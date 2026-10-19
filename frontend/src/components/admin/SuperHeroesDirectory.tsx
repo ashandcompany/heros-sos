@@ -1,7 +1,7 @@
 import { Avatar } from "@/components/ui/Avatar";
 import { DialogTrigger } from "@/components/ui/DialogTrigger";
 import { getSuperHeroProfiles } from "@/lib/api";
-import { requireAdminSession } from "@/lib/admin-session";
+import { requireAdminSession } from "@/lib/server-session";
 import { formatFullName, formatInteger, formatPhone, formatRating, phoneHref } from "@/lib/format";
 import type { SuperHeroProfile } from "@/types";
 import { heroDialogId, SuperHeroDetailsDialog } from "./SuperHeroDetailsDialog";

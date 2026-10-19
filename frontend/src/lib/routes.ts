@@ -37,3 +37,13 @@ export const accountHomeByRole: Record<UserRole, string> = {
   "super-heros": routes.heroSpace,
   admin: routes.adminHeroes,
 };
+
+/**
+ * Page affichée après connexion. Les espaces citoyen et héros n'existant pas encore,
+ * seuls les administrateurs sont envoyés vers leur espace.
+ */
+export const afterLoginRouteByRole: Record<UserRole, string> = {
+  citoyen: routes.home,
+  "super-heros": routes.home,
+  admin: routes.adminHeroes,
+};

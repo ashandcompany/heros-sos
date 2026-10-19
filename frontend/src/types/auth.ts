@@ -14,7 +14,8 @@ export interface LoginCredentials {
 }
 
 export type LoginResult =
-  { ok: true; user: AuthUser; token: string } | { ok: false; error: "invalid-credentials" };
+  | { ok: true; user: AuthUser; token: string }
+  | { ok: false; error: "invalid-credentials" | "account-suspended" };
 
 export type Civility = "madame" | "monsieur" | "non-precise";
 

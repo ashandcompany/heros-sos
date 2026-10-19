@@ -1,74 +1,112 @@
+import Image from "next/image";
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import { Container } from "@/components/ui/Container";
+import { Typewriter } from "@/components/ui/Typewriter";
 import { routes } from "@/lib/routes";
 
-function SignalIllustration() {
+const requiredItems = [
+  "Nature de l'incident",
+  "Lieu des faits",
+  "Identité du super-vilain (si connue)",
+];
+
+/** Affiche encadrée : décorative, masquée sur petit écran. */
+function Poster() {
   return (
-    <div
-      aria-hidden="true"
-      className="relative mx-auto hidden aspect-square w-full max-w-sm lg:block"
-    >
-      <div className="absolute inset-0 rounded-full border border-border/60" />
-      <div className="absolute inset-[12%] rounded-full border border-border/70" />
-      <div className="absolute inset-[24%] rounded-full border border-accent/30" />
-      <div className="absolute inset-[36%] rounded-full bg-primary/15 motion-safe:animate-pulse" />
-      <svg viewBox="0 0 64 64" className="absolute inset-[38%]">
-        <path
-          d="M32 4 8 14v17c0 15 10.4 26.2 24 29 13.6-2.8 24-14 24-29V14L32 4Z"
-          className="fill-surface-raised stroke-primary"
-          strokeWidth="3"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M16 34h8l4-10 8 20 4-10h8"
-          className="stroke-accent"
-          fill="none"
-          strokeWidth="3"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-      <span className="absolute top-[18%] right-[14%] size-3 rounded-full bg-accent shadow-[0_0_16px] shadow-accent" />
-      <span className="absolute bottom-[22%] left-[10%] size-2 rounded-full bg-primary shadow-[0_0_16px] shadow-primary" />
-      <span className="absolute right-[30%] bottom-[8%] size-2 rounded-full bg-success shadow-[0_0_12px] shadow-success" />
-    </div>
+    <figure className="panel rivets paper relative mx-auto hidden w-full max-w-xs rotate-1 p-3 pb-2 md:block lg:max-w-sm">
+      <Image
+        src="/ucnr2b18wx471.jpg"
+        alt=""
+        width={1242}
+        height={1652}
+        priority
+        sizes="(min-width: 1024px) 384px, 320px"
+        className="h-auto w-full border-2 border-background"
+      />
+      <figcaption
+        aria-hidden="true"
+        className="mt-2 ps-2.5 font-mono text-[0.65rem] tracking-widest text-ink/75 uppercase"
+      >
+        Affiche officielle n° 7-B — ne pas détériorer
+      </figcaption>
+      <span
+        aria-hidden="true"
+        className="stamp absolute top-8 -left-3 bg-paper/70 text-lg lg:-left-6 lg:text-xl"
+      >
+        Priorité publique
+      </span>
+    </figure>
   );
 }
 
 export function HeroSection() {
   return (
-    <section aria-labelledby="hero-title" className="relative isolate overflow-hidden">
+    <section
+      aria-labelledby="hero-title"
+      className="relative isolate overflow-hidden border-b-4 border-edge"
+    >
+      <div aria-hidden="true" className="bg-tiles absolute inset-0 -z-10 opacity-60" />
       <div
         aria-hidden="true"
-        className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top_right,color-mix(in_oklab,var(--color-primary)_18%,transparent),transparent_55%),radial-gradient(ellipse_at_bottom_left,color-mix(in_oklab,var(--color-accent)_12%,transparent),transparent_50%)]"
+        className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_left,var(--color-background)_30%,transparent_85%)]"
       />
-      <Container className="grid items-center gap-12 py-16 sm:py-20 lg:grid-cols-[1.2fr_1fr] lg:py-28">
+      <Container className="grid items-center gap-12 py-12 sm:py-16 lg:grid-cols-[1.2fr_1fr] lg:py-24">
         <div>
-          <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1 text-sm text-muted">
-            <span aria-hidden="true" className="size-2 rounded-full bg-success" />
-            Des héros disponibles 24 h/24
+          <p className="mb-5 inline-flex flex-wrap items-center gap-x-3 gap-y-1 border-2 border-border bg-background px-3 py-1.5 font-mono text-xs tracking-widest text-muted uppercase">
+            <span>Formulaire n° 7-B</span>
+            <span aria-hidden="true" className="text-border">
+              |
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <span aria-hidden="true" className="led" />
+              Guichet ouvert 24 h/24
+            </span>
           </p>
+
           <h1
             id="hero-title"
-            className="font-display text-4xl leading-tight font-bold tracking-tight text-balance sm:text-5xl lg:text-6xl"
+            className="font-display text-3xl leading-tight font-bold tracking-widest text-balance uppercase sm:text-4xl lg:text-5xl"
           >
-            Un super-vilain frappe&nbsp;? <span className="text-primary">Un héros répond.</span>
+            <Typewriter text="Un super-vilain sévit ? Un agent est dépêché." />
           </h1>
+
           <p className="mt-6 max-w-xl text-lg text-muted text-pretty">
-            Heros-SOS met en relation les citoyens et les super-héros. Signalez un vol, un
-            cambriolage ou une prise d&apos;otages en quelques secondes depuis votre téléphone : le
-            héros le plus proche prend le relais.
+            Veuillez déclarer tout incident impliquant un super-vilain. Votre signalement sera
+            traité dans l&apos;ordre de priorité par l&apos;agent disponible le plus proche.
           </p>
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <ButtonLink href={routes.signup} size="lg">
+
+          <div className="mt-6 max-w-xl border-2 border-border bg-background/80 p-4">
+            <h2 className="font-mono text-xs font-medium tracking-widest text-accent uppercase">
+              Pièces à fournir
+            </h2>
+            <ul className="mt-3 space-y-2 text-sm">
+              {requiredItems.map((item, index) => (
+                <li key={item} className="flex items-center gap-3">
+                  <span aria-hidden="true" className="size-4 shrink-0 border-2 border-muted" />
+                  <span className="font-mono text-xs text-muted">{`${index + 1}.`}</span>
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center">
+            <ButtonLink href={routes.signup} variant="console" size="lg" className="gap-3">
+              <span aria-hidden="true" className="led" />
               Signaler un incident
             </ButtonLink>
             <ButtonLink href="#comment-ca-marche" variant="secondary" size="lg">
-              Comment ça marche&nbsp;?
+              Consulter la procédure
             </ButtonLink>
           </div>
+
+          <p className="mt-6 max-w-xl text-xs text-muted">
+            Toute déclaration abusive est passible d&apos;un entretien avec le Service (art. 7-B,
+            al. 3). Univers fictif : tous les personnages sont imaginaires.
+          </p>
         </div>
-        <SignalIllustration />
+
+        <Poster />
       </Container>
     </section>
   );

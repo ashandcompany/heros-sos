@@ -1,31 +1,41 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { HeroApplications } from "@/components/admin/HeroApplications";
+import { AdminListSkeleton } from "@/components/admin/ModerationFilter";
 import {
   SuperHeroesDirectory,
   SuperHeroesDirectorySkeleton,
 } from "@/components/admin/SuperHeroesDirectory";
-import { Container } from "@/components/ui/Container";
 
-export const metadata: Metadata = {
-  title: "Super-héros inscrits",
-  robots: { index: false, follow: false },
-};
+export const metadata: Metadata = { title: "Super-héros" };
 
-/** Back-office, réservé aux administrateurs (src/proxy.ts + vérification dans le composant). */
+/** Back-office, réservé aux administrateurs (src/proxy.ts + vérification dans les composants). */
 export default function AdminSuperHeroesPage() {
   return (
-    <Container className="py-10 sm:py-14">
-      <p className="mb-2 text-sm font-semibold tracking-widest text-accent uppercase">
-        Back-office
-      </p>
-      <h1 className="font-display text-3xl font-bold">Super-héros inscrits</h1>
-      <p className="mt-2 mb-8 max-w-2xl text-muted">
-        Référentiel de tous les super-héros de la plateforme. Ces informations sont
-        confidentielles&nbsp;: ne les partagez pas en dehors de l&apos;équipe.
-      </p>
-      <Suspense fallback={<SuperHeroesDirectorySkeleton />}>
-        <SuperHeroesDirectory />
-      </Suspense>
-    </Container>
+    <>
+      <AdminPageHeader
+        title="Super-héros"
+        description="Validez ou refusez les demandes des nouveaux super-héros et consultez le référentiel. Ces informations sont confidentielles : ne les partagez pas en dehors de l'équipe."
+      />
+
+      <section aria-labelledby="applications-title" className="mb-12">
+        <h2 id="applications-title" className="mb-4 font-display text-xl font-semibold">
+          Demandes en attente
+        </h2>
+        <Suspense fallback={<AdminListSkeleton items={2} />}>
+          <HeroApplications />
+        </Suspense>
+      </section>
+
+      <section aria-labelledby="directory-title">
+        <h2 id="directory-title" className="mb-4 font-display text-xl font-semibold">
+          Super-héros inscrits
+        </h2>
+        <Suspense fallback={<SuperHeroesDirectorySkeleton />}>
+          <SuperHeroesDirectory />
+        </Suspense>
+      </section>
+    </>
   );
 }

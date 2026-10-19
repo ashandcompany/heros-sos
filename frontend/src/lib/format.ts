@@ -2,6 +2,7 @@ import type {
   IncidentLocation,
   IncidentStatus,
   IncidentType,
+  ModerationStatus,
   ReporterRole,
   ThreatLevel,
 } from "@/types";
@@ -94,3 +95,12 @@ export const threatLevelLabels: Record<ThreatLevel, string> = {
   eleve: "Élevée",
   critique: "Critique",
 };
+
+export const moderationStatusLabels: Record<ModerationStatus, string> = {
+  "en-attente": "À vérifier",
+  valide: "Validé",
+  rejete: "Rejeté",
+};
+
+export const isModerationStatus = (value: string): value is ModerationStatus =>
+  value in moderationStatusLabels;

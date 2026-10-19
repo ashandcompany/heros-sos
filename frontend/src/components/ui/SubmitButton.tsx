@@ -7,7 +7,7 @@ import { cn } from "./cn";
 interface SubmitButtonProps {
   children: string;
   pendingLabel: string;
-  variant?: "primary" | "secondary";
+  variant?: "primary" | "secondary" | "danger";
   className?: string;
 }
 

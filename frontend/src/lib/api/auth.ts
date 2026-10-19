@@ -5,6 +5,10 @@ import { mockResponse } from "./config";
 
 const MOCK_TOKEN_PREFIX = "mock-token-";
 
+/** Compte suspendu par la modération (seuls les comptes citoyens sont concernés). */
+const isSuspended = (userId: string) =>
+  citizensMock.some(({ id, moderation }) => id === userId && moderation === "rejete");
+
 /**
  * Authentifie un utilisateur par email, ou par pseudo pour un super-héros.
  * Future implémentation : `POST ${API_URL}/auth/login` avec `{ identifier, password }`.
@@ -21,6 +25,9 @@ export async function login({ identifier, password }: LoginCredentials): Promise
   if (!account || account.password !== password) {
     return mockResponse({ ok: false, error: "invalid-credentials" });
   }
+  if (isSuspended(account.user.id)) {
+    return mockResponse({ ok: false, error: "account-suspended" });
+  }
 
   return mockResponse({
     ok: true,
@@ -30,12 +37,15 @@ export async function login({ identifier, password }: LoginCredentials): Promise
 }
 
 /**
- * Utilisateur associé à un jeton de session, ou `null` si le jeton est invalide ou expiré.
+ * Utilisateur associé à un jeton de session, ou `null` si le jeton est invalide, expiré
+ * ou si le compte a été suspendu entre-temps.
  * Future implémentation : `GET ${API_URL}/auth/me` avec `Authorization: Bearer ${token}`.
  */
 export async function getSessionUser(token: string): Promise<AuthUser | null> {
   const userId = token.startsWith(MOCK_TOKEN_PREFIX) ? token.slice(MOCK_TOKEN_PREFIX.length) : "";
-  const account = accountsMock.find(({ user }) => user.id === userId);
+  const account = isSuspended(userId)
+    ? undefined
+    : accountsMock.find(({ user }) => user.id === userId);
 
   return mockResponse(account?.user ?? null);
 }
@@ -80,6 +90,7 @@ export async function register(payload: SignupPayload): Promise<SignupResult> {
     avatarUrl: null,
     newsletterSubscribed: false,
     registeredAt: new Date().toISOString(),
+    moderation: "en-attente",
   });
 
   return mockResponse({ ok: true, user, token: `${MOCK_TOKEN_PREFIX}${user.id}` });

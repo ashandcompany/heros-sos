@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-import { CitizenNav } from "@/components/citizen/CitizenNav";
+import { SpaceNav } from "@/components/layout/SpaceNav";
 import { Container } from "@/components/ui/Container";
+import { citizenNav } from "@/lib/routes";
 
 export const metadata: Metadata = {
   title: { template: "%s · Mon espace · Heros-SOS", default: "Mon espace" },
@@ -14,7 +15,7 @@ export default function CitizenSpaceLayout({ children }: LayoutProps<"/profil">)
       <p className="mb-4 text-sm font-semibold tracking-widest text-accent uppercase">
         Espace personnel
       </p>
-      <CitizenNav />
+      <SpaceNav items={citizenNav} label="Espace personnel" />
       {children}
     </Container>
   );

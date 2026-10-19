@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useId, useRef, useState } from "react";
+import { Suspense, useEffect, useId, useRef, useState } from "react";
 import { buttonClasses } from "@/components/ui/ButtonLink";
 import { cn } from "@/components/ui/cn";
 import { logoutAction } from "@/app/actions/auth";
@@ -28,7 +28,7 @@ function MenuIcon({ open }: { open: boolean }) {
 const spaceLinkByRole: Record<AuthUser["role"], { label: string; href: string } | null> = {
   citoyen: { label: "Mon espace", href: routes.profile },
   "super-heros": null,
-  admin: { label: "Back-office", href: routes.adminHeroes },
+  admin: { label: "Back-office", href: routes.admin },
 };
 
 interface AccountActionsProps {
@@ -43,6 +43,8 @@ function AccountActions({ user, variant, isSpacePage, onNavigate }: AccountActio
   if (user === undefined) return null;
 
   const mobile = variant === "mobile";
+  // Sur desktop, boutons compacts pour que la barre tienne même avec un compte connecté.
+  const compact = mobile ? "" : "px-3 text-xs";
 
   if (!user) {
     return (
@@ -50,11 +52,15 @@ function AccountActions({ user, variant, isSpacePage, onNavigate }: AccountActio
         <Link
           href={routes.login}
           onClick={onNavigate}
-          className={buttonClasses(mobile ? "secondary" : "ghost")}
+          className={cn(buttonClasses(mobile ? "secondary" : "ghost"), compact)}
         >
           Connexion
         </Link>
-        <Link href={routes.signup} onClick={onNavigate} className={buttonClasses("primary")}>
+        <Link
+          href={routes.signup}
+          onClick={onNavigate}
+          className={cn(buttonClasses("primary"), compact)}
+        >
           Inscription
         </Link>
       </>
@@ -65,7 +71,7 @@ function AccountActions({ user, variant, isSpacePage, onNavigate }: AccountActio
 
   return (
     <>
-      <p className={cn("text-sm text-muted", mobile ? "col-span-2" : "hidden lg:block")}>
+      <p className={cn("text-sm text-muted", mobile ? "col-span-2" : "hidden xl:block")}>
         Connecté·e : <span className="font-semibold text-foreground">{user.displayName}</span>
       </p>
       {spaceLink && (
@@ -73,7 +79,7 @@ function AccountActions({ user, variant, isSpacePage, onNavigate }: AccountActio
           href={spaceLink.href}
           onClick={onNavigate}
           aria-current={isSpacePage ? "page" : undefined}
-          className={buttonClasses("secondary")}
+          className={cn(buttonClasses("secondary"), compact)}
         >
           {spaceLink.label}
         </Link>
@@ -81,7 +87,7 @@ function AccountActions({ user, variant, isSpacePage, onNavigate }: AccountActio
       <form action={logoutAction} className={cn(mobile && !spaceLink && "col-span-2")}>
         <button
           type="submit"
-          className={cn(buttonClasses(mobile ? "secondary" : "ghost"), "w-full")}
+          className={cn(buttonClasses(mobile ? "secondary" : "ghost"), compact, "w-full")}
         >
           Déconnexion
         </button>
@@ -90,9 +96,24 @@ function AccountActions({ user, variant, isSpacePage, onNavigate }: AccountActio
   );
 }
 
-/** Navigation principale : liens en ligne sur desktop, menu burger sur mobile. */
+/**
+ * Navigation principale : liens en ligne sur desktop, menu burger sur mobile.
+ * Sur une route à paramètre dynamique, la page courante n'est connue qu'à la requête :
+ * la navigation est d'abord rendue sans lien actif (fallback), puis mise à jour.
+ */
 export function MainNav({ user }: { user: NavUser }) {
-  const pathname = usePathname();
+  return (
+    <Suspense fallback={<MainNavView user={user} pathname={null} />}>
+      <MainNavWithPathname user={user} />
+    </Suspense>
+  );
+}
+
+function MainNavWithPathname({ user }: { user: NavUser }) {
+  return <MainNavView user={user} pathname={usePathname()} />;
+}
+
+function MainNavView({ user, pathname }: { user: NavUser; pathname: string | null }) {
   const [open, setOpen] = useState(false);
   const menuId = useId();
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -112,7 +133,8 @@ export function MainNav({ user }: { user: NavUser }) {
   }, [open]);
 
   const close = () => setOpen(false);
-  const isSpacePage = pathname.startsWith("/admin") || pathname.startsWith("/profil");
+  const isSpacePage =
+    !!pathname && (pathname.startsWith("/admin") || pathname.startsWith("/profil"));
 
   const navLinks = (variant: "desktop" | "mobile") =>
     mainNav.map((item) => {
@@ -124,13 +146,16 @@ export function MainNav({ user }: { user: NavUser }) {
             onClick={close}
             aria-current={isCurrent ? "page" : undefined}
             className={cn(
-              "block rounded-md font-medium transition-colors motion-reduce:transition-none",
-              variant === "desktop" ? "px-3 py-2 text-sm" : "px-3 py-3 text-base",
-              isCurrent ? "text-foreground" : "text-muted hover:text-foreground",
-              isCurrent &&
-                variant === "desktop" &&
-                "underline decoration-primary decoration-2 underline-offset-8",
-              isCurrent && variant === "mobile" && "bg-surface-raised",
+              "block font-mono font-medium tracking-wider uppercase",
+              variant === "desktop"
+                ? "rounded-t-sm border-2 border-b-0 px-3 py-2.5 text-xs"
+                : "px-3 py-3 text-sm",
+              variant === "desktop" &&
+                (isCurrent
+                  ? "border-edge bg-paper text-ink"
+                  : "border-border bg-surface text-muted hover:bg-surface-raised hover:text-foreground"),
+              variant === "mobile" &&
+                (isCurrent ? "bg-surface-raised text-accent" : "text-muted hover:text-foreground"),
             )}
           >
             {item.label}
@@ -141,11 +166,11 @@ export function MainNav({ user }: { user: NavUser }) {
 
   return (
     <>
-      <nav aria-label="Navigation principale" className="hidden md:block">
-        <ul className="flex items-center gap-1">{navLinks("desktop")}</ul>
+      <nav aria-label="Navigation principale" className="hidden self-end lg:block">
+        <ul className="flex items-end gap-1">{navLinks("desktop")}</ul>
       </nav>
 
-      <div className="hidden items-center gap-2 md:flex">
+      <div className="hidden items-center gap-2 lg:flex">
         <AccountActions
           user={user}
           variant="desktop"
@@ -161,7 +186,7 @@ export function MainNav({ user }: { user: NavUser }) {
         aria-expanded={open}
         aria-controls={menuId}
         aria-label={open ? "Fermer le menu" : "Ouvrir le menu"}
-        className="-mr-2 inline-flex size-11 items-center justify-center rounded-md text-foreground hover:bg-surface-raised md:hidden"
+        className="-mr-2 inline-flex size-11 items-center justify-center rounded-sm border-2 border-border text-foreground hover:bg-surface-raised lg:hidden"
       >
         <MenuIcon open={open} />
       </button>
@@ -169,7 +194,7 @@ export function MainNav({ user }: { user: NavUser }) {
       <div
         id={menuId}
         hidden={!open}
-        className="absolute inset-x-0 top-full border-b border-border bg-background px-4 pt-2 pb-6 shadow-2xl md:hidden"
+        className="absolute inset-x-0 top-full border-b-4 border-double border-border bg-background px-4 pt-2 pb-6 shadow-[0_6px_0_0_var(--color-shadow)] lg:hidden"
       >
         <nav aria-label="Navigation principale">
           <ul className="flex flex-col gap-1">{navLinks("mobile")}</ul>

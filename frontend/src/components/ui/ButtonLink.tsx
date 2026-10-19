@@ -2,13 +2,22 @@ import Link from "next/link";
 import type { ComponentProps } from "react";
 import { cn } from "./cn";
 
-type Variant = "primary" | "secondary" | "ghost";
+type Variant = "primary" | "secondary" | "danger" | "ghost" | "console";
 type Size = "md" | "lg";
 
 const variantClasses: Record<Variant, string> = {
-  primary: "bg-primary text-primary-foreground hover:bg-primary-hover",
-  secondary: "border border-border text-foreground hover:border-muted hover:bg-surface-raised",
-  ghost: "text-foreground hover:bg-surface-raised",
+  // Touches de console : reflet en haut, tranche en bas qui s'écrase au clic.
+  primary:
+    "border border-[#8f3a12] bg-primary text-primary-foreground shadow-[inset_0_1px_0_rgb(255_255_255/0.3),inset_0_-2px_0_rgb(0_0_0/0.2),0_3px_0_#7a2f0f,0_4px_0_var(--color-shadow-deep)] hover:bg-primary-hover active:translate-y-0.5 active:shadow-[inset_0_1px_0_rgb(255_255_255/0.2),0_1px_0_#7a2f0f,0_2px_0_var(--color-shadow-deep)]",
+  secondary:
+    "border border-border bg-surface-raised text-foreground shadow-[inset_0_1px_0_rgb(255_255_255/0.12),inset_0_-2px_0_rgb(0_0_0/0.25),0_3px_0_var(--color-shadow)] hover:bg-surface hover:border-muted active:translate-y-0.5 active:shadow-[0_1px_0_var(--color-shadow)]",
+  // Actions destructrices ou de refus (rejeter, suspendre, supprimer).
+  danger:
+    "border border-[#6e1f19] bg-brick text-paper shadow-[inset_0_1px_0_rgb(255_255_255/0.2),inset_0_-2px_0_rgb(0_0_0/0.25),0_3px_0_#6e1f19,0_4px_0_var(--color-shadow-deep)] hover:bg-[#bd3b31] active:translate-y-0.5 active:shadow-[0_1px_0_#6e1f19,0_2px_0_var(--color-shadow-deep)]",
+  ghost: "text-foreground hover:bg-surface-raised hover:text-accent",
+  // Gros bouton de console industrielle.
+  console:
+    "border-2 border-[#8f3a12] bg-primary text-primary-foreground shadow-[inset_0_2px_0_rgb(255_255_255/0.3),inset_0_-4px_0_rgb(0_0_0/0.2),0_7px_0_#7a2f0f,0_9px_0_var(--color-shadow-deep)] hover:bg-primary-hover active:translate-y-1.5 active:shadow-[inset_0_2px_0_rgb(255_255_255/0.2),0_1px_0_#7a2f0f,0_3px_0_var(--color-shadow-deep)]",
 };
 
 const sizeClasses: Record<Size, string> = {
@@ -18,7 +27,8 @@ const sizeClasses: Record<Size, string> = {
 
 export const buttonClasses = (variant: Variant = "primary", size: Size = "md") =>
   cn(
-    "inline-flex items-center justify-center gap-2 rounded-full font-semibold transition-colors motion-reduce:transition-none",
+    "inline-flex items-center justify-center gap-2 rounded-md font-display font-semibold tracking-[0.08em] uppercase",
+    "transition-none",
     variantClasses[variant],
     sizeClasses[size],
   );

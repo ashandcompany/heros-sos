@@ -1,4 +1,27 @@
 import type { Civility, PostalAddress } from "./auth";
+import type { ModerationStatus } from "./moderation";
+
+/** Demande d'inscription d'un nouveau super-héros, validée ou refusée par la modération. */
+export interface HeroApplication {
+  id: string;
+  alias: string;
+  power: string;
+  civility: Civility;
+  firstName: string;
+  lastName: string;
+  /** Date ISO `YYYY-MM-DD`. */
+  birthDate: string;
+  email: string;
+  mobilePhone: string;
+  address: PostalAddress;
+  /** Présentation et motivations du candidat. */
+  motivation: string;
+  /** Date ISO 8601 du dépôt de la demande. */
+  submittedAt: string;
+  status: ModerationStatus;
+  /** Date ISO 8601 de la décision, `null` tant que la demande est en attente. */
+  reviewedAt: string | null;
+}
 
 export interface SuperHero {
   id: string;

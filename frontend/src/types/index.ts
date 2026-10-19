@@ -1,6 +1,9 @@
 export type * from "./account";
 export type * from "./auth";
+export type * from "./blog";
 export type * from "./incident";
+export type * from "./moderation";
 export type * from "./newsletter";
 export type * from "./super-hero";
+export type * from "./video";
 export type * from "./villain";

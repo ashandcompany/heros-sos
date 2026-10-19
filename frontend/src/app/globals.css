@@ -9,31 +9,111 @@
  */
 @theme {
   /* Typographies (variables injectées par next/font dans src/app/layout.tsx) */
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-sora), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-jost), var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-stamp: var(--font-special-elite), var(--font-plex-mono), ui-monospace, monospace;
 
-  /* Fonds et surfaces */
-  --color-background: #070910;
-  --color-surface: #0f1424;
-  --color-surface-raised: #161d33;
-  --color-border: #263050;
+  /* Fonds et surfaces : bruns boisés */
+  --color-background: #1e1611;
+  --color-surface: #4a3426;
+  --color-surface-raised: #5a4132;
+  --color-border: #6d4f3b;
 
-  /* Textes */
-  --color-foreground: #eef1f8;
-  --color-muted: #a3adc4;
+  /* Textes : beige papier */
+  --color-foreground: #efe4cf;
+  --color-muted: #cdbea4;
 
-  /* Couleur principale : signal d'alerte (CTA, focus) */
-  --color-primary: #ff5a4e;
-  --color-primary-hover: #ff7a70;
-  --color-primary-foreground: #0b0d14;
+  /* Couleur principale : orange brûlé (boutons, logo, filets). Texte orange sur beige : primary-ink */
+  --color-primary: #c8561e;
+  --color-primary-hover: #e0652a;
+  --color-primary-foreground: #1e1611;
+  --color-primary-ink: #a3441a;
 
-  /* Couleur secondaire : bleu électrique (accents, informations) */
-  --color-accent: #4fcfff;
+  /* Couleur secondaire : ambre moutarde (titres sur fond sombre, survols, « en cours ») */
+  --color-accent: #d9a13b;
+
+  /* Papier : fond des dossiers et formulaires */
+  --color-paper: #efe4cf;
+
+  /* Encre : texte brun foncé posé sur du papier, identique dans les deux thèmes */
+  --color-ink: #1e1611;
+
+  /* Contours épais et ombres dures (cadres, cartes, boutons) : brun presque noir */
+  --color-edge: #0d0906;
+  --color-shadow: #0d0906;
+  /* Seconde ombre, sous la tranche des boutons */
+  --color-shadow-deep: #000;
+
+  /* Vert sauge sourd : sections secondaires, badges, priorité basse */
+  --color-sage: #4f6b5e;
+
+  /* Vert phosphore : éléments « machine » (chiffres, statuts), en font-mono */
+  --color-terminal: #9be37f;
+
+  /* Rouge brique : priorité haute, échec (fonds, badges). Texte sur fond sombre : danger */
+  --color-brick: #a8322a;
 
   /* Couleurs sémantiques */
-  --color-success: #3ddc97;
-  --color-rating: #fbbf24;
-  --color-danger: #ff8a80;
+  --color-success: #9be37f;
+  --color-rating: #d9a13b;
+  --color-danger: #e57a6e;
+}
+
+/*
+ * Thème clair (« papier crème »), activé par <html data-theme="light"> (voir ThemeToggle).
+ * Le thème sombre ci-dessus reste celui par défaut. Contrastes vérifiés (WCAG AA) pour le texte
+ * sur background, surface et paper ; ambre, vert et rouge sont foncés pour rester lisibles.
+ * Les couleurs fixes (primary, brick, sage, terminal, ink) ne changent pas.
+ */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --color-background: #f4ecdc;
+  --color-surface: #e9dcc3;
+  --color-surface-raised: #dfcdaa;
+  --color-border: #94775a;
+
+  --color-foreground: #24180f;
+  --color-muted: #5a4634;
+
+  --color-accent: #7a4e0c;
+  --color-paper: #fbf6ec;
+
+  --color-success: #28601d;
+  --color-rating: #7a4e0c;
+  --color-danger: #9a2c25;
+
+  /* Contours brun moyen et ombres beige foncé : le relief reste lisible sans noir */
+  --color-edge: #7d6249;
+  --color-shadow: #c4ab86;
+  --color-shadow-deep: #ad9370;
+}
+
+/*
+ * L'écran cathodique reste un écran éteint (sombre) en thème clair : on y rétablit les tokens
+ * du thème sombre pour que son contenu garde ses couleurs d'origine.
+ */
+:root[data-theme="light"] .crt {
+  --color-background: #1e1611;
+  --color-surface: #4a3426;
+  --color-surface-raised: #5a4132;
+  --color-border: #6d4f3b;
+  --color-foreground: #efe4cf;
+  --color-muted: #cdbea4;
+  --color-accent: #d9a13b;
+  --color-paper: #efe4cf;
+  --color-success: #9be37f;
+  --color-rating: #d9a13b;
+  --color-danger: #e57a6e;
+  color: var(--color-foreground);
+}
+
+/* Contenu de l'écran (fond noir) : contours et ombres noirs, comme en thème sombre. */
+:root[data-theme="light"] .crt__screen {
+  --color-edge: #0d0906;
+  --color-shadow: #0d0906;
+  --color-shadow-deep: #000;
 }
 
 @layer base {

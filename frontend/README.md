@@ -27,6 +27,23 @@ npm run dev
 - `src/types/` : types métier
 - `src/app/globals.css` (bloc `@theme`) : design tokens Tailwind (couleurs, typos)
 
+## Back-office (modération)
+
+Espace `/admin`, réservé au rôle `admin` (compte mock : `admin@heros-sos.fr` / `Admin123!`).
+
+| Page                  | Rôle                                                             |
+| --------------------- | ---------------------------------------------------------------- |
+| `/admin`              | Tableau de bord : éléments en attente dans chaque section        |
+| `/admin/incidents`    | Valider / rejeter / corriger les incidents, en signaler un       |
+| `/admin/comptes`      | Contrôler les nouveaux comptes (suspension), changements d'email |
+| `/admin/super-heros`  | Valider / refuser les demandes de super-héros, référentiel       |
+| `/admin/videotheque`  | Publier / refuser / supprimer les films des vidéothèques         |
+| `/admin/commentaires` | Publier / masquer les commentaires des évaluations               |
+| `/admin/blog`         | Créer, modifier, supprimer les articles (éditeur riche Tiptap)   |
+
+Les listes à modérer affichent par défaut les éléments en attente (`?statut=valide|rejete|tous`
+pour les autres). Le HTML des articles doit être assaini côté API avant tout affichage public.
+
 ## Brancher l'API Go
 
 Renseigner `NEXT_PUBLIC_API_URL`, puis remplacer dans chaque fonction de `src/lib/api/`

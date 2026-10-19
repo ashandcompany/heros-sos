@@ -4,5 +4,5 @@ Plateforme web qui rapproche les citoyens et les super-héros pour signaler et t
 
 ## Stack
 
-- PHP 8.4
+- Golang
 - MySQL

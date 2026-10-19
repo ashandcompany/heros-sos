@@ -137,3 +137,15 @@ export interface HeroIncident extends Incident {
   /** Interventions sur cet incident, des plus récentes aux plus anciennes. */
   interventions: HeroIntervention[];
 }
+
+/**
+ * Avis affiché sur la fiche publique d'un super-héros : uniquement les commentaires publiés
+ * par la modération, sans aucune information sur le citoyen qui l'a écrit.
+ */
+export interface PublicReview {
+  incidentId: string;
+  rating: number;
+  comment: string;
+  ratedAt: string;
+  reply: HeroReply | null;
+}

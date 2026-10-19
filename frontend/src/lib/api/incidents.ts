@@ -347,3 +347,37 @@ export async function finishIntervention(
 
   return mockResponse({ ok: true });
 }
+
+/* ---------- Fiches publiques de l'encyclopédie ---------- */
+
+/**
+ * Interventions réussies d'un super-héros, des plus récentes aux plus anciennes.
+ * Future implémentation : `GET ${API_URL}/heroes/${heroId}/incidents?status=resolu&limit=${limit}`
+ */
+export async function getResolvedIncidentsByHero(
+  heroId: string,
+  limit = 6,
+): Promise<ResolvedIncident[]> {
+  return mockResponse(
+    incidentsMock
+      .filter(isPublic)
+      .filter(isResolved)
+      .filter((incident) => incident.hero.id === heroId)
+      .sort((a, b) => Date.parse(b.resolvedAt) - Date.parse(a.resolvedAt))
+      .slice(0, limit),
+  );
+}
+
+/**
+ * Incidents attribués à un super-vilain, du plus récent au plus ancien.
+ * Future implémentation : `GET ${API_URL}/villains/${villainId}/incidents?limit=${limit}`
+ */
+export async function getIncidentsByVillain(villainId: string, limit = 6): Promise<Incident[]> {
+  return mockResponse(
+    incidentsMock
+      .filter(isPublic)
+      .filter((incident) => incident.villain?.id === villainId)
+      .sort(byMostRecent)
+      .slice(0, limit),
+  );
+}

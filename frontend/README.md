@@ -25,7 +25,7 @@ npm run dev
 - `src/lib/api/` : couche d'accès aux données, seule à connaître les mocks
 - `src/mocks/` : données fictives
 - `src/types/` : types métier
-- `src/styles/theme.css` : design tokens Tailwind (couleurs, typos)
+- `src/app/globals.css` (bloc `@theme`) : design tokens Tailwind (couleurs, typos)
 
 ## Brancher l'API Go
 

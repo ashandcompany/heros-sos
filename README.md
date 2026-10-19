@@ -58,7 +58,7 @@ Il n'y a pas encore de script de test.
 - `src/lib/api/` : couche d'accès aux données, seule à connaître les mocks
 - `src/mocks/` : données fictives
 - `src/types/` : types métier
-- `src/styles/theme.css` : design tokens Tailwind
+- `src/app/globals.css` (bloc `@theme`) : design tokens Tailwind
 
 Pour brancher l'API, voir [frontend/README.md](frontend/README.md#brancher-lapi-go).
 

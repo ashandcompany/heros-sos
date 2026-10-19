@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { login } from "@/lib/api";
-import { SESSION_COOKIE } from "@/lib/cookies";
+import { SESSION_COOKIE, sessionCookieOptions } from "@/lib/cookies";
 import { routes } from "@/lib/routes";
 
 export interface LoginFormState {
@@ -15,7 +15,6 @@ export interface LoginFormState {
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PSEUDO_PATTERN = /^[\p{L}\p{N} _-]{2,30}$/u;
-const ONE_WEEK_IN_SECONDS = 60 * 60 * 24 * 7;
 
 function validateIdentifier(identifier: string): string | undefined {
   if (!identifier) return "Veuillez saisir votre adresse email ou votre pseudo.";
@@ -51,14 +50,7 @@ export async function loginAction(
     };
   }
 
-  // Placeholder : le format de session sera fixé avec l'API Go (JWT, session opaque…).
-  (await cookies()).set(SESSION_COOKIE, result.token, {
-    maxAge: ONE_WEEK_IN_SECONDS,
-    path: "/",
-    sameSite: "lax",
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-  });
+  (await cookies()).set(SESSION_COOKIE, result.token, sessionCookieOptions);
 
   redirect(routes.home);
 }

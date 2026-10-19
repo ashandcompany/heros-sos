@@ -1,6 +1,6 @@
 import type { UserRole } from "@/types";
 
-/** Routes de l'application. Seules les pages d'accueil, de connexion et de mot de passe oublié existent pour l'instant. */
+/** Routes de l'application. Pages existantes : accueil, connexion, inscription, mot de passe oublié. */
 export const routes = {
   home: "/",
   encyclopedia: "/encyclopedie",

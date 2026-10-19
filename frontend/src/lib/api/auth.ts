@@ -1,5 +1,5 @@
 import { accountsMock } from "@/mocks/users";
-import type { AuthUser, LoginCredentials, LoginResult } from "@/types";
+import type { AuthUser, LoginCredentials, LoginResult, SignupPayload, SignupResult } from "@/types";
 import { mockResponse } from "./config";
 
 const MOCK_TOKEN_PREFIX = "mock-token-";
@@ -47,4 +47,25 @@ export async function getSessionUser(token: string): Promise<AuthUser | null> {
 export async function requestPasswordReset(email: string): Promise<{ ok: boolean }> {
   void email;
   return mockResponse({ ok: true });
+}
+
+/**
+ * Crée un compte. Aucun rôle n'est choisi à l'inscription : le compte est créé citoyen
+ * (le passage en super-héros relève d'un autre parcours, à définir avec l'API).
+ * Future implémentation : `POST ${API_URL}/auth/register` avec le `SignupPayload`.
+ */
+export async function register(payload: SignupPayload): Promise<SignupResult> {
+  if (accountsMock.some(({ email }) => email === payload.email)) {
+    return mockResponse({ ok: false, error: "email-already-used" });
+  }
+
+  const user: AuthUser = {
+    id: crypto.randomUUID(),
+    displayName: payload.firstName,
+    role: "citoyen",
+  };
+  // Mock en mémoire : le compte reste utilisable jusqu'au redémarrage du serveur.
+  accountsMock.push({ user, email: payload.email, password: payload.password });
+
+  return mockResponse({ ok: true, user, token: `${MOCK_TOKEN_PREFIX}${user.id}` });
 }

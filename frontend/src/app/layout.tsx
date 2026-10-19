@@ -35,7 +35,7 @@ const specialElite = Special_Elite({
 
 export const metadata: Metadata = {
   title: {
-    default: "Heros-SOS — Signalez, un super-héros intervient",
+    default: "Heros-SOS · Signalez, un super-héros intervient",
     template: "%s · Heros-SOS",
   },
   description:

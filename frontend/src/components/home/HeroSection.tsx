@@ -13,7 +13,7 @@ const requiredItems = [
 /** Affiche encadrée : décorative, masquée sur petit écran. */
 function Poster() {
   return (
-    <figure className="panel rivets paper relative mx-auto hidden w-full max-w-xs rotate-1 p-3 pb-2 md:block lg:max-w-sm">
+    <figure className="panel rivets paper relative mx-auto hidden w-full max-w-xs p-3 pb-2 md:block lg:max-w-sm">
       <Image
         src="/ucnr2b18wx471.jpg"
         alt=""
@@ -21,7 +21,7 @@ function Poster() {
         height={1652}
         priority
         sizes="(min-width: 1024px) 384px, 320px"
-        className="h-auto w-full border-2 border-background"
+        className="h-auto w-full border-[3px] border-ink grayscale-[0.25] contrast-110"
       />
       <figcaption
         aria-hidden="true"
@@ -45,14 +45,18 @@ export function HeroSection() {
       aria-labelledby="hero-title"
       className="relative isolate overflow-hidden border-b-4 border-edge"
     >
-      <div aria-hidden="true" className="bg-tiles absolute inset-0 -z-10 opacity-60" />
+      <div aria-hidden="true" className="bg-tiles absolute inset-0 -z-10 opacity-70" />
+      <div
+        aria-hidden="true"
+        className="starburst absolute -top-40 -right-40 -z-10 size-[34rem] opacity-[0.12] motion-safe:animate-[spin_120s_linear_infinite]"
+      />
       <div
         aria-hidden="true"
         className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_left,var(--color-background)_30%,transparent_85%)]"
       />
       <Container className="grid items-center gap-12 py-12 sm:py-16 lg:grid-cols-[1.2fr_1fr] lg:py-24">
         <div>
-          <p className="mb-5 inline-flex flex-wrap items-center gap-x-3 gap-y-1 border-2 border-border bg-background px-3 py-1.5 font-mono text-xs tracking-widest text-muted uppercase">
+          <p className="mb-5 inline-flex flex-wrap items-center gap-x-3 gap-y-1 border-2 border-edge bg-background px-3 py-1.5 font-mono text-xs tracking-widest text-muted uppercase">
             <span>Formulaire n° 7-B</span>
             <span aria-hidden="true" className="text-border">
               |
@@ -65,7 +69,7 @@ export function HeroSection() {
 
           <h1
             id="hero-title"
-            className="font-display text-3xl leading-tight font-bold tracking-widest text-balance uppercase sm:text-4xl lg:text-5xl"
+            className="font-display text-4xl leading-[1.05] font-black tracking-tight text-balance uppercase sm:text-5xl lg:text-6xl"
           >
             <Typewriter text="Un super-vilain sévit ? Un agent est dépêché." />
           </h1>
@@ -75,8 +79,8 @@ export function HeroSection() {
             traité dans l&apos;ordre de priorité par l&apos;agent disponible le plus proche.
           </p>
 
-          <div className="mt-6 max-w-xl border-2 border-border bg-background/80 p-4">
-            <h2 className="font-mono text-xs font-medium tracking-widest text-accent uppercase">
+          <div className="mt-6 max-w-xl border-2 border-edge bg-background/90 p-4 shadow-[4px_4px_0_0_var(--color-shadow)]">
+            <h2 className="font-mono text-xs font-semibold tracking-widest text-accent uppercase">
               Pièces à fournir
             </h2>
             <ul className="mt-3 space-y-2 text-sm">

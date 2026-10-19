@@ -151,12 +151,12 @@ function MainNavView({ user, pathname }: { user: NavUser; pathname: string | nul
             className={cn(
               "block font-mono font-medium tracking-wider uppercase",
               variant === "desktop"
-                ? "rounded-t-sm border-2 border-b-0 px-3 py-2.5 text-xs"
+                ? "border-2 border-b-0 px-3 py-2.5 text-xs font-semibold"
                 : "px-3 py-3 text-sm",
               variant === "desktop" &&
                 (isCurrent
-                  ? "border-edge bg-paper text-ink"
-                  : "border-border bg-surface text-muted hover:bg-surface-raised hover:text-foreground"),
+                  ? "border-edge bg-primary text-primary-foreground"
+                  : "border-border bg-surface text-muted hover:border-edge hover:bg-surface-raised hover:text-foreground"),
               variant === "mobile" &&
                 (isCurrent ? "bg-surface-raised text-accent" : "text-muted hover:text-foreground"),
             )}
@@ -189,7 +189,7 @@ function MainNavView({ user, pathname }: { user: NavUser; pathname: string | nul
         aria-expanded={open}
         aria-controls={menuId}
         aria-label={open ? "Fermer le menu" : "Ouvrir le menu"}
-        className="-mr-2 inline-flex size-11 items-center justify-center rounded-sm border-2 border-border text-foreground hover:bg-surface-raised lg:hidden"
+        className="-mr-2 inline-flex size-11 items-center justify-center border-2 border-edge text-foreground hover:bg-surface-raised lg:hidden"
       >
         <MenuIcon open={open} />
       </button>
@@ -197,7 +197,7 @@ function MainNavView({ user, pathname }: { user: NavUser; pathname: string | nul
       <div
         id={menuId}
         hidden={!open}
-        className="absolute inset-x-0 top-full border-b-4 border-double border-border bg-background px-4 pt-2 pb-6 shadow-[0_6px_0_0_var(--color-shadow)] lg:hidden"
+        className="absolute inset-x-0 top-full border-b-4 border-edge bg-background px-4 pt-2 pb-6 lg:hidden"
       >
         <nav aria-label="Navigation principale">
           <ul className="flex flex-col gap-1">{navLinks("mobile")}</ul>

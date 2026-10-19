@@ -23,7 +23,7 @@ export function IncidentListItem({ incident, detailed = false }: IncidentListIte
   const place = [incident.location.address, incident.location.city].filter(Boolean).join(", ");
 
   return (
-    <article className="rounded-2xl border border-border bg-surface p-4 sm:p-5">
+    <article className="border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-4 sm:p-5">
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone={statusTone[incident.status]}>{incidentStatusLabels[incident.status]}</Badge>
         <Badge>{incidentTypeLabels[incident.type]}</Badge>

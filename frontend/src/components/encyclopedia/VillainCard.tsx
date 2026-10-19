@@ -13,7 +13,7 @@ export const threatTone: Record<ThreatLevel, "sage" | "warning" | "danger"> = {
 
 export function VillainCard({ villain }: { villain: Villain }) {
   return (
-    <article className="relative flex h-full flex-col rounded-2xl border border-border bg-surface p-5 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary hover:border-muted">
+    <article className="relative flex h-full flex-col border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-5 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary hover:border-muted">
       <div className="flex items-start justify-between gap-3">
         <h3 className="font-display text-lg font-semibold">
           {/* Lien étiré : toute la carte mène à la fiche détaillée. */}

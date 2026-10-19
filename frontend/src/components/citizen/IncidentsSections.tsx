@@ -104,7 +104,7 @@ export function ListSkeleton({ items = 3 }: { items?: number }) {
       {Array.from({ length: items }, (_, index) => (
         <div
           key={index}
-          className="h-36 rounded-2xl border border-border bg-surface motion-safe:animate-pulse"
+          className="h-36 border-2 border-border bg-surface motion-safe:animate-pulse"
         />
       ))}
     </div>

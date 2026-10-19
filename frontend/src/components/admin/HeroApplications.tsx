@@ -17,7 +17,7 @@ function ApplicationCard({ application }: { application: HeroApplication }) {
   return (
     <article
       aria-labelledby={titleId}
-      className="rounded-2xl border border-border bg-surface p-5 sm:p-6"
+      className="border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-5 sm:p-6"
     >
       <div className="flex items-start gap-4">
         <Avatar name={application.alias} src={null} size={56} />

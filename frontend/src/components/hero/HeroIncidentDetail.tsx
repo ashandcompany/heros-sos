@@ -11,7 +11,8 @@ import { requireHeroSession } from "@/lib/server-session";
 import { FinishInterventionForm, PriorityForm, TakeChargeForm } from "./IncidentActions";
 import { PriorityBadge, StatusBadge } from "./IncidentBadges";
 
-const panelClasses = "rounded-2xl border border-border bg-surface p-5 sm:p-6";
+const panelClasses =
+  "border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-5 sm:p-6";
 
 /** Lit la session et les paramètres d'URL : à rendre sous <Suspense>. */
 export async function HeroIncidentDetail({ params }: { params: Promise<{ id: string }> }) {

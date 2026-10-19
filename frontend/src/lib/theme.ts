@@ -5,8 +5,8 @@ export const THEME_STORAGE_KEY = "theme";
 
 /** Couleur de la barre du navigateur mobile (`<meta name="theme-color">`) pour chaque thème. */
 export const themeColors: Record<Theme, string> = {
-  dark: "#1e1611",
-  light: "#f4ecdc",
+  dark: "#111315",
+  light: "#efe9da",
 };
 
 /**

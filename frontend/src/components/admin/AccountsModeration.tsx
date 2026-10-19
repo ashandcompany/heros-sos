@@ -28,7 +28,7 @@ function AccountCard({ account }: { account: CitizenAccount }) {
   return (
     <article
       aria-labelledby={titleId}
-      className="grid gap-5 rounded-2xl border border-border bg-surface p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
+      className="grid gap-5 border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
     >
       <div className="flex min-w-0 items-start gap-4">
         <Avatar name={account.firstName} src={account.avatarUrl} size={48} />
@@ -97,7 +97,7 @@ export async function AccountsModeration({
               return (
                 <li
                   key={account.id}
-                  className="grid gap-4 rounded-2xl border border-border bg-surface p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
+                  className="grid gap-4 border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
                 >
                   <div className="min-w-0">
                     <p className="font-display font-semibold">{fullName}</p>

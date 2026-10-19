@@ -19,7 +19,7 @@ function StatTile({
   detail?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col rounded-2xl border border-border bg-surface p-5">
+    <div className="flex flex-col border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-5">
       <dt className="order-2 text-sm text-muted">{label}</dt>
       <dd className="order-1 font-mono text-4xl font-semibold">{value}</dd>
       {detail && <dd className="order-3 mt-2 text-sm text-muted">{detail}</dd>}
@@ -43,7 +43,7 @@ function IncidentTypesBreakdown({ counts }: { counts: Record<IncidentType, numbe
   const max = Math.max(1, ...rows.map(([, count]) => count));
 
   return (
-    <div className="rounded-2xl border border-border bg-surface p-5">
+    <div className="border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-5">
       <h3 id="types-title" className="mb-4 text-sm text-muted">
         Signalements par type d&apos;incident
       </h3>
@@ -132,7 +132,7 @@ export async function HeroDashboardContent() {
             value={formatInteger(personal.videos)}
             detail={`${personal.publishedVideos} publié${personal.publishedVideos > 1 ? "s" : ""}`}
           />
-          <div className="flex flex-col rounded-2xl border border-border bg-surface p-5">
+          <div className="flex flex-col border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-5">
             <dt className="text-sm text-muted">Ennemis principaux</dt>
             <dd className="mt-2">
               {personal.mainEnemies.length === 0 ? (
@@ -205,12 +205,12 @@ export async function HeroDashboardContent() {
 export function HeroDashboardSkeleton() {
   return (
     <div aria-hidden="true" className="space-y-6">
-      <div className="h-40 rounded-2xl border border-border bg-surface motion-safe:animate-pulse" />
+      <div className="h-40 border-2 border-border bg-surface motion-safe:animate-pulse" />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }, (_, index) => (
           <div
             key={index}
-            className="h-36 rounded-2xl border border-border bg-surface motion-safe:animate-pulse"
+            className="h-36 border-2 border-border bg-surface motion-safe:animate-pulse"
           />
         ))}
       </div>

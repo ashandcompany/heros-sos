@@ -40,7 +40,7 @@ export function SuperHeroDetailsDialog({ hero }: { hero: SuperHeroProfile }) {
     <dialog
       id={heroDialogId(hero.id)}
       aria-labelledby={titleId}
-      className="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-2xl overflow-y-auto rounded-2xl border border-border bg-surface p-0 text-foreground backdrop:bg-black/70 backdrop:backdrop-blur-sm"
+      className="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-2xl overflow-y-auto border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-0 text-foreground backdrop:bg-black/70 backdrop:backdrop-blur-sm"
     >
       <div className="flex items-start gap-4 p-6 sm:p-8">
         <Avatar name={hero.alias} src={hero.avatarUrl} size={64} />

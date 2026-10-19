@@ -16,9 +16,9 @@ async function SessionAwareNav() {
 
 export function SiteHeader() {
   return (
-    <header className="sticky top-0 z-40 bg-background shadow-[0_4px_0_0_var(--color-shadow)]">
+    <header className="sticky top-0 z-40 bg-background">
       {/* Bandeau officiel */}
-      <div className="border-b-2 border-border bg-surface-raised">
+      <div className="border-b-2 border-edge bg-surface-raised">
         <Container className="flex h-8 items-center justify-between gap-4 font-mono text-xs tracking-widest text-muted uppercase">
           <p className="truncate">
             <span className="hidden sm:inline">Service de signalement des incidents — </span>
@@ -32,7 +32,7 @@ export function SiteHeader() {
         </Container>
       </div>
 
-      <div className="border-b-4 border-double border-border">
+      <div className="border-b-4 border-edge">
         <Container className="relative flex h-16 items-center justify-between gap-4">
           <Link
             href={routes.home}
@@ -47,6 +47,7 @@ export function SiteHeader() {
           </Suspense>
         </Container>
       </div>
+      <div aria-hidden="true" className="bar-tricolor" />
     </header>
   );
 }

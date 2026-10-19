@@ -20,7 +20,7 @@ export function Panel({
   return (
     <section
       aria-labelledby={id}
-      className="rounded-2xl border border-border bg-surface p-5 sm:p-8"
+      className="border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-5 sm:p-8"
     >
       <h2 id={id} className="font-display text-xl font-semibold">
         {title}
@@ -104,8 +104,8 @@ export async function AccountDetails() {
 export function AccountDetailsSkeleton() {
   return (
     <div aria-hidden="true" className="grid gap-6 lg:grid-cols-[20rem_1fr]">
-      <div className="h-96 rounded-2xl border border-border bg-surface motion-safe:animate-pulse" />
-      <div className="h-[36rem] rounded-2xl border border-border bg-surface motion-safe:animate-pulse" />
+      <div className="h-96 border-2 border-border bg-surface motion-safe:animate-pulse" />
+      <div className="h-[36rem] border-2 border-border bg-surface motion-safe:animate-pulse" />
     </div>
   );
 }

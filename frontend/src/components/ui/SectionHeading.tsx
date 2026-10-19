@@ -24,17 +24,17 @@ export function SectionHeading({
   return (
     <div className={cn("max-w-3xl", className)}>
       {label && (
-        <p className="mb-2 font-mono text-sm font-medium tracking-widest text-accent uppercase">
+        <p className="mb-3 inline-block bg-accent px-2 py-0.5 font-mono text-xs font-semibold tracking-widest text-background uppercase">
           {label}
         </p>
       )}
       <h2
         id={id}
-        className="font-display text-2xl font-bold tracking-[0.12em] text-balance uppercase sm:text-3xl"
+        className="font-display text-3xl font-black tracking-[0.04em] text-balance uppercase sm:text-4xl"
       >
         {title}
       </h2>
-      <div aria-hidden="true" className="rule-thick mt-4 w-24" />
+      <div aria-hidden="true" className="rule-thick mt-4 w-20" />
       {description && <p className="mt-4 text-muted text-pretty">{description}</p>}
     </div>
   );

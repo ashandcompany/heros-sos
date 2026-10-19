@@ -18,7 +18,7 @@ export default function HeroIncidentPage({ params }: PageProps<"/heros/incidents
         fallback={
           <div
             aria-hidden="true"
-            className="h-[32rem] rounded-2xl border border-border bg-surface motion-safe:animate-pulse"
+            className="h-[32rem] border-2 border-border bg-surface motion-safe:animate-pulse"
           />
         }
       >

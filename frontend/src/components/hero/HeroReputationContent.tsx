@@ -36,7 +36,7 @@ export async function HeroReputationContent() {
     <div className="grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start">
       <section
         aria-labelledby="score-title"
-        className="rounded-2xl border border-border bg-surface p-5 sm:p-6"
+        className="border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-5 sm:p-6"
       >
         <h2 id="score-title" className="text-sm text-muted">
           Note globale
@@ -76,7 +76,7 @@ export async function HeroReputationContent() {
                 <li key={rating.incidentId}>
                   <article
                     aria-labelledby={titleId}
-                    className="rounded-2xl border border-border bg-surface p-5 sm:p-6"
+                    className="border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-5 sm:p-6"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <RatingStars rating={rating.rating} />

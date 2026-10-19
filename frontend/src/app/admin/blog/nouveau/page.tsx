@@ -22,7 +22,7 @@ export default function AdminNewArticlePage() {
         </Link>
       </p>
       <AdminPageHeader title="Nouvel article" />
-      <div className="max-w-3xl rounded-2xl border border-border bg-surface p-5 sm:p-8">
+      <div className="max-w-3xl border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-5 sm:p-8">
         <Suspense fallback={<div aria-hidden="true" className="h-[40rem]" />}>
           <NewArticle />
         </Suspense>

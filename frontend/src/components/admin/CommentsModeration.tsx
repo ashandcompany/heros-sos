@@ -27,7 +27,7 @@ function CommentCard({ rating }: { rating: RatingForModeration }) {
   return (
     <article
       aria-labelledby={titleId}
-      className="grid gap-5 rounded-2xl border border-border bg-surface p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_auto]"
+      className="grid gap-5 border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_auto]"
     >
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-3">

@@ -63,7 +63,7 @@ export default function BlogArticlePage({ params }: PageProps<"/blog/[slug]">) {
         fallback={
           <div
             aria-hidden="true"
-            className="h-96 max-w-3xl rounded-2xl border border-border bg-surface motion-safe:animate-pulse"
+            className="h-96 max-w-3xl border-2 border-border bg-surface motion-safe:animate-pulse"
           />
         }
       >

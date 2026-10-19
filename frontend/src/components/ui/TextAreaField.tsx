@@ -34,7 +34,7 @@ export function TextAreaField({
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
         className={cn(
-          "w-full rounded-xl border bg-background px-4 py-3 text-foreground placeholder:text-muted",
+          "w-full border-2 bg-background px-4 py-3 text-foreground placeholder:text-muted",
           error ? "border-danger" : "border-border",
         )}
         {...textareaProps}

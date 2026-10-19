@@ -1,0 +1,19 @@
+FROM golang:1.26.5-alpine3.23 AS builder
+
+WORKDIR /usr/src/app/
+
+
+COPY cmd/go.mod cmd/go.sum ./${SERVICE_NAME}/
+
+WORKDIR /usr/src/app/
+RUN go mod download
+
+COPY . .
+RUN CGO_ENABLED=0 go build -o /usr/src/app/bin/${SERVICE_NAME} .
+
+FROM scratch
+
+ARG SERVICE_NAME
+
+COPY --from=builder /usr/src/app/bin/cmd /cmd/
+CMD ["/cmd"]

@@ -3,13 +3,13 @@ FROM golang:1.26.5-alpine3.23 AS builder
 WORKDIR /usr/src/app/
 
 
-COPY cmd/go.mod cmd/go.sum ./${SERVICE_NAME}/
+COPY cmd/go.mod cmd/go.sum ./
 
 WORKDIR /usr/src/app/
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 go build -o /usr/src/app/bin/${SERVICE_NAME} .
+RUN CGO_ENABLED=0 go build -o /usr/src/app/bin/cmd .
 
 FROM scratch
 

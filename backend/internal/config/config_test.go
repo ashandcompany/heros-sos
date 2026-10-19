@@ -51,6 +51,7 @@ func TestLoadAppliesDefaults(t *testing.T) {
 		{"niveau de log", cfg.LogLevel, slog.LevelInfo},
 		{"adresse HTTP", cfg.HTTP.Addr, defaultHTTPAddr},
 		{"taille max du corps", cfg.HTTP.MaxBodyBytes, int64(defaultMaxBodyBytes)},
+		{"délai du healthcheck", cfg.HTTP.HealthcheckTimeout, defaultHealthcheckTimeout},
 		{"session membre : inactivité", cfg.Session.Member.IdleTimeout, defaultMemberSessionIdle},
 		{"session modérateur : durée max", cfg.Session.Moderator.MaxLifetime, defaultModeratorMax},
 		{"cookie sécurisé", cfg.Session.CookieSecure, false},

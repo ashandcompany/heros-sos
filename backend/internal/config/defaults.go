@@ -6,13 +6,14 @@ import "time"
 // durées, des tailles ou des seuils codés en dur : le reste du code les lit depuis Config.
 // Chaque valeur peut être surchargée par une variable d'environnement (voir env.go).
 const (
-	defaultHTTPAddr          = ":8080"
-	defaultReadHeaderTimeout = 5 * time.Second
-	defaultReadTimeout       = 15 * time.Second
-	defaultWriteTimeout      = 30 * time.Second
-	defaultIdleTimeout       = 60 * time.Second
-	defaultShutdownTimeout   = 20 * time.Second
-	defaultMaxBodyBytes      = 1 << 20 // 1 Mio
+	defaultHTTPAddr           = ":8080"
+	defaultReadHeaderTimeout  = 5 * time.Second
+	defaultReadTimeout        = 15 * time.Second
+	defaultWriteTimeout       = 30 * time.Second
+	defaultIdleTimeout        = 60 * time.Second
+	defaultShutdownTimeout    = 20 * time.Second
+	defaultMaxBodyBytes       = 1 << 20 // 1 Mio
+	defaultHealthcheckTimeout = 3 * time.Second
 
 	defaultDBMaxOpenConns    = 25
 	defaultDBMaxIdleConns    = 5

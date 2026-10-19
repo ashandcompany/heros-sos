@@ -1,0 +1,68 @@
+import type { SuperHero } from "@/types";
+
+export const superHeroesMock: SuperHero[] = [
+  {
+    id: "hero-1",
+    alias: "Lumen",
+    avatarUrl: null,
+    power: "Manipule la lumière pour aveugler ou guider",
+    averageRating: 4.9,
+    interventionsCount: 214,
+  },
+  {
+    id: "hero-2",
+    alias: "Rempart",
+    avatarUrl: null,
+    power: "Génère des boucliers d'énergie indestructibles",
+    averageRating: 4.8,
+    interventionsCount: 187,
+  },
+  {
+    id: "hero-3",
+    alias: "Vélocité",
+    avatarUrl: null,
+    power: "Se déplace à une vitesse supersonique",
+    averageRating: 4.6,
+    interventionsCount: 302,
+  },
+  {
+    id: "hero-4",
+    alias: "Sylve",
+    avatarUrl: null,
+    power: "Contrôle la végétation urbaine",
+    averageRating: 4.7,
+    interventionsCount: 96,
+  },
+  {
+    id: "hero-5",
+    alias: "Écho",
+    avatarUrl: null,
+    power: "Perçoit et reproduit n'importe quel son",
+    averageRating: 4.5,
+    interventionsCount: 141,
+  },
+  {
+    id: "hero-6",
+    alias: "Magnéta",
+    avatarUrl: null,
+    power: "Maîtrise les champs magnétiques",
+    averageRating: 4.8,
+    interventionsCount: 158,
+  },
+  {
+    id: "hero-7",
+    alias: "Brume",
+    avatarUrl: null,
+    power: "Se dissout en brouillard à volonté",
+    averageRating: 4.4,
+    interventionsCount: 73,
+  },
+  {
+    id: "hero-8",
+    alias: "Titanide",
+    avatarUrl: null,
+    power: "Force colossale et peau de granit",
+    averageRating: 4.7,
+    interventionsCount: 229,
+  },
+];

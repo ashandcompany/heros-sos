@@ -1,0 +1,333 @@
+/*
+ * Direction artistique « administration rétro-futuriste » (années 70) : CSS pur, aucune image.
+ * Tout est décoratif ; les couleurs viennent des tokens définis dans globals.css (@theme).
+ * Les effets animés sont désactivés sous prefers-reduced-motion (voir bas de fichier).
+ */
+
+:root {
+  /* Fond des écrans (cathodique, afficheur) : toujours noir, quel que soit le thème.
+     Contours et ombres : tokens --color-edge / --color-shadow (globals.css), adoucis en thème clair. */
+  --retro-screen: #0d0906;
+  /* Ombrage des lattes de bois */
+  --retro-wood-shade: 1;
+  --retro-noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Focus visible : filet ambre double sur fond sombre, brun sur papier */
+:focus-visible {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 2px var(--color-edge);
+}
+
+.paper :focus-visible {
+  outline-color: var(--color-primary-ink);
+  box-shadow: 0 0 0 2px var(--color-paper);
+}
+
+/* Grain de papier : voile discret sur toute la page, jamais interactif */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  pointer-events: none;
+  background-image: var(--retro-noise);
+  opacity: 0.07;
+  mix-blend-mode: overlay;
+}
+
+/* Thème clair : lattes de bois nettement plus discrètes */
+:root[data-theme="light"] {
+  --retro-wood-shade: 0.4;
+}
+
+/* Fond lattes de bois verticales */
+.bg-wood {
+  background-color: var(--color-surface);
+  background-image:
+    repeating-linear-gradient(
+      90deg,
+      rgb(0 0 0 / calc(0.22 * var(--retro-wood-shade))) 0 2px,
+      transparent 2px 28px
+    ),
+    repeating-linear-gradient(90deg, rgb(255 255 255 / 0.035) 0 14px, transparent 14px 28px),
+    linear-gradient(
+      180deg,
+      rgb(0 0 0 / calc(0.18 * var(--retro-wood-shade))),
+      transparent 30%,
+      transparent 70%,
+      rgb(0 0 0 / calc(0.25 * var(--retro-wood-shade)))
+    );
+}
+
+/* Carrelage géométrique : quarts de cercle et joints, version très atténuée */
+.bg-tiles {
+  background-image:
+    radial-gradient(
+      circle at 0 0,
+      transparent 0 41px,
+      color-mix(in oklab, var(--color-accent) 22%, transparent) 41px 43px,
+      transparent 43px
+    ),
+    radial-gradient(
+      circle at 100% 100%,
+      transparent 0 41px,
+      color-mix(in oklab, var(--color-primary) 26%, transparent) 41px 43px,
+      transparent 43px
+    ),
+    linear-gradient(color-mix(in oklab, var(--color-edge) 55%, transparent) 2px, transparent 2px),
+    linear-gradient(
+      90deg,
+      color-mix(in oklab, var(--color-edge) 55%, transparent) 2px,
+      transparent 2px
+    );
+  background-size: 96px 96px;
+}
+
+/* Plaque vissée : cadre épais, filet intérieur, ombre dure */
+.panel {
+  position: relative;
+  background-color: var(--color-surface);
+  border: 3px solid var(--color-edge);
+  box-shadow:
+    inset 0 0 0 2px var(--color-border),
+    4px 4px 0 var(--color-shadow);
+}
+
+@media (min-width: 640px) {
+  .panel {
+    border-width: 4px;
+    box-shadow:
+      inset 0 0 0 3px var(--color-border),
+      inset 0 0 0 5px var(--color-edge),
+      6px 6px 0 var(--color-shadow);
+  }
+}
+
+/* Rivets aux quatre coins (masqués sur petit écran) */
+.rivets::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: none;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  background-size: 9px 9px;
+  background-image:
+    radial-gradient(
+      circle at 35% 35%,
+      #ead9b6 0 1.5px,
+      #9a7a58 2.5px,
+      #3b2a1e 4.5px,
+      transparent 5px
+    ),
+    radial-gradient(
+      circle at 35% 35%,
+      #ead9b6 0 1.5px,
+      #9a7a58 2.5px,
+      #3b2a1e 4.5px,
+      transparent 5px
+    ),
+    radial-gradient(
+      circle at 35% 35%,
+      #ead9b6 0 1.5px,
+      #9a7a58 2.5px,
+      #3b2a1e 4.5px,
+      transparent 5px
+    ),
+    radial-gradient(
+      circle at 35% 35%,
+      #ead9b6 0 1.5px,
+      #9a7a58 2.5px,
+      #3b2a1e 4.5px,
+      transparent 5px
+    );
+  background-position:
+    10px 10px,
+    calc(100% - 10px) 10px,
+    10px calc(100% - 10px),
+    calc(100% - 10px) calc(100% - 10px);
+}
+
+@media (min-width: 640px) {
+  .rivets::before {
+    display: block;
+  }
+}
+
+/* Papier / carton : fiches, formulaires. Le texte y est brun foncé (contraste ≈ 14:1). */
+.paper {
+  color: var(--color-ink);
+  background-color: var(--color-paper);
+  background-image:
+    var(--retro-noise), linear-gradient(180deg, rgb(255 255 255 / 0.25), rgb(120 80 40 / 0.08));
+  background-blend-mode: multiply, normal;
+}
+
+/* Écran cathodique */
+.crt {
+  position: relative;
+  padding: 0.75rem;
+  background-color: var(--retro-screen);
+  border: 4px solid var(--color-border);
+  border-radius: 1rem;
+  box-shadow:
+    inset 0 0 0 3px var(--retro-screen),
+    5px 5px 0 var(--color-shadow);
+}
+
+@media (min-width: 640px) {
+  .crt {
+    padding: 1.5rem;
+    border-width: 6px;
+    border-radius: 2rem;
+    box-shadow:
+      inset 0 0 0 4px var(--retro-screen),
+      8px 8px 0 var(--color-shadow);
+  }
+}
+
+.crt__screen {
+  position: relative;
+  isolation: isolate;
+  padding: 0.75rem;
+  background-color: var(--color-background);
+  border-radius: 0.75rem;
+  box-shadow: inset 0 0 50px rgb(0 0 0 / 0.75);
+  animation: crt-flicker 1s steps(1, end) 1;
+}
+
+@media (min-width: 640px) {
+  .crt__screen {
+    padding: 1.25rem;
+    border-radius: 1.5rem;
+    box-shadow: inset 0 0 90px rgb(0 0 0 / 0.8);
+  }
+}
+
+/* Lignes de balayage : au-dessus du contenu mais jamais interactives */
+.crt__screen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  border-radius: inherit;
+  background: repeating-linear-gradient(0deg, rgb(0 0 0 / 0.14) 0 1px, transparent 1px 3px);
+}
+
+@keyframes crt-flicker {
+  0% {
+    opacity: 0.15;
+  }
+  10% {
+    opacity: 1;
+  }
+  16% {
+    opacity: 0.45;
+  }
+  24% {
+    opacity: 1;
+  }
+  34% {
+    opacity: 0.8;
+  }
+  44% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* Tampon encré : police machine à écrire usée, légèrement incliné */
+.stamp {
+  display: inline-block;
+  padding: 0.2rem 0.7rem;
+  font-family: var(--font-stamp);
+  font-size: 1rem;
+  letter-spacing: 0.15em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--color-brick);
+  border: 3px double currentColor;
+  border-radius: 0.2rem;
+  opacity: 0.85;
+  transform: rotate(-9deg);
+  pointer-events: none;
+  user-select: none;
+}
+
+.stamp--terminal {
+  color: var(--color-terminal);
+}
+
+/* Affichage numérique : compteurs, horloge */
+.digital {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+  color: var(--color-terminal);
+  background-color: var(--retro-screen);
+  border: 2px solid var(--color-border);
+  border-radius: 0.2rem;
+  text-shadow: 0 0 6px color-mix(in oklab, var(--color-terminal) 55%, transparent);
+  box-shadow: inset 0 0 8px rgb(0 0 0 / 0.8);
+}
+
+/* Voyant lumineux */
+.led {
+  display: inline-block;
+  flex: none;
+  aspect-ratio: 1;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 9999px;
+  background-color: var(--color-terminal);
+  box-shadow:
+    0 0 0 2px var(--color-edge),
+    0 0 8px var(--color-terminal);
+}
+
+/* Filets */
+.rule-double {
+  border-top: 4px double var(--color-border);
+}
+
+.rule-thick {
+  border-top: 6px solid var(--color-edge);
+  box-shadow: 0 2px 0 var(--color-border);
+}
+
+.field-line {
+  border-bottom: 1px dotted currentColor;
+}
+
+/* Effet machine à écrire : chaque caractère apparaît à son tour (CSS pur, sans JS) */
+.tw-char {
+  opacity: 0;
+  animation: tw-in 0s steps(1, end) forwards;
+  animation-delay: calc(var(--i) * 45ms + 250ms);
+}
+
+@keyframes tw-in {
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tw-char {
+    opacity: 1;
+    animation: none;
+  }
+
+  .crt__screen {
+    animation: none;
+  }
+}

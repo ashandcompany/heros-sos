@@ -1,0 +1,47 @@
+name: Backend CI
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: backend
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Verify dependencies
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      # Échoue uniquement si une vulnérabilité atteignable dans le code est détectée
+      - name: Vulnerability check
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+      - name: Test (*_test.go)
+        run: go test ./... -race -count=1
+
+      - name: Build
+        run: go build ./...

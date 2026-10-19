@@ -40,7 +40,9 @@ export function IncidentCard({ incident }: { incident: ResolvedIncident }) {
         </div>
         <div>
           <dt className="text-muted">Vilain</dt>
-          <dd className="mt-0.5 font-semibold text-primary">{incident.villain.alias}</dd>
+          <dd className="mt-0.5 font-semibold text-primary">
+            {incident.villain?.alias ?? "Non identifié"}
+          </dd>
         </div>
       </dl>
     </article>

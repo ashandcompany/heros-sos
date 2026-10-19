@@ -30,7 +30,15 @@ export function Avatar({ name, src, size = 80, className }: AvatarProps) {
 
   if (src) {
     return (
-      <Image src={src} alt="" width={size} height={size} className={cn(classes, "object-cover")} />
+      <Image
+        src={src}
+        alt=""
+        width={size}
+        height={size}
+        // Photo envoyée par l'utilisateur (data URL dans les mocks) : pas d'optimisation possible.
+        unoptimized={src.startsWith("data:")}
+        className={cn(classes, "object-cover")}
+      />
     );
   }
 

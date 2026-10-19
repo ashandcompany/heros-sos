@@ -24,3 +24,11 @@ export async function getSuperHeroProfiles(sessionToken: string): Promise<SuperH
   const profiles = [...superHeroProfilesMock].sort((a, b) => a.alias.localeCompare(b.alias, "fr"));
   return mockResponse(profiles);
 }
+
+/**
+ * Tous les super-héros (profil public), triés par pseudo, pour l'encyclopédie.
+ * Future implémentation : `GET ${API_URL}/heroes?sort=alias`
+ */
+export async function getSuperHeroes(): Promise<SuperHero[]> {
+  return mockResponse([...superHeroesMock].sort((a, b) => a.alias.localeCompare(b.alias, "fr")));
+}

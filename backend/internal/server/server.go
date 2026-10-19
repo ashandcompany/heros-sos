@@ -21,9 +21,12 @@ import (
 	"github.com/ashandcompany/heros-sos/backend/internal/database"
 	"github.com/ashandcompany/heros-sos/backend/internal/hero"
 	"github.com/ashandcompany/heros-sos/backend/internal/httpx"
+	"github.com/ashandcompany/heros-sos/backend/internal/incident"
+	"github.com/ashandcompany/heros-sos/backend/internal/interventiontype"
 	"github.com/ashandcompany/heros-sos/backend/internal/mail"
 	"github.com/ashandcompany/heros-sos/backend/internal/moderation"
 	"github.com/ashandcompany/heros-sos/backend/internal/user"
+	"github.com/ashandcompany/heros-sos/backend/internal/villain"
 )
 
 // components regroupe les dépendances partagées par les fonctions d'enregistrement des routes.
@@ -43,6 +46,9 @@ type components struct {
 	authHandler       *auth.Handler
 	heroHandler       *hero.Handler
 	moderationHandler *moderation.Handler
+	incidentHandler   *incident.Handler
+	villainHandler    *villain.Handler
+	typeHandler       *interventiontype.Handler
 }
 
 // Server est l'application prête à servir.
@@ -144,6 +150,19 @@ func NewWithDB(cfg config.Config, logger *slog.Logger, db *gorm.DB, opts ...Opti
 	c.moderationHandler = moderation.NewHandler(
 		moderation.NewService(c.users, sessions, c.audit, c.tx, c.clock), logger)
 
+	types := interventiontype.NewRepository(db)
+	villains := villain.NewRepository(db)
+	c.typeHandler = interventiontype.NewHandler(
+		interventiontype.NewService(types, c.audit, c.tx, c.clock), logger, cfg.HTTP)
+	c.villainHandler = villain.NewHandler(
+		villain.NewService(villains, c.audit, c.tx, c.clock), logger, cfg.HTTP)
+	c.incidentHandler = incident.NewHandler(incident.HandlerDeps{
+		Service: incident.NewService(incident.ServiceDeps{
+			Repo: incident.NewRepository(db, sealer), Types: types, Villains: villains, Users: c.users,
+			Notifier: mailService, Audit: c.audit, Tx: c.tx, Clock: c.clock, Logger: logger,
+		}),
+		Logger: logger, HTTP: cfg.HTTP, Limits: cfg.Security.RateLimits, Clock: c.clock,
+	})
 	router := newRouter()
 	registerRoutes(router, c)
 
@@ -262,6 +281,7 @@ func (s *Server) runJanitor(ctx context.Context) {
 func (s *Server) cleanup(ctx context.Context) {
 	c := s.components
 	c.authHandler.SweepLimiters()
+	c.incidentHandler.SweepLimiters()
 	sessions, tokens, err := c.authService.Cleanup(ctx, s.cfg.Jobs.SessionRetention, s.cfg.Jobs.TokenRetention)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "nettoyage périodique en échec", "error", err)

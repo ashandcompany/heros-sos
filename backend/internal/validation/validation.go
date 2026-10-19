@@ -33,6 +33,12 @@ const (
 	MaxBioLength               = 1000
 	MaxRequestMessageLength    = 2000
 	MaxRejectionReasonLength   = 1000
+	MaxLabelLength             = 60
+	MaxShortDescriptionLength  = 500
+	MinIncidentTitleLength     = 5
+	MaxIncidentTitleLength     = 80
+	MinIncidentDescription     = 20
+	MaxIncidentDescription     = 1000
 	MaxIdentifierLength        = MaxEmailLength
 	MaxAgeInYears              = 120
 	isoDateLayout              = "2006-01-02"
@@ -201,6 +207,22 @@ func RequiredText(raw string, maxLength int) (trimmed, code string) {
 	case trimmed == "":
 		return trimmed, CodeRequired
 	case utf8.RuneCountInString(trimmed) > maxLength:
+		return trimmed, CodeTooLong
+	}
+	return trimmed, ""
+}
+
+// BoundedText valide un texte obligatoire dont la longueur (en caractères) est comprise entre
+// minLength et maxLength.
+func BoundedText(raw string, minLength, maxLength int) (trimmed, code string) {
+	trimmed = strings.TrimSpace(raw)
+	length := utf8.RuneCountInString(trimmed)
+	switch {
+	case trimmed == "":
+		return trimmed, CodeRequired
+	case length < minLength:
+		return trimmed, CodeTooShort
+	case length > maxLength:
 		return trimmed, CodeTooLong
 	}
 	return trimmed, ""

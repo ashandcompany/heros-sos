@@ -19,19 +19,23 @@ var templateFS embed.FS
 const (
 	templateActivation    = "activation"
 	templatePasswordReset = "password_reset"
+	templateIncident      = "incident_reported"
 )
 
 const (
 	subjectActivation    = "Activez votre compte %s"
 	subjectPasswordReset = "Réinitialisation de votre mot de passe %s"
+	subjectIncident      = "Nouvel incident déclaré sur %s"
 )
 
 // templateData est ce que voient les modèles.
 type templateData struct {
-	AppName   string
-	FirstName string
-	Link      string
-	ExpiresIn string
+	AppName       string
+	FirstName     string
+	Link          string
+	ExpiresIn     string
+	IncidentTitle string
+	IncidentType  string
 }
 
 // Service compose les mails de l'application à partir des modèles et les confie à un Mailer.
@@ -68,6 +72,14 @@ func (s *Service) SendActivation(ctx context.Context, to, firstName, link string
 func (s *Service) SendPasswordReset(ctx context.Context, to, firstName, link string) error {
 	return s.send(ctx, to, fmt.Sprintf(subjectPasswordReset, s.appName), templatePasswordReset, templateData{
 		FirstName: firstName, Link: link, ExpiresIn: formatDuration(s.tokens.PasswordResetTTL),
+	})
+}
+
+// SendIncidentReported prévient un destinataire d'un nouvel incident. Le sujet est fixe : le
+// titre, saisi par un utilisateur, ne figure que dans le corps.
+func (s *Service) SendIncidentReported(ctx context.Context, to, title, interventionType string) error {
+	return s.send(ctx, to, fmt.Sprintf(subjectIncident, s.appName), templateIncident, templateData{
+		IncidentTitle: title, IncidentType: interventionType,
 	})
 }
 

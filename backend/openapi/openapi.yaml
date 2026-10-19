@@ -38,6 +38,9 @@ tags:
   - name: Authentification
   - name: Super-héros
   - name: Modération
+  - name: Incidents
+  - name: Types d'intervention
+  - name: Vilains
 
 paths:
   /health:
@@ -419,7 +422,8 @@ paths:
           schema: { type: string, enum: [citizen, hero, moderator] }
         - name: status
           in: query
-          schema: { type: string, enum: [pending_activation, active, deactivated] }
+          schema:
+            { type: string, enum: [pending_activation, active, deactivated] }
         - name: email
           in: query
           schema: { type: string }
@@ -491,6 +495,180 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/InternalError" }
 
+  /intervention-types:
+    get:
+      tags: [Types d'intervention]
+      summary: Types d'intervention choisissables
+      description: Les types actifs, par libellé. C'est la liste à proposer dans le formulaire de déclaration.
+      operationId: listInterventionTypes
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Une page de types actifs.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InterventionTypePage" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/intervention-types:
+    get:
+      tags: [Types d'intervention]
+      summary: Tous les types d'intervention
+      description: Réservé aux modérateurs. Inclut les types désactivés.
+      operationId: listAllInterventionTypes
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Une page de types.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InterventionTypePage" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    post:
+      tags: [Types d'intervention]
+      summary: Créer un type d'intervention
+      description: Le type est actif dès sa création.
+      operationId: createInterventionType
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InterventionTypePayload" }
+      responses:
+        "201":
+          description: Type créé.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InterventionType" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: Ce libellé est déjà utilisé (`intervention_type_label_already_used`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/intervention-types/{id}/deactivate:
+    post:
+      tags: [Types d'intervention]
+      summary: Désactiver un type d'intervention
+      description: |
+        Le type n'est plus proposé aux nouvelles déclarations ; les incidents existants le gardent.
+        Idempotent. Il n'existe pas de suppression.
+      operationId: deactivateInterventionType
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "204": { description: Type désactivé. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /villains:
+    post:
+      tags: [Vilains]
+      summary: Créer un vilain
+      description: |
+        Tout utilisateur connecté peut déclarer un vilain, visible aussitôt par tous. Le pseudo est
+        unique, sans tenir compte de la casse. Le niveau de menace commence à `faible` : seul un
+        modérateur le modifie.
+      operationId: createVillain
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VillainPayload" }
+      responses:
+        "201":
+          description: Vilain créé.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Villain" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: Ce pseudo est déjà utilisé (`villain_alias_already_used`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    get:
+      tags: [Vilains]
+      summary: Liste des vilains
+      description: Par pseudo. Le filtre `q` porte sur le début du pseudo, sans tenir compte de la casse.
+      operationId: listVillains
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Une page de vilains.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VillainPage" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /incidents:
+    post:
+      tags: [Incidents]
+      summary: Déclarer un incident
+      description: |
+        Tout utilisateur connecté peut déclarer un incident. Le type d'intervention doit exister et
+        être actif ; le vilain, s'il est fourni, doit exister. Le lieu est chiffré en base. Les modérateurs
+        et les héros actifs reçoivent un mail (sans le lieu). Le nombre de déclarations par utilisateur
+        est limité (`rate_limited`).
+      operationId: createIncident
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IncidentPayload" }
+      responses:
+        "201":
+          description: Incident déclaré, à l'état `signale`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Incident" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
 components:
   securitySchemes:
     sessionCookie:
@@ -515,7 +693,7 @@ components:
       name: id
       in: path
       required: true
-      description: Identifiant de l'utilisateur.
+      description: Identifiant de la ressource.
       schema: { type: string, format: uuid }
     Limit:
       name: limit
@@ -640,7 +818,17 @@ components:
 
     RegisterRequest:
       type: object
-      required: [civility, firstName, lastName, birthDate, email, mobilePhone, address, password]
+      required:
+        [
+          civility,
+          firstName,
+          lastName,
+          birthDate,
+          email,
+          mobilePhone,
+          address,
+          password,
+        ]
       additionalProperties: false
       properties:
         civility: { type: string, enum: [madame, monsieur, non-precise] }
@@ -756,7 +944,18 @@ components:
 
     HeroApplicant:
       type: object
-      required: [userId, alias, bio, requestMessage, status, createdAt, email, firstName, lastName]
+      required:
+        [
+          userId,
+          alias,
+          bio,
+          requestMessage,
+          status,
+          createdAt,
+          email,
+          firstName,
+          lastName,
+        ]
       properties:
         userId: { type: string, format: uuid }
         alias: { type: string }
@@ -789,7 +988,8 @@ components:
         lastName: { type: string }
         alias: { type: string }
         role: { type: string, enum: [citizen, hero, moderator] }
-        status: { type: string, enum: [pending_activation, active, deactivated] }
+        status:
+          { type: string, enum: [pending_activation, active, deactivated] }
         verifiedAt: { type: string, format: date-time }
         createdAt: { type: string, format: date-time }
 
@@ -803,3 +1003,129 @@ components:
         total: { type: integer }
         limit: { type: integer }
         offset: { type: integer }
+
+    InterventionTypePayload:
+      type: object
+      required: [label]
+      additionalProperties: false
+      properties:
+        label: { type: string, maxLength: 60 }
+        description: { type: string, maxLength: 500 }
+
+    InterventionType:
+      type: object
+      required: [id, label, description, active, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        label: { type: string }
+        description: { type: string }
+        active: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    InterventionTypePage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/InterventionType" }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+
+    VillainPayload:
+      type: object
+      required: [alias]
+      additionalProperties: false
+      properties:
+        alias:
+          type: string
+          description: "Pseudo (2 à 30 caractères : lettres, chiffres, espaces, tirets)."
+        description: { type: string, maxLength: 500 }
+
+    Villain:
+      type: object
+      required: [id, alias, description, threatLevel, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        alias: { type: string }
+        description: { type: string }
+        threatLevel: { type: string, enum: [faible, modere, eleve, critique] }
+        createdAt: { type: string, format: date-time }
+
+    VillainPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Villain" }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+
+    IncidentLocation:
+      type: object
+      required: [address, city]
+      additionalProperties: false
+      properties:
+        address: { type: string, maxLength: 200 }
+        city: { type: string, maxLength: 100 }
+
+    IncidentPayload:
+      type: object
+      required: [interventionTypeId, title, description, reporterRole, location]
+      additionalProperties: false
+      properties:
+        interventionTypeId: { type: string, format: uuid }
+        title: { type: string, minLength: 5, maxLength: 80 }
+        description: { type: string, minLength: 20, maxLength: 1000 }
+        reporterRole: { type: string, enum: [temoin, victime] }
+        location: { $ref: "#/components/schemas/IncidentLocation" }
+        occurredAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Date des faits (RFC 3339, pas dans le futur) ; `null` si l'incident est en cours.
+        villainId:
+          type: string
+          format: uuid
+          nullable: true
+          description: "`null` si le déclarant ne sait pas quel vilain est impliqué."
+
+    Incident:
+      type: object
+      required:
+        [
+          id,
+          title,
+          description,
+          interventionType,
+          status,
+          reporterRole,
+          location,
+          reportedAt,
+          villain,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        description: { type: string }
+        interventionType:
+          type: object
+          required: [id, label]
+          properties:
+            id: { type: string, format: uuid }
+            label: { type: string }
+        status: { type: string, enum: [signale, en-cours, resolu] }
+        reporterRole: { type: string, enum: [temoin, victime] }
+        location: { $ref: "#/components/schemas/IncidentLocation" }
+        reportedAt: { type: string, format: date-time }
+        occurredAt: { type: string, format: date-time }
+        villain:
+          type: object
+          nullable: true
+          required: [id, alias]
+          properties:
+            id: { type: string, format: uuid }
+            alias: { type: string }

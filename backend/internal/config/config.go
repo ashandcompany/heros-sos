@@ -155,6 +155,7 @@ type RateLimits struct {
 	RegisterPerIP         RateRule
 	PasswordResetPerIP    RateRule
 	PasswordResetPerEmail RateRule
+	IncidentCreatePerUser RateRule
 	MaxTrackedKeys        int
 }
 
@@ -320,6 +321,7 @@ func Load(getenv func(string) string) (Config, error) {
 				RegisterPerIP:         l.rateRule(envRateRegisterPerIP, defaultRateRegisterPerIP),
 				PasswordResetPerIP:    l.rateRule(envRatePasswordResetPerIP, defaultRatePasswordResetPerIP),
 				PasswordResetPerEmail: l.rateRule(envRatePasswordResetPerKey, defaultRatePasswordResetPerKey),
+				IncidentCreatePerUser: l.rateRule(envRateIncidentCreatePerUser, defaultRateIncidentCreatePerUser),
 				MaxTrackedKeys:        l.positiveInt(envMaxTrackedRateKeys, defaultMaxTrackedRateKeys),
 			},
 			Tokens: Tokens{

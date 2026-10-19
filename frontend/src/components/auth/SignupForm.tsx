@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState, type FormEvent } from "react";
 import { signupAction, type SignupFormState } from "@/app/actions/signup";
+import { AddressField } from "@/components/ui/AddressField";
 import { buttonClasses } from "@/components/ui/ButtonLink";
 import { cn } from "@/components/ui/cn";
 import { PasswordField } from "@/components/ui/PasswordField";
@@ -218,13 +219,15 @@ export function SignupForm() {
               defaultValue={values.mobilePhone}
               error={errors.mobilePhone}
             />
-            <TextField
+            <AddressField
               label="Numéro et nom de la rue"
+              hint="Commencez à saisir votre adresse, puis choisissez-la dans la liste."
               name="street"
               autoComplete="address-line1"
               required
               defaultValue={values.street}
               error={errors.street}
+              fill={{ postalCode: "postalCode", city: "city", country: "country" }}
             />
             <div className="grid gap-5 sm:grid-cols-[10rem_1fr]">
               <TextField

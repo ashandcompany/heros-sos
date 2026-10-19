@@ -7,6 +7,7 @@ import {
   updateContactAction,
   updateNewsletterAction,
 } from "@/app/actions/account";
+import { AddressField } from "@/components/ui/AddressField";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { SelectField } from "@/components/ui/SelectField";
 import { SubmitButton } from "@/components/ui/SubmitButton";
@@ -85,13 +86,15 @@ export function ContactForm({
         defaultValue={value("mobilePhone", contact.mobilePhone)}
         error={errors.mobilePhone}
       />
-      <TextField
+      <AddressField
         label="Numéro et nom de la rue"
+        hint="Commencez à saisir l'adresse, puis choisissez-la dans la liste."
         name="street"
         autoComplete="address-line1"
         required
         defaultValue={value("street", address?.street ?? "")}
         error={errors.street}
+        fill={{ postalCode: "postalCode", city: "city", country: "country" }}
       />
       {withComplement && (
         <TextField

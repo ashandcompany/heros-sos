@@ -1,4 +1,4 @@
-/** Routes de l'application. Seule la page d'accueil existe pour l'instant. */
+/** Routes de l'application. Seules les pages d'accueil et de connexion existent pour l'instant. */
 export const routes = {
   home: "/",
   encyclopedia: "/encyclopedie",
@@ -6,6 +6,7 @@ export const routes = {
   blog: "/blog",
   login: "/connexion",
   signup: "/inscription",
+  forgotPassword: "/mot-de-passe-oublie",
   about: "/a-propos",
   contact: "/contact",
   faq: "/faq",

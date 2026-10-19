@@ -33,7 +33,7 @@ const footerColumns: Array<{ id: string; title: string; links: NavItem[] }> = [
 
 export function SiteFooter() {
   return (
-    <footer className="bg-wood border-t-8 border-double border-[#0d0906] text-foreground">
+    <footer className="bg-wood border-t-8 border-double border-edge text-foreground">
       <Container className="grid gap-12 py-12 lg:grid-cols-[1fr_1.1fr] lg:py-16">
         <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
           {footerColumns.map((column) => (
@@ -60,14 +60,8 @@ export function SiteFooter() {
           ))}
         </div>
 
-        <section
-          aria-labelledby="newsletter-title"
-          className="panel rivets paper p-5 sm:p-6"
-        >
-          <p
-            aria-hidden="true"
-            className="font-mono text-xs tracking-widest text-background/75 uppercase"
-          >
+        <section aria-labelledby="newsletter-title" className="panel rivets paper p-5 sm:p-6">
+          <p aria-hidden="true" className="font-mono text-xs tracking-widest text-ink/75 uppercase">
             Formulaire n° 12-C
           </p>
           <h2
@@ -76,7 +70,7 @@ export function SiteFooter() {
           >
             Demande d&apos;abonnement au bulletin officiel
           </h2>
-          <p className="mt-2 mb-5 text-sm text-pretty text-background/85">
+          <p className="mt-2 mb-5 text-sm text-pretty text-ink/85">
             Une fois par mois : interventions marquantes, nouveaux agents et recommandations de
             sécurité. Veuillez remplir le champ ci-dessous, puis apposer le tampon.
           </p>
@@ -86,7 +80,7 @@ export function SiteFooter() {
         </section>
       </Container>
 
-      <div className="border-t-4 border-[#0d0906] bg-background">
+      <div className="border-t-4 border-edge bg-background">
         <Container className="flex flex-col items-start justify-between gap-4 py-6 font-mono text-xs tracking-wider text-muted uppercase sm:flex-row sm:items-center">
           <Logo />
           <div className="space-y-1 sm:text-right">

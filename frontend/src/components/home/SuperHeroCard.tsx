@@ -12,12 +12,12 @@ export function SuperHeroCard({ hero }: { hero: SuperHero }) {
       {/* Fente du cordon */}
       <span
         aria-hidden="true"
-        className="absolute top-2 left-1/2 h-2 w-14 -translate-x-1/2 rounded-full border-2 border-[#0d0906] bg-background"
+        className="absolute top-2 left-1/2 h-2 w-14 -translate-x-1/2 rounded-full border-2 border-edge bg-background"
       />
 
       <p
         aria-hidden="true"
-        className="font-mono text-[0.65rem] tracking-widest text-background/75 uppercase"
+        className="font-mono text-[0.65rem] tracking-widest text-ink/75 uppercase"
       >
         Matricule {dossierNumber(hero.id, "AG")}
       </p>
@@ -27,7 +27,7 @@ export function SuperHeroCard({ hero }: { hero: SuperHero }) {
       </div>
 
       <h3 className="mt-3 font-display text-lg font-bold tracking-wider uppercase">{hero.alias}</h3>
-      <p className="mt-1 text-sm text-pretty text-background/85">{hero.power}</p>
+      <p className="mt-1 text-sm text-pretty text-ink/85">{hero.power}</p>
 
       <p className="mx-auto mt-3 inline-flex items-center gap-2 border-2 border-sage bg-sage px-2 py-0.5 font-mono text-[0.7rem] font-medium tracking-widest text-paper uppercase">
         <span aria-hidden="true">✓</span> Agent vérifié
@@ -35,9 +35,7 @@ export function SuperHeroCard({ hero }: { hero: SuperHero }) {
 
       <dl className="mt-auto grid grid-cols-2 gap-3 pt-4">
         <div>
-          <dt className="font-mono text-[0.65rem] tracking-widest text-background/75 uppercase">
-            Note
-          </dt>
+          <dt className="font-mono text-[0.65rem] tracking-widest text-ink/75 uppercase">Note</dt>
           <dd className="mt-1">
             <span aria-hidden="true" className="digital text-lg">
               {formatRating(hero.averageRating)}
@@ -46,7 +44,7 @@ export function SuperHeroCard({ hero }: { hero: SuperHero }) {
           </dd>
         </div>
         <div>
-          <dt className="font-mono text-[0.65rem] tracking-widest text-background/75 uppercase">
+          <dt className="font-mono text-[0.65rem] tracking-widest text-ink/75 uppercase">
             Interventions
           </dt>
           <dd className="mt-1">

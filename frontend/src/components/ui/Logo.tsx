@@ -28,14 +28,14 @@ export function Logo({ className }: { className?: string }) {
   return (
     <span
       className={cn(
-        "inline-flex items-stretch border-[3px] border-[#0d0906] bg-background shadow-[3px_3px_0_0] shadow-black",
+        "inline-flex items-stretch border-[3px] border-edge bg-background shadow-[3px_3px_0_0] shadow-black",
         className,
       )}
     >
       <Monogram className="h-10 w-auto shrink-0" />
       <span
         aria-hidden="true"
-        className="hidden flex-col justify-center border-l-[3px] border-[#0d0906] px-2.5 leading-none sm:flex"
+        className="hidden flex-col justify-center border-l-[3px] border-edge px-2.5 leading-none sm:flex"
       >
         <span className="font-display text-sm font-bold tracking-[0.3em] uppercase">Heros-SOS</span>
         <span className="mt-1 font-mono text-[0.55rem] tracking-[0.2em] text-muted uppercase">

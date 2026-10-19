@@ -77,7 +77,7 @@ export function HowItWorksSection() {
     <section
       id="comment-ca-marche"
       aria-labelledby="how-title"
-      className="bg-wood scroll-mt-28 border-y-4 border-[#0d0906] py-14 sm:py-20"
+      className="bg-wood scroll-mt-28 border-y-4 border-edge py-14 sm:py-20"
     >
       <Container>
         <div className="mb-12 flex items-start justify-between gap-10">
@@ -115,7 +115,7 @@ export function HowItWorksSection() {
                 <span className="sr-only">Étape {index + 1} : </span>
                 {step.title}
               </h3>
-              <p className="mt-2 text-sm text-pretty text-background/85">{step.description}</p>
+              <p className="mt-2 text-sm text-pretty text-ink/85">{step.description}</p>
               {index < steps.length - 1 && <ProcedureArrow />}
             </li>
           ))}

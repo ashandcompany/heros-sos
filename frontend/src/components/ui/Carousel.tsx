@@ -35,7 +35,7 @@ function ChevronIcon({ direction }: { direction: "left" | "right" }) {
 }
 
 const controlClasses =
-  "inline-flex size-11 items-center justify-center rounded-md border border-[#9a8a6c] bg-paper text-background shadow-[inset_0_1px_0_rgb(255_255_255/0.6),inset_0_-2px_0_rgb(0_0_0/0.15),0_3px_0_#0d0906] hover:bg-accent active:translate-y-0.5 active:shadow-[0_1px_0_#0d0906] aria-disabled:cursor-not-allowed aria-disabled:opacity-40 aria-disabled:hover:bg-paper";
+  "inline-flex size-11 items-center justify-center rounded-md border border-[#9a8a6c] bg-paper text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6),inset_0_-2px_0_rgb(0_0_0/0.15),0_3px_0_var(--color-shadow)] hover:bg-accent active:translate-y-0.5 active:shadow-[0_1px_0_var(--color-shadow)] aria-disabled:cursor-not-allowed aria-disabled:opacity-40 aria-disabled:hover:bg-paper";
 
 /**
  * Carrousel accessible fait maison.

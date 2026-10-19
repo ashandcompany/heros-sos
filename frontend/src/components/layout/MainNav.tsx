@@ -152,7 +152,7 @@ function MainNavView({ user, pathname }: { user: NavUser; pathname: string | nul
                 : "px-3 py-3 text-sm",
               variant === "desktop" &&
                 (isCurrent
-                  ? "border-[#0d0906] bg-paper text-background"
+                  ? "border-edge bg-paper text-ink"
                   : "border-border bg-surface text-muted hover:bg-surface-raised hover:text-foreground"),
               variant === "mobile" &&
                 (isCurrent ? "bg-surface-raised text-accent" : "text-muted hover:text-foreground"),
@@ -194,7 +194,7 @@ function MainNavView({ user, pathname }: { user: NavUser; pathname: string | nul
       <div
         id={menuId}
         hidden={!open}
-        className="absolute inset-x-0 top-full border-b-4 border-double border-border bg-background px-4 pt-2 pb-6 shadow-[0_6px_0_0_#0d0906] lg:hidden"
+        className="absolute inset-x-0 top-full border-b-4 border-double border-border bg-background px-4 pt-2 pb-6 shadow-[0_6px_0_0_var(--color-shadow)] lg:hidden"
       >
         <nav aria-label="Navigation principale">
           <ul className="flex flex-col gap-1">{navLinks("mobile")}</ul>

@@ -10,7 +10,8 @@ type Tone = "neutral" | "paper" | "accent" | "success" | "warning" | "danger" | 
  */
 const toneClasses: Record<Tone, string> = {
   neutral: "border-border bg-surface-raised text-foreground",
-  paper: "border-paper/50 bg-paper/10 text-paper",
+  // Texte clair sur fond sombre, foncé sur fond clair (foreground = papier en thème sombre).
+  paper: "border-foreground/50 bg-foreground/10 text-foreground",
   accent: "border-accent/50 bg-accent/10 text-accent",
   success: "border-success/50 bg-success/10 text-success",
   warning: "border-rating/50 bg-rating/10 text-rating",

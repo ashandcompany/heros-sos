@@ -52,7 +52,7 @@ function CarouselSkeleton() {
       {Array.from({ length: 3 }, (_, index) => (
         <div
           key={index}
-          className="paper h-72 w-[85%] shrink-0 border-2 border-[#0d0906] opacity-40 motion-safe:animate-pulse sm:w-[calc((100%-1rem)/2)] lg:w-[calc((100%-2rem)/3)]"
+          className="paper h-72 w-[85%] shrink-0 border-2 border-edge opacity-40 motion-safe:animate-pulse sm:w-[calc((100%-1rem)/2)] lg:w-[calc((100%-2rem)/3)]"
         />
       ))}
     </div>

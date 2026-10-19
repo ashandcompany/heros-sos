@@ -27,7 +27,7 @@ export function NewsletterForm({ alreadySubscribed }: NewsletterFormProps) {
 
   if (alreadySubscribed) {
     return (
-      <p className="text-sm text-background/85">
+      <p className="text-sm text-ink/85">
         Une demande d&apos;abonnement est déjà enregistrée à votre nom. Merci.
       </p>
     );
@@ -56,7 +56,7 @@ export function NewsletterForm({ alreadySubscribed }: NewsletterFormProps) {
           aria-invalid={hasError}
           aria-describedby={hasError ? errorId : undefined}
           className={cn(
-            "min-h-11 w-full rounded-none border-0 border-b-2 bg-transparent px-1 font-mono text-background placeholder:text-background/60",
+            "min-h-11 w-full rounded-none border-0 border-b-2 bg-transparent px-1 font-mono text-ink placeholder:text-ink/60",
             hasError ? "border-brick" : "border-background",
           )}
         />

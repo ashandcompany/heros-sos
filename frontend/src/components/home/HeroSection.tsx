@@ -25,7 +25,7 @@ function Poster() {
       />
       <figcaption
         aria-hidden="true"
-        className="mt-2 ps-2.5 font-mono text-[0.65rem] tracking-widest text-background/75 uppercase"
+        className="mt-2 ps-2.5 font-mono text-[0.65rem] tracking-widest text-ink/75 uppercase"
       >
         Affiche officielle n° 7-B — ne pas détériorer
       </figcaption>
@@ -43,7 +43,7 @@ export function HeroSection() {
   return (
     <section
       aria-labelledby="hero-title"
-      className="relative isolate overflow-hidden border-b-4 border-[#0d0906]"
+      className="relative isolate overflow-hidden border-b-4 border-edge"
     >
       <div aria-hidden="true" className="bg-tiles absolute inset-0 -z-10 opacity-60" />
       <div

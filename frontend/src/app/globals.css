@@ -36,6 +36,15 @@
   /* Papier : fond des dossiers et formulaires */
   --color-paper: #efe4cf;
 
+  /* Encre : texte brun foncé posé sur du papier, identique dans les deux thèmes */
+  --color-ink: #1e1611;
+
+  /* Contours épais et ombres dures (cadres, cartes, boutons) : brun presque noir */
+  --color-edge: #0d0906;
+  --color-shadow: #0d0906;
+  /* Seconde ombre, sous la tranche des boutons */
+  --color-shadow-deep: #000;
+
   /* Vert sauge sourd : sections secondaires, badges, priorité basse */
   --color-sage: #4f6b5e;
 
@@ -49,6 +58,62 @@
   --color-success: #9be37f;
   --color-rating: #d9a13b;
   --color-danger: #e57a6e;
+}
+
+/*
+ * Thème clair (« papier crème »), activé par <html data-theme="light"> (voir ThemeToggle).
+ * Le thème sombre ci-dessus reste celui par défaut. Contrastes vérifiés (WCAG AA) pour le texte
+ * sur background, surface et paper ; ambre, vert et rouge sont foncés pour rester lisibles.
+ * Les couleurs fixes (primary, brick, sage, terminal, ink) ne changent pas.
+ */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --color-background: #f4ecdc;
+  --color-surface: #e9dcc3;
+  --color-surface-raised: #dfcdaa;
+  --color-border: #94775a;
+
+  --color-foreground: #24180f;
+  --color-muted: #5a4634;
+
+  --color-accent: #7a4e0c;
+  --color-paper: #fbf6ec;
+
+  --color-success: #28601d;
+  --color-rating: #7a4e0c;
+  --color-danger: #9a2c25;
+
+  /* Contours brun moyen et ombres beige foncé : le relief reste lisible sans noir */
+  --color-edge: #7d6249;
+  --color-shadow: #c4ab86;
+  --color-shadow-deep: #ad9370;
+}
+
+/*
+ * L'écran cathodique reste un écran éteint (sombre) en thème clair : on y rétablit les tokens
+ * du thème sombre pour que son contenu garde ses couleurs d'origine.
+ */
+:root[data-theme="light"] .crt {
+  --color-background: #1e1611;
+  --color-surface: #4a3426;
+  --color-surface-raised: #5a4132;
+  --color-border: #6d4f3b;
+  --color-foreground: #efe4cf;
+  --color-muted: #cdbea4;
+  --color-accent: #d9a13b;
+  --color-paper: #efe4cf;
+  --color-success: #9be37f;
+  --color-rating: #d9a13b;
+  --color-danger: #e57a6e;
+  color: var(--color-foreground);
+}
+
+/* Contenu de l'écran (fond noir) : contours et ombres noirs, comme en thème sombre. */
+:root[data-theme="light"] .crt__screen {
+  --color-edge: #0d0906;
+  --color-shadow: #0d0906;
+  --color-shadow-deep: #000;
 }
 
 @layer base {

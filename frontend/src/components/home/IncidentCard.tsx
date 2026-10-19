@@ -6,7 +6,7 @@ import type { ResolvedIncident } from "@/types";
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-3">
-      <dt className="shrink-0 font-mono text-[0.7rem] tracking-widest text-background/75 uppercase sm:w-28">
+      <dt className="shrink-0 font-mono text-[0.7rem] tracking-widest text-ink/75 uppercase sm:w-28">
         {label}
       </dt>
       <dd className="field-line min-w-0 flex-1 pb-0.5 font-semibold">{children}</dd>
@@ -21,12 +21,12 @@ export function IncidentCard({ incident }: { incident: ResolvedIncident }) {
       {/* Onglet du dossier */}
       <div
         aria-hidden="true"
-        className="paper absolute -top-7 left-4 border-2 border-b-0 border-[#0d0906] px-3 py-1 font-mono text-xs font-medium tracking-widest uppercase"
+        className="paper absolute -top-7 left-4 border-2 border-b-0 border-edge px-3 py-1 font-mono text-xs font-medium tracking-widest uppercase"
       >
         Dossier {dossierNumber(incident.id)}
       </div>
 
-      <div className="paper relative flex h-full flex-col border-2 border-[#0d0906] p-4 shadow-[4px_4px_0_0_#000] sm:p-5">
+      <div className="paper relative flex h-full flex-col border-2 border-edge p-4 shadow-[4px_4px_0_0_var(--color-shadow-deep)] sm:p-5">
         <p className="sr-only">Dossier {dossierNumber(incident.id)}, statut : résolu.</p>
 
         <h3 className="pr-24 font-display text-base leading-snug font-bold tracking-wider text-balance uppercase">

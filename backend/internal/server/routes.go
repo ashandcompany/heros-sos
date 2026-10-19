@@ -14,6 +14,7 @@ func registerRoutes(router *Router, c *components) {
 	registerAuthRoutes(router, c)
 	registerHeroRoutes(router, c)
 	registerModerationRoutes(router, c)
+	registerDocsRoutes(router, c)
 }
 
 // protected exige une session valide (et le jeton CSRF sur les écritures) ; avec des rôles, il

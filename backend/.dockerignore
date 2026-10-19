@@ -17,11 +17,11 @@ secrets/
 .vscode
 .DS_Store
 
-# Fichiers sans effet sur la compilation
+# Fichiers sans effet sur la compilation (openapi/ n'en fait PAS partie : openapi.yaml est embarqué
+# dans le binaire pour la documentation de l'API)
 **/*_test.go
 *.md
 Makefile
-openapi/
 bin/
 tmp/
 coverage.*

@@ -1,0 +1,805 @@
+openapi: 3.0.3
+
+info:
+  title: Heros-SOS API
+  version: 0.1.0
+  description: |
+    API de la plateforme Heros-SOS : authentification, demandes de statut de super-héros et
+    modération des comptes.
+
+    **Ce fichier est la référence du contrat** (spec d'abord). Les tests de bout en bout du
+    backend valident chaque requête et chaque réponse contre lui, et vérifient que les routes
+    enregistrées sont exactement celles décrites ici : une route ou un statut non documenté
+    fait échouer les tests.
+
+    ## Session et CSRF
+
+    La session est un cookie opaque (`HttpOnly`, `SameSite=Lax`, sans `Domain`) posé par
+    `POST /auth/login`. Son nom est `__Host-session` en production (HTTPS) et `session` en
+    développement. Le jeton est aléatoire et n'est jamais lisible en JavaScript.
+
+    Toute requête **authentifiée qui modifie des données** (POST, PUT, PATCH, DELETE) doit porter
+    l'en-tête `X-CSRF-Token`, dont la valeur est le champ `csrfToken` renvoyé par `POST /auth/login`
+    et `GET /auth/me`. Toute requête qui modifie des données doit aussi venir d'une origine
+    autorisée : l'en-tête `Origin`, s'il est présent, doit figurer dans la liste du serveur.
+
+    ## Erreurs
+
+    Toutes les erreurs ont la forme `{"error": {"code", "message", "fields"?}}`. Le `code` est
+    stable et sert au frontend ; le `message` est destiné à l'affichage. Les erreurs de
+    validation (422) détaillent les champs : `fields` associe un nom de champ à un code
+    (`required`, `invalid`, `too_short`, `too_long`, `weak`).
+
+servers:
+  - url: /api/v1
+
+tags:
+  - name: Santé
+  - name: Authentification
+  - name: Super-héros
+  - name: Modération
+
+paths:
+  /health:
+    get:
+      tags: [Santé]
+      summary: Le processus répond
+      operationId: health
+      responses:
+        "200":
+          description: Le serveur est en vie.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+
+  /ready:
+    get:
+      tags: [Santé]
+      summary: La base de données répond
+      operationId: ready
+      responses:
+        "200":
+          description: Le serveur est prêt à recevoir du trafic.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+        "503":
+          description: La base de données ne répond pas.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+
+  /auth/register:
+    post:
+      tags: [Authentification]
+      summary: Inscription d'un citoyen
+      description: |
+        Crée un compte citoyen **en attente d'activation** et envoie un mail contenant le lien
+        d'activation. Aucune session n'est ouverte : il faut activer le compte puis se connecter.
+        Aucun rôle n'est choisi ici ; le statut de super-héros se demande ensuite via
+        `POST /heroes/requests`.
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterRequest" }
+      responses:
+        "201":
+          description: Compte créé, en attente d'activation.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RegisterResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: Cette adresse email est déjà utilisée (`email_already_used`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /auth/activate:
+    post:
+      tags: [Authentification]
+      summary: Activation du compte
+      description: Active le compte avec le jeton du lien reçu par mail. Un jeton ne sert qu'une fois.
+      operationId: activate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TokenRequest" }
+      responses:
+        "204": { description: Compte activé. }
+        "400": { $ref: "#/components/responses/BadRequestOrInvalidToken" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /auth/resend-activation:
+    post:
+      tags: [Authentification]
+      summary: Renvoyer le lien d'activation
+      description: |
+        Envoie un nouveau lien si l'adresse correspond à un compte en attente d'activation (les
+        liens précédents sont invalidés). La réponse est identique dans tous les cas : elle ne
+        révèle pas quelles adresses ont un compte.
+      operationId: resendActivation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmailRequest" }
+      responses:
+        "202": { description: Demande prise en compte. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /auth/login:
+    post:
+      tags: [Authentification]
+      summary: Connexion
+      description: |
+        Authentifie par adresse email, ou par pseudo pour un super-héros, et ouvre une session
+        (cookie). Un identifiant inconnu et un mauvais mot de passe donnent exactement la même
+        réponse (`invalid_credentials`). Les états « non activé » et « désactivé » ne sont annoncés
+        qu'avec le bon mot de passe. Après plusieurs échecs, le compte est verrouillé pour une
+        durée croissante (`account_locked`, avec `Retry-After`).
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: Connecté. Le cookie de session est posé.
+          headers:
+            Set-Cookie:
+              description: Cookie de session (`HttpOnly`, `SameSite=Lax`, `Path=/`).
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401":
+          description: Identifiant ou mot de passe incorrect (`invalid_credentials`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: Origine non autorisée, compte non activé (`account_not_activated`) ou désactivé (`account_deactivated`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /auth/logout:
+    post:
+      tags: [Authentification]
+      summary: Déconnexion de l'appareil courant
+      operationId: logout
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      responses:
+        "204":
+          description: Session fermée, cookie effacé.
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /auth/logout-all:
+    post:
+      tags: [Authentification]
+      summary: Déconnexion de tous les appareils
+      operationId: logoutAll
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      responses:
+        "204":
+          description: Toutes les sessions de l'utilisateur sont fermées.
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /auth/me:
+    get:
+      tags: [Authentification]
+      summary: Utilisateur courant
+      description: Sert aussi à redirection du frontend selon le rôle, et à récupérer le jeton CSRF.
+      operationId: me
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: L'utilisateur de la session.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MeResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /auth/password-reset:
+    post:
+      tags: [Authentification]
+      summary: Demander la réinitialisation du mot de passe
+      description: |
+        Envoie un lien à l'adresse si elle correspond à un compte actif (les liens précédents sont
+        invalidés). La réponse est identique pour une adresse inconnue : elle ne révèle rien.
+      operationId: requestPasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmailRequest" }
+      responses:
+        "202": { description: Demande prise en compte. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /auth/password-reset/confirm:
+    post:
+      tags: [Authentification]
+      summary: Choisir un nouveau mot de passe
+      description: |
+        Change le mot de passe avec le jeton reçu par mail et ferme toutes les sessions de
+        l'utilisateur. Un mot de passe trop faible est refusé (422) **sans consommer le jeton**.
+      operationId: confirmPasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PasswordResetConfirmRequest" }
+      responses:
+        "204": { description: Mot de passe changé. }
+        "400": { $ref: "#/components/responses/BadRequestOrInvalidToken" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /heroes/requests:
+    post:
+      tags: [Super-héros]
+      summary: Demander le statut de super-héros
+      description: |
+        Dépose la demande d'un citoyen actif. Elle reste « en attente » jusqu'à la décision d'un
+        modérateur. Une demande refusée peut être redéposée.
+      operationId: requestHeroStatus
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HeroRequestPayload" }
+      responses:
+        "201":
+          description: Demande enregistrée, en attente.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HeroRequestStatus" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403":
+          description: Origine non autorisée, jeton CSRF invalide, ou compte non éligible (`hero_request_not_eligible`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: Demande déjà en attente (`hero_request_pending`), déjà super-héros (`already_hero`) ou pseudo pris (`alias_already_used`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /heroes/requests/me:
+    get:
+      tags: [Super-héros]
+      summary: État de ma demande
+      operationId: myHeroRequest
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: La demande de l'utilisateur courant.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HeroRequestStatus" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404":
+          description: Aucune demande (`hero_request_not_found`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/hero-requests:
+    get:
+      tags: [Modération]
+      summary: Demandes de statut de super-héros
+      description: Réservé aux modérateurs. Les demandes les plus anciennes viennent d'abord.
+      operationId: listHeroRequests
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [pending, approved, rejected] }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Une page de demandes, avec l'identité des demandeurs.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HeroApplicantPage" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/hero-requests/{userId}/approve:
+    post:
+      tags: [Modération]
+      summary: Accepter une demande
+      description: Le demandeur devient super-héros immédiatement, sans reconnexion.
+      operationId: approveHeroRequest
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/UserId" }
+      responses:
+        "204": { description: Demande acceptée. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: La demande a déjà été traitée (`hero_request_not_pending`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/hero-requests/{userId}/reject:
+    post:
+      tags: [Modération]
+      summary: Refuser une demande
+      operationId: rejectHeroRequest
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/UserId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RejectPayload" }
+      responses:
+        "204": { description: Demande refusée. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: La demande a déjà été traitée (`hero_request_not_pending`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/users:
+    get:
+      tags: [Modération]
+      summary: Liste des comptes
+      description: Réservé aux modérateurs. Le filtre `email` porte sur le début de l'adresse, sans tenir compte de la casse.
+      operationId: listUsers
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: role
+          in: query
+          schema: { type: string, enum: [citizen, hero, moderator] }
+        - name: status
+          in: query
+          schema: { type: string, enum: [pending_activation, active, deactivated] }
+        - name: email
+          in: query
+          schema: { type: string }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Une page de comptes.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserSummaryPage" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/users/{id}/deactivate:
+    post:
+      tags: [Modération]
+      summary: Désactiver un compte
+      description: |
+        Le compte ne peut plus se connecter et toutes ses sessions sont fermées immédiatement.
+        Idempotent. Impossible sur son propre compte (`self_action_forbidden`) et sur un compte de
+        modérateur (`protected_account`).
+      operationId: deactivateUser
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "204": { description: Compte désactivé. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Action interdite sur son propre compte (`self_action_forbidden`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/users/{id}/reactivate:
+    post:
+      tags: [Modération]
+      summary: Réactiver un compte
+      operationId: reactivateUser
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "204": { description: Compte réactivé. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/users/{id}/verify:
+    post:
+      tags: [Modération]
+      summary: Marquer un citoyen comme vérifié
+      description: "Information de confiance uniquement : elle ne donne aucun droit supplémentaire."
+      operationId: verifyUser
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "204": { description: Compte marqué comme vérifié. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: session
+      description: Cookie de session (`__Host-session` en production).
+    csrfToken:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+      description: Jeton CSRF renvoyé par `/auth/login` et `/auth/me`, exigé sur les écritures authentifiées.
+
+  parameters:
+    UserId:
+      name: userId
+      in: path
+      required: true
+      description: Identifiant de l'utilisateur dont la demande est traitée.
+      schema: { type: string, format: uuid }
+    Id:
+      name: id
+      in: path
+      required: true
+      description: Identifiant de l'utilisateur.
+      schema: { type: string, format: uuid }
+    Limit:
+      name: limit
+      in: query
+      description: Nombre d'éléments par page (1 à 100, 20 par défaut).
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    Offset:
+      name: offset
+      in: query
+      description: Nombre d'éléments à sauter.
+      schema: { type: integer, minimum: 0, default: 0 }
+
+  responses:
+    BadRequest:
+      description: "Requête mal formée (`bad_request`) : JSON invalide, champ inconnu, corps vide."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    BadRequestOrInvalidToken:
+      description: Requête mal formée (`bad_request`) ou lien invalide, expiré ou déjà utilisé (`invalid_token`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthenticated:
+      description: Session absente ou expirée (`unauthenticated`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: |
+        Refusé : origine non autorisée (`origin_not_allowed`), jeton CSRF absent ou invalide
+        (`csrf_invalid`), ou rôle insuffisant (`forbidden`, `protected_account`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Ressource introuvable (`not_found`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    PayloadTooLarge:
+      description: Corps de requête trop volumineux (`payload_too_large`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    UnsupportedMediaType:
+      description: Le corps doit être de type `application/json` (`unsupported_media_type`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ValidationFailed:
+      description: Données invalides (`validation_failed`) ; `fields` détaille chaque champ.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      description: Trop de requêtes (`rate_limited`) ou compte verrouillé (`account_locked`).
+      headers:
+        Retry-After:
+          description: Délai en secondes avant de réessayer.
+          schema: { type: integer }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    InternalError:
+      description: Erreur interne (`internal_error`). Le détail n'est jamais exposé.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [ok, unavailable] }
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Code stable destiné au frontend.
+              example: invalid_credentials
+            message:
+              type: string
+              description: Message destiné à l'affichage.
+            fields:
+              type: object
+              description: Pour les erreurs de validation, champ → code (`required`, `invalid`, `too_short`, `too_long`, `weak`).
+              additionalProperties: { type: string }
+
+    UserView:
+      type: object
+      required: [id, displayName, role, email]
+      properties:
+        id: { type: string, format: uuid }
+        displayName:
+          type: string
+          description: Pseudo pour un super-héros, prénom sinon.
+        role: { type: string, enum: [citizen, hero, moderator] }
+        email: { type: string, format: email }
+
+    Address:
+      type: object
+      required: [street, postalCode, city, country]
+      additionalProperties: false
+      properties:
+        street: { type: string, maxLength: 200 }
+        complement: { type: string, maxLength: 200 }
+        postalCode: { type: string }
+        city: { type: string, maxLength: 100 }
+        country:
+          type: string
+          description: Code pays ISO 3166-1 alpha-2, en majuscules.
+          example: FR
+
+    RegisterRequest:
+      type: object
+      required: [civility, firstName, lastName, birthDate, email, mobilePhone, address, password]
+      additionalProperties: false
+      properties:
+        civility: { type: string, enum: [madame, monsieur, non-precise] }
+        firstName: { type: string }
+        lastName: { type: string }
+        birthDate:
+          type: string
+          format: date
+          description: Date ISO AAAA-MM-JJ, ni future ni antérieure à 120 ans.
+        email: { type: string, format: email }
+        mobilePhone:
+          type: string
+          description: Mobile français (06 ou 07) ou international (+33…). Les espaces, points et tirets sont ignorés.
+        address: { $ref: "#/components/schemas/Address" }
+        password:
+          type: string
+          format: password
+          description: Au moins 10 caractères, avec une minuscule, une majuscule et un chiffre.
+
+    RegisterResponse:
+      type: object
+      required: [user, activationRequired]
+      properties:
+        user: { $ref: "#/components/schemas/UserView" }
+        activationRequired: { type: boolean, enum: [true] }
+
+    TokenRequest:
+      type: object
+      required: [token]
+      additionalProperties: false
+      properties:
+        token: { type: string, description: Jeton du lien reçu par mail. }
+
+    EmailRequest:
+      type: object
+      required: [email]
+      additionalProperties: false
+      properties:
+        email: { type: string, format: email }
+
+    LoginRequest:
+      type: object
+      required: [identifier, password]
+      additionalProperties: false
+      properties:
+        identifier:
+          type: string
+          description: Adresse email, ou pseudo pour un super-héros.
+        password: { type: string, format: password }
+        rememberMe:
+          type: boolean
+          description: Prolonge la session (sans effet pour un modérateur).
+
+    LoginResponse:
+      type: object
+      required: [user, csrfToken, expiresAt]
+      properties:
+        user: { $ref: "#/components/schemas/UserView" }
+        csrfToken:
+          type: string
+          description: À renvoyer dans `X-CSRF-Token` sur les écritures authentifiées.
+        expiresAt:
+          type: string
+          format: date-time
+          description: Durée de vie maximale de la session.
+
+    MeResponse:
+      type: object
+      required: [user, csrfToken]
+      properties:
+        user: { $ref: "#/components/schemas/UserView" }
+        csrfToken: { type: string }
+
+    PasswordResetConfirmRequest:
+      type: object
+      required: [token, newPassword]
+      additionalProperties: false
+      properties:
+        token: { type: string }
+        newPassword: { type: string, format: password }
+
+    HeroRequestPayload:
+      type: object
+      required: [alias]
+      additionalProperties: false
+      properties:
+        alias:
+          type: string
+          description: "Pseudo public (2 à 30 caractères : lettres, chiffres, espaces, tirets)."
+        bio:
+          type: string
+          maxLength: 1000
+          description: Description publique.
+        requestMessage:
+          type: string
+          maxLength: 2000
+          description: Message destiné aux modérateurs, jamais public.
+
+    HeroRequestStatus:
+      type: object
+      required: [status, alias]
+      properties:
+        status: { type: string, enum: [pending, approved, rejected] }
+        alias: { type: string }
+        rejectionReason: { type: string }
+
+    RejectPayload:
+      type: object
+      required: [reason]
+      additionalProperties: false
+      properties:
+        reason: { type: string, maxLength: 1000 }
+
+    HeroApplicant:
+      type: object
+      required: [userId, alias, bio, requestMessage, status, createdAt, email, firstName, lastName]
+      properties:
+        userId: { type: string, format: uuid }
+        alias: { type: string }
+        bio: { type: string }
+        requestMessage: { type: string }
+        status: { type: string, enum: [pending, approved, rejected] }
+        createdAt: { type: string, format: date-time }
+        email: { type: string, format: email }
+        firstName: { type: string }
+        lastName: { type: string }
+
+    HeroApplicantPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/HeroApplicant" }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+
+    UserSummary:
+      type: object
+      required: [id, email, firstName, lastName, role, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        firstName: { type: string }
+        lastName: { type: string }
+        alias: { type: string }
+        role: { type: string, enum: [citizen, hero, moderator] }
+        status: { type: string, enum: [pending_activation, active, deactivated] }
+        verifiedAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    UserSummaryPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/UserSummary" }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }

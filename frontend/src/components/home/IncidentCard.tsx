@@ -1,50 +1,55 @@
-import { Badge } from "@/components/ui/Badge";
+import type { ReactNode } from "react";
 import { formatDate, formatLocation, incidentTypeLabels } from "@/lib/format";
+import { dossierNumber } from "@/lib/dossier";
 import type { ResolvedIncident } from "@/types";
 
-function PinIcon() {
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <svg viewBox="0 0 20 20" aria-hidden="true" className="size-4 shrink-0 fill-current">
-      <path d="M10 1.5a6 6 0 0 0-6 6c0 4.5 6 11 6 11s6-6.5 6-11a6 6 0 0 0-6-6Zm0 8.25a2.25 2.25 0 1 1 0-4.5 2.25 2.25 0 0 1 0 4.5Z" />
-    </svg>
+    <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-3">
+      <dt className="shrink-0 font-mono text-[0.7rem] tracking-widest text-background/75 uppercase sm:w-28">
+        {label}
+      </dt>
+      <dd className="field-line min-w-0 flex-1 pb-0.5 font-semibold">{children}</dd>
+    </div>
   );
 }
 
+/** Fiche de dossier cartonné : onglet, numéro, champs typés, tampon « RÉSOLU ». */
 export function IncidentCard({ incident }: { incident: ResolvedIncident }) {
   return (
-    <article className="flex h-full flex-col rounded-2xl border border-border bg-surface p-5 sm:p-6">
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge>{incidentTypeLabels[incident.type]}</Badge>
-        <Badge tone="success">
-          <span aria-hidden="true">✓</span> Résolu
-        </Badge>
+    <article className="relative mt-7 flex h-full flex-col">
+      {/* Onglet du dossier */}
+      <div
+        aria-hidden="true"
+        className="paper absolute -top-7 left-4 border-2 border-b-0 border-[#0d0906] px-3 py-1 font-mono text-xs font-medium tracking-widest uppercase"
+      >
+        Dossier {dossierNumber(incident.id)}
       </div>
 
-      <h3 className="mt-4 font-display text-lg leading-snug font-semibold text-balance">
-        {incident.title}
-      </h3>
+      <div className="paper relative flex h-full flex-col border-2 border-[#0d0906] p-4 shadow-[4px_4px_0_0_#000] sm:p-5">
+        <p className="sr-only">Dossier {dossierNumber(incident.id)}, statut : résolu.</p>
 
-      <p className="mt-3 flex items-center gap-1.5 text-sm text-muted">
-        <PinIcon />
-        <span className="sr-only">Lieu :</span>
-        {formatLocation(incident.location)}
-      </p>
-      <p className="mt-1 mb-6 text-sm text-muted">
-        Traité le <time dateTime={incident.resolvedAt} className="font-mono">{formatDate(incident.resolvedAt)}</time>
-      </p>
+        <h3 className="pr-24 font-display text-base leading-snug font-bold tracking-wider text-balance uppercase">
+          {incident.title}
+        </h3>
+        <div aria-hidden="true" className="rule-thick mt-3 mb-4" />
 
-      <dl className="mt-auto grid grid-cols-2 gap-4 border-t border-border pt-4 text-sm">
-        <div>
-          <dt className="text-muted">Super-héros</dt>
-          <dd className="mt-0.5 font-semibold text-foreground">{incident.hero.alias}</dd>
-        </div>
-        <div>
-          <dt className="text-muted">Vilain</dt>
-          <dd className="mt-0.5 font-semibold text-danger">
-            {incident.villain?.alias ?? "Non identifié"}
-          </dd>
-        </div>
-      </dl>
+        <dl className="space-y-2.5 text-sm">
+          <Field label="Type">{incidentTypeLabels[incident.type]}</Field>
+          <Field label="Lieu">{formatLocation(incident.location)}</Field>
+          <Field label="Date">
+            <time dateTime={incident.resolvedAt} className="font-mono">
+              {formatDate(incident.resolvedAt)}
+            </time>
+          </Field>
+          <Field label="Agent intervenant">{incident.hero.alias}</Field>
+          <Field label="Sujet appréhendé">{incident.villain?.alias ?? "Non identifié"}</Field>
+        </dl>
+
+        <span aria-hidden="true" className="stamp absolute top-3 right-3 text-lg">
+          Résolu
+        </span>
+      </div>
     </article>
   );
 }

@@ -35,7 +35,7 @@ function ChevronIcon({ direction }: { direction: "left" | "right" }) {
 }
 
 const controlClasses =
-  "inline-flex size-11 items-center justify-center rounded-full border border-border bg-surface text-foreground transition-colors hover:bg-surface-raised aria-disabled:cursor-not-allowed aria-disabled:opacity-40 aria-disabled:hover:bg-surface motion-reduce:transition-none";
+  "inline-flex size-11 items-center justify-center rounded-md border border-[#9a8a6c] bg-paper text-background shadow-[inset_0_1px_0_rgb(255_255_255/0.6),inset_0_-2px_0_rgb(0_0_0/0.15),0_3px_0_#0d0906] hover:bg-accent active:translate-y-0.5 active:shadow-[0_1px_0_#0d0906] aria-disabled:cursor-not-allowed aria-disabled:opacity-40 aria-disabled:hover:bg-paper";
 
 /**
  * Carrousel accessible fait maison.
@@ -156,7 +156,7 @@ export function Carousel({
         onScroll={scheduleMeasure}
         onKeyDown={handleKeyDown}
         aria-label="Liste défilante, utilisez les flèches gauche et droite pour naviguer"
-        className="relative -mx-1 flex snap-x snap-mandatory scrollbar-none gap-4 overflow-x-auto overscroll-x-contain rounded-2xl px-1 py-1"
+        className="relative -mx-1 flex snap-x snap-mandatory scrollbar-none gap-4 overflow-x-auto overscroll-x-contain px-1 py-2"
       >
         {slides.map((slide, index) => (
           <div
@@ -183,13 +183,13 @@ export function Carousel({
                 aria-controls={trackId}
                 aria-current={isCurrent ? "true" : undefined}
                 aria-label={`Afficher l'élément ${index + 1}`}
-                className="group inline-flex size-6 items-center justify-center rounded-full"
+                className="group inline-flex size-6 items-center justify-center"
               >
                 <span
                   aria-hidden="true"
                   className={cn(
-                    "h-2 rounded-full transition-all motion-reduce:transition-none",
-                    isCurrent ? "w-6 bg-primary" : "w-2 bg-border group-hover:bg-muted",
+                    "h-2",
+                    isCurrent ? "w-6 bg-terminal" : "w-2 bg-muted/50 group-hover:bg-muted",
                   )}
                 />
               </button>

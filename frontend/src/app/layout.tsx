@@ -4,6 +4,7 @@ import { SiteFooter } from "@/components/layout/SiteFooter";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SkipLink } from "@/components/layout/SkipLink";
 import "./globals.css";
+import "./retro.css";
 
 // Titres : clone libre de Futura, en capitales espacées.
 const jost = Jost({

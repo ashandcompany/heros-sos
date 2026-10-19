@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { Container } from "@/components/ui/Container";
+import { DigitalClock } from "@/components/ui/DigitalClock";
 import { Logo } from "@/components/ui/Logo";
 import { routes } from "@/lib/routes";
 import { getCurrentUser } from "@/lib/server-session";
@@ -14,16 +15,30 @@ async function SessionAwareNav() {
 
 export function SiteHeader() {
   return (
-    <header className="sticky top-0 z-40 border-b border-border/60 bg-background/85 backdrop-blur-md">
-      <Container className="relative flex h-16 items-center justify-between gap-6">
-        <Link href={routes.home} className="rounded-md" aria-label="Heros-SOS, retour à l'accueil">
-          <Logo />
-        </Link>
-        {/* Pendant la lecture de la session : navigation sans boutons de compte. */}
-        <Suspense fallback={<MainNav user={undefined} />}>
-          <SessionAwareNav />
-        </Suspense>
-      </Container>
+    <header className="sticky top-0 z-40 bg-background shadow-[0_4px_0_0_#0d0906]">
+      {/* Bandeau officiel */}
+      <div className="border-b-2 border-border bg-surface-raised">
+        <Container className="flex h-8 items-center justify-between gap-4 font-mono text-xs tracking-widest text-muted uppercase">
+          <p className="truncate">
+            <span className="hidden sm:inline">Service de signalement des incidents — </span>
+            <span className="sm:hidden">Signalement d&apos;incidents — </span>
+            Accès public
+          </p>
+          <DigitalClock />
+        </Container>
+      </div>
+
+      <div className="border-b-4 border-double border-border">
+        <Container className="relative flex h-16 items-center justify-between gap-4">
+          <Link href={routes.home} className="rounded-sm" aria-label="Heros-SOS, retour à l'accueil">
+            <Logo />
+          </Link>
+          {/* Pendant la lecture de la session : navigation sans boutons de compte. */}
+          <Suspense fallback={<MainNav user={undefined} />}>
+            <SessionAwareNav />
+          </Suspense>
+        </Container>
+      </div>
     </header>
   );
 }

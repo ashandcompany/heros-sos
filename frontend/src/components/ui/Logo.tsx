@@ -1,27 +1,46 @@
 import { cn } from "./cn";
 
-/** Logo placeholder : emblème « signal » + logotype texte. */
+const S_PATH = "M6 0h18v7H8v5.5h10l6 6V26l-6 6H0v-7h16v-5.5H6l-6-6V6Z";
+
+/**
+ * Monogramme « SOS » : deux S chanfreinés massifs, O bauhaus posé par-dessus
+ * (détouré par un filet de la couleur du fond) avec un voyant au centre.
+ */
+function Monogram({ className }: { className?: string }) {
+  return (
+    <svg viewBox="-7 -7 86 46" role="img" aria-label="Heros-SOS" className={className}>
+      <rect x="-7" y="-7" width="86" height="46" className="fill-primary" />
+      <path d={S_PATH} className="fill-paper" />
+      <path d={S_PATH} transform="translate(48 0)" className="fill-paper" />
+      <circle cx="36" cy="16" r="17.5" className="fill-primary" />
+      <path
+        fillRule="evenodd"
+        d="M36 0a16 16 0 1 1 0 32 16 16 0 0 1 0-32Zm0 8.5a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15Z"
+        className="fill-paper"
+      />
+      <circle cx="36" cy="16" r="3" className="fill-accent" />
+    </svg>
+  );
+}
+
+/** Logo : monogramme dans un cartouche, suivi du nom complet et de la mention de service. */
 export function Logo({ className }: { className?: string }) {
   return (
-    <span className={cn("inline-flex items-center gap-2", className)}>
-      <svg viewBox="0 0 32 32" aria-hidden="true" className="size-8 shrink-0">
-        <path
-          d="M16 2 4 7v8.5C4 23 9.2 28.6 16 30c6.8-1.4 12-7 12-14.5V7L16 2Z"
-          className="fill-surface-raised stroke-primary"
-          strokeWidth="2"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M8 17h4l2-5 4 10 2-5h4"
-          className="stroke-accent"
-          fill="none"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-      <span className="font-display text-lg font-bold tracking-tight">
-        Heros<span className="text-primary">-SOS</span>
+    <span
+      className={cn(
+        "inline-flex items-stretch border-[3px] border-[#0d0906] bg-background shadow-[3px_3px_0_0] shadow-black",
+        className,
+      )}
+    >
+      <Monogram className="h-10 w-auto shrink-0" />
+      <span
+        aria-hidden="true"
+        className="hidden flex-col justify-center border-l-[3px] border-[#0d0906] px-2.5 leading-none sm:flex"
+      >
+        <span className="font-display text-sm font-bold tracking-[0.3em] uppercase">Heros-SOS</span>
+        <span className="mt-1 font-mono text-[0.55rem] tracking-[0.2em] text-muted uppercase">
+          Service d&apos;intervention
+        </span>
       </span>
     </span>
   );

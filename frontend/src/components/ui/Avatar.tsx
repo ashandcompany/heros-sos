@@ -49,7 +49,9 @@ export function Avatar({ name, src, size = 80, className, square = false }: Avat
   }
 
   const initials = name.slice(0, 2).toUpperCase();
-  const gradient = square ? "from-surface-raised to-background" : gradients[hashString(name) % gradients.length];
+  const gradient = square
+    ? "from-surface-raised to-background"
+    : gradients[hashString(name) % gradients.length];
 
   return (
     <span

@@ -37,6 +37,7 @@ export const routes = {
 export const adminIncidentRoute = (id: string) => `${routes.adminIncidents}/${id}`;
 export const adminArticleRoute = (id: string) => `${routes.adminBlog}/${id}`;
 export const heroIncidentRoute = (id: string) => `${routes.heroIncidents}/${id}`;
+export const blogArticleRoute = (slug: string) => `${routes.blog}/${slug}`;
 
 export interface NavItem {
   label: string;

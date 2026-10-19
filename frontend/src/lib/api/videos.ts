@@ -96,3 +96,19 @@ export async function deleteMyVideo(token: string, id: string): Promise<Mutation
   videosMock.splice(index, 1);
   return mockResponse({ ok: true });
 }
+
+/* ---------- Vidéothèque publique ---------- */
+
+/**
+ * Films publiés par la modération, des plus récents aux plus anciens, éventuellement ceux
+ * d'un seul super-héros.
+ * Future implémentation : `GET ${API_URL}/videos?hero=${heroId}`
+ */
+export async function getPublishedVideos(heroId?: string): Promise<HeroVideo[]> {
+  return mockResponse(
+    videosMock
+      .filter((video) => video.moderation === "valide")
+      .filter((video) => !heroId || video.hero.id === heroId)
+      .sort((a, b) => Date.parse(b.addedAt) - Date.parse(a.addedAt)),
+  );
+}

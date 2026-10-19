@@ -9,7 +9,15 @@ export {
   updateNewsletterPreference,
 } from "./account";
 export { getSessionUser, login, register, requestPasswordReset } from "./auth";
-export { createArticle, deleteArticle, getAllArticles, getArticle, updateArticle } from "./blog";
+export {
+  createArticle,
+  deleteArticle,
+  getAllArticles,
+  getArticle,
+  getPublishedArticle,
+  getPublishedArticles,
+  updateArticle,
+} from "./blog";
 export { getHeroDashboard } from "./hero-dashboard";
 export { searchImdbTitles } from "./imdb";
 export {
@@ -54,6 +62,7 @@ export {
   deleteVideo,
   getHeroVideos,
   getMyVideos,
+  getPublishedVideos,
   moderateVideo,
 } from "./videos";
 export { getVillains } from "./villains";

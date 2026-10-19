@@ -1,0 +1,100 @@
+package mail
+
+import (
+	"bytes"
+	"context"
+	"embed"
+	"fmt"
+	htmltemplate "html/template"
+	texttemplate "text/template"
+	"time"
+
+	"github.com/ashandcompany/heros-sos/backend/internal/config"
+)
+
+//go:embed templates/*.tmpl
+var templateFS embed.FS
+
+// Noms des modèles : <nom>.txt.tmpl et <nom>.html.tmpl dans templates/.
+const (
+	templateActivation    = "activation"
+	templatePasswordReset = "password_reset"
+)
+
+const (
+	subjectActivation    = "Activez votre compte %s"
+	subjectPasswordReset = "Réinitialisation de votre mot de passe %s"
+)
+
+// templateData est ce que voient les modèles.
+type templateData struct {
+	AppName   string
+	FirstName string
+	Link      string
+	ExpiresIn string
+}
+
+// Service compose les mails de l'application à partir des modèles et les confie à un Mailer.
+type Service struct {
+	mailer  Mailer
+	appName string
+	tokens  config.Tokens
+	text    *texttemplate.Template
+	html    *htmltemplate.Template
+}
+
+// NewService charge les modèles (une erreur de modèle est détectée au démarrage, pas au premier
+// envoi). appName est le nom du service dans les mails.
+func NewService(mailer Mailer, appName string, tokens config.Tokens) (*Service, error) {
+	text, err := texttemplate.ParseFS(templateFS, "templates/*.txt.tmpl")
+	if err != nil {
+		return nil, fmt.Errorf("mail : modèles texte : %w", err)
+	}
+	html, err := htmltemplate.ParseFS(templateFS, "templates/*.html.tmpl")
+	if err != nil {
+		return nil, fmt.Errorf("mail : modèles HTML : %w", err)
+	}
+	return &Service{mailer: mailer, appName: appName, tokens: tokens, text: text, html: html}, nil
+}
+
+// SendActivation envoie le lien d'activation d'un compte.
+func (s *Service) SendActivation(ctx context.Context, to, firstName, link string) error {
+	return s.send(ctx, to, fmt.Sprintf(subjectActivation, s.appName), templateActivation, templateData{
+		FirstName: firstName, Link: link, ExpiresIn: formatDuration(s.tokens.ActivationTTL),
+	})
+}
+
+// SendPasswordReset envoie le lien de réinitialisation d'un mot de passe.
+func (s *Service) SendPasswordReset(ctx context.Context, to, firstName, link string) error {
+	return s.send(ctx, to, fmt.Sprintf(subjectPasswordReset, s.appName), templatePasswordReset, templateData{
+		FirstName: firstName, Link: link, ExpiresIn: formatDuration(s.tokens.PasswordResetTTL),
+	})
+}
+
+func (s *Service) send(ctx context.Context, to, subject, name string, data templateData) error {
+	data.AppName = s.appName
+
+	var text, html bytes.Buffer
+	if err := s.text.ExecuteTemplate(&text, name+".txt.tmpl", data); err != nil {
+		return fmt.Errorf("mail : modèle texte %s : %w", name, err)
+	}
+	if err := s.html.ExecuteTemplate(&html, name+".html.tmpl", data); err != nil {
+		return fmt.Errorf("mail : modèle HTML %s : %w", name, err)
+	}
+	return s.mailer.Send(ctx, Message{To: to, Subject: subject, Text: text.String(), HTML: html.String()})
+}
+
+// formatDuration écrit une durée de validité en français : « 24 heures », « 30 minutes ».
+func formatDuration(d time.Duration) string {
+	if d >= time.Hour && d%time.Hour == 0 {
+		return plural(int(d/time.Hour), "heure")
+	}
+	return plural(int(d.Round(time.Minute)/time.Minute), "minute")
+}
+
+func plural(count int, unit string) string {
+	if count == 1 {
+		return fmt.Sprintf("1 %s", unit)
+	}
+	return fmt.Sprintf("%d %ss", count, unit)
+}

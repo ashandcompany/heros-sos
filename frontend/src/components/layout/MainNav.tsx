@@ -5,7 +5,12 @@ import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { buttonClasses } from "@/components/ui/ButtonLink";
 import { cn } from "@/components/ui/cn";
+import { logoutAction } from "@/app/actions/auth";
 import { mainNav, routes } from "@/lib/routes";
+import type { AuthUser } from "@/types";
+
+/** Utilisateur connecté (`null` : visiteur, `undefined` : session en cours de lecture). */
+type NavUser = Pick<AuthUser, "displayName" | "role"> | null | undefined;
 
 function MenuIcon({ open }: { open: boolean }) {
   return (
@@ -19,8 +24,65 @@ function MenuIcon({ open }: { open: boolean }) {
   );
 }
 
+interface AccountActionsProps {
+  user: NavUser;
+  variant: "desktop" | "mobile";
+  isAdminPage: boolean;
+  onNavigate: () => void;
+}
+
+/** Boutons de compte : connexion / inscription, ou utilisateur connecté et déconnexion. */
+function AccountActions({ user, variant, isAdminPage, onNavigate }: AccountActionsProps) {
+  if (user === undefined) return null;
+
+  const mobile = variant === "mobile";
+
+  if (!user) {
+    return (
+      <>
+        <Link
+          href={routes.login}
+          onClick={onNavigate}
+          className={buttonClasses(mobile ? "secondary" : "ghost")}
+        >
+          Connexion
+        </Link>
+        <Link href={routes.signup} onClick={onNavigate} className={buttonClasses("primary")}>
+          Inscription
+        </Link>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <p className={cn("text-sm text-muted", mobile ? "col-span-2" : "hidden lg:block")}>
+        Connecté·e : <span className="font-semibold text-foreground">{user.displayName}</span>
+      </p>
+      {user.role === "admin" && (
+        <Link
+          href={routes.adminHeroes}
+          onClick={onNavigate}
+          aria-current={isAdminPage ? "page" : undefined}
+          className={buttonClasses("secondary")}
+        >
+          Back-office
+        </Link>
+      )}
+      <form action={logoutAction} className={cn(mobile && user.role !== "admin" && "col-span-2")}>
+        <button
+          type="submit"
+          className={cn(buttonClasses(mobile ? "secondary" : "ghost"), "w-full")}
+        >
+          Déconnexion
+        </button>
+      </form>
+    </>
+  );
+}
+
 /** Navigation principale : liens en ligne sur desktop, menu burger sur mobile. */
-export function MainNav() {
+export function MainNav({ user }: { user: NavUser }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const menuId = useId();
@@ -41,6 +103,7 @@ export function MainNav() {
   }, [open]);
 
   const close = () => setOpen(false);
+  const isAdminPage = pathname.startsWith("/admin");
 
   const navLinks = (variant: "desktop" | "mobile") =>
     mainNav.map((item) => {
@@ -74,12 +137,12 @@ export function MainNav() {
       </nav>
 
       <div className="hidden items-center gap-2 md:flex">
-        <Link href={routes.login} className={buttonClasses("ghost")}>
-          Connexion
-        </Link>
-        <Link href={routes.signup} className={buttonClasses("primary")}>
-          Inscription
-        </Link>
+        <AccountActions
+          user={user}
+          variant="desktop"
+          isAdminPage={isAdminPage}
+          onNavigate={close}
+        />
       </div>
 
       <button
@@ -102,14 +165,16 @@ export function MainNav() {
         <nav aria-label="Navigation principale">
           <ul className="flex flex-col gap-1">{navLinks("mobile")}</ul>
         </nav>
-        <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border pt-4">
-          <Link href={routes.login} onClick={close} className={buttonClasses("secondary")}>
-            Connexion
-          </Link>
-          <Link href={routes.signup} onClick={close} className={buttonClasses("primary")}>
-            Inscription
-          </Link>
-        </div>
+        {user !== undefined && (
+          <div className="mt-4 grid grid-cols-2 items-center gap-3 border-t border-border pt-4">
+            <AccountActions
+              user={user}
+              variant="mobile"
+              isAdminPage={isAdminPage}
+              onNavigate={close}
+            />
+          </div>
+        )}
       </div>
     </>
   );

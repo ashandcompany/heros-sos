@@ -18,4 +18,9 @@ export const accountsMock: MockAccount[] = [
     email: "lumen@heros-sos.fr",
     password: "Heros123!",
   },
+  {
+    user: { id: "admin-1", displayName: "Équipe Heros-SOS", role: "admin" },
+    email: "admin@heros-sos.fr",
+    password: "Admin123!",
+  },
 ];

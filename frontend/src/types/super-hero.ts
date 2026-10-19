@@ -1,3 +1,5 @@
+import type { Civility, PostalAddress } from "./auth";
+
 export interface SuperHero {
   id: string;
   /** Nom de super-héros affiché publiquement. */
@@ -13,3 +15,23 @@ export interface SuperHero {
 
 /** Version allégée d'un super-héros, embarquée dans d'autres ressources (ex : un incident). */
 export type SuperHeroSummary = Pick<SuperHero, "id" | "alias">;
+
+/**
+ * Fiche complète d'un super-héros, avec ses données personnelles.
+ * Réservée au back-office : ne jamais l'exposer sur une page publique.
+ */
+export interface SuperHeroProfile extends SuperHero {
+  /** Identité civile : `null` si le héros ne l'a pas communiquée. */
+  firstName: string | null;
+  lastName: string | null;
+  civility: Civility | null;
+  /** Date ISO `YYYY-MM-DD`, `null` si inconnue. */
+  birthDate: string | null;
+  email: string;
+  mobilePhone: string;
+  address: PostalAddress | null;
+  /** Date ISO 8601 de l'inscription sur la plateforme. */
+  registeredAt: string;
+  /** Date ISO 8601 de la dernière intervention, `null` si aucune. */
+  lastInterventionAt: string | null;
+}

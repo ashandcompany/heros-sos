@@ -1,6 +1,6 @@
 import type { UserRole } from "@/types";
 
-/** Routes de l'application. Pages existantes : accueil, connexion, inscription, mot de passe oublié. */
+/** Routes de l'application. Pages existantes : accueil, connexion, inscription, mot de passe oublié, admin super-héros. */
 export const routes = {
   home: "/",
   encyclopedia: "/encyclopedie",
@@ -11,6 +11,7 @@ export const routes = {
   forgotPassword: "/mot-de-passe-oublie",
   profile: "/profil",
   heroSpace: "/espace-heros",
+  adminHeroes: "/admin/super-heros",
   about: "/a-propos",
   contact: "/contact",
   faq: "/faq",
@@ -34,4 +35,15 @@ export const mainNav: NavItem[] = [
 export const accountHomeByRole: Record<UserRole, string> = {
   citoyen: routes.profile,
   "super-heros": routes.heroSpace,
+  admin: routes.adminHeroes,
+};
+
+/**
+ * Page affichée après connexion. Les espaces citoyen et héros n'existant pas encore,
+ * seuls les administrateurs sont envoyés vers leur espace.
+ */
+export const afterLoginRouteByRole: Record<UserRole, string> = {
+  citoyen: routes.home,
+  "super-heros": routes.home,
+  admin: routes.adminHeroes,
 };

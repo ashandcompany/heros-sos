@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { login } from "@/lib/api";
 import { SESSION_COOKIE, sessionCookieOptions } from "@/lib/cookies";
-import { routes } from "@/lib/routes";
+import { afterLoginRouteByRole, routes } from "@/lib/routes";
 
 export interface LoginFormState {
   /** Identifiant renvoyé pour pré-remplir le champ (le mot de passe ne l'est jamais). */
@@ -52,5 +52,11 @@ export async function loginAction(
 
   (await cookies()).set(SESSION_COOKIE, result.token, sessionCookieOptions);
 
+  redirect(afterLoginRouteByRole[result.user.role]);
+}
+
+export async function logoutAction(): Promise<void> {
+  // Future implémentation : invalider aussi la session côté API (`POST ${API_URL}/auth/logout`).
+  (await cookies()).delete(SESSION_COOKIE);
   redirect(routes.home);
 }

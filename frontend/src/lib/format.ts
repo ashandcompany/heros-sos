@@ -1,4 +1,10 @@
-import type { IncidentLocation, IncidentType } from "@/types";
+import type {
+  IncidentLocation,
+  IncidentStatus,
+  IncidentType,
+  ReporterRole,
+  ThreatLevel,
+} from "@/types";
 
 const dateFormatter = new Intl.DateTimeFormat("fr-FR", {
   day: "numeric",
@@ -57,3 +63,34 @@ export function formatFullName(lastName: string | null, firstName: string | null
   const parts = [lastName?.toLocaleUpperCase("fr-FR"), firstName].filter(Boolean);
   return parts.length > 0 ? parts.join(" ") : null;
 }
+
+const dateTimeFormatter = new Intl.DateTimeFormat("fr-FR", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone: "Europe/Paris",
+});
+
+export function formatDateTime(isoDate: string): string {
+  return dateTimeFormatter.format(new Date(isoDate));
+}
+
+export const incidentStatusLabels: Record<IncidentStatus, string> = {
+  signale: "Signalé",
+  "en-cours": "Intervention en cours",
+  resolu: "Résolu",
+};
+
+export const reporterRoleLabels: Record<ReporterRole, string> = {
+  temoin: "Témoin",
+  victime: "Victime",
+};
+
+export const threatLevelLabels: Record<ThreatLevel, string> = {
+  faible: "Faible",
+  modere: "Modérée",
+  eleve: "Élevée",
+  critique: "Critique",
+};

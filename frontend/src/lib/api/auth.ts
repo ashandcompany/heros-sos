@@ -1,3 +1,4 @@
+import { citizensMock } from "@/mocks/citizens";
 import { accountsMock } from "@/mocks/users";
 import type { AuthUser, LoginCredentials, LoginResult, SignupPayload, SignupResult } from "@/types";
 import { mockResponse } from "./config";
@@ -66,6 +67,20 @@ export async function register(payload: SignupPayload): Promise<SignupResult> {
   };
   // Mock en mémoire : le compte reste utilisable jusqu'au redémarrage du serveur.
   accountsMock.push({ user, email: payload.email, password: payload.password });
+  citizensMock.push({
+    id: user.id,
+    civility: payload.civility,
+    firstName: payload.firstName,
+    lastName: payload.lastName,
+    birthDate: payload.birthDate,
+    email: payload.email,
+    pendingEmail: null,
+    mobilePhone: payload.mobilePhone,
+    address: { ...payload.address, complement: null },
+    avatarUrl: null,
+    newsletterSubscribed: false,
+    registeredAt: new Date().toISOString(),
+  });
 
   return mockResponse({ ok: true, user, token: `${MOCK_TOKEN_PREFIX}${user.id}` });
 }

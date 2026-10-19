@@ -24,15 +24,22 @@ function MenuIcon({ open }: { open: boolean }) {
   );
 }
 
+/** Lien vers l'espace de chaque rôle (l'espace héros n'existe pas encore). */
+const spaceLinkByRole: Record<AuthUser["role"], { label: string; href: string } | null> = {
+  citoyen: { label: "Mon espace", href: routes.profile },
+  "super-heros": null,
+  admin: { label: "Back-office", href: routes.adminHeroes },
+};
+
 interface AccountActionsProps {
   user: NavUser;
   variant: "desktop" | "mobile";
-  isAdminPage: boolean;
+  isSpacePage: boolean;
   onNavigate: () => void;
 }
 
 /** Boutons de compte : connexion / inscription, ou utilisateur connecté et déconnexion. */
-function AccountActions({ user, variant, isAdminPage, onNavigate }: AccountActionsProps) {
+function AccountActions({ user, variant, isSpacePage, onNavigate }: AccountActionsProps) {
   if (user === undefined) return null;
 
   const mobile = variant === "mobile";
@@ -54,22 +61,24 @@ function AccountActions({ user, variant, isAdminPage, onNavigate }: AccountActio
     );
   }
 
+  const spaceLink = spaceLinkByRole[user.role];
+
   return (
     <>
       <p className={cn("text-sm text-muted", mobile ? "col-span-2" : "hidden lg:block")}>
         Connecté·e : <span className="font-semibold text-foreground">{user.displayName}</span>
       </p>
-      {user.role === "admin" && (
+      {spaceLink && (
         <Link
-          href={routes.adminHeroes}
+          href={spaceLink.href}
           onClick={onNavigate}
-          aria-current={isAdminPage ? "page" : undefined}
+          aria-current={isSpacePage ? "page" : undefined}
           className={buttonClasses("secondary")}
         >
-          Back-office
+          {spaceLink.label}
         </Link>
       )}
-      <form action={logoutAction} className={cn(mobile && user.role !== "admin" && "col-span-2")}>
+      <form action={logoutAction} className={cn(mobile && !spaceLink && "col-span-2")}>
         <button
           type="submit"
           className={cn(buttonClasses(mobile ? "secondary" : "ghost"), "w-full")}
@@ -103,7 +112,7 @@ export function MainNav({ user }: { user: NavUser }) {
   }, [open]);
 
   const close = () => setOpen(false);
-  const isAdminPage = pathname.startsWith("/admin");
+  const isSpacePage = pathname.startsWith("/admin") || pathname.startsWith("/profil");
 
   const navLinks = (variant: "desktop" | "mobile") =>
     mainNav.map((item) => {
@@ -140,7 +149,7 @@ export function MainNav({ user }: { user: NavUser }) {
         <AccountActions
           user={user}
           variant="desktop"
-          isAdminPage={isAdminPage}
+          isSpacePage={isSpacePage}
           onNavigate={close}
         />
       </div>
@@ -170,7 +179,7 @@ export function MainNav({ user }: { user: NavUser }) {
             <AccountActions
               user={user}
               variant="mobile"
-              isAdminPage={isAdminPage}
+              isSpacePage={isSpacePage}
               onNavigate={close}
             />
           </div>

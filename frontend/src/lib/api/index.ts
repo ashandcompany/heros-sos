@@ -1,4 +1,18 @@
+export {
+  getMyAccount,
+  requestEmailChange,
+  updateMyAvatar,
+  updateMyContact,
+  updateNewsletterPreference,
+} from "./account";
 export { getSessionUser, login, register, requestPasswordReset } from "./auth";
-export { getLatestResolvedIncidents } from "./incidents";
+export {
+  declareIncident,
+  getLatestResolvedIncidents,
+  getMyIncidents,
+  getOngoingIncidents,
+} from "./incidents";
 export { subscribeToNewsletter } from "./newsletter";
-export { getFeaturedSuperHeroes, getSuperHeroProfiles } from "./super-heroes";
+export { getMyInterventions, rateIntervention } from "./ratings";
+export { getFeaturedSuperHeroes, getSuperHeroes, getSuperHeroProfiles } from "./super-heroes";
+export { getVillains } from "./villains";

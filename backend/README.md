@@ -13,7 +13,7 @@ Prérequis : Go (voir `go.mod`), Docker, `openssl`.
 ```bash
 cd backend
 make env             # crée .env avec des secrets aléatoires
-make up-dev          # http://localhost:8088 (front + API) · http://localhost:8025 (mails reçus)
+make up-dev          # http://localhost:8088 (front + API) · /api/v1/docs (Swagger) · :8025 (mails reçus)
 make moderator-dev EMAIL=modo@example.org FIRST=Nick LAST=Fury BIRTH=1950-12-04
 ```
 
@@ -64,13 +64,37 @@ Ce qui protège de la régression :
   verrouillages simultanés.
 - `.env.example` est vérifié contre les variables réellement lues par le code.
 
+## Documentation interactive (Swagger UI)
+
+En développement, l'API sert sa propre documentation, générée à partir du contrat
+`openapi/openapi.yaml` : **http://localhost:8088/api/v1/docs** avec `make up-dev`, ou
+http://localhost:8080/api/v1/docs avec `make run`. On y lit chaque route, ses champs et ses erreurs,
+et on peut l'essayer (« Try it out »).
+
+- **Une écriture authentifiée** demande une session et le jeton CSRF : appeler `POST /auth/login`
+  (le cookie est posé par le navigateur), copier le `csrfToken` de la réponse dans « Authorize »
+  (`csrfToken`), puis essayer la route. L'origine de la page doit figurer dans
+  `HEROS_ALLOWED_ORIGINS`, sinon les écritures sont refusées (`origin_not_allowed`) : c'est le cas du
+  proxy (`:8088`) avec `make up-dev`, mais pas de l'accès direct à l'API (`:8081`). Avec `make run`,
+  ajouter `http://localhost:8080` à cette variable dans `.env`. Les lectures (`GET`) n'y sont pas soumises.
+- **Rien ne sort de la machine** : Swagger UI est embarqué dans le binaire (pas de CDN), le validateur
+  en ligne est désactivé et la politique de sécurité de la page interdit les scripts en ligne et
+  toute ressource extérieure. Seule cette page assouplit la politique de l'API.
+- **Absente en production** : les routes `/docs` ne sont pas enregistrées (404).
+- Le contrat n'a pas besoin d'être répété : ajouter une route dans `openapi.yaml` (voir plus bas) la
+  fait apparaître dans la page. Les routes de la documentation elles-mêmes ne font pas partie du
+  contrat (`Router.HandleOutsideContract`).
+- Les fichiers de Swagger UI (`internal/apidocs/assets/`) sont ceux de la distribution officielle,
+  sans modification, et vérifiés par un test : voir `internal/apidocs/THIRD_PARTY.md` pour la version
+  et la mise à jour.
+
 ## Organisation du code
 
 ```
 cmd/api                 serveur HTTP (-migrate pour appliquer les migrations)
 cmd/createmoderator     crée un modérateur (mot de passe par HEROS_MODERATOR_PASSWORD)
 migrations/             SQL versionné par horodatage (golang-migrate), embarqué dans le binaire
-openapi/openapi.yaml    contrat de l'API (référence)
+openapi/openapi.yaml    contrat de l'API (référence), embarqué par openapi/openapi.go
 internal/
   config/               TOUTE la configuration : variables d'environnement, valeurs par défaut,
                         validation (plus stricte en production)
@@ -81,6 +105,7 @@ internal/
   moderation/           actions des modérateurs sur les comptes
   crypto/               cascade AES-256-GCM puis XChaCha20-Poly1305 (clé de 512 bits)
   mail/                 construction MIME, SMTP, file d'envoi asynchrone, modèles
+  apidocs/              documentation interactive (Swagger UI embarqué), hors production
   audit/                journal des actions sensibles
   httpx/                format des erreurs, JSON strict, IP client, middlewares
   validation/           règles de saisie (alignées sur le formulaire du frontend)

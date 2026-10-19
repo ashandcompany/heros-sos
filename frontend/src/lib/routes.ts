@@ -1,4 +1,6 @@
-/** Routes de l'application. Seules les pages d'accueil et de connexion existent pour l'instant. */
+import type { UserRole } from "@/types";
+
+/** Routes de l'application. Seules les pages d'accueil, de connexion et de mot de passe oublié existent pour l'instant. */
 export const routes = {
   home: "/",
   encyclopedia: "/encyclopedie",
@@ -7,6 +9,8 @@ export const routes = {
   login: "/connexion",
   signup: "/inscription",
   forgotPassword: "/mot-de-passe-oublie",
+  profile: "/profil",
+  heroSpace: "/espace-heros",
   about: "/a-propos",
   contact: "/contact",
   faq: "/faq",
@@ -25,3 +29,9 @@ export const mainNav: NavItem[] = [
   { label: "Vidéothèque", href: routes.videos },
   { label: "Blog", href: routes.blog },
 ];
+
+/** Page d'accueil de l'espace personnel selon le rôle de l'utilisateur connecté. */
+export const accountHomeByRole: Record<UserRole, string> = {
+  citoyen: routes.profile,
+  "super-heros": routes.heroSpace,
+};

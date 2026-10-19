@@ -37,3 +37,11 @@ export async function requireAdminSession(): Promise<string> {
 export async function requireCitizenSession(): Promise<string> {
   return (await requireRole("citoyen")).token;
 }
+
+/**
+ * Un compte super-héros n'existe qu'une fois sa demande validée par la modération
+ * (voir `reviewHeroApplication`) : le rôle suffit à garantir un compte validé.
+ */
+export async function requireHeroSession(): Promise<{ token: string; user: AuthUser }> {
+  return requireRole("super-heros");
+}

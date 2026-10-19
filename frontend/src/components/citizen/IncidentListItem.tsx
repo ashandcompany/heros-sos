@@ -7,7 +7,7 @@ import {
 } from "@/lib/format";
 import type { Incident, IncidentStatus } from "@/types";
 
-const statusTone: Record<IncidentStatus, "paper" | "warning" | "success"> = {
+export const statusTone: Record<IncidentStatus, "paper" | "warning" | "success"> = {
   signale: "paper",
   "en-cours": "warning",
   resolu: "success",

@@ -1,7 +1,13 @@
 import { heroApplicationsMock } from "@/mocks/hero-applications";
 import { superHeroesMock, superHeroProfilesMock } from "@/mocks/super-heroes";
 import { accountsMock } from "@/mocks/users";
-import type { HeroApplication, MutationResult, SuperHero, SuperHeroProfile } from "@/types";
+import type {
+  HeroApplication,
+  MutationResult,
+  PostalAddress,
+  SuperHero,
+  SuperHeroProfile,
+} from "@/types";
 import { mockResponse } from "./config";
 import { userFromToken } from "./session-user";
 
@@ -92,6 +98,7 @@ export async function reviewHeroApplication(
       civility: application.civility,
       birthDate: application.birthDate,
       email: application.email,
+      pendingEmail: null,
       mobilePhone: application.mobilePhone,
       address: application.address,
       registeredAt: now,
@@ -105,5 +112,69 @@ export async function reviewHeroApplication(
     });
   }
 
+  return mockResponse({ ok: true });
+}
+
+/* ---------- Espace super-héros (rôle super-heros) ---------- */
+
+async function findMyProfile(token: string): Promise<SuperHeroProfile> {
+  const user = await userFromToken(token, "super-heros");
+  const profile = superHeroProfilesMock.find(({ id }) => id === user.id);
+  if (!profile) throw new Error("404 : profil introuvable");
+  return profile;
+}
+
+/** Future implémentation : `GET ${API_URL}/hero/me` */
+export async function getMyHeroProfile(token: string): Promise<SuperHeroProfile> {
+  return mockResponse(await findMyProfile(token));
+}
+
+/** Future implémentation : `PATCH ${API_URL}/hero/me` avec `{ mobilePhone, address }`. */
+export async function updateMyHeroContact(
+  token: string,
+  update: { mobilePhone: string; address: PostalAddress },
+): Promise<MutationResult> {
+  const profile = await findMyProfile(token);
+  profile.mobilePhone = update.mobilePhone;
+  profile.address = update.address;
+  return mockResponse({ ok: true });
+}
+
+/**
+ * Remplace la photo (profil complet et profil public).
+ * Future implémentation : `PUT ${API_URL}/hero/me/avatar` en multipart/form-data.
+ */
+export async function updateMyHeroAvatar(token: string, file: File): Promise<MutationResult> {
+  const profile = await findMyProfile(token);
+  const base64 = Buffer.from(await file.arrayBuffer()).toString("base64");
+  const avatarUrl = `data:${file.type};base64,${base64}`;
+  profile.avatarUrl = avatarUrl;
+  const hero = superHeroesMock.find(({ id }) => id === profile.id);
+  if (hero) hero.avatarUrl = avatarUrl;
+  return mockResponse({ ok: true });
+}
+
+/**
+ * Demande de changement d'email, appliquée après validation par la modération.
+ * Future implémentation : `POST ${API_URL}/hero/me/email-change-requests` avec `{ email }`.
+ */
+export async function requestHeroEmailChange(
+  token: string,
+  email: string,
+): Promise<MutationResult> {
+  const profile = await findMyProfile(token);
+  const normalized = email.toLowerCase();
+
+  if (normalized === profile.email) {
+    return mockResponse({ ok: false, error: "C'est déjà votre adresse email actuelle." });
+  }
+  if (accountsMock.some((existing) => existing.email === normalized)) {
+    return mockResponse({
+      ok: false,
+      error: "Cette adresse est déjà utilisée par un autre compte.",
+    });
+  }
+
+  profile.pendingEmail = normalized;
   return mockResponse({ ok: true });
 }

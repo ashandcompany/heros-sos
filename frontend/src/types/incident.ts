@@ -7,6 +7,12 @@ export type IncidentType =
 
 export type IncidentStatus = "signale" | "en-cours" | "resolu";
 
+/** Urgence de l'incident, définie par les super-héros. */
+export type IncidentPriority = "basse" | "normale" | "haute" | "critique";
+
+/** Résultat d'une intervention terminée. */
+export type InterventionOutcome = "reussi" | "echoue";
+
 /** Le citoyen qui déclare est témoin ou victime de l'incident. */
 export type ReporterRole = "temoin" | "victime";
 
@@ -27,6 +33,8 @@ export interface Incident {
    * Un incident rejeté n'apparaît plus dans les listes publiques.
    */
   moderation: ModerationStatus;
+  /** Priorité fixée par un super-héros (`normale` tant qu'elle n'a pas été définie). */
+  priority?: IncidentPriority;
   location: IncidentLocation;
   /** Date ISO 8601 du signalement. */
   reportedAt: string;
@@ -74,6 +82,14 @@ export interface InterventionRating {
   /** Modération du commentaire : un commentaire rejeté est masqué (la note reste comptée). */
   commentModeration: ModerationStatus;
   ratedAt: string;
+  /** Réponse du super-héros au commentaire. */
+  reply?: HeroReply | null;
+}
+
+export interface HeroReply {
+  content: string;
+  /** Date ISO 8601. */
+  repliedAt: string;
 }
 
 /** Évaluation affichée dans le back-office, avec l'incident et le héros concernés. */
@@ -98,4 +114,26 @@ export interface IncidentUpdate {
 export interface RateableIntervention {
   incident: ResolvedIncident;
   rating: InterventionRating | null;
+}
+
+/**
+ * Intervention d'un super-héros sur un incident. Un seul héros intervient à la fois :
+ * après un échec, l'incident redevient disponible pour une nouvelle prise en charge.
+ */
+export interface HeroIntervention {
+  id: string;
+  incidentId: string;
+  hero: SuperHeroSummary;
+  /** Dates ISO 8601. */
+  startedAt: string;
+  endedAt: string | null;
+  /** `null` tant que l'intervention est en cours. */
+  outcome: InterventionOutcome | null;
+}
+
+/** Incident vu depuis l'espace super-héros : priorité et historique des interventions. */
+export interface HeroIncident extends Incident {
+  priority: IncidentPriority;
+  /** Interventions sur cet incident, des plus récentes aux plus anciennes. */
+  interventions: HeroIntervention[];
 }

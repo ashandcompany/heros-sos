@@ -11,16 +11,25 @@ import { FormMessage } from "@/components/ui/FormMessage";
 import { SelectField } from "@/components/ui/SelectField";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { TextField } from "@/components/ui/TextField";
-import { countries } from "@/lib/countries";
+import { countries, DEFAULT_COUNTRY } from "@/lib/countries";
 import type { ContactField } from "@/lib/validation/account";
 import { idleFormState, type FormState } from "@/lib/validation/form-state";
-import type { CitizenAccount } from "@/types";
+import type { PostalAddress } from "@/types";
 
-export function AvatarForm() {
-  const [state, formAction] = useActionState(
-    updateAvatarAction,
-    idleFormState as FormState<"avatar">,
-  );
+/*
+ * Formulaires du compte. Ils servent aussi au profil des super-héros : l'action par défaut
+ * (espace citoyen) peut être remplacée par celle d'un autre espace.
+ */
+
+type FormAction<Field extends string> = (
+  previousState: FormState<Field>,
+  formData: FormData,
+) => Promise<FormState<Field>>;
+
+export function AvatarForm({
+  action = updateAvatarAction,
+}: { action?: FormAction<"avatar"> } = {}) {
+  const [state, formAction] = useActionState(action, idleFormState as FormState<"avatar">);
 
   return (
     <form action={formAction} className="space-y-3">
@@ -42,11 +51,24 @@ export function AvatarForm() {
   );
 }
 
-export function ContactForm({ account }: { account: CitizenAccount }) {
-  const [state, formAction] = useActionState(
-    updateContactAction,
-    idleFormState as FormState<ContactField>,
-  );
+interface ContactFormProps {
+  contact: {
+    mobilePhone: string;
+    /** `null` si aucune adresse n'est encore connue (profil de super-héros). */
+    address: (PostalAddress & { complement?: string | null }) | null;
+  };
+  action?: FormAction<ContactField>;
+  /** Affiche le champ « Complément d'adresse » (absent du profil des super-héros). */
+  withComplement?: boolean;
+}
+
+export function ContactForm({
+  contact,
+  action = updateContactAction,
+  withComplement = true,
+}: ContactFormProps) {
+  const [state, formAction] = useActionState(action, idleFormState as FormState<ContactField>);
+  const address = contact.address;
   const errors = state.fieldErrors;
   // Après une erreur, on réaffiche la saisie ; sinon les valeurs enregistrées.
   const value = (field: ContactField, saved: string) => state.values?.[field] ?? saved;
@@ -60,7 +82,7 @@ export function ContactForm({ account }: { account: CitizenAccount }) {
         inputMode="tel"
         autoComplete="tel"
         required
-        defaultValue={value("mobilePhone", account.mobilePhone)}
+        defaultValue={value("mobilePhone", contact.mobilePhone)}
         error={errors.mobilePhone}
       />
       <TextField
@@ -68,24 +90,26 @@ export function ContactForm({ account }: { account: CitizenAccount }) {
         name="street"
         autoComplete="address-line1"
         required
-        defaultValue={value("street", account.address.street)}
+        defaultValue={value("street", address?.street ?? "")}
         error={errors.street}
       />
-      <TextField
-        label="Complément d'adresse (facultatif)"
-        hint="Bâtiment, étage, code d'accès…"
-        name="complement"
-        autoComplete="address-line2"
-        defaultValue={value("complement", account.address.complement ?? "")}
-        error={errors.complement}
-      />
+      {withComplement && (
+        <TextField
+          label="Complément d'adresse (facultatif)"
+          hint="Bâtiment, étage, code d'accès…"
+          name="complement"
+          autoComplete="address-line2"
+          defaultValue={value("complement", address?.complement ?? "")}
+          error={errors.complement}
+        />
+      )}
       <div className="grid gap-5 sm:grid-cols-[10rem_1fr]">
         <TextField
           label="Code postal"
           name="postalCode"
           autoComplete="postal-code"
           required
-          defaultValue={value("postalCode", account.address.postalCode)}
+          defaultValue={value("postalCode", address?.postalCode ?? "")}
           error={errors.postalCode}
         />
         <TextField
@@ -93,7 +117,7 @@ export function ContactForm({ account }: { account: CitizenAccount }) {
           name="city"
           autoComplete="address-level2"
           required
-          defaultValue={value("city", account.address.city)}
+          defaultValue={value("city", address?.city ?? "")}
           error={errors.city}
         />
       </div>
@@ -102,7 +126,7 @@ export function ContactForm({ account }: { account: CitizenAccount }) {
         name="country"
         autoComplete="country"
         required
-        defaultValue={value("country", account.address.country)}
+        defaultValue={value("country", address?.country ?? DEFAULT_COUNTRY)}
         error={errors.country}
       >
         {countries.map((country) => (
@@ -117,11 +141,10 @@ export function ContactForm({ account }: { account: CitizenAccount }) {
   );
 }
 
-export function EmailChangeForm() {
-  const [state, formAction] = useActionState(
-    requestEmailChangeAction,
-    idleFormState as FormState<"email">,
-  );
+export function EmailChangeForm({
+  action = requestEmailChangeAction,
+}: { action?: FormAction<"email"> } = {}) {
+  const [state, formAction] = useActionState(action, idleFormState as FormState<"email">);
 
   return (
     <form action={formAction} noValidate className="space-y-4">

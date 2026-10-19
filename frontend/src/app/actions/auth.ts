@@ -46,7 +46,10 @@ export async function loginAction(
     return {
       identifier,
       fieldErrors: {},
-      formError: "Identifiant ou mot de passe incorrect.",
+      formError:
+        result.error === "account-suspended"
+          ? "Ce compte a été suspendu par la modération. Contactez-nous pour en savoir plus."
+          : "Identifiant ou mot de passe incorrect.",
     };
   }
 

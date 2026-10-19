@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { routes } from "@/lib/routes";
 import { declareIncident, getVillains, rateIntervention } from "@/lib/api";
-import { requireCitizenSession } from "@/lib/server-session";
+import { requireAdminSession, requireCitizenSession } from "@/lib/server-session";
 import { hasFieldErrors, type FormState } from "@/lib/validation/form-state";
 import {
   readDeclarationValues,
@@ -12,11 +12,35 @@ import {
   type DeclarationField,
 } from "@/lib/validation/incident";
 
+export type DeclareIncidentFormAction = (
+  previousState: FormState<DeclarationField>,
+  formData: FormData,
+) => Promise<FormState<DeclarationField>>;
+
 export async function declareIncidentAction(
   _previousState: FormState<DeclarationField>,
   formData: FormData,
 ): Promise<FormState<DeclarationField>> {
-  const token = await requireCitizenSession();
+  return submitDeclaration(await requireCitizenSession(), formData);
+}
+
+/** Signalement par un modérateur, depuis le back-office (validé d'office par l'API). */
+export async function adminDeclareIncidentAction(
+  _previousState: FormState<DeclarationField>,
+  formData: FormData,
+): Promise<FormState<DeclarationField>> {
+  const state = await submitDeclaration(await requireAdminSession(), formData);
+  if (state.status === "success") {
+    revalidatePath(routes.admin);
+    revalidatePath(routes.adminIncidents);
+  }
+  return state;
+}
+
+async function submitDeclaration(
+  token: string,
+  formData: FormData,
+): Promise<FormState<DeclarationField>> {
   const values = readDeclarationValues(formData);
   // Date convertie en ISO par le navigateur (fuseau de l'utilisateur) quand JavaScript est actif.
   const occurredAtIso = String(formData.get("occurredAtIso") ?? "");

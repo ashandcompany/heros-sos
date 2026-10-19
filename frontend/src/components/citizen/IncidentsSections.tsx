@@ -4,6 +4,7 @@ import { cn } from "@/components/ui/cn";
 import { getMyIncidents, getOngoingIncidents, getVillains } from "@/lib/api";
 import { routes } from "@/lib/routes";
 import { requireCitizenSession } from "@/lib/server-session";
+import { declareIncidentAction } from "@/app/actions/incidents";
 import { DeclareIncidentForm } from "./DeclareIncidentForm";
 import { IncidentListItem } from "./IncidentListItem";
 
@@ -70,7 +71,12 @@ export async function OngoingIncidents({
 export async function DeclareIncidentSection() {
   await requireCitizenSession();
   const villains = await getVillains();
-  return <DeclareIncidentForm villains={villains.map(({ id, alias }) => ({ id, alias }))} />;
+  return (
+    <DeclareIncidentForm
+      villains={villains.map(({ id, alias }) => ({ id, alias }))}
+      action={declareIncidentAction}
+    />
+  );
 }
 
 export async function MyIncidents() {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, type FormEvent } from "react";
-import { declareIncidentAction } from "@/app/actions/incidents";
+import type { DeclareIncidentFormAction } from "@/app/actions/incidents";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { RadioGroup } from "@/components/ui/RadioGroup";
 import { SelectField } from "@/components/ui/SelectField";
@@ -20,11 +20,14 @@ import {
 } from "@/lib/validation/incident";
 import type { VillainSummary } from "@/types";
 
-export function DeclareIncidentForm({ villains }: { villains: VillainSummary[] }) {
-  const [state, formAction] = useActionState(
-    declareIncidentAction,
-    idleFormState as FormState<DeclarationField>,
-  );
+interface DeclareIncidentFormProps {
+  villains: VillainSummary[];
+  /** Action de déclaration : citoyen (espace personnel) ou modérateur (back-office). */
+  action: DeclareIncidentFormAction;
+}
+
+export function DeclareIncidentForm({ villains, action }: DeclareIncidentFormProps) {
+  const [state, formAction] = useActionState(action, idleFormState as FormState<DeclarationField>);
   const formRef = useRef<HTMLFormElement>(null);
   const occurredAtIsoRef = useRef<HTMLInputElement>(null);
   const errors = state.fieldErrors;

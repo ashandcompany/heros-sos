@@ -27,6 +27,9 @@ export function IncidentListItem({ incident, detailed = false }: IncidentListIte
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone={statusTone[incident.status]}>{incidentStatusLabels[incident.status]}</Badge>
         <Badge>{incidentTypeLabels[incident.type]}</Badge>
+        {detailed && incident.moderation === "rejete" && (
+          <Badge tone="danger">Rejeté par la modération</Badge>
+        )}
         {detailed && incident.reporterRole && (
           <span className="text-xs text-muted">
             Vous étiez {reporterRoleLabels[incident.reporterRole].toLowerCase()}
@@ -39,7 +42,10 @@ export function IncidentListItem({ incident, detailed = false }: IncidentListIte
         {place}
       </p>
       <p className="text-sm text-muted">
-        Signalé le <time dateTime={incident.reportedAt} className="font-mono">{formatDateTime(incident.reportedAt)}</time>
+        Signalé le{" "}
+        <time dateTime={incident.reportedAt} className="font-mono">
+          {formatDateTime(incident.reportedAt)}
+        </time>
       </p>
       {detailed && incident.description && (
         <p className="mt-3 text-sm text-pretty">{incident.description}</p>

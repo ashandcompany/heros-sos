@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useId, useRef, useState } from "react";
+import { Suspense, useEffect, useId, useRef, useState } from "react";
 import { buttonClasses } from "@/components/ui/ButtonLink";
 import { cn } from "@/components/ui/cn";
 import { logoutAction } from "@/app/actions/auth";
@@ -28,7 +28,7 @@ function MenuIcon({ open }: { open: boolean }) {
 const spaceLinkByRole: Record<AuthUser["role"], { label: string; href: string } | null> = {
   citoyen: { label: "Mon espace", href: routes.profile },
   "super-heros": null,
-  admin: { label: "Back-office", href: routes.adminHeroes },
+  admin: { label: "Back-office", href: routes.admin },
 };
 
 interface AccountActionsProps {
@@ -56,7 +56,11 @@ function AccountActions({ user, variant, isSpacePage, onNavigate }: AccountActio
         >
           Connexion
         </Link>
-        <Link href={routes.signup} onClick={onNavigate} className={cn(buttonClasses("primary"), compact)}>
+        <Link
+          href={routes.signup}
+          onClick={onNavigate}
+          className={cn(buttonClasses("primary"), compact)}
+        >
           Inscription
         </Link>
       </>
@@ -92,9 +96,24 @@ function AccountActions({ user, variant, isSpacePage, onNavigate }: AccountActio
   );
 }
 
-/** Navigation principale : liens en ligne sur desktop, menu burger sur mobile. */
+/**
+ * Navigation principale : liens en ligne sur desktop, menu burger sur mobile.
+ * Sur une route à paramètre dynamique, la page courante n'est connue qu'à la requête :
+ * la navigation est d'abord rendue sans lien actif (fallback), puis mise à jour.
+ */
 export function MainNav({ user }: { user: NavUser }) {
-  const pathname = usePathname();
+  return (
+    <Suspense fallback={<MainNavView user={user} pathname={null} />}>
+      <MainNavWithPathname user={user} />
+    </Suspense>
+  );
+}
+
+function MainNavWithPathname({ user }: { user: NavUser }) {
+  return <MainNavView user={user} pathname={usePathname()} />;
+}
+
+function MainNavView({ user, pathname }: { user: NavUser; pathname: string | null }) {
   const [open, setOpen] = useState(false);
   const menuId = useId();
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -114,7 +133,8 @@ export function MainNav({ user }: { user: NavUser }) {
   }, [open]);
 
   const close = () => setOpen(false);
-  const isSpacePage = pathname.startsWith("/admin") || pathname.startsWith("/profil");
+  const isSpacePage =
+    !!pathname && (pathname.startsWith("/admin") || pathname.startsWith("/profil"));
 
   const navLinks = (variant: "desktop" | "mobile") =>
     mainNav.map((item) => {

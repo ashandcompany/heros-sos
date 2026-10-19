@@ -1,6 +1,13 @@
 import { incidentsMock } from "@/mocks/incidents";
 import { ratingsMock } from "@/mocks/ratings";
-import type { Incident, MutationResult, RateableIntervention, ResolvedIncident } from "@/types";
+import type {
+  Incident,
+  ModerationStatus,
+  MutationResult,
+  RateableIntervention,
+  RatingForModeration,
+  ResolvedIncident,
+} from "@/types";
 import { mockResponse } from "./config";
 import { userFromToken } from "./session-user";
 
@@ -50,7 +57,55 @@ export async function rateIntervention(
     heroId: incident.hero.id,
     rating,
     comment,
+    commentModeration: comment ? "en-attente" : "valide",
     ratedAt: new Date().toISOString(),
   });
+  return mockResponse({ ok: true });
+}
+
+/* ---------- Back-office (rôle admin) ---------- */
+
+/**
+ * Évaluations accompagnées d'un commentaire, des plus récentes aux plus anciennes.
+ * Future implémentation : `GET ${API_URL}/admin/ratings?hasComment=true&moderation=${moderation}`
+ */
+export async function getRatingsForModeration(
+  token: string,
+  moderation?: ModerationStatus,
+): Promise<RatingForModeration[]> {
+  await userFromToken(token, "admin");
+  const ratings = ratingsMock
+    .filter((rating) => rating.comment)
+    .filter((rating) => !moderation || rating.commentModeration === moderation)
+    .sort((a, b) => Date.parse(b.ratedAt) - Date.parse(a.ratedAt))
+    .flatMap((rating) => {
+      const incident = incidentsMock.find(({ id }) => id === rating.incidentId);
+      if (!incident?.hero) return [];
+      return [
+        {
+          ...rating,
+          incident: { id: incident.id, title: incident.title },
+          hero: incident.hero,
+        },
+      ];
+    });
+
+  return mockResponse(ratings);
+}
+
+/**
+ * Publie ou masque le commentaire d'une évaluation (la note reste prise en compte).
+ * Future implémentation : `PUT ${API_URL}/admin/ratings/${incidentId}/moderation` avec `{ decision }`.
+ */
+export async function moderateComment(
+  token: string,
+  incidentId: string,
+  decision: ModerationStatus,
+): Promise<MutationResult> {
+  await userFromToken(token, "admin");
+  const rating = ratingsMock.find((existing) => existing.incidentId === incidentId);
+  if (!rating) return mockResponse({ ok: false, error: "Évaluation introuvable." });
+
+  rating.commentModeration = decision;
   return mockResponse({ ok: true });
 }

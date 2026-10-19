@@ -1,3 +1,4 @@
+import type { ModerationStatus } from "./moderation";
 import type { SuperHeroSummary } from "./super-hero";
 import type { VillainSummary } from "./villain";
 
@@ -21,6 +22,11 @@ export interface Incident {
   title: string;
   type: IncidentType;
   status: IncidentStatus;
+  /**
+   * Vérification par la modération (déclaration conforme et réelle).
+   * Un incident rejeté n'apparaît plus dans les listes publiques.
+   */
+  moderation: ModerationStatus;
   location: IncidentLocation;
   /** Date ISO 8601 du signalement. */
   reportedAt: string;
@@ -65,7 +71,27 @@ export interface InterventionRating {
   /** Note entière de 1 à 5. */
   rating: number;
   comment: string | null;
+  /** Modération du commentaire : un commentaire rejeté est masqué (la note reste comptée). */
+  commentModeration: ModerationStatus;
   ratedAt: string;
+}
+
+/** Évaluation affichée dans le back-office, avec l'incident et le héros concernés. */
+export interface RatingForModeration extends InterventionRating {
+  incident: Pick<Incident, "id" | "title">;
+  hero: SuperHeroSummary;
+}
+
+/** Modifications d'un incident par la modération. */
+export interface IncidentUpdate {
+  title: string;
+  type: IncidentType;
+  status: IncidentStatus;
+  description: string;
+  location: { address: string; city: string };
+  villainId: string | null;
+  /** Obligatoire dès que l'incident est pris en charge. */
+  heroId: string | null;
 }
 
 /** Intervention terminée sur un incident du citoyen, avec sa note s'il l'a déjà donnée. */

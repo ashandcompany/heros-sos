@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { ComponentProps } from "react";
 import { cn } from "./cn";
 
-type Variant = "primary" | "secondary" | "ghost" | "console";
+type Variant = "primary" | "secondary" | "danger" | "ghost" | "console";
 type Size = "md" | "lg";
 
 const variantClasses: Record<Variant, string> = {
@@ -11,6 +11,9 @@ const variantClasses: Record<Variant, string> = {
     "border border-[#8f3a12] bg-primary text-primary-foreground shadow-[inset_0_1px_0_rgb(255_255_255/0.3),inset_0_-2px_0_rgb(0_0_0/0.2),0_3px_0_#7a2f0f,0_4px_0_#000] hover:bg-primary-hover active:translate-y-0.5 active:shadow-[inset_0_1px_0_rgb(255_255_255/0.2),0_1px_0_#7a2f0f,0_2px_0_#000]",
   secondary:
     "border border-border bg-surface-raised text-foreground shadow-[inset_0_1px_0_rgb(255_255_255/0.12),inset_0_-2px_0_rgb(0_0_0/0.25),0_3px_0_#0d0906] hover:bg-surface hover:border-muted active:translate-y-0.5 active:shadow-[0_1px_0_#0d0906]",
+  // Actions destructrices ou de refus (rejeter, suspendre, supprimer).
+  danger:
+    "border border-[#6e1f19] bg-brick text-paper shadow-[inset_0_1px_0_rgb(255_255_255/0.2),inset_0_-2px_0_rgb(0_0_0/0.25),0_3px_0_#6e1f19,0_4px_0_#000] hover:bg-[#bd3b31] active:translate-y-0.5 active:shadow-[0_1px_0_#6e1f19,0_2px_0_#000]",
   ghost: "text-foreground hover:bg-surface-raised hover:text-accent",
   // Gros bouton de console industrielle.
   console:

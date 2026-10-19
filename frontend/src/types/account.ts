@@ -1,4 +1,5 @@
 import type { Civility, PostalAddress } from "./auth";
+import type { ModerationStatus } from "./moderation";
 
 export interface CitizenAddress extends PostalAddress {
   /** Complément d'adresse (bâtiment, étage…). */
@@ -23,6 +24,8 @@ export interface CitizenAccount {
   newsletterSubscribed: boolean;
   /** Date ISO 8601 de l'inscription. */
   registeredAt: string;
+  /** Contrôle du compte par la modération : `rejete` = compte suspendu (connexion impossible). */
+  moderation: ModerationStatus;
 }
 
 /** Champs modifiables directement par le citoyen (hors photo, email et newsletter). */

@@ -93,3 +93,27 @@ export async function deleteArticle(token: string, id: string): Promise<Mutation
   articlesMock.splice(index, 1);
   return mockResponse({ ok: true });
 }
+
+/* ---------- Blog public ---------- */
+
+const isPublished = (article: BlogArticle): article is BlogArticle & { publishedAt: string } =>
+  article.status === "publie" && !!article.publishedAt;
+
+/**
+ * Articles publiés, du plus récent au plus ancien.
+ * Future implémentation : `GET ${API_URL}/articles?sort=-publishedAt`
+ */
+export async function getPublishedArticles(): Promise<BlogArticle[]> {
+  return mockResponse(
+    articlesMock
+      .filter(isPublished)
+      .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt)),
+  );
+}
+
+/** Future implémentation : `GET ${API_URL}/articles/${slug}` (404 → `null`, brouillons compris). */
+export async function getPublishedArticle(slug: string): Promise<BlogArticle | null> {
+  return mockResponse(
+    articlesMock.find((article) => article.slug === slug && isPublished(article)) ?? null,
+  );
+}

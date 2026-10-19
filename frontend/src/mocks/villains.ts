@@ -7,6 +7,7 @@ export const villainsMock: Villain[] = [
     threatLevel: "eleve",
     description: "Cambrioleur insaisissable qui commande des nuées d'oiseaux mécaniques.",
     reportedIncidentsCount: 12,
+    status: "en-liberte",
   },
   {
     id: "villain-2",
@@ -14,6 +15,7 @@ export const villainsMock: Villain[] = [
     threatLevel: "modere",
     description: "Ingénieur déchu capable de corroder n'importe quel métal en quelques secondes.",
     reportedIncidentsCount: 8,
+    status: "en-liberte",
   },
   {
     id: "villain-3",
@@ -21,6 +23,7 @@ export const villainsMock: Villain[] = [
     threatLevel: "critique",
     description: "Contrôle les eaux portuaires et s'en prend aux musées et aux navires.",
     reportedIncidentsCount: 5,
+    status: "en-liberte",
   },
   {
     id: "villain-4",
@@ -28,6 +31,7 @@ export const villainsMock: Villain[] = [
     threatLevel: "faible",
     description: "Maître de l'illusion, spécialiste des faux billets et des fausses identités.",
     reportedIncidentsCount: 17,
+    status: "emprisonne",
   },
   {
     id: "villain-5",
@@ -35,6 +39,7 @@ export const villainsMock: Villain[] = [
     threatLevel: "eleve",
     description: "Absorbe et relâche l'électricité, cible privilégiée : les réseaux urbains.",
     reportedIncidentsCount: 9,
+    status: "en-liberte",
   },
   {
     id: "villain-6",
@@ -42,5 +47,6 @@ export const villainsMock: Villain[] = [
     threatLevel: "critique",
     description: "Ralentit le temps autour d'elle ; impliquée dans plusieurs prises d'otages.",
     reportedIncidentsCount: 4,
+    status: "emprisonne",
   },
 ];

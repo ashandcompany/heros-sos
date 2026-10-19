@@ -1,10 +1,15 @@
 import { incidentsMock } from "@/mocks/incidents";
-import { superHeroesMock } from "@/mocks/super-heroes";
+import { interventionsMock } from "@/mocks/interventions";
+import { superHeroesMock, superHeroProfilesMock } from "@/mocks/super-heroes";
 import { villainsMock } from "@/mocks/villains";
 import type {
+  HeroIncident,
   Incident,
   IncidentDeclaration,
+  IncidentPriority,
+  IncidentStatus,
   IncidentUpdate,
+  InterventionOutcome,
   ModerationStatus,
   MutationResult,
   ResolvedIncident,
@@ -179,5 +184,166 @@ export async function moderateIncident(
   if (!incident) return mockResponse({ ok: false, error: "Incident introuvable." });
 
   incident.moderation = decision;
+  return mockResponse({ ok: true });
+}
+
+/* ---------- Espace super-héros (rôle super-heros) ---------- */
+
+const priorityRank: Record<IncidentPriority, number> = {
+  critique: 0,
+  haute: 1,
+  normale: 2,
+  basse: 3,
+};
+
+const statusRank: Record<IncidentStatus, number> = { signale: 0, "en-cours": 1, resolu: 2 };
+
+function toHeroIncident(incident: Incident): HeroIncident {
+  return {
+    ...incident,
+    priority: incident.priority ?? "normale",
+    interventions: interventionsMock
+      .filter(({ incidentId }) => incidentId === incident.id)
+      .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt)),
+  };
+}
+
+/**
+ * Signalements diffusés aux super-héros, triés par statut (à prendre en charge d'abord),
+ * puis par priorité et du plus récent au plus ancien.
+ * Future implémentation : `GET ${API_URL}/hero/incidents?status=${statuses}`
+ */
+export async function getHeroIncidents(
+  token: string,
+  statuses?: readonly IncidentStatus[],
+): Promise<HeroIncident[]> {
+  await userFromToken(token, "super-heros");
+  const incidents = incidentsMock
+    .filter(isPublic)
+    .filter((incident) => !statuses || statuses.includes(incident.status))
+    .map(toHeroIncident)
+    .sort(
+      (a, b) =>
+        statusRank[a.status] - statusRank[b.status] ||
+        priorityRank[a.priority] - priorityRank[b.priority] ||
+        byMostRecent(a, b),
+    );
+
+  return mockResponse(incidents);
+}
+
+/** Future implémentation : `GET ${API_URL}/hero/incidents/${id}` (404 → `null`). */
+export async function getHeroIncident(token: string, id: string): Promise<HeroIncident | null> {
+  await userFromToken(token, "super-heros");
+  const incident = incidentsMock.find((existing) => existing.id === id && isPublic(existing));
+  return mockResponse(incident ? toHeroIncident(incident) : null);
+}
+
+/** Incident diffusé et non résolu, sur lequel un héros peut agir. */
+function findActionableIncident(id: string): Incident | { error: string } {
+  const incident = incidentsMock.find((existing) => existing.id === id && isPublic(existing));
+  if (!incident) return { error: "Incident introuvable." };
+  if (incident.status === "resolu") return { error: "Cet incident est déjà résolu." };
+  return incident;
+}
+
+/** Future implémentation : `PUT ${API_URL}/hero/incidents/${id}/priority` avec `{ priority }`. */
+export async function setIncidentPriority(
+  token: string,
+  id: string,
+  priority: IncidentPriority,
+): Promise<MutationResult> {
+  await userFromToken(token, "super-heros");
+  const incident = findActionableIncident(id);
+  if ("error" in incident) return mockResponse({ ok: false, error: incident.error });
+
+  incident.priority = priority;
+  return mockResponse({ ok: true });
+}
+
+/**
+ * Prise en charge d'un incident : un seul super-héros peut intervenir à la fois
+ * (l'API répondra 409 si un autre héros l'a pris en charge entre-temps).
+ * Future implémentation : `POST ${API_URL}/hero/incidents/${id}/intervention`
+ */
+export async function takeChargeOfIncident(token: string, id: string): Promise<MutationResult> {
+  const user = await userFromToken(token, "super-heros");
+  const incident = findActionableIncident(id);
+  if ("error" in incident) return mockResponse({ ok: false, error: incident.error });
+  if (incident.status === "en-cours" || incident.hero) {
+    return mockResponse({
+      ok: false,
+      error:
+        incident.hero?.id === user.id
+          ? "Vous intervenez déjà sur cet incident."
+          : "Un autre super-héros intervient déjà sur cet incident.",
+    });
+  }
+
+  const hero = { id: user.id, alias: user.displayName };
+  incident.status = "en-cours";
+  incident.hero = hero;
+  interventionsMock.push({
+    id: `intervention-${crypto.randomUUID()}`,
+    incidentId: incident.id,
+    hero,
+    startedAt: new Date().toISOString(),
+    endedAt: null,
+    outcome: null,
+  });
+  return mockResponse({ ok: true });
+}
+
+/**
+ * Termine l'intervention du héros. Réussie : l'incident est résolu. Échouée : il redevient
+ * disponible pour un autre super-héros.
+ * Future implémentation : `PUT ${API_URL}/hero/incidents/${id}/intervention` avec `{ outcome }`.
+ */
+export async function finishIntervention(
+  token: string,
+  id: string,
+  outcome: InterventionOutcome,
+): Promise<MutationResult> {
+  const user = await userFromToken(token, "super-heros");
+  const incident = findActionableIncident(id);
+  if ("error" in incident) return mockResponse({ ok: false, error: incident.error });
+  if (incident.status !== "en-cours" || incident.hero?.id !== user.id) {
+    return mockResponse({ ok: false, error: "Vous n'intervenez pas sur cet incident." });
+  }
+
+  const now = new Date().toISOString();
+  const intervention = interventionsMock.find(
+    (existing) =>
+      existing.incidentId === id && existing.hero.id === user.id && existing.outcome === null,
+  );
+  if (intervention) {
+    intervention.endedAt = now;
+    intervention.outcome = outcome;
+  } else {
+    // Héros affecté par la modération : aucune prise en charge enregistrée.
+    interventionsMock.push({
+      id: `intervention-${crypto.randomUUID()}`,
+      incidentId: id,
+      hero: incident.hero,
+      startedAt: incident.reportedAt,
+      endedAt: now,
+      outcome,
+    });
+  }
+
+  if (outcome === "reussi") {
+    incident.status = "resolu";
+    incident.resolvedAt = now;
+  } else {
+    incident.status = "signale";
+    incident.hero = undefined;
+  }
+
+  for (const hero of [...superHeroesMock, ...superHeroProfilesMock]) {
+    if (hero.id === user.id) hero.interventionsCount += 1;
+  }
+  const profile = superHeroProfilesMock.find(({ id: heroId }) => heroId === user.id);
+  if (profile) profile.lastInterventionAt = now;
+
   return mockResponse({ ok: true });
 }

@@ -12,7 +12,12 @@ export const routes = {
   profile: "/profil",
   profileIncidents: "/profil/incidents",
   profileInterventions: "/profil/interventions",
-  heroSpace: "/espace-heros",
+  heroSpace: "/heros",
+  heroDashboard: "/heros/dashboard",
+  heroIncidents: "/heros/incidents",
+  heroProfile: "/heros/profil",
+  heroVideos: "/heros/films",
+  heroReputation: "/heros/reputation",
   admin: "/admin",
   adminIncidents: "/admin/incidents",
   adminReportIncident: "/admin/incidents/signaler",
@@ -31,6 +36,8 @@ export const routes = {
 
 export const adminIncidentRoute = (id: string) => `${routes.adminIncidents}/${id}`;
 export const adminArticleRoute = (id: string) => `${routes.adminBlog}/${id}`;
+export const heroIncidentRoute = (id: string) => `${routes.heroIncidents}/${id}`;
+export const blogArticleRoute = (slug: string) => `${routes.blog}/${slug}`;
 
 export interface NavItem {
   label: string;
@@ -47,7 +54,7 @@ export const mainNav: NavItem[] = [
 /** Page d'accueil de l'espace personnel selon le rôle de l'utilisateur connecté. */
 export const accountHomeByRole: Record<UserRole, string> = {
   citoyen: routes.profile,
-  "super-heros": routes.heroSpace,
+  "super-heros": routes.heroDashboard,
   admin: routes.admin,
 };
 
@@ -58,15 +65,14 @@ export const citizenNav: NavItem[] = [
   { label: "Noter un super-héros", href: routes.profileInterventions },
 ];
 
-/**
- * Page affichée après connexion. L'espace héros n'existant pas encore,
- * les super-héros restent sur l'accueil.
- */
-export const afterLoginRouteByRole: Record<UserRole, string> = {
-  citoyen: routes.profile,
-  "super-heros": routes.home,
-  admin: routes.admin,
-};
+/** Sous-navigation de l'espace professionnel des super-héros. */
+export const heroNav: NavItem[] = [
+  { label: "Tableau de bord", href: routes.heroDashboard },
+  { label: "Incidents", href: routes.heroIncidents },
+  { label: "Ma vidéothèque", href: routes.heroVideos },
+  { label: "Ma réputation", href: routes.heroReputation },
+  { label: "Mon profil", href: routes.heroProfile },
+];
 
 /** Sous-navigation du back-office (modération). */
 export const adminNav: NavItem[] = [

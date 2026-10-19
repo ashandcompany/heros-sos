@@ -6,7 +6,7 @@ import { requireCitizenSession } from "@/lib/server-session";
 import { civilityOptions } from "@/lib/validation/signup";
 import { AvatarForm, ContactForm, EmailChangeForm, NewsletterSettingsForm } from "./AccountForms";
 
-function Panel({
+export function Panel({
   id,
   title,
   description,
@@ -78,7 +78,7 @@ export async function AccountDetails() {
 
       <div className="space-y-6">
         <Panel id="contact-title" title="Coordonnées">
-          <ContactForm account={account} />
+          <ContactForm contact={account} />
         </Panel>
 
         <Panel id="email-title" title="Adresse email">

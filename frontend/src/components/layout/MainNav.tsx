@@ -24,10 +24,10 @@ function MenuIcon({ open }: { open: boolean }) {
   );
 }
 
-/** Lien vers l'espace de chaque rôle (l'espace héros n'existe pas encore). */
+/** Lien vers l'espace de chaque rôle. */
 const spaceLinkByRole: Record<AuthUser["role"], { label: string; href: string } | null> = {
   citoyen: { label: "Mon espace", href: routes.profile },
-  "super-heros": null,
+  "super-heros": { label: "Espace pro", href: routes.heroDashboard },
   admin: { label: "Back-office", href: routes.admin },
 };
 
@@ -134,7 +134,10 @@ function MainNavView({ user, pathname }: { user: NavUser; pathname: string | nul
 
   const close = () => setOpen(false);
   const isSpacePage =
-    !!pathname && (pathname.startsWith("/admin") || pathname.startsWith("/profil"));
+    !!pathname &&
+    ["/admin", "/profil", routes.heroSpace].some(
+      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+    );
 
   const navLinks = (variant: "desktop" | "mobile") =>
     mainNav.map((item) => {

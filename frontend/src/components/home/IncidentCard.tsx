@@ -14,7 +14,7 @@ export function IncidentCard({ incident }: { incident: ResolvedIncident }) {
   return (
     <article className="flex h-full flex-col rounded-2xl border border-border bg-surface p-5 sm:p-6">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge tone="accent">{incidentTypeLabels[incident.type]}</Badge>
+        <Badge>{incidentTypeLabels[incident.type]}</Badge>
         <Badge tone="success">
           <span aria-hidden="true">✓</span> Résolu
         </Badge>
@@ -30,7 +30,7 @@ export function IncidentCard({ incident }: { incident: ResolvedIncident }) {
         {formatLocation(incident.location)}
       </p>
       <p className="mt-1 mb-6 text-sm text-muted">
-        Traité le <time dateTime={incident.resolvedAt}>{formatDate(incident.resolvedAt)}</time>
+        Traité le <time dateTime={incident.resolvedAt} className="font-mono">{formatDate(incident.resolvedAt)}</time>
       </p>
 
       <dl className="mt-auto grid grid-cols-2 gap-4 border-t border-border pt-4 text-sm">
@@ -40,7 +40,7 @@ export function IncidentCard({ incident }: { incident: ResolvedIncident }) {
         </div>
         <div>
           <dt className="text-muted">Vilain</dt>
-          <dd className="mt-0.5 font-semibold text-primary">
+          <dd className="mt-0.5 font-semibold text-danger">
             {incident.villain?.alias ?? "Non identifié"}
           </dd>
         </div>

@@ -2,8 +2,8 @@ import { Badge } from "@/components/ui/Badge";
 import { formatInteger, threatLevelLabels } from "@/lib/format";
 import type { ThreatLevel, Villain } from "@/types";
 
-const threatTone: Record<ThreatLevel, "neutral" | "warning" | "danger"> = {
-  faible: "neutral",
+const threatTone: Record<ThreatLevel, "sage" | "warning" | "danger"> = {
+  faible: "sage",
   modere: "warning",
   eleve: "danger",
   critique: "danger",
@@ -21,7 +21,7 @@ export function VillainCard({ villain }: { villain: Villain }) {
       </div>
       <p className="mt-2 text-sm text-muted text-pretty">{villain.description}</p>
       <p className="mt-auto pt-4 text-sm">
-        <span className="font-semibold">{formatInteger(villain.reportedIncidentsCount)}</span>{" "}
+        <span className="font-mono font-semibold">{formatInteger(villain.reportedIncidentsCount)}</span>{" "}
         <span className="text-muted">incidents signalés</span>
       </p>
     </article>

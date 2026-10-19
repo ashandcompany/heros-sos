@@ -7,9 +7,9 @@ import {
 } from "@/lib/format";
 import type { Incident, IncidentStatus } from "@/types";
 
-const statusTone: Record<IncidentStatus, "warning" | "accent" | "success"> = {
-  signale: "warning",
-  "en-cours": "accent",
+const statusTone: Record<IncidentStatus, "paper" | "warning" | "success"> = {
+  signale: "paper",
+  "en-cours": "warning",
   resolu: "success",
 };
 
@@ -39,7 +39,7 @@ export function IncidentListItem({ incident, detailed = false }: IncidentListIte
         {place}
       </p>
       <p className="text-sm text-muted">
-        Signalé le <time dateTime={incident.reportedAt}>{formatDateTime(incident.reportedAt)}</time>
+        Signalé le <time dateTime={incident.reportedAt} className="font-mono">{formatDateTime(incident.reportedAt)}</time>
       </p>
       {detailed && incident.description && (
         <p className="mt-3 text-sm text-pretty">{incident.description}</p>

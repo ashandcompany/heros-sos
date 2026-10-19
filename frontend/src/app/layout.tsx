@@ -1,18 +1,35 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Sora } from "next/font/google";
+import { IBM_Plex_Mono, IBM_Plex_Sans, Jost, Special_Elite } from "next/font/google";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SkipLink } from "@/components/layout/SkipLink";
 import "./globals.css";
 
-const inter = Inter({
-  variable: "--font-inter",
+// Titres : clone libre de Futura, en capitales espacées.
+const jost = Jost({
+  variable: "--font-jost",
   subsets: ["latin"],
 });
 
-const sora = Sora({
-  variable: "--font-sora",
+// Texte courant : sobre, corporate.
+const plexSans = IBM_Plex_Sans({
+  variable: "--font-plex-sans",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
+
+// Données : numéros d'incident, dates, statuts.
+const plexMono = IBM_Plex_Mono({
+  variable: "--font-plex-mono",
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+});
+
+// Réservée aux tampons.
+const specialElite = Special_Elite({
+  variable: "--font-special-elite",
+  subsets: ["latin"],
+  weight: "400",
 });
 
 export const metadata: Metadata = {
@@ -25,12 +42,12 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#070910",
+  themeColor: "#1e1611",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="fr" className={`${inter.variable} ${sora.variable} h-full`}>
+    <html lang="fr" className={`${jost.variable} ${plexSans.variable} ${plexMono.variable} ${specialElite.variable} h-full`}>
       <body className="flex min-h-full flex-col">
         <SkipLink />
         <SiteHeader />

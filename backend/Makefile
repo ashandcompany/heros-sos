@@ -8,7 +8,7 @@ DB_USER        ?= heros
 DB_PASSWORD    ?= heros
 DB_NAME        ?= herossos
 DB_TEST_NAME   ?= herossos_test
-DB_IMAGE       ?= postgres:17
+DB_IMAGE       ?= postgres:18-alpine
 export HEROS_TEST_DATABASE_URL ?= postgres://$(DB_USER):$(DB_PASSWORD)@localhost:$(DB_PORT)/$(DB_TEST_NAME)?sslmode=disable
 
 # Charge .env (s'il existe) avant de lancer une commande Go.
@@ -32,7 +32,9 @@ db-start: ## Démarre PostgreSQL dans Docker (bases herossos et herossos_test)
 	docker run -d --name $(DB_CONTAINER) -p $(DB_PORT):5432 \
 		-e POSTGRES_USER=$(DB_USER) -e POSTGRES_PASSWORD=$(DB_PASSWORD) -e POSTGRES_DB=$(DB_NAME) \
 		$(DB_IMAGE) >/dev/null
-	@until docker exec $(DB_CONTAINER) pg_isready -U $(DB_USER) >/dev/null 2>&1; do sleep 0.5; done
+	@# -h 127.0.0.1 (TCP) : pendant son initialisation, l'image démarre un serveur temporaire qui n'écoute
+	@# que sur son socket. Tester le socket déclarerait la base prête juste avant son redémarrage.
+	@until docker exec $(DB_CONTAINER) pg_isready -h 127.0.0.1 -U $(DB_USER) -d $(DB_NAME) >/dev/null 2>&1; do sleep 0.5; done
 	@docker exec $(DB_CONTAINER) psql -U $(DB_USER) -d $(DB_NAME) -tc \
 		"SELECT 1 FROM pg_database WHERE datname='$(DB_TEST_NAME)'" | grep -q 1 || \
 		docker exec $(DB_CONTAINER) createdb -U $(DB_USER) $(DB_TEST_NAME)
@@ -40,7 +42,8 @@ db-start: ## Démarre PostgreSQL dans Docker (bases herossos et herossos_test)
 
 .PHONY: db-stop
 db-stop: ## Arrête et supprime le conteneur PostgreSQL (les données sont perdues)
-	@docker rm -f $(DB_CONTAINER) >/dev/null 2>&1 || true
+	@# -v : supprime aussi le volume anonyme de l'image PostgreSQL, sinon chaque cycle en abandonne un.
+	@docker rm -fv $(DB_CONTAINER) >/dev/null 2>&1 || true
 
 .PHONY: migrate
 migrate: ## Applique les migrations SQL

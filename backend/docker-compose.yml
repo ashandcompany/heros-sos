@@ -6,11 +6,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
+    env_file: .env
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-heros}:${POSTGRES_PASSWORD:-heros}@db:5432/${POSTGRES_DB:-heros}?sslmode=disable
-      RABBITMQ_URL: amqp://${RABBITMQ_USER:-heros}:${RABBITMQ_PASSWORD:-heros}@rabbitmq:5672/
+      HEROS_DATABASE_URL: postgres://${POSTGRES_USER:-heros}:${POSTGRES_PASSWORD:-heros}@db:5432/${POSTGRES_DB:-herossos}?sslmode=disable
+      HEROS_AUTO_MIGRATE: "true"
     ports:
       - "8080:8080"
     restart: unless-stopped
@@ -20,7 +19,7 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-heros}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-heros}
-      POSTGRES_DB: ${POSTGRES_DB:-heros}
+      POSTGRES_DB: ${POSTGRES_DB:-herossos}
     ports:
       - "5432:5432"
     volumes:

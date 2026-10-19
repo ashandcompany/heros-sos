@@ -110,7 +110,7 @@ up-dev: ## Démarre la pile de développement (proxy, API, base, Mailpit, Rabbit
 	@# démarrage en abandonnerait une copie (~700 Mo) et les dépendances resteraient celles d'avant.
 	$(COMPOSE_DEV) rm -sfv web
 	$(COMPOSE_DEV) up -d --build
-	@set -a; . ./.env; set +a; echo "Application : http://localhost:$${PROXY_PORT:-8088}   Mails : http://localhost:$${MAILPIT_PORT:-8025}"
+	@set -a; . ./.env; set +a; echo "Application : http://localhost:$${PROXY_PORT:-8088}   API : http://localhost:$${PROXY_PORT:-8088}/api/v1/docs   Mails : http://localhost:$${MAILPIT_PORT:-8025}"
 
 .PHONY: down-dev
 down-dev: ## Arrête la pile de développement (V=1 supprime aussi les données)

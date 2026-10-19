@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -21,8 +22,33 @@ func (l *loader) fail(format string, args ...any) {
 	l.errs = append(l.errs, fmt.Errorf(format, args...))
 }
 
+// fileSuffix désigne, pour toute variable NOM, la variable NOM_FILE qui contient le chemin d'un
+// fichier dont le contenu est la valeur. C'est la convention des secrets Docker
+// (/run/secrets/…) : le secret n'apparaît ni dans l'environnement du conteneur, ni dans
+// `docker inspect`.
+const fileSuffix = "_FILE"
+
+// lookup lit la variable, ou le fichier désigné par NOM_FILE. Définir les deux est une erreur :
+// il serait ambigu de savoir laquelle des deux valeurs l'emporte.
 func (l *loader) lookup(name string) (string, bool) {
-	value := strings.TrimSpace(l.getenv(name))
+	direct := strings.TrimSpace(l.getenv(name))
+	path := strings.TrimSpace(l.getenv(name + fileSuffix))
+
+	switch {
+	case path == "":
+		return direct, direct != ""
+	case direct != "":
+		l.fail("%s et %s%s sont tous deux définis : n'en gardez qu'un", name, name, fileSuffix)
+		return "", false
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		// Le message cite le chemin, jamais le contenu du fichier.
+		l.fail("%s%s : lecture impossible de %q", name, fileSuffix, path)
+		return "", false
+	}
+	value := strings.TrimSpace(string(content))
 	return value, value != ""
 }
 

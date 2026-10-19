@@ -32,3 +32,28 @@ export const incidentTypeLabels: Record<IncidentType, string> = {
   sabotage: "Sabotage",
   enlevement: "Enlèvement",
 };
+
+const integerFormatter = new Intl.NumberFormat("fr-FR");
+
+export function formatInteger(value: number): string {
+  return integerFormatter.format(value);
+}
+
+/** « 06 12 34 56 78 », « +33 6 12 34 56 78 », sinon le numéro tel quel. */
+export function formatPhone(phone: string): string {
+  if (/^0\d{9}$/.test(phone)) return phone.replace(/(\d{2})(?=\d)/g, "$1 ");
+  const french = phone.match(/^\+33(\d)(\d{8})$/);
+  if (french) return `+33 ${french[1]} ${french[2].replace(/(\d{2})(?=\d)/g, "$1 ")}`;
+  return phone;
+}
+
+/** Valeur de lien `tel:` au format international quand c'est possible. */
+export function phoneHref(phone: string): string {
+  return `tel:${/^0\d{9}$/.test(phone) ? `+33${phone.slice(1)}` : phone}`;
+}
+
+/** « NOM Prénom », ou `null` si aucun des deux n'est connu. */
+export function formatFullName(lastName: string | null, firstName: string | null): string | null {
+  const parts = [lastName?.toLocaleUpperCase("fr-FR"), firstName].filter(Boolean);
+  return parts.length > 0 ? parts.join(" ") : null;
+}

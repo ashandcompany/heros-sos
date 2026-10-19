@@ -40,10 +40,10 @@ export function Avatar({ name, src, size = 80, className }: AvatarProps) {
   return (
     <span
       aria-hidden="true"
-      style={{ width: size, height: size }}
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.34) }}
       className={cn(
         classes,
-        "inline-flex items-center justify-center bg-linear-to-br font-display text-xl font-bold text-white ring-2 ring-border",
+        "inline-flex items-center justify-center bg-linear-to-br font-display font-bold text-white ring-2 ring-border",
         gradient,
       )}
     >

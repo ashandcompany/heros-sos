@@ -24,6 +24,7 @@ export {
   declareIncident,
   finishIntervention,
   getAllIncidents,
+  getCitizenIncident,
   getHeroIncident,
   getHeroIncidents,
   getIncident,

@@ -149,3 +149,15 @@ export interface PublicReview {
   ratedAt: string;
   reply: HeroReply | null;
 }
+
+/** Détail d'un incident consulté depuis l'espace citoyen. */
+export interface CitizenIncidentDetail {
+  /** Sans `reporterId` quand l'incident a été déclaré par quelqu'un d'autre. */
+  incident: Incident;
+  /** L'incident a été déclaré par le citoyen connecté. */
+  isMine: boolean;
+  /** Interventions des super-héros, des plus anciennes aux plus récentes (en cours comprise). */
+  interventions: HeroIntervention[];
+  /** Note déjà donnée par le citoyen (uniquement pour ses propres incidents). */
+  rating: InterventionRating | null;
+}

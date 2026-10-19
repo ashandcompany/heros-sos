@@ -70,7 +70,7 @@ export async function getOngoingIncidents(city?: string): Promise<Incident[]> {
  * Future implémentation : `GET ${API_URL}/me/incidents`
  */
 export async function getMyIncidents(token: string): Promise<Incident[]> {
-  const user = await userFromToken(token, "citoyen");
+  const user = await userFromToken(token, ["citoyen", "super-heros"]);
   return mockResponse(
     incidentsMock.filter((incident) => incident.reporterId === user.id).sort(byMostRecent),
   );
@@ -78,15 +78,15 @@ export async function getMyIncidents(token: string): Promise<Incident[]> {
 
 /**
  * Déclare un incident ; il est diffusé aux super-héros à proximité.
- * Un citoyen ou un modérateur peut déclarer : la déclaration d'un modérateur est validée d'office,
- * celle d'un citoyen attend la vérification de la modération.
+ * Un citoyen, un super-héros ou un modérateur peut déclarer : la déclaration d'un modérateur est validée d'office,
+ * celle d'un citoyen ou d'un super-héros attend la vérification de la modération.
  * Future implémentation : `POST ${API_URL}/incidents` avec l'`IncidentDeclaration`.
  */
 export async function declareIncident(
   token: string,
   declaration: IncidentDeclaration,
 ): Promise<MutationResult> {
-  const user = await userFromToken(token, ["citoyen", "admin"]);
+  const user = await userFromToken(token, ["citoyen", "super-heros", "admin"]);
   const villain = villainsMock.find(({ id }) => id === declaration.villainId);
 
   incidentsMock.push({

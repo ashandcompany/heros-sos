@@ -79,7 +79,7 @@ export function HeroSection() {
             traité dans l&apos;ordre de priorité par l&apos;agent disponible le plus proche.
           </p>
 
-          <div className="mt-6 max-w-xl border-2 border-edge bg-background/90 p-4 shadow-[4px_4px_0_0_var(--color-shadow)]">
+          <div className="mt-6 max-w-xl border-2 border-edge bg-background/90 p-4 shadow-[3px_3px_0_0_var(--color-shadow)]">
             <h2 className="font-mono text-xs font-semibold tracking-widest text-accent uppercase">
               Pièces à fournir
             </h2>

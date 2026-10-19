@@ -15,7 +15,7 @@ export function WallPoster({ src, width, height, caption, className }: WallPoste
     <figure
       aria-hidden="true"
       className={cn(
-        "relative hidden w-56 shrink-0 border-4 border-edge bg-paper p-2 shadow-[8px_8px_0_0_var(--color-shadow)] lg:block xl:w-64",
+        "relative hidden w-56 shrink-0 border-4 border-edge bg-paper p-2 shadow-[5px_5px_0_0_var(--color-shadow)] lg:block xl:w-64",
         className,
       )}
     >

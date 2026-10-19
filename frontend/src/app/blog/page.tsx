@@ -24,7 +24,7 @@ async function ArticlesList() {
     <ul className="grid gap-4 sm:gap-6 md:grid-cols-2">
       {articles.map((article) => (
         <li key={article.id}>
-          <article className="relative flex h-full flex-col border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-5 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary hover:border-muted sm:p-6">
+          <article className="relative flex h-full flex-col border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-5 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary hover:border-muted sm:p-6">
             <p className="font-mono text-xs tracking-widest text-muted uppercase">
               <time dateTime={article.publishedAt ?? undefined}>
                 {article.publishedAt && formatDate(article.publishedAt)}

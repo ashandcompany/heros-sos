@@ -43,7 +43,7 @@ async function ArticleEditor({ params }: { params: Promise<{ id: string }> }) {
           description="L'article sera définitivement retiré du blog. Cette action est irréversible."
         />
       </div>
-      <div className="max-w-3xl border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-5 sm:p-8">
+      <div className="max-w-3xl border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-5 sm:p-8">
         <ArticleForm article={article} />
       </div>
     </>

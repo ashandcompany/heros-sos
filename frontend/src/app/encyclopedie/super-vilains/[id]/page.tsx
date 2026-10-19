@@ -41,7 +41,7 @@ async function VillainSheet({ params }: { params: Promise<{ id: string }> }) {
 
   return (
     <div className="space-y-12">
-      <header className="border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-6 sm:p-8">
+      <header className="border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-6 sm:p-8">
         <p className="font-mono text-xs tracking-widest text-muted uppercase">
           Dossier {dossierNumber(villain.id, "SV")}
         </p>
@@ -87,7 +87,7 @@ async function VillainSheet({ params }: { params: Promise<{ id: string }> }) {
               {incidents.map((incident) => (
                 <li
                   key={incident.id}
-                  className="border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-4 sm:p-5"
+                  className="border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-4 sm:p-5"
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <StatusBadge status={incident.status} />

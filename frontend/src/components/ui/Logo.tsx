@@ -28,7 +28,7 @@ export function Logo({ className }: { className?: string }) {
   return (
     <span
       className={cn(
-        "inline-flex items-stretch border-[3px] border-edge bg-background shadow-[4px_4px_0_0_var(--color-shadow)]",
+        "inline-flex items-stretch border-[3px] border-edge bg-background shadow-[3px_3px_0_0_var(--color-shadow)]",
         className,
       )}
     >

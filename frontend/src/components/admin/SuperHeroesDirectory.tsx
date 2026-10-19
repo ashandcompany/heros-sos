@@ -42,7 +42,7 @@ function Stats({ heroes }: { heroes: SuperHeroProfile[] }) {
       {stats.map((stat) => (
         <div
           key={stat.label}
-          className="border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-4"
+          className="border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-4"
         >
           <dt className="text-sm text-muted">{stat.label}</dt>
           <dd className="mt-1 font-display text-2xl font-bold">{stat.value}</dd>
@@ -70,7 +70,7 @@ export async function SuperHeroesDirectory() {
         {heroes.map((hero) => (
           <li
             key={hero.id}
-            className="border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-4"
+            className="border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-4"
           >
             <div className="flex items-center gap-3">
               <Avatar name={hero.alias} src={hero.avatarUrl} size={44} />

@@ -14,7 +14,7 @@ export default function SignupPage() {
   return (
     <Container className="flex justify-center py-12 sm:py-20">
       <div className="w-full max-w-2xl">
-        <div className="border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-6 sm:p-10">
+        <div className="border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-6 sm:p-10">
           <h1 className="font-display text-3xl font-bold">Créer un compte</h1>
           <p className="mt-2 mb-8 text-muted">
             Citoyen ou super-héros, l&apos;inscription est la même pour tous. Elle ne prend que deux

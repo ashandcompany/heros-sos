@@ -18,6 +18,7 @@ export const routes = {
   heroProfile: "/heros/profil",
   heroVideos: "/heros/films",
   heroReputation: "/heros/reputation",
+  heroDeclare: "/heros/signaler",
   admin: "/admin",
   adminIncidents: "/admin/incidents",
   adminReportIncident: "/admin/incidents/signaler",
@@ -71,6 +72,7 @@ export const citizenNav: NavItem[] = [
 export const heroNav: NavItem[] = [
   { label: "Tableau de bord", href: routes.heroDashboard },
   { label: "Incidents", href: routes.heroIncidents },
+  { label: "Signaler un incident", href: routes.heroDeclare },
   { label: "Ma vidéothèque", href: routes.heroVideos },
   { label: "Ma réputation", href: routes.heroReputation },
   { label: "Mon profil", href: routes.heroProfile },

@@ -107,7 +107,7 @@ async function HeroSheet({ params }: { params: Promise<{ id: string }> }) {
                 {interventions.map((incident) => (
                   <li
                     key={incident.id}
-                    className="border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-4 sm:p-5"
+                    className="border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-4 sm:p-5"
                   >
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge tone="success">Résolu</Badge>
@@ -134,7 +134,7 @@ async function HeroSheet({ params }: { params: Promise<{ id: string }> }) {
                 {reviews.map((review) => (
                   <li
                     key={review.incidentId}
-                    className="border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-5"
+                    className="border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-5"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <RatingStars rating={review.rating} />
@@ -187,7 +187,7 @@ async function HeroSheet({ params }: { params: Promise<{ id: string }> }) {
                   {videos.map((video) => (
                     <li
                       key={video.id}
-                      className="border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-4"
+                      className="border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-4"
                     >
                       <p className="font-display font-semibold">
                         {video.title}

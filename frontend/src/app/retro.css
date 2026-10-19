@@ -11,7 +11,6 @@
   --retro-screen: #0a0b0c;
   /* Intensité des lignes de grille du béton */
   --retro-grid: 0.07;
-  --retro-noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 /* Focus visible : filet turquoise épais sur fond sombre, brun-orangé sur papier */
@@ -22,18 +21,6 @@
 
 .paper :focus-visible {
   outline-color: var(--color-primary-ink);
-}
-
-/* Grain de béton : voile discret sur toute la page, jamais interactif */
-body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 90;
-  pointer-events: none;
-  background-image: var(--retro-noise);
-  opacity: 0.06;
-  mix-blend-mode: overlay;
 }
 
 :root[data-theme="light"] {
@@ -96,13 +83,13 @@ body::after {
   position: relative;
   background-color: var(--color-surface);
   border: 3px solid var(--color-edge);
-  box-shadow: 5px 5px 0 var(--color-shadow);
+  box-shadow: 3px 3px 0 var(--color-shadow);
 }
 
 @media (min-width: 640px) {
   .panel {
     border-width: 4px;
-    box-shadow: 8px 8px 0 var(--color-shadow);
+    box-shadow: 5px 5px 0 var(--color-shadow);
   }
 }
 
@@ -135,12 +122,13 @@ body::after {
   }
 }
 
-/* Papier / carton : fiches, formulaires. Le texte y est presque noir (contraste ≈ 16:1). */
+/* Fiche : aplat crème net, liseré orange en tête. Le texte y est presque noir (contraste ≈ 16:1). */
 .paper {
   color: var(--color-ink);
   background-color: var(--color-paper);
-  background-image: var(--retro-noise);
-  background-blend-mode: multiply;
+  background-image: linear-gradient(var(--color-primary), var(--color-primary));
+  background-repeat: no-repeat;
+  background-size: 100% 6px;
 }
 
 /* Écran cathodique : seule forme arrondie du site, hommage aux postes de contrôle */
@@ -150,14 +138,14 @@ body::after {
   background-color: var(--retro-screen);
   border: 4px solid var(--color-edge);
   border-radius: 1.25rem;
-  box-shadow: 5px 5px 0 var(--color-shadow);
+  box-shadow: 3px 3px 0 var(--color-shadow);
 }
 
 @media (min-width: 640px) {
   .crt {
     padding: 1.25rem;
     border-radius: 1.75rem;
-    box-shadow: 8px 8px 0 var(--color-shadow);
+    box-shadow: 5px 5px 0 var(--color-shadow);
   }
 }
 

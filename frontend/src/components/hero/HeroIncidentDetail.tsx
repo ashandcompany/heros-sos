@@ -12,7 +12,7 @@ import { FinishInterventionForm, PriorityForm, TakeChargeForm } from "./Incident
 import { PriorityBadge, StatusBadge } from "./IncidentBadges";
 
 const panelClasses =
-  "border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-5 sm:p-6";
+  "border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-5 sm:p-6";
 
 /** Lit la session et les paramètres d'URL : à rendre sous <Suspense>. */
 export async function HeroIncidentDetail({ params }: { params: Promise<{ id: string }> }) {

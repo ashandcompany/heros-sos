@@ -35,7 +35,7 @@ export async function InterventionsList() {
             <li key={incident.id}>
               <article
                 aria-labelledby={titleId}
-                className="grid gap-6 border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-5 sm:p-8 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]"
+                className="grid gap-6 border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-5 sm:p-8 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]"
               >
                 <div>
                   <div className="flex items-center gap-3">

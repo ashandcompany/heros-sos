@@ -209,7 +209,7 @@ export function AddressField({
 
         <div
           hidden={!open}
-          className="absolute inset-x-0 top-full z-30 mt-1 overflow-hidden rounded-xl border border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)]"
+          className="absolute inset-x-0 top-full z-30 mt-1 overflow-hidden rounded-xl border border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)]"
         >
           <ul
             id={listboxId}

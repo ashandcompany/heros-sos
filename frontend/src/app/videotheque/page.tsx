@@ -23,7 +23,7 @@ function VideoCard({ video }: { video: HeroVideo }) {
   return (
     <article
       aria-labelledby={titleId}
-      className="flex h-full flex-col border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-5"
+      className="flex h-full flex-col border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-5"
     >
       <p className="font-mono text-xs tracking-widest text-accent uppercase">
         {video.imdbId ? "Film" : "Vidéo"} · {video.hero.alias}

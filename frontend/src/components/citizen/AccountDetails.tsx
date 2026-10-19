@@ -20,7 +20,7 @@ export function Panel({
   return (
     <section
       aria-labelledby={id}
-      className="border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-5 sm:p-8"
+      className="border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-5 sm:p-8"
     >
       <h2 id={id} className="font-display text-xl font-semibold">
         {title}

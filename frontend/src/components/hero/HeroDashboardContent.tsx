@@ -19,7 +19,7 @@ function StatTile({
   detail?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-5">
+    <div className="flex flex-col border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-5">
       <dt className="order-2 text-sm text-muted">{label}</dt>
       <dd className="order-1 font-mono text-4xl font-semibold">{value}</dd>
       {detail && <dd className="order-3 mt-2 text-sm text-muted">{detail}</dd>}
@@ -43,7 +43,7 @@ function IncidentTypesBreakdown({ counts }: { counts: Record<IncidentType, numbe
   const max = Math.max(1, ...rows.map(([, count]) => count));
 
   return (
-    <div className="border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-5">
+    <div className="border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-5">
       <h3 id="types-title" className="mb-4 text-sm text-muted">
         Signalements par type d&apos;incident
       </h3>
@@ -132,7 +132,7 @@ export async function HeroDashboardContent() {
             value={formatInteger(personal.videos)}
             detail={`${personal.publishedVideos} publié${personal.publishedVideos > 1 ? "s" : ""}`}
           />
-          <div className="flex flex-col border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-5">
+          <div className="flex flex-col border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-5">
             <dt className="text-sm text-muted">Ennemis principaux</dt>
             <dd className="mt-2">
               {personal.mainEnemies.length === 0 ? (

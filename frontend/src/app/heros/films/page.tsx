@@ -26,7 +26,7 @@ export default function HeroVideosPage({ searchParams }: PageProps<"/heros/films
 
         <section
           aria-labelledby="imdb-title"
-          className="border-2 border-border bg-surface shadow-[4px_4px_0_0_var(--color-shadow)] p-5 sm:p-6"
+          className="border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-5 sm:p-6"
         >
           <h2 id="imdb-title" className="mb-4 font-display text-xl font-semibold">
             Ajouter un film depuis IMDb

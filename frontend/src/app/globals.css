@@ -57,7 +57,7 @@
 
   /* Contours épais et ombres dures décalées : crème et gris béton sur fond sombre */
   --color-edge: #f2ebd9;
-  --color-shadow: #3d434b;
+  --color-shadow: #262a30;
   /* Ombre secondaire, sous la tranche des boutons */
   --color-shadow-deep: #000;
 
@@ -100,10 +100,10 @@
   --color-rating: #7f5400;
   --color-danger: #b3261e;
 
-  /* Béton et encre : contours noirs, ombres noires pleines */
+  /* Béton et encre : contours noirs, ombres douces beige-gris */
   --color-edge: #111315;
-  --color-shadow: #111315;
-  --color-shadow-deep: #111315;
+  --color-shadow: #cfc8b4;
+  --color-shadow-deep: #bfb8a3;
 }
 
 /*
@@ -128,7 +128,7 @@
 /* Contenu de l'écran (fond noir) : contours crème et ombres grises, comme en thème sombre. */
 :root[data-theme="light"] .crt__screen {
   --color-edge: #f2ebd9;
-  --color-shadow: #3d434b;
+  --color-shadow: #262a30;
   --color-shadow-deep: #000;
 }
 

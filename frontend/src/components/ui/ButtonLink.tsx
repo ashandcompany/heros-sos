@@ -11,22 +11,22 @@ const lift =
 
 const variantClasses: Record<Variant, string> = {
   primary: cn(
-    "border-2 border-edge bg-primary text-primary-foreground shadow-[4px_4px_0_0_var(--color-edge)] hover:bg-primary-hover hover:shadow-[3px_3px_0_0_var(--color-edge)]",
+    "border-2 border-edge bg-primary text-primary-foreground shadow-[3px_3px_0_0_var(--color-shadow)] hover:bg-primary-hover hover:shadow-[2px_2px_0_0_var(--color-shadow)]",
     lift,
   ),
   secondary: cn(
-    "border-2 border-edge bg-surface-raised text-foreground shadow-[4px_4px_0_0_var(--color-edge)] hover:bg-surface hover:shadow-[3px_3px_0_0_var(--color-edge)]",
+    "border-2 border-edge bg-surface-raised text-foreground shadow-[3px_3px_0_0_var(--color-shadow)] hover:bg-surface hover:shadow-[2px_2px_0_0_var(--color-shadow)]",
     lift,
   ),
   // Actions destructrices ou de refus (rejeter, suspendre, supprimer).
   danger: cn(
-    "border-2 border-edge bg-brick text-paper shadow-[4px_4px_0_0_var(--color-edge)] hover:bg-[#c9382a] hover:shadow-[3px_3px_0_0_var(--color-edge)]",
+    "border-2 border-edge bg-brick text-paper shadow-[3px_3px_0_0_var(--color-shadow)] hover:bg-[#c9382a] hover:shadow-[2px_2px_0_0_var(--color-shadow)]",
     lift,
   ),
   ghost: "text-foreground hover:bg-surface-raised hover:text-accent",
   // Gros bouton d'appel : orange atomique, ombre profonde.
   console: cn(
-    "border-[3px] border-edge bg-primary text-primary-foreground shadow-[6px_6px_0_0_var(--color-edge)] hover:bg-primary-hover hover:shadow-[5px_5px_0_0_var(--color-edge)]",
+    "border-[3px] border-edge bg-primary text-primary-foreground shadow-[4px_4px_0_0_var(--color-shadow)] hover:bg-primary-hover hover:shadow-[3px_3px_0_0_var(--color-shadow)]",
     "hover:translate-x-px hover:translate-y-px active:translate-x-1.5 active:translate-y-1.5 active:shadow-none",
   ),
 };

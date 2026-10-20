@@ -4,14 +4,15 @@ import { Container } from "@/components/ui/Container";
 import { DigitalClock } from "@/components/ui/DigitalClock";
 import { Logo } from "@/components/ui/Logo";
 import { routes } from "@/lib/routes";
-import { getCurrentUser } from "@/lib/server-session";
+import { getCurrentUser, getCurrentUserAvatarUrl } from "@/lib/server-session";
 import { MainNav } from "./MainNav";
 import { ThemeToggle } from "./ThemeToggle";
 
 /** Lit la session (cookies) : rendu en streaming, sous <Suspense>. */
 async function SessionAwareNav() {
-  const user = await getCurrentUser();
-  return <MainNav user={user && { displayName: user.displayName, role: user.role }} />;
+  // La session est mise en cache pour la requête : la lire deux fois ne coûte qu'un appel.
+  const [user, avatarUrl] = await Promise.all([getCurrentUser(), getCurrentUserAvatarUrl()]);
+  return <MainNav user={user && { displayName: user.displayName, role: user.role, avatarUrl }} />;
 }
 
 export function SiteHeader() {

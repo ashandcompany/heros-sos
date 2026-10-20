@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useState, type ChangeEvent } from "react";
+import Cropper from "react-easy-crop";
 import {
   requestEmailChangeAction,
   updateAvatarAction,
@@ -8,12 +9,14 @@ import {
   updateNewsletterAction,
 } from "@/app/actions/account";
 import { AddressField } from "@/components/ui/AddressField";
+import { buttonClasses } from "@/components/ui/ButtonLink";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { SelectField } from "@/components/ui/SelectField";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { TextField } from "@/components/ui/TextField";
+import { cropAvatar, type CropArea } from "@/lib/avatar-image";
 import { countries, DEFAULT_COUNTRY } from "@/lib/countries";
-import type { ContactField } from "@/lib/validation/account";
+import { AVATAR_TYPES, type ContactField } from "@/lib/validation/account";
 import { idleFormState, type FormState } from "@/lib/validation/form-state";
 import type { PostalAddress } from "@/types";
 
@@ -27,27 +30,110 @@ type FormAction<Field extends string> = (
   formData: FormData,
 ) => Promise<FormState<Field>>;
 
+/**
+ * Choix de la photo : aperçu, recadrage rond (glisser, molette ou flèches du clavier) et zoom.
+ * Seule l'image recadrée et compressée est envoyée (voir `cropAvatar`), jamais le fichier d'origine.
+ */
 export function AvatarForm({
   action = updateAvatarAction,
 }: { action?: FormAction<"avatar"> } = {}) {
-  const [state, formAction] = useActionState(action, idleFormState as FormState<"avatar">);
+  // Image choisie (URL locale `blob:`), `null` tant qu'aucun fichier n'est sélectionné.
+  const [source, setSource] = useState<string | null>(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [area, setArea] = useState<CropArea | null>(null);
+  const [fileError, setFileError] = useState<string>();
+
+  const [state, formAction] = useActionState(
+    async (previousState: FormState<"avatar">, formData: FormData) => {
+      if (!source || !area) {
+        return { status: "error", fieldErrors: { avatar: "Veuillez choisir une image." } } as const;
+      }
+      try {
+        formData.set("avatar", await cropAvatar(source, area));
+      } catch {
+        return {
+          status: "error",
+          fieldErrors: { avatar: "Impossible de lire cette image." },
+        } as const;
+      }
+      const result = await action(previousState, formData);
+      if (result.status === "success") setSource(null);
+      return result;
+    },
+    idleFormState as FormState<"avatar">,
+  );
+
+  // Libère l'image locale quand elle est remplacée, envoyée ou que le formulaire disparaît.
+  useEffect(() => (source ? () => URL.revokeObjectURL(source) : undefined), [source]);
+
+  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    // Vidé aussitôt : choisir à nouveau le même fichier après « Annuler » redéclenche onChange.
+    event.target.value = "";
+    if (!file) return;
+    if (!AVATAR_TYPES.includes(file.type)) {
+      setFileError("Formats acceptés : JPEG, PNG ou WebP.");
+      return;
+    }
+    setFileError(undefined);
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    setSource(URL.createObjectURL(file));
+  };
 
   return (
     <form action={formAction} className="space-y-3">
       <TextField
-        label="Changer de photo"
-        hint="JPEG, PNG ou WebP, 2 Mo maximum."
-        name="avatar"
+        label={source ? "Choisir une autre photo" : "Changer de photo"}
+        hint="JPEG, PNG ou WebP. Vous pourrez ensuite la recadrer."
+        // Sans `name` : le fichier d'origine n'est pas envoyé, seulement l'image recadrée.
         type="file"
-        accept="image/jpeg,image/png,image/webp"
-        required
-        error={state.fieldErrors.avatar}
+        accept={AVATAR_TYPES.join(",")}
+        onChange={handleFileChange}
+        error={fileError ?? state.fieldErrors.avatar}
         className="[&_input]:py-2.5 [&_input]:file:mr-3 [&_input]:file:rounded-full [&_input]:file:border-0 [&_input]:file:bg-surface-raised [&_input]:file:px-3 [&_input]:file:py-1 [&_input]:file:text-foreground"
       />
+      {source && (
+        <>
+          <div className="relative aspect-square w-full overflow-hidden border-2 border-edge bg-surface-raised">
+            <Cropper
+              image={source}
+              crop={crop}
+              zoom={zoom}
+              aspect={1}
+              cropShape="round"
+              showGrid={false}
+              onCropChange={setCrop}
+              onZoomChange={setZoom}
+              onCropComplete={(_, pixels) => setArea(pixels)}
+            />
+          </div>
+          <label className="flex items-center gap-3 text-sm font-medium">
+            Zoom
+            <input
+              type="range"
+              min={1}
+              max={3}
+              step={0.01}
+              value={zoom}
+              onChange={(event) => setZoom(Number(event.target.value))}
+              className="w-full accent-primary"
+            />
+          </label>
+        </>
+      )}
       <FormMessage state={state} />
-      <SubmitButton variant="secondary" pendingLabel="Envoi…">
-        Mettre à jour la photo
-      </SubmitButton>
+      {source && (
+        <div className="flex flex-wrap gap-3">
+          <SubmitButton variant="secondary" pendingLabel="Envoi…">
+            Enregistrer la photo
+          </SubmitButton>
+          <button type="button" onClick={() => setSource(null)} className={buttonClasses("ghost")}>
+            Annuler
+          </button>
+        </div>
+      )}
     </form>
   );
 }

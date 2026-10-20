@@ -184,6 +184,10 @@ Note sur 5 en lecture seule, avec un libellé complet pour les lecteurs d'écran
   `<section>` parente. Props : `eyebrow`, `section` (affiche « SECTION 02 »), `description`.
 - **Avatar** : `name`, `src` (`null` → initiales sur dégradé), `size`, `square` (photo d'identité
   noir et blanc des fiches d'agent). Décoratif (`alt=""`) : **toujours afficher le nom à côté**.
+  Affiché aussi dans la navigation (photo de l'utilisateur connecté, via `getCurrentUserAvatarUrl`).
+- **AvatarForm** (`components/citizen/AccountForms.tsx`) : recadrage rond avec `react-easy-crop`,
+  puis l'image est réduite à 256 px et compressée en WebP dans le navigateur (`lib/avatar-image.ts`).
+  Seule l'image recadrée est envoyée à la Server Action, qui garde sa validation (type, 2 Mo).
 - **Carousel** : chaque enfant devient une diapositive ; `label` donne son nom accessible. Défilement
   natif (scroll-snap), boutons, pastilles et clavier (flèches, Début, Fin).
 

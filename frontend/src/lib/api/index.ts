@@ -9,6 +9,7 @@ export {
   updateNewsletterPreference,
 } from "./account";
 export { getSessionUser, login, logout, register, requestPasswordReset } from "./auth";
+export { getMyAvatarUrl } from "./avatar";
 export { asMockDataUser } from "./session-user";
 export {
   createArticle,

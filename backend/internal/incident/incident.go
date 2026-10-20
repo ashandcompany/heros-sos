@@ -4,46 +4,57 @@
 package incident
 
 import (
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
 )
 
+var ErrNotFound = errors.New("incident : incident introuvable")
+
 // Status est l'état d'un incident.
 type Status string
 
 // StatusReported est l'état d'un incident venant d'être déclaré.
-const StatusReported Status = "signale"
+const StatusReported Status = "reported"
 
-// ReporterRole dit si le déclarant est témoin ou victime.
-type ReporterRole string
+// Priority est le niveau de priorité d'un incident.
+type Priority string
 
-// Rôles du déclarant.
 const (
-	ReporterWitness ReporterRole = "temoin"
-	ReporterVictim  ReporterRole = "victime"
+	PriorityHigh   Priority = "high"
+	PriorityNormal Priority = "normal"
+	PriorityLow    Priority = "low"
 )
-
-// Valid indique si le rôle est connu.
-func (r ReporterRole) Valid() bool { return r == ReporterWitness || r == ReporterVictim }
 
 // Incident est un incident déclaré.
 type Incident struct {
-	ID                 uuid.UUID
-	ReporterID         uuid.UUID
-	ReporterRole       ReporterRole
-	InterventionTypeID uuid.UUID
-	// InterventionType est le libellé du type, rempli à la déclaration.
-	InterventionType string
-	VillainID        *uuid.UUID
-	// VillainAlias est le pseudo du vilain, rempli à la déclaration.
-	VillainAlias string
-	Title        string
-	Description  string
-	Address      string
-	City         string
-	OccurredAt   *time.Time
-	Status       Status
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ID                uuid.UUID
+	ReporterID        uuid.UUID
+	TypeID            int16
+	TypeCode          string
+	TypeLabel         string
+	Description       string
+	Status            Status
+	Priority          Priority
+	CitizensRescued   int16
+	Street            string
+	PostalCode        string
+	City              string
+	Country           string
+	AddressComplement string
+	Latitude          *float64
+	Longitude         *float64
+	OccurredAt        *time.Time
+	VillainIDs        []uuid.UUID
+	Villains          []VillainReference
+	InterventionID    *uuid.UUID
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+}
+
+// VillainReference est un vilain associé à un incident.
+type VillainReference struct {
+	ID    uuid.UUID
+	Alias string
 }

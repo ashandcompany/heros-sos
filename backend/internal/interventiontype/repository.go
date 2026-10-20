@@ -7,57 +7,48 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
-	"github.com/google/uuid"
 	"gorm.io/gorm"
 
 	"github.com/ashandcompany/heros-sos/backend/internal/database"
 )
 
 const (
-	tableInterventionTypes = "intervention_types"
-	labelUniqueConstraint  = "intervention_types_label_key"
+	tableIncidentTypes   = "incident_types"
+	codeUniqueConstraint = "incident_types_code_key"
 )
 
 var (
 	// ErrNotFound indique qu'aucun type ne porte cet identifiant.
 	ErrNotFound = errors.New("interventiontype : type introuvable")
-	// ErrLabelTaken indique qu'un autre type porte déjà ce libellé.
-	ErrLabelTaken = errors.New("interventiontype : libellé déjà utilisé")
+	// ErrCodeTaken indique qu'un autre type porte déjà ce code.
+	ErrCodeTaken = errors.New("interventiontype : code déjà utilisé")
 )
 
 // InterventionType est une catégorie d'intervention.
 type InterventionType struct {
-	ID          uuid.UUID
-	Label       string
-	Description string
-	Active      bool
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID            int16
+	Code          string
+	Label         string
+	EndangersLife bool
 }
 
 type record struct {
-	ID          uuid.UUID `gorm:"primaryKey"`
-	Label       string
-	Description string
-	Active      bool
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID            int16 `gorm:"primaryKey;autoIncrement"`
+	Code          string
+	Label         string
+	EndangersLife bool
 }
 
-func (record) TableName() string { return tableInterventionTypes }
+func (record) TableName() string { return tableIncidentTypes }
 
 func (r record) toType() InterventionType { return InterventionType(r) }
 
 // Repository est le stockage des types d'intervention.
 type Repository interface {
 	Create(ctx context.Context, t *InterventionType) error
-	Find(ctx context.Context, id uuid.UUID) (*InterventionType, error)
-	// List retourne une page de types, par libellé ; onlyActive masque les types désactivés.
-	List(ctx context.Context, onlyActive bool, limit, offset int) ([]InterventionType, int64, error)
-	// Deactivate retire un type du choix. Il retourne false si le type était déjà désactivé.
-	Deactivate(ctx context.Context, id uuid.UUID, now time.Time) (bool, error)
+	Find(ctx context.Context, id int16) (*InterventionType, error)
+	List(ctx context.Context, limit, offset int) ([]InterventionType, int64, error)
 }
 
 type gormRepository struct {
@@ -72,15 +63,16 @@ func (r *gormRepository) conn(ctx context.Context) *gorm.DB { return database.Co
 func (r *gormRepository) Create(ctx context.Context, t *InterventionType) error {
 	rec := record(*t)
 	if err := r.conn(ctx).Create(&rec).Error; err != nil {
-		if database.IsUniqueViolation(err, labelUniqueConstraint) {
-			return ErrLabelTaken
+		if database.IsUniqueViolation(err, codeUniqueConstraint) {
+			return ErrCodeTaken
 		}
 		return fmt.Errorf("interventiontype : création : %w", err)
 	}
+	*t = rec.toType()
 	return nil
 }
 
-func (r *gormRepository) Find(ctx context.Context, id uuid.UUID) (*InterventionType, error) {
+func (r *gormRepository) Find(ctx context.Context, id int16) (*InterventionType, error) {
 	var rec record
 	err := r.conn(ctx).Where("id = ?", id).Take(&rec).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -93,21 +85,14 @@ func (r *gormRepository) Find(ctx context.Context, id uuid.UUID) (*InterventionT
 	return &found, nil
 }
 
-func (r *gormRepository) List(ctx context.Context, onlyActive bool, limit, offset int) ([]InterventionType, int64, error) {
-	filtered := func() *gorm.DB {
-		query := r.conn(ctx).Model(&record{})
-		if onlyActive {
-			query = query.Where("active")
-		}
-		return query
-	}
-
+func (r *gormRepository) List(ctx context.Context, limit, offset int) ([]InterventionType, int64, error) {
+	filtered := r.conn(ctx).Model(&record{})
 	var total int64
-	if err := filtered().Count(&total).Error; err != nil {
+	if err := filtered.Count(&total).Error; err != nil {
 		return nil, 0, fmt.Errorf("interventiontype : comptage : %w", err)
 	}
 	var records []record
-	if err := filtered().Order("label ASC, id ASC").Limit(limit).Offset(offset).Find(&records).Error; err != nil {
+	if err := filtered.Order("label ASC, id ASC").Limit(limit).Offset(offset).Find(&records).Error; err != nil {
 		return nil, 0, fmt.Errorf("interventiontype : liste : %w", err)
 	}
 	types := make([]InterventionType, len(records))
@@ -115,20 +100,4 @@ func (r *gormRepository) List(ctx context.Context, onlyActive bool, limit, offse
 		types[i] = rec.toType()
 	}
 	return types, total, nil
-}
-
-func (r *gormRepository) Deactivate(ctx context.Context, id uuid.UUID, now time.Time) (bool, error) {
-	result := r.conn(ctx).Table(tableInterventionTypes).
-		Where("id = ? AND active", id).
-		Updates(map[string]any{"active": false, "updated_at": now})
-	if result.Error != nil {
-		return false, fmt.Errorf("interventiontype : désactivation : %w", result.Error)
-	}
-	if result.RowsAffected > 0 {
-		return true, nil
-	}
-	if _, err := r.Find(ctx, id); err != nil {
-		return false, err
-	}
-	return false, nil
 }

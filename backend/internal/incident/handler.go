@@ -1,6 +1,7 @@
 package incident
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -41,37 +42,42 @@ func NewHandler(deps HandlerDeps) *Handler {
 func (h *Handler) SweepLimiters() { h.createPerUser.Sweep() }
 
 type createPayload struct {
-	Type         string  `json:"interventionTypeId"`
-	Title        string  `json:"title"`
-	Description  string  `json:"description"`
-	ReporterRole string  `json:"reporterRole"`
-	Location     location `json:"location"`
-	OccurredAt   *string `json:"occurredAt"`
-	VillainID    *string `json:"villainId"`
-}
-
-type location struct {
-	Address string `json:"address"`
-	City    string `json:"city"`
+	TypeID            int16    `json:"typeId"`
+	Description       string   `json:"description"`
+	CitizensRescued   int16    `json:"citizensRescued"`
+	Street            string   `json:"street"`
+	PostalCode        string   `json:"postalCode"`
+	City              string   `json:"city"`
+	Country           string   `json:"country"`
+	AddressComplement string   `json:"addressComplement"`
+	Latitude          *float64 `json:"latitude"`
+	Longitude         *float64 `json:"longitude"`
+	OccurredAt        *string  `json:"occurredAt"`
+	VillainIDs        []string `json:"villainIds"`
 }
 
 // Response est un incident vu par son déclarant ou un modérateur.
 type Response struct {
-	ID               uuid.UUID        `json:"id"`
-	Title            string           `json:"title"`
-	Description      string           `json:"description"`
-	InterventionType typeSummary      `json:"interventionType"`
-	Status           string           `json:"status"`
-	ReporterRole     string           `json:"reporterRole"`
-	Location         location         `json:"location"`
-	ReportedAt       time.Time        `json:"reportedAt"`
-	OccurredAt       *time.Time       `json:"occurredAt,omitempty"`
-	Villain          *villainSummary  `json:"villain"`
-}
-
-type typeSummary struct {
-	ID    uuid.UUID `json:"id"`
-	Label string    `json:"label"`
+	ID                uuid.UUID        `json:"id"`
+	TypeID            int16            `json:"typeId"`
+	TypeCode          string           `json:"typeCode"`
+	TypeLabel         string           `json:"typeLabel"`
+	Description       string           `json:"description"`
+	Status            string           `json:"status"`
+	Priority          string           `json:"priority"`
+	CitizensRescued   int16            `json:"citizensRescued"`
+	Street            string           `json:"street"`
+	PostalCode        string           `json:"postalCode"`
+	City              string           `json:"city"`
+	Country           string           `json:"country"`
+	AddressComplement string           `json:"addressComplement,omitempty"`
+	Latitude          *float64         `json:"latitude,omitempty"`
+	Longitude         *float64         `json:"longitude,omitempty"`
+	OccurredAt        *time.Time       `json:"occurredAt,omitempty"`
+	VillainIDs        []string         `json:"villainIds"`
+	Villains          []villainSummary `json:"villains"`
+	InterventionID    *uuid.UUID       `json:"interventionId,omitempty"`
+	CreatedAt         time.Time        `json:"createdAt"`
 }
 
 type villainSummary struct {
@@ -80,17 +86,56 @@ type villainSummary struct {
 }
 
 func newResponse(in Incident) Response {
-	response := Response{
-		ID: in.ID, Title: in.Title, Description: in.Description,
-		InterventionType: typeSummary{ID: in.InterventionTypeID, Label: in.InterventionType},
-		Status:           string(in.Status), ReporterRole: string(in.ReporterRole),
-		Location:   location{Address: in.Address, City: in.City},
-		ReportedAt: in.CreatedAt, OccurredAt: in.OccurredAt,
+	villainIDs := make([]string, len(in.VillainIDs))
+	for i, id := range in.VillainIDs {
+		villainIDs[i] = id.String()
 	}
-	if in.VillainID != nil {
-		response.Villain = &villainSummary{ID: *in.VillainID, Alias: in.VillainAlias}
+	villains := make([]villainSummary, len(in.Villains))
+	for i, villain := range in.Villains {
+		villains[i] = villainSummary{ID: villain.ID, Alias: villain.Alias}
 	}
-	return response
+	return Response{
+		ID: in.ID, TypeID: in.TypeID, TypeCode: in.TypeCode, TypeLabel: in.TypeLabel,
+		Description: in.Description, Status: string(in.Status), Priority: string(in.Priority),
+		CitizensRescued: in.CitizensRescued, Street: in.Street, PostalCode: in.PostalCode,
+		City: in.City, Country: in.Country, AddressComplement: in.AddressComplement,
+		Latitude: in.Latitude, Longitude: in.Longitude, OccurredAt: in.OccurredAt,
+		VillainIDs: villainIDs, Villains: villains, InterventionID: in.InterventionID, CreatedAt: in.CreatedAt,
+	}
+}
+
+// List traite GET /incidents.
+func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
+	page, err := httpx.ParsePage(r)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	incidents, total, err := h.Service.List(r.Context(), page.Limit, page.Offset)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	items := make([]Response, len(incidents))
+	for i, item := range incidents {
+		items[i] = newResponse(item)
+	}
+	httpx.WriteJSON(w, http.StatusOK, httpx.NewPageResponse(items, total, page))
+}
+
+// Get traite GET /incidents/{id}.
+func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, ErrNotFound)
+		return
+	}
+	item, err := h.Service.Get(r.Context(), id)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, newResponse(*item))
 }
 
 // Create traite POST /incidents.
@@ -106,14 +151,13 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in := CreateInput{
-		ReporterRole: body.ReporterRole, InterventionTypeID: body.Type, Title: body.Title,
-		Description: body.Description, Address: body.Location.Address, City: body.Location.City,
+		TypeID: body.TypeID, Description: body.Description,
+		CitizensRescued: body.CitizensRescued, Street: body.Street, PostalCode: body.PostalCode,
+		City: body.City, Country: body.Country, AddressComplement: body.AddressComplement,
+		Latitude: body.Latitude, Longitude: body.Longitude, VillainIDs: body.VillainIDs,
 	}
 	if body.OccurredAt != nil {
 		in.OccurredAt = *body.OccurredAt
-	}
-	if body.VillainID != nil {
-		in.VillainID = *body.VillainID
 	}
 
 	created, err := h.Service.Create(r.Context(), principal.UserID, in, httpx.ClientIPFrom(r.Context()))
@@ -125,5 +169,8 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, ErrNotFound) {
+		err = httpx.NotFound("Incident introuvable.")
+	}
 	httpx.Fail(w, r, h.Logger, err)
 }

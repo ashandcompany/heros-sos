@@ -34,10 +34,10 @@ const (
 	ActionPasswordReset     = "auth.password_reset"
 	ActionLogoutAllSessions = "auth.logout_all"
 
-	ActionInterventionTypeCreated     = "intervention_type.create"
-	ActionInterventionTypeDeactivated = "intervention_type.deactivate"
-	ActionVillainCreated              = "villain.create"
-	ActionIncidentDeclared            = "incident.declare"
+	ActionInterventionTypeCreated = "intervention_type.create"
+	ActionVillainCreated          = "villain.create"
+	ActionVillainUpdated          = "villain.update"
+	ActionIncidentDeclared        = "incident.declare"
 )
 
 // Entry décrit une action à journaliser.

@@ -2,7 +2,9 @@ package villain
 
 import (
 	"context"
+	"errors"
 	"net/netip"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -10,10 +12,18 @@ import (
 	"github.com/ashandcompany/heros-sos/backend/internal/clock"
 	"github.com/ashandcompany/heros-sos/backend/internal/database"
 	"github.com/ashandcompany/heros-sos/backend/internal/ids"
+	"github.com/ashandcompany/heros-sos/backend/internal/interventiontype"
+	"github.com/ashandcompany/heros-sos/backend/internal/user"
 	"github.com/ashandcompany/heros-sos/backend/internal/validation"
 )
 
 const entityType = "villain"
+
+var ErrNotAllowed = errors.New("villain : modification non autorisée")
+
+type TypeFinder interface {
+	Find(ctx context.Context, id int16) (*interventiontype.InterventionType, error)
+}
 
 // Service porte les règles des vilains.
 type Service struct {
@@ -21,37 +31,59 @@ type Service struct {
 	audit audit.Recorder
 	tx    database.Transactor
 	clock clock.Clock
+	types TypeFinder
 }
 
 // NewService crée le service.
-func NewService(repo Repository, recorder audit.Recorder, tx database.Transactor, clk clock.Clock) *Service {
-	return &Service{repo: repo, audit: recorder, tx: tx, clock: clk}
+func NewService(repo Repository, recorder audit.Recorder, tx database.Transactor, clk clock.Clock, types TypeFinder) *Service {
+	return &Service{repo: repo, audit: recorder, tx: tx, clock: clk, types: types}
 }
 
 // CreateInput est la saisie d'un nouveau vilain.
 type CreateInput struct {
 	Alias       string
+	LastName    string
+	FirstName   string
+	MainSector  string
 	Description string
+	TypeIDs     []int16
 }
 
-// Create enregistre un vilain. Un pseudo déjà pris (sans tenir compte de la casse) retourne
-// ErrAliasTaken.
+type UpdateInput struct {
+	Alias       string
+	LastName    *string
+	FirstName   *string
+	MainSector  *string
+	Description *string
+	TypeIDs     []int16
+}
+
+// Create enregistre un vilain. Un alias déjà pris retourne ErrAliasTaken.
 func (s *Service) Create(ctx context.Context, userID uuid.UUID, in CreateInput, ip netip.Addr) (*Villain, error) {
 	var fields validation.Collector
-	alias, code := validation.Alias(in.Alias)
-	fields.Add("alias", code)
-	description, code := validation.OptionalText(in.Description, validation.MaxShortDescriptionLength)
-	fields.Add("description", code)
+	alias := strings.TrimSpace(in.Alias)
+	if alias == "" {
+		fields.Add("alias", validation.CodeRequired)
+	}
+	description := strings.TrimSpace(in.Description)
+	lastName := strings.TrimSpace(in.LastName)
+	firstName := strings.TrimSpace(in.FirstName)
+	mainSector := strings.TrimSpace(in.MainSector)
+	typeIDs, err := s.validateTypeIDs(ctx, in.TypeIDs, &fields)
+	if err != nil {
+		return nil, err
+	}
 	if err := fields.Err(); err != nil {
 		return nil, err
 	}
 
 	now := s.clock.Now()
 	created := &Villain{
-		ID: ids.New(), Alias: alias, Description: description, ThreatLevel: defaultThreatLevel,
-		CreatedBy: &userID, CreatedAt: now,
+		ID: ids.New(), Alias: alias, LastName: lastName, FirstName: firstName,
+		MainSector: mainSector, Description: description, CreatedBy: &userID, CreatedAt: now,
+		UpdatedAt: now, TypeIDs: typeIDs,
 	}
-	err := s.tx.WithinTx(ctx, func(ctx context.Context) error {
+	err = s.tx.WithinTx(ctx, func(ctx context.Context) error {
 		if err := s.repo.Create(ctx, created); err != nil {
 			return err
 		}
@@ -61,6 +93,79 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, in CreateInput, 
 		return nil, err
 	}
 	return created, nil
+}
+
+func (s *Service) Update(ctx context.Context, actorID uuid.UUID, role user.Role, id uuid.UUID, in UpdateInput, ip netip.Addr) (*Villain, error) {
+	current, err := s.repo.Find(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if role != user.RoleModerator && (current.CreatedBy == nil || *current.CreatedBy != actorID) {
+		return nil, ErrNotAllowed
+	}
+	var fields validation.Collector
+	alias := strings.TrimSpace(in.Alias)
+	if alias == "" {
+		fields.Add("alias", validation.CodeRequired)
+	}
+	typeIDs, err := s.validateTypeIDs(ctx, in.TypeIDs, &fields)
+	if err != nil {
+		return nil, err
+	}
+	if err := fields.Err(); err != nil {
+		return nil, err
+	}
+	updated := &Villain{
+		ID: id, Alias: alias, LastName: current.LastName, FirstName: current.FirstName,
+		MainSector: current.MainSector, Description: current.Description,
+		CreatedBy: current.CreatedBy, CreatedAt: current.CreatedAt, UpdatedAt: s.clock.Now(), TypeIDs: typeIDs,
+	}
+	if in.LastName != nil {
+		updated.LastName = strings.TrimSpace(*in.LastName)
+	}
+	if in.FirstName != nil {
+		updated.FirstName = strings.TrimSpace(*in.FirstName)
+	}
+	if in.MainSector != nil {
+		updated.MainSector = strings.TrimSpace(*in.MainSector)
+	}
+	if in.Description != nil {
+		updated.Description = strings.TrimSpace(*in.Description)
+	}
+	err = s.tx.WithinTx(ctx, func(ctx context.Context) error {
+		if err := s.repo.Update(ctx, updated); err != nil {
+			return err
+		}
+		return s.record(ctx, actorID, id, audit.ActionVillainUpdated, ip)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return updated, nil
+}
+
+func (s *Service) validateTypeIDs(ctx context.Context, raw []int16, fields *validation.Collector) ([]int16, error) {
+	seen := make(map[int16]struct{}, len(raw))
+	valid := make([]int16, 0, len(raw))
+	for _, id := range raw {
+		if id <= 0 {
+			fields.Add("typeIds", validation.CodeInvalid)
+			continue
+		}
+		if _, duplicate := seen[id]; duplicate {
+			continue
+		}
+		seen[id] = struct{}{}
+		if _, err := s.types.Find(ctx, id); err != nil {
+			if errors.Is(err, interventiontype.ErrNotFound) {
+				fields.Add("typeIds", validation.CodeInvalid)
+				continue
+			}
+			return nil, err
+		}
+		valid = append(valid, id)
+	}
+	return valid, nil
 }
 
 // List retourne une page de vilains, éventuellement filtrée par début de pseudo.

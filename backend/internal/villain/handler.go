@@ -30,21 +30,71 @@ func NewHandler(service *Service, logger *slog.Logger, httpConfig config.HTTP) *
 }
 
 type createPayload struct {
-	Alias       string `json:"alias"`
-	Description string `json:"description"`
+	Alias       string  `json:"alias"`
+	LastName    string  `json:"lastName"`
+	FirstName   string  `json:"firstName"`
+	MainSector  string  `json:"mainSector"`
+	Description string  `json:"description"`
+	TypeIDs     []int16 `json:"typeIds"`
+}
+
+type updatePayload struct {
+	Alias       string   `json:"alias"`
+	LastName    *string  `json:"lastName"`
+	FirstName   *string  `json:"firstName"`
+	MainSector  *string  `json:"mainSector"`
+	Description *string  `json:"description"`
+	TypeIDs     *[]int16 `json:"typeIds"`
 }
 
 // Response est un vilain.
 type Response struct {
 	ID          uuid.UUID `json:"id"`
 	Alias       string    `json:"alias"`
-	Description string    `json:"description"`
-	ThreatLevel string    `json:"threatLevel"`
+	LastName    string    `json:"lastName,omitempty"`
+	FirstName   string    `json:"firstName,omitempty"`
+	MainSector  string    `json:"mainSector,omitempty"`
+	Description string    `json:"description,omitempty"`
+	TypeIDs     []int16   `json:"typeIds"`
 	CreatedAt   time.Time `json:"createdAt"`
 }
 
 func newResponse(v Villain) Response {
-	return Response{ID: v.ID, Alias: v.Alias, Description: v.Description, ThreatLevel: v.ThreatLevel, CreatedAt: v.CreatedAt}
+	return Response{
+		ID: v.ID, Alias: v.Alias, LastName: v.LastName, FirstName: v.FirstName,
+		MainSector: v.MainSector, Description: v.Description, TypeIDs: v.TypeIDs, CreatedAt: v.CreatedAt,
+	}
+}
+
+// Update traite PATCH /villains/{id}.
+func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
+	principal, _ := auth.PrincipalFrom(r.Context())
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, ErrNotFound)
+		return
+	}
+	var body updatePayload
+	if err := httpx.DecodeJSON(w, r, h.http.MaxBodyBytes, &body); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if body.TypeIDs == nil {
+		h.fail(w, r, &httpx.Error{
+			Status: http.StatusUnprocessableEntity, Code: httpx.CodeValidationFailed,
+			Message: "Certains champs sont invalides.", Fields: map[string]string{"typeIds": "required"},
+		})
+		return
+	}
+	updated, err := h.service.Update(r.Context(), principal.UserID, principal.Role, id, UpdateInput{
+		Alias: body.Alias, LastName: body.LastName, FirstName: body.FirstName,
+		MainSector: body.MainSector, Description: body.Description, TypeIDs: *body.TypeIDs,
+	}, httpx.ClientIPFrom(r.Context()))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, newResponse(*updated))
 }
 
 // Create traite POST /villains.
@@ -92,6 +142,8 @@ func toHTTPError(err error) error {
 		return httpx.NotFound("Vilain introuvable.")
 	case errors.Is(err, ErrAliasTaken):
 		return httpx.Conflict(CodeAliasTaken, "Un vilain porte déjà ce pseudo.")
+	case errors.Is(err, ErrNotAllowed):
+		return httpx.Forbidden("Vous ne pouvez pas modifier cette fiche de vilain.")
 	}
 	return err
 }

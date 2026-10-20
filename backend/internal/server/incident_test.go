@@ -7,34 +7,40 @@ import (
 )
 
 type typeView struct {
-	ID, Label string
-	Active    bool
+	ID            int16
+	Code          string
+	Label         string
+	EndangersLife bool
 }
 
 type villainView struct {
-	ID, Alias, ThreatLevel string
+	ID, Alias string
+	TypeIDs   []int16
 }
 
-func (e *e2e) firstActiveType(a *actor) typeView {
+func (e *e2e) createType(a *actor, code, label string, endangersLife bool) typeView {
 	e.t.Helper()
-	var page struct{ Items []typeView }
-	got := a.get("/intervention-types")
-	got.decode(e.t, &page)
-	if got.status != http.StatusOK || len(page.Items) == 0 {
-		e.t.Fatalf("types actifs : %d %s", got.status, got.body)
+	got := a.post("/admin/intervention-types", map[string]any{
+		"code": code, "label": label, "endangersLife": endangersLife,
+	})
+	var created typeView
+	got.decode(e.t, &created)
+	if got.status != http.StatusCreated || created.ID <= 0 {
+		e.t.Fatalf("création du type : %d %s", got.status, got.body)
 	}
-	return page.Items[0]
+	return created
 }
 
-func validIncident(typeID string) map[string]any {
+func validIncident(typeID int16) map[string]any {
 	return map[string]any{
-		"interventionTypeId": typeID,
-		"title":              "Cambriolage en cours",
-		"description":        "Deux individus forcent la porte de la bijouterie.",
-		"reporterRole":       "temoin",
-		"location":           map[string]any{"address": "12 rue des Lilas", "city": "Lyon"},
-		"occurredAt":         nil,
-		"villainId":          nil,
+		"typeId":      typeID,
+		"description": "Deux individus forcent la porte de la bijouterie.",
+		"street":      "12 rue des Lilas",
+		"postalCode":  "69001",
+		"city":        "Lyon",
+		"country":     "FR",
+		"occurredAt":  nil,
+		"villainIds":  []string{},
 	}
 }
 
@@ -53,72 +59,75 @@ func TestInterventionTypesAreManagedByModerators(t *testing.T) {
 		t.Errorf("un citoyen ne liste pas tout : %d", got.status)
 	}
 
-	created := moderator.post("/admin/intervention-types", map[string]string{"label": "Évasion", "description": "Fuite d'un prisonnier"})
-	var view typeView
-	created.decode(t, &view)
-	if created.status != http.StatusCreated || !view.Active {
-		t.Fatalf("création : %d %s", created.status, created.body)
+	view := e.createType(moderator, "hostage_taking", "Prise d'otages", true)
+	var types struct{ Items []typeView }
+	if got := citizen.get("/intervention-types"); got.status != http.StatusOK {
+		t.Fatalf("liste des types : %d %s", got.status, got.body)
+	} else {
+		got.decode(t, &types)
 	}
-	if got := moderator.post("/admin/intervention-types", map[string]string{"label": "évasion"}); got.status != http.StatusConflict ||
-		got.code() != "intervention_type_label_already_used" {
-		t.Errorf("doublon (casse ignorée) : %d %s", got.status, got.body)
+	if len(types.Items) != 1 || types.Items[0] != view {
+		t.Errorf("type listé : %+v, attendu %+v", types.Items, view)
 	}
-	if got := moderator.post("/admin/intervention-types", map[string]string{"label": " "}); got.status != http.StatusUnprocessableEntity ||
-		got.fields()["label"] != "required" {
-		t.Errorf("libellé vide : %d %s", got.status, got.body)
-	}
-
-
-	// Désactivé : disparu du choix des utilisateurs, toujours visible des modérateurs.
-	for range 2 { // idempotent
-		if got := moderator.post("/admin/intervention-types/"+view.ID+"/deactivate", nil); got.status != http.StatusNoContent {
-			t.Fatalf("désactivation : %d %s", got.status, got.body)
-		}
-	}
-	if e.count("audit_logs", "action = 'intervention_type.deactivate'") != 1 {
-		t.Error("une seule trace d'audit pour une désactivation répétée")
-	}
-	var active, all struct{ Items []typeView }
-	citizen.get("/intervention-types").decode(t, &active)
-	moderator.get("/admin/intervention-types").decode(t, &all)
-	if len(all.Items) != len(active.Items)+1 {
-		t.Errorf("actifs = %d, tous = %d", len(active.Items), len(all.Items))
-	}
-	for _, item := range active.Items {
-		if item.ID == view.ID {
-			t.Error("un type désactivé ne doit pas être proposé")
-		}
-	}
-	if got := moderator.post("/admin/intervention-types/00000000-0000-0000-0000-000000000000/deactivate", nil); got.status != http.StatusNotFound {
-		t.Errorf("type inconnu : %d", got.status)
+	if got := moderator.post("/admin/intervention-types", map[string]string{"code": "hostage_taking", "label": "Autre libellé"}); got.status != http.StatusConflict ||
+		got.code() != "incident_type_code_already_used" {
+		t.Errorf("code dupliqué : %d %s", got.status, got.body)
 	}
 }
 
 func TestVillainsAreCreatedByUsers(t *testing.T) {
 	e := newE2E(t, nil)
 	citizen := e.signUpAndLogin("citizen@example.org")
+	other := e.signUpAndLogin("other@example.org")
 	moderator := e.newModerator("fury@shield.example")
+	theft := e.createType(moderator, "theft", "Vol", false)
+	burglary := e.createType(moderator, "burglary", "Cambriolage", false)
 
-	created := citizen.post("/villains", map[string]string{"alias": "Le Corbeau Gris", "description": "Voleur de nuit"})
+	created := citizen.post("/villains", map[string]any{
+		"alias": "Le Corbeau Gris", "mainSector": "Lyon", "description": "Voleur de nuit",
+		"typeIds": []int16{theft.ID, burglary.ID},
+	})
 	var villain villainView
 	created.decode(t, &villain)
-	if created.status != http.StatusCreated || villain.ThreatLevel != "faible" {
+	if created.status != http.StatusCreated || villain.Alias != "Le Corbeau Gris" ||
+		len(villain.TypeIDs) != 2 || villain.TypeIDs[0] != theft.ID || villain.TypeIDs[1] != burglary.ID {
 		t.Fatalf("création : %d %s", created.status, created.body)
 	}
-	if got := moderator.post("/villains", map[string]string{"alias": "le corbeau gris"}); got.status != http.StatusConflict ||
+	if got := citizen.request(http.MethodPatch, "/villains/"+villain.ID, map[string]any{
+		"alias": "Le Corbeau Gris", "typeIds": []int16{burglary.ID},
+	}); got.status != http.StatusOK {
+		t.Fatalf("remplacement des spécialités : %d %s", got.status, got.body)
+	} else {
+		got.decode(t, &villain)
+		if len(villain.TypeIDs) != 1 || villain.TypeIDs[0] != burglary.ID {
+			t.Errorf("spécialités après remplacement : %v", villain.TypeIDs)
+		}
+	}
+	if got := other.request(http.MethodPatch, "/villains/"+villain.ID, map[string]any{
+		"alias": "Le Corbeau Gris", "typeIds": []int16{theft.ID},
+	}); got.status != http.StatusForbidden {
+		t.Errorf("un autre utilisateur ne modifie pas les spécialités : %d", got.status)
+	}
+	if got := moderator.post("/villains", map[string]string{"alias": "Le Corbeau Gris"}); got.status != http.StatusConflict ||
 		got.code() != "villain_alias_already_used" {
-		t.Errorf("doublon (casse ignorée) : %d %s", got.status, got.body)
+		t.Errorf("alias dupliqué : %d %s", got.status, got.body)
 	}
-	if got := citizen.post("/villains", map[string]string{"alias": "x"}); got.status != http.StatusUnprocessableEntity || got.fields()["alias"] != "invalid" {
-		t.Errorf("pseudo invalide : %d %s", got.status, got.body)
+	if got := citizen.post("/villains", map[string]string{"alias": " "}); got.status != http.StatusUnprocessableEntity || got.fields()["alias"] != "required" {
+		t.Errorf("alias requis : %d %s", got.status, got.body)
 	}
-	moderator.post("/villains", map[string]string{"alias": "Docteur Chaos"})
+	if got := citizen.post("/villains", map[string]any{"alias": "Inconnu", "typeIds": []int16{32000}}); got.status != http.StatusUnprocessableEntity ||
+		got.fields()["typeIds"] != "invalid" {
+		t.Errorf("spécialité inconnue : %d %s", got.status, got.body)
+	}
+	if got := moderator.post("/villains", map[string]string{"alias": "Docteur Chaos"}); got.status != http.StatusCreated {
+		t.Fatalf("création par modérateur : %d %s", got.status, got.body)
+	}
 
 	var page struct {
 		Items []villainView
 		Total int
 	}
-	citizen.get("/villains?q=le%20co").decode(t, &page)
+	citizen.get("/villains?q=Le%20Co").decode(t, &page)
 	if page.Total != 1 || page.Items[0].Alias != "Le Corbeau Gris" {
 		t.Errorf("recherche par préfixe : %+v", page)
 	}
@@ -136,7 +145,7 @@ func TestIncidentDeclaration(t *testing.T) {
 	e := newE2E(t, nil)
 	citizen := e.signUpAndLogin("citizen@example.org")
 	moderator := e.newModerator("fury@shield.example")
-	incidentType := e.firstActiveType(citizen)
+	incidentType := e.createType(moderator, "burglary", "Cambriolage", false)
 
 	var villain villainView
 	citizen.post("/villains", map[string]string{"alias": "Le Corbeau Gris"}).decode(t, &villain)
@@ -146,28 +155,32 @@ func TestIncidentDeclaration(t *testing.T) {
 	}
 
 	body := validIncident(incidentType.ID)
-	body["villainId"] = villain.ID
+	body["villainIds"] = []string{villain.ID}
 	body["occurredAt"] = "2026-10-18T22:30:00+02:00"
 	before := len(e.mailer.Messages())
 	created := citizen.post("/incidents", body)
 	var incident struct {
-		ID, Status string
-		Villain    *struct{ ID, Alias string }
-		Location   struct{ Address, City string }
+		ID, Status, Street, City, Priority string
+		TypeID                             int16
+		VillainIDs                         []string
 	}
 	created.decode(t, &incident)
-	if created.status != http.StatusCreated || incident.Status != "signale" || incident.Villain == nil ||
-		incident.Villain.Alias != "Le Corbeau Gris" || incident.Location.City != "Lyon" {
+	if created.status != http.StatusCreated || incident.Status != "reported" || incident.Priority != "normal" ||
+		incident.TypeID != incidentType.ID || incident.Street != "12 rue des Lilas" || incident.City != "Lyon" ||
+		len(incident.VillainIDs) != 1 || incident.VillainIDs[0] != villain.ID {
 		t.Fatalf("déclaration : %d %s", created.status, created.body)
 	}
 
-	// Le lieu est chiffré en base.
-	var stored struct{ Address []byte }
-	if err := e.db.Table("incidents").Select("address").Where("id = ?", incident.ID).Take(&stored).Error; err != nil {
+	var stored struct {
+		Street          string
+		Priority        string
+		CitizensRescued int16
+	}
+	if err := e.db.Table("incidents").Select("street, priority, citizens_rescued").Where("id = ?", incident.ID).Take(&stored).Error; err != nil {
 		t.Fatal(err)
 	}
-	if len(stored.Address) == 0 || strings.Contains(string(stored.Address), "Lilas") {
-		t.Error("l'adresse doit être chiffrée en base")
+	if stored.Street != "12 rue des Lilas" || stored.Priority != "normal" || stored.CitizensRescued != 0 {
+		t.Errorf("valeurs documentées non persistées : %+v", stored)
 	}
 
 	// Seuls les modérateurs sont prévenus (aucun héros ici), jamais le déclarant, sans le lieu.
@@ -189,19 +202,19 @@ func TestIncidentDeclarationValidation(t *testing.T) {
 	e := newE2E(t, nil)
 	citizen := e.signUpAndLogin("citizen@example.org")
 	moderator := e.newModerator("fury@shield.example")
-	incidentType := e.firstActiveType(citizen)
+	incidentType := e.createType(moderator, "theft", "Vol", false)
 
 	bad := map[string]any{
-		"interventionTypeId": "pas-un-uuid", "title": "ab", "description": "trop court",
-		"reporterRole": "passant", "location": map[string]any{"address": "", "city": ""},
-		"occurredAt": "2999-01-01T00:00:00Z", "villainId": "00000000-0000-0000-0000-000000000000",
+		"typeId": 0, "description": "", "citizensRescued": -1,
+		"street": "", "city": "", "occurredAt": "2999-01-01T00:00:00Z",
+		"villainIds": []string{"00000000-0000-0000-0000-000000000000"},
 	}
 	got := citizen.post("/incidents", bad)
 	fields := got.fields()
 	want := map[string]string{
-		"interventionTypeId": "invalid", "title": "too_short", "description": "too_short",
-		"reporterRole": "invalid", "location.address": "required", "location.city": "required",
-		"occurredAt": "invalid", "villainId": "invalid",
+		"typeId": "invalid", "description": "required",
+		"citizensRescued": "invalid", "street": "required", "city": "required",
+		"occurredAt": "invalid", "villainIds": "invalid",
 	}
 	if got.status != http.StatusUnprocessableEntity {
 		t.Fatalf("%d %s", got.status, got.body)
@@ -212,11 +225,9 @@ func TestIncidentDeclarationValidation(t *testing.T) {
 		}
 	}
 
-	// Un type désactivé n'est plus acceptable.
-	moderator.post("/admin/intervention-types/"+incidentType.ID+"/deactivate", nil)
-	if got := citizen.post("/incidents", validIncident(incidentType.ID)); got.status != http.StatusUnprocessableEntity ||
-		got.fields()["interventionTypeId"] != "invalid" {
-		t.Errorf("type désactivé : %d %s", got.status, got.body)
+	if got := citizen.post("/incidents", validIncident(incidentType.ID+1000)); got.status != http.StatusUnprocessableEntity ||
+		got.fields()["typeId"] != "invalid" {
+		t.Errorf("type inconnu : %d %s", got.status, got.body)
 	}
 	if e.count("incidents", "true") != 0 {
 		t.Error("aucun incident ne doit être créé sur une saisie invalide")
@@ -227,7 +238,8 @@ func TestIncidentDeclarationIsRateLimitedPerUser(t *testing.T) {
 	e := newE2E(t, map[string]string{"HEROS_RATE_INCIDENT_CREATE_PER_USER": "2/1h"})
 	citizen := e.signUpAndLogin("citizen@example.org")
 	other := e.signUpAndLogin("other@example.org")
-	typeID := e.firstActiveType(citizen).ID
+	moderator := e.newModerator("fury@shield.example")
+	typeID := e.createType(moderator, "murder", "Tentative de meurtre", true).ID
 
 	for range 2 {
 		if got := citizen.post("/incidents", validIncident(typeID)); got.status != http.StatusCreated {

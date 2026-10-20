@@ -28,7 +28,7 @@ const (
 
 // TypeFinder lit le catalogue des types d'intervention.
 type TypeFinder interface {
-	Find(ctx context.Context, id uuid.UUID) (*interventiontype.InterventionType, error)
+	Find(ctx context.Context, id int16) (*interventiontype.InterventionType, error)
 }
 
 // VillainFinder lit les vilains.
@@ -64,16 +64,18 @@ func NewService(deps ServiceDeps) *Service { return &Service{ServiceDeps: deps} 
 
 // CreateInput est la saisie d'une déclaration (valeurs brutes, non validées).
 type CreateInput struct {
-	ReporterRole       string
-	InterventionTypeID string
-	// VillainID est vide quand le déclarant ne sait pas quel vilain est impliqué.
-	VillainID   string
-	Title       string
-	Description string
-	Address     string
-	City        string
-	// OccurredAt est une date RFC 3339, vide si l'incident est en cours.
-	OccurredAt string
+	TypeID            int16
+	Description       string
+	CitizensRescued   int16
+	Street            string
+	PostalCode        string
+	City              string
+	Country           string
+	AddressComplement string
+	Latitude          *float64
+	Longitude         *float64
+	OccurredAt        string
+	VillainIDs        []string
 }
 
 // Create enregistre l'incident d'un utilisateur, puis prévient les modérateurs et les héros. Toutes
@@ -86,6 +88,7 @@ func (s *Service) Create(ctx context.Context, reporterID uuid.UUID, in CreateInp
 		return nil, err
 	}
 	created.ID, created.ReporterID, created.Status = ids.New(), reporterID, StatusReported
+	created.Priority = PriorityNormal
 	created.CreatedAt, created.UpdatedAt = now, now
 
 	err = s.Tx.WithinTx(ctx, func(ctx context.Context) error {
@@ -107,20 +110,28 @@ func (s *Service) Create(ctx context.Context, reporterID uuid.UUID, in CreateInp
 func (s *Service) validate(ctx context.Context, in CreateInput, now time.Time) (*Incident, error) {
 	var fields validation.Collector
 	created := &Incident{}
-	var code string
 
-	created.ReporterRole = ReporterRole(strings.TrimSpace(in.ReporterRole))
-	if !created.ReporterRole.Valid() {
-		fields.Add("reporterRole", validation.CodeInvalid)
+	created.Description = strings.TrimSpace(in.Description)
+	if created.Description == "" {
+		fields.Add("description", validation.CodeRequired)
 	}
-	created.Title, code = validation.BoundedText(in.Title, validation.MinIncidentTitleLength, validation.MaxIncidentTitleLength)
-	fields.Add("title", code)
-	created.Description, code = validation.BoundedText(in.Description, validation.MinIncidentDescription, validation.MaxIncidentDescription)
-	fields.Add("description", code)
-	created.Address, code = validation.RequiredText(in.Address, validation.MaxStreetLength)
-	fields.Add("location.address", code)
-	created.City, code = validation.RequiredText(in.City, validation.MaxCityLength)
-	fields.Add("location.city", code)
+	created.Street = strings.TrimSpace(in.Street)
+	if created.Street == "" {
+		fields.Add("street", validation.CodeRequired)
+	}
+	created.City = strings.TrimSpace(in.City)
+	if created.City == "" {
+		fields.Add("city", validation.CodeRequired)
+	}
+	created.PostalCode = strings.TrimSpace(in.PostalCode)
+	created.Country = strings.TrimSpace(in.Country)
+	created.AddressComplement = strings.TrimSpace(in.AddressComplement)
+	created.CitizensRescued = in.CitizensRescued
+	if in.CitizensRescued < 0 {
+		fields.Add("citizensRescued", validation.CodeInvalid)
+	}
+	created.Latitude, created.Longitude = in.Latitude, in.Longitude
+	created.Priority = PriorityNormal
 
 	if raw := strings.TrimSpace(in.OccurredAt); raw != "" {
 		occurredAt, err := time.Parse(time.RFC3339, raw)
@@ -131,10 +142,10 @@ func (s *Service) validate(ctx context.Context, in CreateInput, now time.Time) (
 		}
 	}
 
-	if err := s.resolveType(ctx, in.InterventionTypeID, created, &fields); err != nil {
+	if err := s.resolveType(ctx, in.TypeID, created, &fields); err != nil {
 		return nil, err
 	}
-	if err := s.resolveVillain(ctx, in.VillainID, created, &fields); err != nil {
+	if err := s.resolveVillains(ctx, in.VillainIDs, created, &fields); err != nil {
 		return nil, err
 	}
 	if err := fields.Err(); err != nil {
@@ -143,45 +154,58 @@ func (s *Service) validate(ctx context.Context, in CreateInput, now time.Time) (
 	return created, nil
 }
 
-// resolveType exige un type existant et actif.
-func (s *Service) resolveType(ctx context.Context, raw string, created *Incident, fields *validation.Collector) error {
-	id, err := uuid.Parse(strings.TrimSpace(raw))
-	if err != nil {
-		fields.Add("interventionTypeId", validation.CodeInvalid)
+// resolveType exige un type d'incident existant.
+func (s *Service) resolveType(ctx context.Context, id int16, created *Incident, fields *validation.Collector) error {
+	if id <= 0 {
+		fields.Add("typeId", validation.CodeInvalid)
 		return nil
 	}
 	found, err := s.Types.Find(ctx, id)
-	switch {
-	case errors.Is(err, interventiontype.ErrNotFound), err == nil && !found.Active:
-		fields.Add("interventionTypeId", validation.CodeInvalid)
+	if errors.Is(err, interventiontype.ErrNotFound) {
+		fields.Add("typeId", validation.CodeInvalid)
 		return nil
-	case err != nil:
+	}
+	if err != nil {
 		return err
 	}
-	created.InterventionTypeID, created.InterventionType = found.ID, found.Label
+	created.TypeID, created.TypeCode, created.TypeLabel = found.ID, found.Code, found.Label
 	return nil
 }
 
-func (s *Service) resolveVillain(ctx context.Context, raw string, created *Incident, fields *validation.Collector) error {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil
-	}
-	id, err := uuid.Parse(raw)
-	if err != nil {
-		fields.Add("villainId", validation.CodeInvalid)
-		return nil
-	}
-	found, err := s.Villains.Find(ctx, id)
-	if err != nil {
-		if errors.Is(err, villain.ErrNotFound) {
-			fields.Add("villainId", validation.CodeInvalid)
-			return nil
+func (s *Service) resolveVillains(ctx context.Context, rawIDs []string, created *Incident, fields *validation.Collector) error {
+	seen := make(map[uuid.UUID]struct{}, len(rawIDs))
+	for _, raw := range rawIDs {
+		id, err := uuid.Parse(strings.TrimSpace(raw))
+		if err != nil {
+			fields.Add("villainIds", validation.CodeInvalid)
+			continue
 		}
-		return err
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		found, err := s.Villains.Find(ctx, id)
+		if err != nil {
+			if errors.Is(err, villain.ErrNotFound) {
+				fields.Add("villainIds", validation.CodeInvalid)
+				continue
+			}
+			return err
+		}
+		created.VillainIDs = append(created.VillainIDs, id)
+		created.Villains = append(created.Villains, VillainReference{ID: id, Alias: found.Alias})
 	}
-	created.VillainID, created.VillainAlias = &found.ID, found.Alias
 	return nil
+}
+
+// List retourne les incidents proposés aux héros, les plus récents d'abord.
+func (s *Service) List(ctx context.Context, limit, offset int) ([]Incident, int64, error) {
+	return s.Repo.List(ctx, limit, offset)
+}
+
+// Get retourne le détail d'un incident.
+func (s *Service) Get(ctx context.Context, id uuid.UUID) (*Incident, error) {
+	return s.Repo.Find(ctx, id)
 }
 
 // notify prévient les modérateurs et les héros actifs, sauf le déclarant. Le lieu n'est jamais
@@ -201,7 +225,7 @@ func (s *Service) notify(ctx context.Context, created *Incident) {
 		if to == reporter.Email {
 			continue
 		}
-		if err := s.Notifier.SendIncidentReported(ctx, to, created.Title, created.InterventionType); err != nil {
+		if err := s.Notifier.SendIncidentReported(ctx, to, created.Description, created.TypeLabel); err != nil {
 			s.Logger.ErrorContext(ctx, "notification d'incident impossible", "incident_id", created.ID, "error", err)
 		}
 	}

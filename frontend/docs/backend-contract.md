@@ -5,62 +5,83 @@ Le contrat de l'API Go est [backend/openapi/openapi.yaml](../../backend/openapi/
 dit **où le frontend actuel s'écarte de ce contrat** et ce qu'il faut changer au moment du
 branchement. À mettre à jour à chaque fonction branchée.
 
-> État au 20/10/2026 : le frontend fonctionne entièrement sur des mocks. Aucune fonction de
-> `src/lib/api/` n'appelle le backend.
+> État au 20/10/2026 : **connexion, session et déconnexion sont branchées** sur l'API dès que
+> `API_URL` est renseignée. Tout le reste fonctionne encore sur des mocks, y compris avec l'API.
 
 ## 1. Couverture : ce qui est dans le contrat, et le reste
 
 Le contrat décrit aujourd'hui **20 opérations** (identité et modération des comptes). Tout le reste
 du frontend n'a pas encore de contrat.
 
-| Domaine frontend                   | Fonctions `lib/api/`                           | Contrat OpenAPI                                               |
-| ---------------------------------- | ---------------------------------------------- | ------------------------------------------------------------- |
-| Connexion, session, déconnexion    | `login`, `getSessionUser` + `logoutAction`     | `/auth/login`, `/auth/me`, `/auth/logout`                     |
-| Inscription                        | `register`                                     | `/auth/register`, `/auth/activate`, `/auth/resend-activation` |
-| Mot de passe oublié                | `requestPasswordReset`                         | `/auth/password-reset` (+ `/confirm`)                         |
-| Demande de statut super-héros      | `getHeroApplications`, `reviewHeroApplication` | `/heroes/requests`, `/admin/hero-requests/*`                  |
-| Comptes (suspension, vérification) | `getCitizenAccounts`, `moderateAccount`        | `/admin/users/*`                                              |
-| Incidents, interventions, notes    | `lib/api/incidents.ts`, `ratings.ts`           | ❌ aucun                                                      |
-| Fiches super-héros / super-vilains | `super-heroes.ts` (profils), `villains.ts`     | ❌ aucun                                                      |
-| Vidéothèque, blog, newsletter      | `videos.ts`, `blog.ts`, `newsletter.ts`        | ❌ aucun                                                      |
-| Profil (email, téléphone, avatar)  | `account.ts`, `super-heroes.ts` (`updateMy…`)  | ❌ aucun                                                      |
-| Tableau de bord héros, modération  | `hero-dashboard.ts`, `moderation.ts`           | ❌ aucun                                                      |
+| Domaine frontend                   | Fonctions `lib/api/`                           | Contrat OpenAPI                                               | État       |
+| ---------------------------------- | ---------------------------------------------- | ------------------------------------------------------------- | ---------- |
+| Connexion, session, déconnexion    | `login`, `getSessionUser`, `logout`            | `/auth/login`, `/auth/me`, `/auth/logout`                     | ✅ branché |
+| Inscription                        | `register`                                     | `/auth/register`, `/auth/activate`, `/auth/resend-activation` | mock       |
+| Mot de passe oublié                | `requestPasswordReset`                         | `/auth/password-reset` (+ `/confirm`)                         | mock       |
+| Demande de statut super-héros      | `getHeroApplications`, `reviewHeroApplication` | `/heroes/requests`, `/admin/hero-requests/*`                  | mock       |
+| Comptes (suspension, vérification) | `getCitizenAccounts`, `moderateAccount`        | `/admin/users/*`                                              | mock       |
+| Incidents, interventions, notes    | `lib/api/incidents.ts`, `ratings.ts`           | ❌ aucun                                                      | mock       |
+| Fiches super-héros / super-vilains | `super-heroes.ts` (profils), `villains.ts`     | ❌ aucun                                                      | mock       |
+| Vidéothèque, blog, newsletter      | `videos.ts`, `blog.ts`, `newsletter.ts`        | ❌ aucun                                                      | mock       |
+| Profil (email, téléphone, avatar)  | `account.ts`, `super-heroes.ts` (`updateMy…`)  | ❌ aucun                                                      | mock       |
+| Tableau de bord héros, modération  | `hero-dashboard.ts`, `moderation.ts`           | ❌ aucun                                                      | mock       |
 
 Les « Future implémentation » écrites dans les commentaires de `lib/api/` pour les domaines non
 couverts sont des **hypothèses** du frontend, pas un contrat. Il faudra les faire valider (ou les
 remplacer) quand le backend ajoutera ces routes.
 
-## 2. Écarts à résoudre avant de brancher
+## 2. Ce qui est branché : la session
 
-### Session : cookie posé par l'API, plus par Next
+### Principe : le serveur Next sert d'intermédiaire
 
-|               | Frontend actuel                                              | Contrat                                                                                               |
-| ------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
-| Cookie        | Posé par `loginAction` ([cookies.ts](../src/lib/cookies.ts)) | Posé par l'API (`Set-Cookie` de `POST /auth/login`)                                                   |
-| Nom           | `session`                                                    | `session` en dev, **`__Host-session`** en production (HTTPS)                                          |
-| Valeur        | Jeton mock (`mock-token-<id>`)                               | Jeton opaque aléatoire, jamais lisible en JavaScript                                                  |
-| Envoi à l'API | « `Authorization: Bearer` » (commentaires de `lib/api/`)     | Le cookie, tel quel. Pas d'en-tête `Authorization`                                                    |
-| Écritures     | —                                                            | En-tête **`X-CSRF-Token`** obligatoire (POST/PUT/PATCH/DELETE)                                        |
-| Durée         | 7 jours fixes                                                | 2 h d'inactivité / 7 j max (citoyen, héros) ; 15 min / 8 h (modérateur) ; « se souvenir de moi » 30 j |
+Le navigateur ne parle **jamais** directement à l'API : tous les appels partent du serveur Next
+(Server Actions, Server Components, `proxy.ts`), à travers le client
+[src/lib/api/http.ts](../src/lib/api/http.ts) (`apiFetch`).
 
-À faire :
+```
+Navigateur ──cookie session──► Next (serveur) ──Cookie: session=… ──► API Go
+                                  ▲                      │
+                                  └──── Set-Cookie ◄─────┘  (login : recopié vers le navigateur)
+```
 
-- Dans une Server Action, l'appel `fetch` vers l'API doit **recopier le `Set-Cookie`** de la
-  réponse de login vers le navigateur (`cookies().set(…)`), avec le même nom, et transmettre le
-  cookie de la requête entrante sur les appels suivants.
-- Remplacer `SESSION_COOKIE` par un nom dépendant de l'environnement (`__Host-session` en
-  production), ou le lire depuis une configuration partagée avec le backend. **`proxy.ts` et
-  `server-session.ts` en dépendent.**
-- Conserver le `csrfToken` renvoyé par `/auth/login` et `/auth/me` et l'envoyer dans
-  `X-CSRF-Token` sur toute écriture. Il peut être relu via `GET /auth/me` (`getSessionUser`) à
-  chaque rendu serveur : pas besoin de le stocker côté client.
-- `proxy.ts` appelle `getUserFromToken` à **chaque requête** : une fois branchée, cela devient un
-  aller-retour vers `GET /auth/me`. Prévoir un cache court ou limiter le proxy à un test de
-  présence du cookie, la vraie vérification restant dans `requireRole()`.
-- Le backend vérifie l'en-tête `Origin` : l'origine du site Next doit figurer dans
-  `HEROS_ALLOWED_ORIGINS` (valeur d'exemple : `http://localhost:3000`).
-- `rememberMe` (connexion prolongée) existe côté API, pas encore dans `LoginCredentials` ni dans
-  le formulaire.
+|               | Fonctionnement                                                                                                                                 |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Connexion     | `loginAction` → `login()` → `POST /auth/login`. Le jeton du `Set-Cookie` de l'API est recopié dans le cookie du navigateur (même nom)          |
+| Durée         | Celle de la session API : le cookie expire à `expiresAt` (7 j max pour un citoyen ou un héros, 8 h pour un modérateur)                         |
+| Lecture       | `getSessionUser(token)` → `GET /auth/me`, le jeton dans l'en-tête `Cookie`. Mémorisé le temps d'un rendu (`cache` de React)                    |
+| Déconnexion   | `logoutAction` → `logout()` : `GET /auth/me` (jeton CSRF) puis `POST /auth/logout` avec `X-CSRF-Token`. Le cookie est effacé dans tous les cas |
+| Nom du cookie | [cookies.ts](../src/lib/cookies.ts) : `__Host-session` en production, `session` sinon : même règle que l'API (`HEROS_COOKIE_SECURE`)           |
+| API en panne  | `getSessionUser` renvoie `null` (visiteur, espaces protégés fermés) et journalise l'erreur ; `login` renvoie `unavailable`                     |
+| Adresse IP    | `login` transmet `X-Forwarded-For` et `User-Agent` du visiteur : l'API limite les tentatives par IP et enregistre l'appareil de la session     |
+
+À savoir :
+
+- **Le nom du cookie doit être le même des deux côtés.** Si l'API pose un autre nom (par exemple
+  un front lancé avec `next start` en local, donc en mode production, face à une API de
+  développement), `login` lève une erreur explicite au lieu d'échouer en silence.
+- **`X-Forwarded-For` n'est fiable que derrière le reverse proxy** : Caddy remplace l'en-tête
+  envoyé par le client, et l'API ne croit que les adresses fixes du proxy et du front
+  (`HEROS_TRUSTED_PROXIES`). Le conteneur `web` ne doit donc jamais être exposé directement.
+  Sans proxy (`npm run dev`), l'API ne voit que l'adresse du serveur Next.
+- Les appels du serveur Next n'envoient pas d'en-tête `Origin` : l'API les accepte sans
+  `HEROS_ALLOWED_ORIGINS`. Cette liste ne sert qu'aux appels directs du navigateur.
+- `proxy.ts` appelle `getUserFromToken`, donc `GET /auth/me`, sur chaque page des espaces
+  protégés (voir son `matcher`), en plus des vérifications de `requireRole()` pendant le rendu.
+- `rememberMe` (connexion prolongée, 30 j) existe côté API, pas encore dans `LoginCredentials`
+  ni dans le formulaire.
+
+### Domaines encore mockés avec une session réelle
+
+Les fonctions mockées reçoivent le vrai jeton et vérifient le rôle avec la vraie session
+(`userFromToken`). Mais leurs données sont indexées par les identifiants des comptes mock
+(`user-1`, `hero-1`, `admin-1`) : `asMockDataUser`
+([session-user.ts](../src/lib/api/session-user.ts)) donne au vrai compte l'identifiant du compte
+mock de son rôle, en gardant son nom. `requireRole()` l'applique aussi, pour les composants qui
+comparent `user.id` aux données (incidents d'un héros). **À supprimer quand tous les domaines
+seront branchés.**
+
+Conséquences : deux citoyens réels voient le même profil mock (celui de Camille) ; l'inscription
+mockée n'ouvre aucune session (son jeton mock est refusé par `GET /auth/me`).
 
 ### Rôles : deux vocabulaires
 
@@ -70,23 +91,34 @@ remplacer) quand le backend ajoutera ces routes.
 | `super-heros`         | `hero`                |
 | `admin`               | `moderator`           |
 
-Le frontend utilise ses valeurs partout (`proxy.ts`, `routes.ts`, `requireRole`…). La
-traduction doit se faire **à un seul endroit**, dans `lib/api/` (un mapper `fromApiRole`), pour
-que les composants ne voient jamais `hero` ou `moderator`.
+La traduction se fait **à un seul endroit**, `fromApiUser` dans
+[http.ts](../src/lib/api/http.ts) : les composants ne voient jamais `hero` ou `moderator`.
+
+### Erreurs de connexion
+
+| Code API (statut)                           | `LoginError`            | Message affiché                                     |
+| ------------------------------------------- | ----------------------- | --------------------------------------------------- |
+| `invalid_credentials` (401)                 | `invalid-credentials`   | Identifiant ou mot de passe incorrect               |
+| `validation_failed` (422)                   | `invalid-credentials`   | Idem : le formulaire ne dit pas quel champ est faux |
+| `account_deactivated` (403)                 | `account-suspended`     | Compte suspendu par la modération                   |
+| `account_not_activated` (403)               | `account-not-activated` | Consulter le mail d'activation                      |
+| `account_locked`, `rate_limited` (429)      | `too-many-attempts`     | Réessayer dans N minutes (`Retry-After`)            |
+| Autre code, API injoignable ou délai (10 s) | `unavailable`           | Connexion momentanément indisponible                |
+
+## 3. Écarts à résoudre avant de brancher le reste
 
 ### Erreurs : enveloppe `{ error: { code, message, fields } }`
 
-- L'API renvoie des codes **stables** (`invalid_credentials`, `account_locked`,
-  `account_not_activated`, `account_deactivated`…). Les `lib/api/` mappent ces codes vers les
-  `error` déjà typés (`"invalid-credentials"`, `"account-suspended"`…). Un code inconnu doit
-  tomber sur un message générique, jamais sur le `message` brut.
+- `apiFetch` lève `ApiError` (`status`, `code`, `retryAfterSeconds`) pour toute réponse non 2xx.
+  Chaque fonction mappe les codes vers son `{ ok: false, error }` typé ; un code inconnu tombe sur
+  un message générique, jamais sur le `message` brut de l'API.
 - Codes de champ de validation (422) : `required`, `invalid`, `too_short`, `too_long`, `weak`.
   Les messages français vivent aujourd'hui dans `lib/validation/` ; il faudra une table
   _code de champ → message_ pour afficher les erreurs renvoyées par l'API dans `fieldErrors`.
 - Statuts à traiter explicitement : `401` (session expirée → rediriger vers `/connexion`),
   `403` (origine/CSRF/rôle), `429` (`Retry-After`), `413` et `415`.
-- **Compte verrouillé** (`account_locked`, avec `Retry-After`) : état non géré par le frontend
-  (`LoginResult` ne connaît que `invalid-credentials` et `account-suspended`).
+- Écritures authentifiées : envoyer le `csrfToken` de `GET /auth/me` dans `X-CSRF-Token`
+  (option `csrfToken` d'`apiFetch`, voir `logout`).
 
 ### Inscription et activation de compte
 
@@ -119,11 +151,18 @@ aujourd'hui des tableaux complets : les écrans d'administration devront gérer 
 
 ### Variable d'environnement
 
-`NEXT_PUBLIC_API_URL` doit pointer vers la base **avec** le préfixe du contrat :
-`http://localhost:8080/api/v1` (champ `servers` de l'OpenAPI). Voir le
-[README](../README.md#variables-denvironnement).
+`API_URL` (lue par le serveur au démarrage, jamais exposée au navigateur) doit pointer vers la
+base **avec** le préfixe du contrat (champ `servers` de l'OpenAPI) :
 
-## 3. Garder types et contrat synchronisés
+| Contexte                                    | `API_URL`                                                           |
+| ------------------------------------------- | ------------------------------------------------------------------- |
+| Pile Docker (`make up-dev`, `make up-prod`) | `http://api:8080/api/v1` (fixé dans `backend/docker-compose.*.yml`) |
+| `npm run dev` + API de `make up-dev`        | `http://localhost:8081/api/v1`                                      |
+| `npm run dev` + API lancée avec `go run`    | `http://localhost:8080/api/v1`                                      |
+
+Voir le [README](../README.md#variables-denvironnement).
+
+## 4. Garder types et contrat synchronisés
 
 Aujourd'hui `src/types/` est écrit à la main et les formes de l'API ne sont décrites que dans
 l'OpenAPI : aucun mécanisme n'empêche une divergence silencieuse.
@@ -146,9 +185,15 @@ des routes qui n'existent pas ne servirait à rien.
 
 ## Checklist de branchement d'une fonction
 
+Modèle à suivre : [src/lib/api/auth.ts](../src/lib/api/auth.ts) (`login`, `getSessionUser`,
+`logout`).
+
 1. La route existe-t-elle dans `openapi.yaml` ? Sinon, la faire ajouter côté backend d'abord.
-2. Remplacer `mockResponse()` par un `fetch` vers `${API_URL}…`, en gardant la signature.
-3. Transmettre le cookie de session, et `X-CSRF-Token` pour une écriture.
-4. Convertir la réponse (rôles, statuts, dates) vers les types de `src/types/`.
-5. Mapper les codes d'erreur vers le résultat `{ ok: false, error }` existant.
-6. Mettre à jour le tableau de la section 1 et supprimer le mock devenu inutile.
+2. Garder la signature ; brancher sur `isApiEnabled` : `apiFetch(…)` si l'API est configurée,
+   le mock sinon (l'application doit toujours démarrer sans backend).
+3. Passer le jeton dans `sessionToken`, et le `csrfToken` de `GET /auth/me` pour une écriture.
+4. Convertir la réponse (rôles, statuts, dates) vers les types de `src/types/`, avec un
+   commentaire `/** Schéma OpenAPI : … */` sur l'interface de la réponse brute.
+5. Mapper les codes d'erreur (`ApiError.code`) vers le résultat `{ ok: false, error }` existant.
+6. Mettre à jour le tableau de la section 1. Quand le domaine n'utilise plus `userFromToken`,
+   vérifier si `asMockDataUser` sert encore.

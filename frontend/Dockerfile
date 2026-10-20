@@ -36,12 +36,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Les variables NEXT_PUBLIC_* sont figées dans le code du navigateur au moment du build : elles se
-# passent donc ici (build.args dans docker-compose.prod.yml), pas à l'exécution. Vide tant que le
-# front travaille sur des données mockées (voir src/lib/api/).
-ARG NEXT_PUBLIC_API_URL=
-ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-
+# Aucune variable à figer au build : l'URL de l'API (API_URL) est lue par le serveur au démarrage
+# (environment dans backend/docker-compose.*.yml), la même image sert donc partout.
 # `next/font/google` télécharge les polices pendant la compilation : le build a besoin d'internet.
 RUN npm run build
 

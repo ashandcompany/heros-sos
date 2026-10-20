@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { register } from "@/lib/api";
-import { SESSION_COOKIE, sessionCookieOptions } from "@/lib/cookies";
+import { MOCK_SESSION_MAX_AGE, SESSION_COOKIE, sessionCookieAttributes } from "@/lib/cookies";
 import { routes } from "@/lib/routes";
 import {
   firstInvalidField,
@@ -49,7 +49,10 @@ export async function signupAction(
     };
   }
 
-  (await cookies()).set(SESSION_COOKIE, result.token, sessionCookieOptions);
+  (await cookies()).set(SESSION_COOKIE, result.token, {
+    ...sessionCookieAttributes,
+    maxAge: MOCK_SESSION_MAX_AGE,
+  });
 
   redirect(routes.home);
 }

@@ -8,7 +8,8 @@ export {
   updateMyContact,
   updateNewsletterPreference,
 } from "./account";
-export { getSessionUser, login, register, requestPasswordReset } from "./auth";
+export { getSessionUser, login, logout, register, requestPasswordReset } from "./auth";
+export { asMockDataUser } from "./session-user";
 export {
   createArticle,
   deleteArticle,

@@ -29,7 +29,7 @@ npm run dev
 
 L'application est disponible à l'adresse suivante : <http://localhost:3000>.
 
-Tant que l'API n'est pas connectée, les données du frontend proviennent de `frontend/src/mocks/`. Aucune configuration supplémentaire n'est nécessaire pour les utiliser.
+Sans `API_URL`, les données du frontend proviennent de `frontend/src/mocks/` : aucune configuration supplémentaire n'est nécessaire. Pour lancer front et API ensemble dans Docker : `make env` puis `make up-dev` depuis `backend/` (<http://localhost:8088>).
 
 ### Backend
 
@@ -41,7 +41,7 @@ Copier `frontend/.env.example` vers `frontend/.env.local`. Ce dernier fichier es
 
 | Variable | Rôle |
 |---|---|
-| `NEXT_PUBLIC_API_URL` | URL de base de l'API REST (ex. : `http://localhost:8080/api/v1`). Cette variable n'est pas encore utilisée tant que les données proviennent des mocks. Son préfixe `NEXT_PUBLIC_` la rend accessible dans le navigateur : ne pas y placer de secret. |
+| `API_URL` | URL de base de l'API REST, préfixe compris (ex. : `http://localhost:8081/api/v1`). Lue par le serveur Next uniquement. Vide : tout le frontend tourne sur les mocks ; renseignée : connexion, session et déconnexion passent par l'API (voir `frontend/docs/backend-contract.md`). |
 
 ## Scripts disponibles
 

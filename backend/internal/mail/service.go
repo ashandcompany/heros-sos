@@ -9,6 +9,8 @@ import (
 	texttemplate "text/template"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/ashandcompany/heros-sos/backend/internal/config"
 )
 
@@ -17,21 +19,32 @@ var templateFS embed.FS
 
 // Noms des modèles : <nom>.txt.tmpl et <nom>.html.tmpl dans templates/.
 const (
-	templateActivation    = "activation"
-	templatePasswordReset = "password_reset"
+	templateActivation         = "activation"
+	templatePasswordReset      = "password_reset"
+	templateIncident           = "incident_reported"
+	templateInterventionInvite = "intervention_invitation"
+	templateOutcomeValidation  = "outcome_validation"
+	templateOutcomeDisputed    = "outcome_disputed"
 )
 
 const (
-	subjectActivation    = "Activez votre compte %s"
-	subjectPasswordReset = "Réinitialisation de votre mot de passe %s"
+	subjectActivation         = "Activez votre compte %s"
+	subjectPasswordReset      = "Réinitialisation de votre mot de passe %s"
+	subjectIncident           = "Nouvel incident déclaré sur %s"
+	subjectInterventionInvite = "Vous êtes invité à une intervention sur %s"
+	subjectOutcomeValidation  = "Validation du résultat d'une intervention sur %s"
+	subjectOutcomeDisputed    = "Désaccord sur une intervention sur %s"
 )
 
 // templateData est ce que voient les modèles.
 type templateData struct {
-	AppName   string
-	FirstName string
-	Link      string
-	ExpiresIn string
+	AppName        string
+	FirstName      string
+	Link           string
+	ExpiresIn      string
+	IncidentTitle  string
+	IncidentType   string
+	InterventionID string
 }
 
 // Service compose les mails de l'application à partir des modèles et les confie à un Mailer.
@@ -68,6 +81,35 @@ func (s *Service) SendActivation(ctx context.Context, to, firstName, link string
 func (s *Service) SendPasswordReset(ctx context.Context, to, firstName, link string) error {
 	return s.send(ctx, to, fmt.Sprintf(subjectPasswordReset, s.appName), templatePasswordReset, templateData{
 		FirstName: firstName, Link: link, ExpiresIn: formatDuration(s.tokens.PasswordResetTTL),
+	})
+}
+
+// SendIncidentReported prévient un destinataire d'un nouvel incident. Le sujet est fixe : le
+// titre, saisi par un utilisateur, ne figure que dans le corps.
+func (s *Service) SendIncidentReported(ctx context.Context, to, title, interventionType string) error {
+	return s.send(ctx, to, fmt.Sprintf(subjectIncident, s.appName), templateIncident, templateData{
+		IncidentTitle: title, IncidentType: interventionType,
+	})
+}
+
+// SendInterventionInvitation notifie un héros qu'il a été invité à une intervention.
+func (s *Service) SendInterventionInvitation(ctx context.Context, to string, interventionID uuid.UUID) error {
+	return s.send(ctx, to, fmt.Sprintf(subjectInterventionInvite, s.appName), templateInterventionInvite, templateData{
+		InterventionID: interventionID.String(),
+	})
+}
+
+// SendOutcomeValidation demande à un participant de valider le résultat proposé.
+func (s *Service) SendOutcomeValidation(ctx context.Context, to string, interventionID uuid.UUID) error {
+	return s.send(ctx, to, fmt.Sprintf(subjectOutcomeValidation, s.appName), templateOutcomeValidation, templateData{
+		InterventionID: interventionID.String(),
+	})
+}
+
+// SendOutcomeDisputed prévient un modérateur qu'un participant a refusé le résultat proposé.
+func (s *Service) SendOutcomeDisputed(ctx context.Context, to string, interventionID uuid.UUID) error {
+	return s.send(ctx, to, fmt.Sprintf(subjectOutcomeDisputed, s.appName), templateOutcomeDisputed, templateData{
+		InterventionID: interventionID.String(),
 	})
 }
 

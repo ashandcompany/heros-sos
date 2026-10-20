@@ -21,9 +21,13 @@ import (
 	"github.com/ashandcompany/heros-sos/backend/internal/database"
 	"github.com/ashandcompany/heros-sos/backend/internal/hero"
 	"github.com/ashandcompany/heros-sos/backend/internal/httpx"
+	"github.com/ashandcompany/heros-sos/backend/internal/incident"
+	"github.com/ashandcompany/heros-sos/backend/internal/intervention"
+	"github.com/ashandcompany/heros-sos/backend/internal/interventiontype"
 	"github.com/ashandcompany/heros-sos/backend/internal/mail"
 	"github.com/ashandcompany/heros-sos/backend/internal/moderation"
 	"github.com/ashandcompany/heros-sos/backend/internal/user"
+	"github.com/ashandcompany/heros-sos/backend/internal/villain"
 )
 
 // components regroupe les dépendances partagées par les fonctions d'enregistrement des routes.
@@ -37,12 +41,16 @@ type components struct {
 	audit  audit.Recorder
 	mailer mail.Mailer
 
-	health            healthHandler
-	authService       *auth.Service
-	authMiddleware    *auth.Middleware
-	authHandler       *auth.Handler
-	heroHandler       *hero.Handler
-	moderationHandler *moderation.Handler
+	health              healthHandler
+	authService         *auth.Service
+	authMiddleware      *auth.Middleware
+	authHandler         *auth.Handler
+	heroHandler         *hero.Handler
+	moderationHandler   *moderation.Handler
+	incidentHandler     *incident.Handler
+	interventionHandler *intervention.Handler
+	villainHandler      *villain.Handler
+	typeHandler         *interventiontype.Handler
 }
 
 // Server est l'application prête à servir.
@@ -139,11 +147,29 @@ func NewWithDB(cfg config.Config, logger *slog.Logger, db *gorm.DB, opts ...Opti
 		Service: c.authService, Cookies: cookies, CSRF: csrf, Clock: c.clock, Logger: logger,
 		HTTP: cfg.HTTP, Limits: cfg.Security.RateLimits,
 	})
+	heroProfiles := hero.NewRepository(db)
 	c.heroHandler = hero.NewHandler(
-		hero.NewService(hero.NewRepository(db), c.users, c.audit, c.tx, c.clock), logger, cfg.HTTP)
+		hero.NewService(heroProfiles, c.users, c.audit, c.tx, c.clock), logger, cfg.HTTP)
 	c.moderationHandler = moderation.NewHandler(
 		moderation.NewService(c.users, sessions, c.audit, c.tx, c.clock), logger)
 
+	types := interventiontype.NewRepository(db)
+	villains := villain.NewRepository(db)
+	c.typeHandler = interventiontype.NewHandler(
+		interventiontype.NewService(types, c.audit, c.tx, c.clock), logger, cfg.HTTP)
+	c.villainHandler = villain.NewHandler(
+		villain.NewService(villains, c.audit, c.tx, c.clock, types), logger, cfg.HTTP)
+	c.incidentHandler = incident.NewHandler(incident.HandlerDeps{
+		Service: incident.NewService(incident.ServiceDeps{
+			Repo: incident.NewRepository(db), Types: types, Villains: villains, Users: c.users,
+			Notifier: mailService, Audit: c.audit, Tx: c.tx, Clock: c.clock, Logger: logger,
+		}),
+		Logger: logger, HTTP: cfg.HTTP, Limits: cfg.Security.RateLimits, Clock: c.clock,
+	})
+	c.interventionHandler = intervention.NewHandler(intervention.NewService(intervention.ServiceDeps{
+		Repo: intervention.NewRepository(db), Users: c.users, Heroes: heroProfiles,
+		Audit: c.audit, Tx: c.tx, Clock: c.clock, Notifier: mailService, Logger: logger,
+	}), logger, cfg.HTTP)
 	router := newRouter()
 	registerRoutes(router, c)
 
@@ -262,6 +288,7 @@ func (s *Server) runJanitor(ctx context.Context) {
 func (s *Server) cleanup(ctx context.Context) {
 	c := s.components
 	c.authHandler.SweepLimiters()
+	c.incidentHandler.SweepLimiters()
 	sessions, tokens, err := c.authService.Cleanup(ctx, s.cfg.Jobs.SessionRetention, s.cfg.Jobs.TokenRetention)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "nettoyage périodique en échec", "error", err)

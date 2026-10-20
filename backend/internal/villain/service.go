@@ -56,6 +56,8 @@ type UpdateInput struct {
 	MainSector  *string
 	Description *string
 	TypeIDs     []int16
+	ThreatLevel *string
+	Status      *string
 }
 
 // Create enregistre un vilain. Un alias déjà pris retourne ErrAliasTaken.
@@ -81,7 +83,7 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, in CreateInput, 
 	created := &Villain{
 		ID: ids.New(), Alias: alias, LastName: lastName, FirstName: firstName,
 		MainSector: mainSector, Description: description, CreatedBy: &userID, CreatedAt: now,
-		UpdatedAt: now, TypeIDs: typeIDs,
+		UpdatedAt: now, TypeIDs: typeIDs, ThreatLevel: defaultThreatLevel, Status: defaultStatus,
 	}
 	err = s.tx.WithinTx(ctx, func(ctx context.Context) error {
 		if err := s.repo.Create(ctx, created); err != nil {
@@ -103,6 +105,9 @@ func (s *Service) Update(ctx context.Context, actorID uuid.UUID, role user.Role,
 	if role != user.RoleModerator && (current.CreatedBy == nil || *current.CreatedBy != actorID) {
 		return nil, ErrNotAllowed
 	}
+	if role != user.RoleModerator && (in.ThreatLevel != nil || in.Status != nil) {
+		return nil, ErrNotAllowed
+	}
 	var fields validation.Collector
 	alias := strings.TrimSpace(in.Alias)
 	if alias == "" {
@@ -118,6 +123,7 @@ func (s *Service) Update(ctx context.Context, actorID uuid.UUID, role user.Role,
 	updated := &Villain{
 		ID: id, Alias: alias, LastName: current.LastName, FirstName: current.FirstName,
 		MainSector: current.MainSector, Description: current.Description,
+		ThreatLevel: current.ThreatLevel, Status: current.Status,
 		CreatedBy: current.CreatedBy, CreatedAt: current.CreatedAt, UpdatedAt: s.clock.Now(), TypeIDs: typeIDs,
 	}
 	if in.LastName != nil {
@@ -131,6 +137,23 @@ func (s *Service) Update(ctx context.Context, actorID uuid.UUID, role user.Role,
 	}
 	if in.Description != nil {
 		updated.Description = strings.TrimSpace(*in.Description)
+	}
+	if in.ThreatLevel != nil {
+		level := ThreatLevel(*in.ThreatLevel)
+		if !level.Valid() {
+			fields.Add("threatLevel", validation.CodeInvalid)
+		}
+		updated.ThreatLevel = level
+	}
+	if in.Status != nil {
+		status := Status(*in.Status)
+		if !status.Valid() {
+			fields.Add("status", validation.CodeInvalid)
+		}
+		updated.Status = status
+	}
+	if err := fields.Err(); err != nil {
+		return nil, err
 	}
 	err = s.tx.WithinTx(ctx, func(ctx context.Context) error {
 		if err := s.repo.Update(ctx, updated); err != nil {

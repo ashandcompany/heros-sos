@@ -71,11 +71,11 @@ const (
 
 // Règles de limitation de débit par défaut (maximum de requêtes par fenêtre).
 var (
-	defaultRateLoginPerIP          = RateRule{Max: 20, Window: 15 * time.Minute}
-	defaultRateLoginPerIdentifier  = RateRule{Max: 5, Window: 15 * time.Minute}
-	defaultRateRegisterPerIP       = RateRule{Max: 5, Window: time.Hour}
-	defaultRatePasswordResetPerIP  = RateRule{Max: 10, Window: time.Hour}
-	defaultRatePasswordResetPerKey = RateRule{Max: 3, Window: time.Hour}
+	defaultRateLoginPerIP            = RateRule{Max: 20, Window: 15 * time.Minute}
+	defaultRateLoginPerIdentifier    = RateRule{Max: 5, Window: 15 * time.Minute}
+	defaultRateRegisterPerIP         = RateRule{Max: 5, Window: time.Hour}
+	defaultRatePasswordResetPerIP    = RateRule{Max: 10, Window: time.Hour}
+	defaultRatePasswordResetPerKey   = RateRule{Max: 3, Window: time.Hour}
 	defaultRateIncidentCreatePerUser = RateRule{Max: 10, Window: time.Hour}
 )
 

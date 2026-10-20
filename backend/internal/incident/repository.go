@@ -68,7 +68,7 @@ func toRecord(in *Incident) record {
 type Repository interface {
 	Create(ctx context.Context, in *Incident) error
 	Find(ctx context.Context, id uuid.UUID) (*Incident, error)
-	List(ctx context.Context, limit, offset int) ([]Incident, int64, error)
+	List(ctx context.Context, reporterID *uuid.UUID, limit, offset int) ([]Incident, int64, error)
 }
 
 type gormRepository struct {
@@ -110,8 +110,13 @@ func (r *gormRepository) Find(ctx context.Context, id uuid.UUID) (*Incident, err
 	return &items[0], nil
 }
 
-func (r *gormRepository) List(ctx context.Context, limit, offset int) ([]Incident, int64, error) {
-	query := r.incidentQuery(ctx).Where("incidents.status IN ?", []string{"reported", "in_progress", "failed"})
+func (r *gormRepository) List(ctx context.Context, reporterID *uuid.UUID, limit, offset int) ([]Incident, int64, error) {
+	query := r.incidentQuery(ctx)
+	if reporterID != nil {
+		query = query.Where("incidents.reporter_id = ?", *reporterID)
+	} else {
+		query = query.Where("incidents.status IN ?", []string{"reported", "in_progress", "failed"})
+	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, fmt.Errorf("incident : comptage : %w", err)

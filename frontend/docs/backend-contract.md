@@ -5,9 +5,8 @@ Le contrat de l'API Go est [backend/openapi/openapi.yaml](../../backend/openapi/
 dit **où le frontend actuel s'écarte de ce contrat** et ce qu'il faut changer au moment du
 branchement. À mettre à jour à chaque fonction branchée.
 
-> État au 20/10/2026 : **connexion, session, déconnexion, activation et réinitialisation du mot
-> de passe (demande et nouveau mot de passe) sont branchées** sur l'API dès que `API_URL` est
-> renseignée.
+> État au 20/10/2026 : **inscription, activation, connexion, session, déconnexion et
+> réinitialisation du mot de passe sont branchées** sur l'API dès que `API_URL` est renseignée.
 > Tout le reste fonctionne encore sur des mocks, y compris avec l'API.
 
 ## 1. Couverture : ce qui est dans le contrat, et le reste
@@ -18,7 +17,7 @@ du frontend n'a pas encore de contrat.
 | Domaine frontend                   | Fonctions `lib/api/`                           | Contrat OpenAPI                              | État       |
 | ---------------------------------- | ---------------------------------------------- | -------------------------------------------- | ---------- |
 | Connexion, session, déconnexion    | `login`, `getSessionUser`, `logout`            | `/auth/login`, `/auth/me`, `/auth/logout`    | ✅ branché |
-| Inscription                        | `register`                                     | `/auth/register`                             | mock       |
+| Inscription                        | `register`                                     | `/auth/register`                             | ✅ branché |
 | Activation du compte               | `activateAccount`, `resendActivation`          | `/auth/activate`, `/auth/resend-activation`  | ✅ branché |
 | Mot de passe oublié (demande)      | `requestPasswordReset`                         | `/auth/password-reset`                       | ✅ branché |
 | Nouveau mot de passe (jeton)       | `confirmPasswordReset`                         | `/auth/password-reset/confirm`               | ✅ branché |
@@ -84,8 +83,7 @@ mock de son rôle, en gardant son nom. `requireRole()` l'applique aussi, pour le
 comparent `user.id` aux données (incidents d'un héros). **À supprimer quand tous les domaines
 seront branchés.**
 
-Conséquences : deux citoyens réels voient le même profil mock (celui de Camille) ; l'inscription
-mockée n'ouvre aucune session (son jeton mock est refusé par `GET /auth/me`).
+Conséquence : deux citoyens réels voient le même profil mock (celui de Camille).
 
 ### Rôles : deux vocabulaires
 
@@ -116,9 +114,9 @@ La traduction se fait **à un seul endroit**, `fromApiUser` dans
 - `apiFetch` lève `ApiError` (`status`, `code`, `retryAfterSeconds`) pour toute réponse non 2xx.
   Chaque fonction mappe les codes vers son `{ ok: false, error }` typé ; un code inconnu tombe sur
   un message générique, jamais sur le `message` brut de l'API.
-- Codes de champ de validation (422) : `required`, `invalid`, `too_short`, `too_long`, `weak`.
-  Les messages français vivent aujourd'hui dans `lib/validation/` ; il faudra une table
-  _code de champ → message_ pour afficher les erreurs renvoyées par l'API dans `fieldErrors`.
+- Codes de champ de validation (422) : `required`, `invalid`, `too_short`, `too_long`, `weak`,
+  dans `ApiError.fields` (champ imbriqué : `address.city`). Exemple de table _code → message_ :
+  `toSignupErrors` dans [actions/signup.ts](../src/app/actions/signup.ts).
 - Statuts à traiter explicitement : `401` (session expirée → rediriger vers `/connexion`),
   `403` (origine/CSRF/rôle), `429` (`Retry-After`), `413` et `415`.
 - Écritures authentifiées : envoyer le `csrfToken` de `GET /auth/me` dans `X-CSRF-Token`
@@ -128,7 +126,7 @@ La traduction se fait **à un seul endroit**, `fromApiUser` dans
 
 | Sujet                     | Frontend actuel                                                             | Contrat                                                                                      |
 | ------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Résultat de l'inscription | `SignupResult` : `{ ok, user, token }` (connexion immédiate)                | `{ user, activationRequired: true }` : **pas de session**, un e-mail d'activation est envoyé |
+| Résultat de l'inscription | `SignupResult` : `{ ok, user }`, écran « vérifiez vos mails », sans session | `{ user, activationRequired: true }` : **pas de session**, un e-mail d'activation est envoyé |
 | Activation                | Page `/activation?token=…` : bouton de confirmation, renvoi du lien         | Jeton reçu par e-mail à confirmer (`HEROS_ACTIVATION_PATH` = `routes.activation`)            |
 | Adresse                   | `PostalAddress` : rue, code postal, ville, pays                             | Idem + champ `complement` facultatif                                                         |
 | Mot de passe              | `lib/validation/signup.ts` : ≥ 10 caractères, majuscule, minuscule, chiffre | Mêmes règles (`weak` sinon) : déjà alignés                                                   |

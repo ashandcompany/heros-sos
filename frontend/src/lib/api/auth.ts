@@ -19,8 +19,8 @@ import { isApiEnabled, mockResponse } from "./config";
 import { ApiError, type ApiUserView, apiFetch, fromApiUser, readSessionCookie } from "./http";
 
 /*
- * Connexion, session, déconnexion, activation et mot de passe oublié sont branchés sur l'API Go dès
- * que `API_URL` est renseignée (sinon : mocks). L'inscription reste mockée.
+ * Inscription, activation, connexion, session, déconnexion et mot de passe oublié sont branchés sur
+ * l'API Go dès que `API_URL` est renseignée (sinon : mocks).
  */
 
 const MOCK_TOKEN_PREFIX = "mock-token-";
@@ -306,14 +306,53 @@ export async function confirmPasswordReset(
   }
 }
 
+/** Schéma OpenAPI : RegisterResponse */
+interface ApiRegisterResponse {
+  user: ApiUserView;
+  activationRequired: true;
+}
+
 /**
- * Crée un compte. Aucun rôle n'est choisi à l'inscription : le compte est créé citoyen
- * (le passage en super-héros relève d'un autre parcours, à définir avec l'API).
- * Reste mocké même quand l'API est configurée : le jeton mock renvoyé n'ouvre alors aucune
- * session (`GET /auth/me` le refuse), le nouveau compte reste visiteur.
- * Future implémentation : `POST ${API_URL}/auth/register` avec le `SignupPayload`.
+ * Crée un compte citoyen en attente d'activation : aucune session n'est ouverte, l'API envoie un
+ * mail contenant le lien d'activation (`routes.activation`). Aucun rôle n'est choisi à
+ * l'inscription : le statut de super-héros se demande ensuite (`POST /heroes/requests`).
+ * API : `POST /auth/register` avec le `SignupPayload`.
  */
 export async function register(payload: SignupPayload): Promise<SignupResult> {
+  if (!isApiEnabled) return registerWithMocks(payload);
+
+  try {
+    const response = await apiFetch("/auth/register", {
+      method: "POST",
+      body: payload,
+      headers: await visitorHeaders(),
+    });
+    const body = (await response.json()) as ApiRegisterResponse;
+    return { ok: true, user: fromApiUser(body.user) };
+  } catch (error) {
+    if (error instanceof ApiError) {
+      if (error.code === "email_already_used") return { ok: false, error: "email-already-used" };
+      if (error.code === "validation_failed") {
+        return { ok: false, error: "invalid-fields", fields: error.fields };
+      }
+      if (error.code === "rate_limited") {
+        return {
+          ok: false,
+          error: "too-many-attempts",
+          retryAfterSeconds: error.retryAfterSeconds,
+        };
+      }
+    }
+    console.error("Inscription : appel à l'API en échec", error);
+    return { ok: false, error: "unavailable" };
+  }
+}
+
+/**
+ * Mock en mémoire : le compte reste utilisable jusqu'au redémarrage du serveur. Comme avec l'API,
+ * aucune session n'est ouverte (le mock de connexion ne vérifie pas l'activation).
+ */
+async function registerWithMocks(payload: SignupPayload): Promise<SignupResult> {
   if (accountsMock.some(({ email }) => email === payload.email)) {
     return mockResponse({ ok: false, error: "email-already-used" });
   }
@@ -323,7 +362,6 @@ export async function register(payload: SignupPayload): Promise<SignupResult> {
     displayName: payload.firstName,
     role: "citoyen",
   };
-  // Mock en mémoire : le compte reste utilisable jusqu'au redémarrage du serveur.
   accountsMock.push({ user, email: payload.email, password: payload.password });
   citizensMock.push({
     id: user.id,
@@ -341,5 +379,5 @@ export async function register(payload: SignupPayload): Promise<SignupResult> {
     moderation: "en-attente",
   });
 
-  return mockResponse({ ok: true, user, token: `${MOCK_TOKEN_PREFIX}${user.id}` });
+  return mockResponse({ ok: true, user });
 }

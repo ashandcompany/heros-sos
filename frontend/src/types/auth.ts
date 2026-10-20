@@ -87,5 +87,13 @@ export interface SignupPayload {
   password: string;
 }
 
+/**
+ * Le compte est créé en attente d'activation : aucune session n'est ouverte, un mail contenant le
+ * lien d'activation est envoyé à l'adresse saisie.
+ */
 export type SignupResult =
-  { ok: true; user: AuthUser; token: string } | { ok: false; error: "email-already-used" };
+  | { ok: true; user: AuthUser }
+  | { ok: false; error: "email-already-used" | "unavailable" }
+  | { ok: false; error: "too-many-attempts"; retryAfterSeconds?: number }
+  /** Refusé par l'API (422) : champ du `SignupPayload` (`email`, `address.city`…) → code. */
+  | { ok: false; error: "invalid-fields"; fields: Record<string, string> };

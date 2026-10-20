@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useEffect, useRef, useState, type FormEvent } from "react";
 import { signupAction, type SignupFormState } from "@/app/actions/signup";
 import { AddressField } from "@/components/ui/AddressField";
@@ -10,6 +11,7 @@ import { RadioGroup } from "@/components/ui/RadioGroup";
 import { SelectField } from "@/components/ui/SelectField";
 import { TextField } from "@/components/ui/TextField";
 import { countries } from "@/lib/countries";
+import { routes } from "@/lib/routes";
 import {
   civilityOptions,
   emptySignupValues,
@@ -138,9 +140,42 @@ export function SignupForm() {
     }
   };
 
+  if (state.registeredEmail) {
+    return (
+      <div role="status" className="space-y-6">
+        <div className="rounded-xl border border-success/40 bg-success/10 p-4 text-sm">
+          <span className="block font-semibold text-success">
+            Compte créé : vérifiez vos mails.
+          </span>
+          Un lien d&apos;activation a été envoyé à <strong>{state.registeredEmail}</strong>. Il est
+          valable 24 heures. Ouvrez-le pour activer votre compte, puis connectez-vous. Pensez à
+          vérifier vos courriers indésirables.
+        </div>
+        <p className="text-sm text-muted">
+          Rien reçu&nbsp;?{" "}
+          <Link
+            href={routes.activation}
+            className="rounded-sm font-medium text-accent hover:underline"
+          >
+            Demander un nouveau lien
+          </Link>
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div>
       <StepIndicator current={step} />
+
+      {state.formError && (
+        <p
+          role="alert"
+          className="mb-6 rounded-xl border border-danger/50 bg-danger/10 px-4 py-3 text-sm text-danger"
+        >
+          {state.formError}
+        </p>
+      )}
 
       <form ref={formRef} action={formAction} onSubmit={handleSubmit} noValidate>
         <h2

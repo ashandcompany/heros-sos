@@ -28,6 +28,17 @@ export interface CitizenAccount {
   moderation: ModerationStatus;
 }
 
+/** « Mon compte » : ce que l'API fournit déjà, et le profil complet quand elle l'exposera. */
+export interface MyAccount {
+  firstName: string;
+  email: string;
+  /**
+   * Profil complet (identité, coordonnées, photo, newsletter). `null` avec l'API : seul
+   * `GET /auth/me` existe, le profil viendra de `GET /me` (pas encore dans le contrat).
+   */
+  profile: CitizenAccount | null;
+}
+
 /** Champs modifiables directement par le citoyen (hors photo, email et newsletter). */
 export interface ContactUpdate {
   mobilePhone: string;

@@ -31,7 +31,7 @@ autres domaines du frontend n'ont pas encore de contrat.
 | Fiches super-héros                 | `super-heroes.ts` (profils)                    | ❌ aucun                                           | mock       |
 | Vidéothèque, blog, newsletter      | `videos.ts`, `blog.ts`, `newsletter.ts`        | ❌ aucun                                           | mock       |
 | Formulaire de contact              | `sendContactMessage` (`contact.ts`)            | ❌ aucun                                           | mock       |
-| Profil (email, téléphone, avatar)  | `account.ts`, `super-heroes.ts` (`updateMy…`)  | ❌ aucun                                           | mock       |
+| Profil (email, téléphone, avatar)  | `account.ts`, `super-heroes.ts` (`updateMy…`)  | partiel : `GET /auth/me` (prénom, email)           | partiel    |
 | Tableau de bord héros, modération  | `hero-dashboard.ts`, `moderation.ts`           | Partiel : `/admin/interventions/{id}/decision`     | mock       |
 
 Les « Future implémentation » écrites dans les commentaires de `lib/api/` pour les domaines non

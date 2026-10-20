@@ -1,7 +1,14 @@
 import { accountsMock } from "@/mocks/users";
 import { citizensMock } from "@/mocks/citizens";
-import type { CitizenAccount, ContactUpdate, ModerationStatus, MutationResult } from "@/types";
-import { mockResponse } from "./config";
+import type {
+  CitizenAccount,
+  ContactUpdate,
+  ModerationStatus,
+  MutationResult,
+  MyAccount,
+} from "@/types";
+import { isApiEnabled, mockResponse } from "./config";
+import { getApiSession } from "./http";
 import { userFromToken } from "./session-user";
 
 async function findMyAccount(token: string): Promise<CitizenAccount> {
@@ -11,9 +18,20 @@ async function findMyAccount(token: string): Promise<CitizenAccount> {
   return account;
 }
 
-/** Future implémentation : `GET ${API_URL}/me` */
-export async function getMyAccount(token: string): Promise<CitizenAccount> {
-  return mockResponse(await findMyAccount(token));
+/**
+ * Compte du citoyen connecté. API : `GET /auth/me` (prénom et email, sans nouvel appel : la
+ * session est déjà lue pour ce rendu) ; le reste du profil attend `GET ${API_URL}/me`, absent du
+ * contrat (`profile: null`). Mock : le profil complet.
+ */
+export async function getMyAccount(token: string): Promise<MyAccount> {
+  if (isApiEnabled) {
+    const session = await getApiSession(token);
+    if (!session) throw new Error("401 : session invalide");
+    return { firstName: session.user.displayName, email: session.user.email, profile: null };
+  }
+
+  const profile = await findMyAccount(token);
+  return mockResponse({ firstName: profile.firstName, email: profile.email, profile });
 }
 
 /** Future implémentation : `PATCH ${API_URL}/me` avec `{ mobilePhone, address }`. */

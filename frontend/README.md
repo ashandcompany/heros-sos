@@ -23,7 +23,8 @@ Sans configuration, toute l'application tourne sur les mocks (comptes de test da
 
 ### Avec l'API Go
 
-La connexion, la session et la déconnexion passent par l'API dès que `API_URL` est renseignée ;
+Inscription, activation, connexion, session, déconnexion et réinitialisation du mot de passe
+passent par l'API dès que `API_URL` est renseignée ;
 le reste reste mocké (voir [docs/backend-contract.md](docs/backend-contract.md)). Les comptes
 sont alors ceux de l'API : à créer par `POST /auth/register`, puis à activer avec le lien reçu
 par mail (Mailpit, `http://localhost:8025`, avec `make up-dev`).

@@ -3,14 +3,20 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Suspense, useEffect, useId, useRef, useState } from "react";
+import { Avatar } from "@/components/ui/Avatar";
 import { buttonClasses } from "@/components/ui/ButtonLink";
 import { cn } from "@/components/ui/cn";
 import { logoutAction } from "@/app/actions/auth";
 import { mainNav, routes } from "@/lib/routes";
+import type { AvatarData } from "@/lib/api";
 import type { AuthUser } from "@/types";
 
-/** Utilisateur connecté (`null` : visiteur, `undefined` : session en cours de lecture). */
-type NavUser = Pick<AuthUser, "displayName" | "role"> | null | undefined;
+/**
+ * Utilisateur connecté (`null` : visiteur, `undefined` : session en cours de lecture).
+ * `avatar` est `null` pour un compte sans profil (administrateur) : initiales du `displayName`.
+ */
+type NavUser =
+  (Pick<AuthUser, "displayName" | "role"> & { avatar: AvatarData | null }) | null | undefined;
 
 function MenuIcon({ open }: { open: boolean }) {
   return (
@@ -71,8 +77,19 @@ function AccountActions({ user, variant, isSpacePage, onNavigate }: AccountActio
 
   return (
     <>
-      <p className={cn("text-sm text-muted", mobile ? "col-span-2" : "hidden xl:block")}>
-        Connecté·e : <span className="font-semibold text-foreground">{user.displayName}</span>
+      {/* Sur desktop étroit, seule la photo reste : le nom passe en infobulle. */}
+      <p
+        title={mobile ? undefined : user.displayName}
+        className={cn("flex items-center gap-3 text-sm text-muted", mobile && "col-span-2")}
+      >
+        <Avatar
+          name={user.avatar?.name ?? user.displayName}
+          src={user.avatar?.src ?? null}
+          size={mobile ? 40 : 32}
+        />
+        <span className={cn(!mobile && "sr-only xl:not-sr-only")}>
+          Connecté·e : <span className="font-semibold text-foreground">{user.displayName}</span>
+        </span>
       </p>
       {spaceLink && (
         <Link

@@ -22,9 +22,10 @@ src/components/**    (Server Components par défaut, "use client" seulement si n
 src/app/actions/*.ts (Server Actions)
    │  requireXxxSession() → validation (lib/validation/) → lib/api/
    ▼
-src/lib/api/*.ts     (seule couche qui connaît les mocks, puis l'API Go)
-   ▼
-src/mocks/*.ts       (données fictives, aujourd'hui)    →    API REST Go (demain)
+src/lib/api/*.ts     (seule couche qui connaît les mocks et l'API Go)
+   ▼                          ▼
+src/mocks/*.ts         API REST Go, via lib/api/http.ts (si API_URL est renseignée :
+(données fictives)     connexion, session, déconnexion aujourd'hui)
 ```
 
 Tout le code qui touche aux données ou à la session s'exécute **côté serveur**. Les composants
@@ -60,20 +61,36 @@ sa route dans `routes.ts` (et dans la sous-navigation si elle doit y figurer).
 
 | Fichier                                                   | Rôle                                                                                                                                           |
 | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| [src/lib/cookies.ts](../src/lib/cookies.ts)               | Nom (`session`) et options du cookie : `httpOnly`, `sameSite: lax`, 7 jours, `secure` en prod                                                  |
+| [src/lib/cookies.ts](../src/lib/cookies.ts)               | Nom du cookie (`__Host-session` en production, `session` sinon, comme l'API) et attributs : `httpOnly`, `sameSite: lax`, `secure` en prod      |
 | [src/lib/session.ts](../src/lib/session.ts)               | `getUserFromToken(token)` : jeton → `AuthUser \| null`. Utilisable partout (pas de `next/headers`)                                             |
 | [src/lib/server-session.ts](../src/lib/server-session.ts) | Helpers qui lisent le cookie : `getCurrentUser()`, `requireRole()`, `requireAdminSession()`, `requireCitizenSession()`, `requireHeroSession()` |
 | [src/proxy.ts](../src/proxy.ts)                           | Contrôle d'accès avant le rendu                                                                                                                |
-| [src/app/actions/auth.ts](../src/app/actions/auth.ts)     | `loginAction` (pose le cookie) et `logoutAction` (le supprime)                                                                                 |
-| [src/lib/api/auth.ts](../src/lib/api/auth.ts)             | `login`, `getSessionUser`, `requestPasswordReset`                                                                                              |
+| [src/app/actions/auth.ts](../src/app/actions/auth.ts)     | `loginAction` (pose le cookie) et `logoutAction` (révoque la session puis efface le cookie)                                                    |
+| [src/lib/api/auth.ts](../src/lib/api/auth.ts)             | `login`, `getSessionUser`, `logout` (API ou mocks selon `API_URL`), `register`, `requestPasswordReset` (mocks)                                 |
+
+Le mode dépend de `API_URL` ([config.ts](../src/lib/api/config.ts), `isApiEnabled`) :
+
+- **vide** : comptes mock (voir [src/mocks/users.ts](../src/mocks/users.ts)), jeton `mock-token-<id>`,
+  session de 7 jours ;
+- **renseignée** : comptes réels de l'API Go, jeton opaque posé par l'API, durée fixée par l'API.
+  Le détail (cookie recopié, CSRF, adresse IP, erreurs) est dans
+  [backend-contract.md](./backend-contract.md#2-ce-qui-est-branché--la-session).
 
 ### Connexion
 
 1. `LoginForm` appelle `loginAction` (via `useActionState`).
 2. L'action valide l'identifiant (email, ou pseudo pour un super-héros) puis appelle `login()`.
-3. En cas de succès, le jeton est écrit dans le cookie `session` et l'utilisateur est redirigé
-   vers `accountHomeByRole[role]`. En cas d'échec, l'action renvoie un message
-   (`account-suspended` ou identifiants invalides) sans dire lequel des deux champs est faux.
+3. En cas de succès, le jeton est écrit dans le cookie `SESSION_COOKIE`, qui expire avec la
+   session (`expiresAt`), et l'utilisateur est redirigé vers `accountHomeByRole[role]`.
+4. En cas d'échec, `loginErrorMessage` traduit l'erreur (`LoginError` : identifiants invalides,
+   compte suspendu ou non activé, trop de tentatives, service indisponible) sans dire lequel
+   des deux champs est faux.
+
+### Déconnexion
+
+`logoutAction` appelle `logout(token)` (révocation côté API, sans effet avec les mocks), puis
+efface le cookie **avec ses attributs** : un cookie `__Host-` ne s'efface que par un `Set-Cookie`
+`Secure`. La révocation ne lève jamais d'erreur : le cookie est effacé même si l'API ne répond pas.
 
 ### Protection des accès : deux niveaux, volontairement redondants
 
@@ -98,23 +115,34 @@ fournit le jeton à transmettre à `lib/api/`, et c'est la vraie vérification d
 - Chaque domaine a son fichier (`incidents.ts`, `super-heroes.ts`, `videos.ts`…), tous
   réexportés par [src/lib/api/index.ts](../src/lib/api/index.ts). **Importer depuis `@/lib/api`**,
   jamais depuis `@/mocks`.
-- Les fonctions sont `async` et renvoient aujourd'hui `mockResponse(donnée)` (une copie
-  `structuredClone`, pour ne jamais muter les mocks par accident).
-- Chaque fonction documente en commentaire l'endpoint futur
-  (« Future implémentation : `POST ${API_URL}/auth/login` … »). C'est la spec du branchement.
+- Les fonctions sont `async`. Celles qui restent mockées renvoient `mockResponse(donnée)` (une
+  copie `structuredClone`, pour ne jamais muter les mocks par accident).
+- Les fonctions branchées choisissent selon `isApiEnabled` : `apiFetch()`
+  ([http.ts](../src/lib/api/http.ts)) si `API_URL` est renseignée, le mock sinon. L'application
+  démarre donc toujours sans backend.
+- Chaque fonction mockée documente en commentaire l'endpoint futur
+  (« Future implémentation : `GET ${API_URL}/incidents` … »). C'est la spec du branchement.
 - Les mutations renvoient un résultat typé plutôt que de lever une exception :
   `{ ok: true, … } | { ok: false, error }` (ex : `LoginResult`). Les actions transforment `error`
   en message affiché.
 - Les fonctions qui exigent une identité reçoivent le **jeton en premier argument**
   (`declareIncident(token, …)`).
 
-Pour brancher une fonction à l'API : renseigner `NEXT_PUBLIC_API_URL`
-([config.ts](../src/lib/api/config.ts) l'expose comme `API_URL`), remplacer `mockResponse()` par un
-`fetch`, et conserver la signature. Aucun composant n'a à changer. Le contrat d'API est décrit
-dans [backend/openapi/openapi.yaml](../../backend/openapi/openapi.yaml).
+[http.ts](../src/lib/api/http.ts) est le seul client de l'API :
 
-> Aujourd'hui, **aucune fonction de `lib/api/` n'appelle encore le backend**. Le seul `fetch`
-> du projet est le géocodage d'adresses ([src/lib/geocoding.ts](../src/lib/geocoding.ts)).
+| Élément             | Rôle                                                                                                             |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `apiFetch(path, …)` | Appel JSON avec `sessionToken` (envoyé dans le cookie attendu par l'API), `csrfToken`, délai de 10 s, sans cache |
+| `ApiError`          | Erreur levée pour une réponse non 2xx : `status`, `code` stable de l'API, `retryAfterSeconds`                    |
+| `readSessionCookie` | Extrait le jeton du `Set-Cookie` de l'API (connexion)                                                            |
+| `fromApiUser`       | Convertit `UserView` vers `AuthUser` : seul endroit où les rôles de l'API (`citizen`, `hero`…) apparaissent      |
+
+Le contrat d'API est décrit dans [backend/openapi/openapi.yaml](../../backend/openapi/openapi.yaml) ;
+ce qui est branché et ce qui reste à faire, dans [backend-contract.md](./backend-contract.md).
+
+> Avec l'API, les domaines encore mockés reçoivent une session réelle, mais leurs données sont
+> indexées par les comptes mock : `asMockDataUser` donne au vrai compte l'identifiant du compte
+> mock de son rôle (voir [backend-contract.md](./backend-contract.md#domaines-encore-mockés-avec-une-session-réelle)).
 
 ## Formulaires et Server Actions
 
@@ -183,6 +211,8 @@ useActionState(action, idleFormState)  1. const token = await requireCitizenSess
 
 **Brancher une fonction à l'API Go**
 
-1. Remplacer `mockResponse()` par `fetch(`${API_URL}/…`)` en gardant la signature.
-2. Mapper les erreurs HTTP vers le `{ ok: false, error }` existant.
+1. Garder la signature ; appeler `apiFetch()` si `isApiEnabled`, le mock sinon.
+2. Mapper les `ApiError` vers le `{ ok: false, error }` existant.
 3. Vérifier que le type de `src/types/` correspond au schéma de `openapi.yaml`.
+
+Détail et modèle à suivre : [backend-contract.md](./backend-contract.md#checklist-de-branchement-dune-fonction).

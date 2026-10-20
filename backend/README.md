@@ -152,8 +152,7 @@ Envoyer un mail : dépendre de l'interface `mail.Mailer` (la file asynchrone l'i
 ## Contrat avec le frontend
 
 - Toutes les routes sont sous `/api/v1`. Le navigateur ne parle qu'à une origine : un reverse proxy
-  route `/api/v1/*` vers l'API et le reste vers Next.js, y compris les routes que Next.js a sous
-  `/api` (l'autocomplétion d'adresse, `/api/adresses`).
+  route `/api/v1/*` vers l'API et le reste vers Next.js, y compris ses propres routes `/api/…`.
 - **Session** : cookie `HttpOnly` posé par `POST /auth/login` (`__Host-session` en production,
   `session` en développement). Le serveur Next relaie le `Set-Cookie` au navigateur et l'en-tête
   `Cookie` à l'API ; l'API n'accepte **que** le cookie (jamais `Authorization: Bearer`).
@@ -174,7 +173,7 @@ Un fichier de base (`docker-compose.yml`) décrit ce qui est commun ; `docker-co
 | | Développement (`make up-dev`) | Production (`make up-prod`) |
 |---|---|---|
 | Ports publiés | proxy `8088`, API `8081`, Mailpit `8025`, PostgreSQL `5432`, RabbitMQ — **sur `127.0.0.1` uniquement** | **proxy seul** : 80 et 443 |
-| Front | serveur de développement Next.js, code monté et rechargé à chaud | image de production (`next start`), sans dépendances de développement |
+| Front | serveur de développement Next.js, code monté et rechargé à chaud | image de production (sortie `standalone` de Next.js, `node server.js`), sans dépendances de développement |
 | TLS | non (HTTP) | automatique (Let's Encrypt, via Caddy) |
 | Secrets | mots de passe publics de `.env.example` | fichiers dans `secrets/`, montés en `/run/secrets` |
 | Migrations | appliquées par l'API au démarrage | tâche `migrate` qui doit réussir avant l'API |

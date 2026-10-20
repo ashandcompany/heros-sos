@@ -48,6 +48,9 @@ services:
     environment:
       # Les événements de fichiers traversent mal les montages Docker Desktop : on interroge à la place.
       WATCHPACK_POLLING: "true"
+      # Le serveur Next appelle l'API directement sur le réseau `edge`, sans repasser par le proxy.
+      # Prioritaire sur un API_URL de frontend/.env.local (Next ne remplace pas une variable déjà définie).
+      API_URL: http://api:8080/api/v1
     volumes:
       # Le code de ../frontend est monté et rechargé à chaud…
       - ../frontend:/app

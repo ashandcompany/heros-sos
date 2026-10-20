@@ -18,6 +18,23 @@ npm run dev
 | `npm run format`       | Formate le code avec Prettier |
 | `npm run format:check` | Vérifie le formatage (CI)     |
 
+Sans configuration, toute l'application tourne sur les mocks (comptes de test dans
+[src/mocks/users.ts](src/mocks/users.ts), ex : `citoyen@heros-sos.fr` / `Citoyen123!`).
+
+### Avec l'API Go
+
+La connexion, la session et la déconnexion passent par l'API dès que `API_URL` est renseignée ;
+le reste reste mocké (voir [docs/backend-contract.md](docs/backend-contract.md)). Les comptes
+sont alors ceux de l'API : à créer par `POST /auth/register`, puis à activer avec le lien reçu
+par mail (Mailpit, `http://localhost:8025`, avec `make up-dev`).
+
+- **Tout dans Docker** (recommandé) : depuis `backend/`, `make env` puis `make up-dev`.
+  Front et API derrière le même proxy : <http://localhost:8088>. `API_URL` est déjà fixée dans
+  `backend/docker-compose.dev.yml` ; le code du front est monté et rechargé à chaud.
+- **Front sur la machine** : lancer l'API (`make up-dev`, ou `go run` dans `backend/`), puis
+  renseigner `API_URL` dans `.env.local` (`http://localhost:8081/api/v1` avec `make up-dev`) et
+  relancer `npm run dev`.
+
 ## Organisation
 
 - `src/app/` : routes, layout racine, Server Actions (`actions/`)
@@ -32,23 +49,21 @@ npm run dev
 Copier `.env.example` vers `.env.local` (jamais versionné). Next.js ne charge les variables qu'au
 démarrage : redémarrer `npm run dev` après modification.
 
-| Variable              | Obligatoire          | Défaut                          | Lue par                                   | Rôle                                                                             |
-| --------------------- | -------------------- | ------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------- |
-| `NEXT_PUBLIC_API_URL` | Non (pour l'instant) | vide → données mockées          | `src/lib/api/config.ts`                   | Base de l'API Go **avec son préfixe**, ex : `http://localhost:8080/api/v1`       |
-| `PHOTON_URL`          | Non                  | `https://photon.komoot.io/api/` | `src/lib/geocoding.ts`                    | Géocodeur Photon (OpenStreetMap) de l'autocomplétion d'adresses                  |
-| `NODE_ENV`            | Non                  | défini par Next                 | `lib/cookies.ts`, `actions/newsletter.ts` | `production` active le drapeau `secure` des cookies. Ne pas le définir à la main |
+| Variable     | Obligatoire | Défaut                          | Lue par                                   | Rôle                                                                                             |
+| ------------ | ----------- | ------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `API_URL`    | Non         | vide → données mockées          | `src/lib/api/config.ts`                   | Base de l'API Go **avec son préfixe**, ex : `http://localhost:8081/api/v1`                       |
+| `PHOTON_URL` | Non         | `https://photon.komoot.io/api/` | `src/lib/geocoding.ts`                    | Géocodeur Photon (OpenStreetMap) de l'autocomplétion d'adresses                                  |
+| `NODE_ENV`   | Non         | défini par Next                 | `lib/cookies.ts`, `actions/newsletter.ts` | `production` : cookies `secure`, cookie de session `__Host-session`. Ne pas le définir à la main |
 
-- `NEXT_PUBLIC_*` est **embarqué dans le JavaScript envoyé au navigateur** : n'y mettre aucun
-  secret. Elle est aujourd'hui lue uniquement côté serveur ; un renommage en `API_URL` éviterait
-  de l'exposer inutilement.
-- Vide ou absente, `NEXT_PUBLIC_API_URL` laisse toute l'application sur les mocks. Une fois les
-  fonctions branchées (voir [docs/backend-contract.md](docs/backend-contract.md)), elle deviendra
-  obligatoire.
+- `API_URL` est lue **par le serveur, au démarrage** : elle n'est jamais envoyée au navigateur et
+  n'est pas figée au build (la même image Docker sert dans tous les environnements). Dans la pile
+  Docker, elle vaut `http://api:8080/api/v1` (réseau interne, voir `backend/docker-compose.*.yml`).
+- Le nom du cookie de session doit être celui de l'API : `session` en développement,
+  `__Host-session` en production. Côté backend, c'est `HEROS_COOKIE_SECURE` (vrai par défaut en
+  production) : un front en mode production face à une API de développement fait échouer la
+  connexion avec une erreur explicite.
 - `PHOTON_URL` : l'instance publique de Komoot est soumise à un usage raisonnable ; en
   production, pointer vers une instance dédiée (ex : `http://photon:2322/api/`).
-- Côté backend, `HEROS_ALLOWED_ORIGINS` doit contenir l'origine du frontend
-  (`http://localhost:3000` en développement), sinon les écritures sont refusées
-  (voir [backend/.env.example](../backend/.env.example)).
 
 ## Documentation détaillée
 
@@ -79,6 +94,8 @@ pour les autres). Le HTML des articles doit être assaini côté API avant tout 
 
 ## Brancher l'API Go
 
-Renseigner `NEXT_PUBLIC_API_URL`, puis remplacer dans chaque fonction de `src/lib/api/`
-l'appel à `mockResponse()` par un `fetch` vers l'endpoint indiqué en commentaire.
-Les composants n'ont pas à être modifiés.
+Connexion, session et déconnexion sont branchées ([src/lib/api/auth.ts](src/lib/api/auth.ts)
+sert de modèle). Pour une autre fonction de `src/lib/api/` : appeler `apiFetch()`
+([src/lib/api/http.ts](src/lib/api/http.ts)) quand `isApiEnabled`, garder le mock sinon, et
+conserver la signature. Les composants n'ont pas à être modifiés. Checklist complète :
+[docs/backend-contract.md](docs/backend-contract.md#checklist-de-branchement-dune-fonction).

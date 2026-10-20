@@ -88,13 +88,12 @@ services:
       context: ../frontend
       dockerfile: Dockerfile
       # Cible `runtime` (dernière étape) : image de production sans dépendances de développement.
-      args:
-        # Figée dans le code du navigateur au build. Vide tant que le front est sur des données mockées.
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
     image: heros-sos/web:${APP_VERSION:-dev}
     restart: unless-stopped
     environment:
       NODE_ENV: production
+      # Le serveur Next appelle l'API directement sur le réseau `edge`, sans repasser par le proxy.
+      API_URL: http://api:8080/api/v1
     networks:
       edge:
         ipv4_address: ${WEB_IP:-172.30.0.3}

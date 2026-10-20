@@ -14,6 +14,13 @@ function hashString(value: string): number {
   return hash;
 }
 
+/** « Jean-Marc Dupont » → « JD », « Batman » → « BA ». */
+function initialsOf(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  const initials = words.length > 1 ? words[0][0] + words[1][0] : (words[0] ?? "").slice(0, 2);
+  return initials.toUpperCase() || "?";
+}
+
 interface AvatarProps {
   name: string;
   src: string | null;
@@ -41,14 +48,15 @@ export function Avatar({ name, src, size = 80, className, square = false }: Avat
         alt=""
         width={size}
         height={size}
-        // Photo envoyée par l'utilisateur (data URL dans les mocks) : pas d'optimisation possible.
+        // Photo envoyée par l'utilisateur (data URL dans les mocks), déjà recadrée et compressée
+        // à l'envoi (voir cropAvatar) : pas d'optimisation possible ni nécessaire.
         unoptimized={src.startsWith("data:")}
         className={cn(classes, "object-cover")}
       />
     );
   }
 
-  const initials = name.slice(0, 2).toUpperCase();
+  const initials = initialsOf(name);
   const gradient = square
     ? "from-surface-raised to-background"
     : gradients[hashString(name) % gradients.length];

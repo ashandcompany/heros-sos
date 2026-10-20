@@ -28,15 +28,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 EXPOSE 3000
 CMD ["npm", "run", "dev", "--", "--hostname", "0.0.0.0", "--port", "3000"]
 
-# ── Étape 2 : Dépendances de production seules ───────────────
-FROM ${NODE_IMAGE} AS prod-deps
-WORKDIR /app
-
-COPY package.json package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm \
-    npm ci --omit=dev --ignore-scripts
-
-# ── Étape 3 : Build ──────────────────────────────────────────
+# ── Étape 2 : Build ──────────────────────────────────────────
 FROM ${NODE_IMAGE} AS build
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -44,19 +36,16 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Les variables NEXT_PUBLIC_* sont figées dans le code du navigateur au moment du build : elles se
-# passent donc ici (build.args dans docker-compose.prod.yml), pas à l'exécution. Vide tant que le
-# front travaille sur des données mockées (voir src/lib/api/).
-ARG NEXT_PUBLIC_API_URL=
-ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-
+# Aucune variable à figer au build : l'URL de l'API (API_URL) est lue par le serveur au démarrage
+# (environment dans backend/docker-compose.*.yml), la même image sert donc partout.
 # `next/font/google` télécharge les polices pendant la compilation : le build a besoin d'internet.
 RUN npm run build
 
-# ── Étape 4 : Image finale ───────────────────────────────────
-# Next.js reste servi par Node (`next start`) : les Server Actions et le rendu serveur ne peuvent pas
-# être servis par un nginx de fichiers statiques. Le TLS, le routage /api et les en-têtes de sécurité
-# sont déjà assurés par le reverse proxy Caddy, devant ce conteneur.
+# ── Étape 3 : Image finale ───────────────────────────────────
+# Sortie `standalone` (voir next.config.ts) : Next.js ne garde que les modules réellement utilisés et
+# fournit un server.js autonome, d'où une image bien plus légère qu'avec node_modules + `next start`.
+# Le rendu serveur et les Server Actions restent servis par Node ; le TLS, le routage /api et les
+# en-têtes de sécurité sont assurés par le reverse proxy Caddy, devant ce conteneur.
 FROM ${NODE_IMAGE} AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
@@ -64,12 +53,11 @@ ENV NODE_ENV=production \
     PORT=3000 \
     HOSTNAME=0.0.0.0
 
-COPY --from=prod-deps --chown=node:node /app/node_modules ./node_modules
-COPY --from=build --chown=node:node /app/.next ./.next
 COPY --from=build --chown=node:node /app/public ./public
-COPY --from=build --chown=node:node /app/package.json /app/next.config.ts ./
+COPY --from=build --chown=node:node /app/.next/standalone ./
+COPY --from=build --chown=node:node /app/.next/static ./.next/static
 
 # Utilisateur non privilégié fourni par l'image Node (uid 1000).
 USER node
 EXPOSE 3000
-CMD ["node_modules/.bin/next", "start"]
+CMD ["node", "server.js"]

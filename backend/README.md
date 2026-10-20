@@ -152,7 +152,7 @@ Envoyer un mail : dépendre de l'interface `mail.Mailer` (la file asynchrone l'i
 ## Contrat avec le frontend
 
 - Toutes les routes sont sous `/api/v1`. Le navigateur ne parle qu'à une origine : un reverse proxy
-  route `/api/*` vers l'API et le reste vers Next.js.
+  route `/api/v1/*` vers l'API et le reste vers Next.js, y compris ses propres routes `/api/…`.
 - **Session** : cookie `HttpOnly` posé par `POST /auth/login` (`__Host-session` en production,
   `session` en développement). Le serveur Next relaie le `Set-Cookie` au navigateur et l'en-tête
   `Cookie` à l'API ; l'API n'accepte **que** le cookie (jamais `Authorization: Bearer`).

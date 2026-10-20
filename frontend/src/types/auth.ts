@@ -20,6 +20,22 @@ export type ResendActivationResult =
       retryAfterSeconds?: number;
     };
 
+export type PasswordResetConfirmResult =
+  | { ok: true }
+  /**
+   * `invalid-token` : lien inconnu, expiré (1 h) ou déjà utilisé. `weak-password` : refusé par
+   * l'API sans consommer le jeton, le visiteur peut réessayer avec le même lien.
+   */
+  | { ok: false; error: "invalid-token" | "weak-password" | "unavailable" };
+
+export type PasswordResetRequestResult =
+  | { ok: true }
+  | {
+      ok: false;
+      error: "invalid-email" | "too-many-attempts" | "unavailable";
+      retryAfterSeconds?: number;
+    };
+
 export interface LoginCredentials {
   /** Adresse email, ou pseudo pour un super-héros. */
   identifier: string;

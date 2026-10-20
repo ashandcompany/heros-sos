@@ -9,6 +9,8 @@ import type {
   LoginCredentials,
   LoginError,
   LoginResult,
+  PasswordResetConfirmResult,
+  PasswordResetRequestResult,
   ResendActivationResult,
   SignupPayload,
   SignupResult,
@@ -17,8 +19,8 @@ import { isApiEnabled, mockResponse } from "./config";
 import { ApiError, type ApiUserView, apiFetch, fromApiUser, readSessionCookie } from "./http";
 
 /*
- * Connexion, session et déconnexion sont branchées sur l'API Go dès que `API_URL` est renseignée
- * (sinon : mocks). Inscription et mot de passe oublié restent mockés.
+ * Connexion, session, déconnexion, activation et mot de passe oublié sont branchés sur l'API Go dès
+ * que `API_URL` est renseignée (sinon : mocks). L'inscription reste mockée.
  */
 
 const MOCK_TOKEN_PREFIX = "mock-token-";
@@ -242,13 +244,66 @@ export async function resendActivation(email: string): Promise<ResendActivationR
 }
 
 /**
- * Demande l'envoi d'un email de réinitialisation du mot de passe.
- * La réponse ne dit pas si l'adresse existe, pour ne pas révéler quels comptes sont inscrits.
- * Future implémentation : `POST ${API_URL}/auth/password-reset` avec `{ email }`.
+ * Demande l'envoi d'un email de réinitialisation du mot de passe (les liens précédents sont
+ * invalidés). La réponse ne dit pas si l'adresse existe, pour ne pas révéler quels comptes sont
+ * inscrits. API : `POST /auth/password-reset` avec `{ email }`.
  */
-export async function requestPasswordReset(email: string): Promise<{ ok: boolean }> {
-  void email;
-  return mockResponse({ ok: true });
+export async function requestPasswordReset(email: string): Promise<PasswordResetRequestResult> {
+  if (!isApiEnabled) return mockResponse({ ok: true });
+
+  try {
+    await apiFetch("/auth/password-reset", {
+      method: "POST",
+      body: { email },
+      headers: await visitorHeaders(),
+    });
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof ApiError) {
+      if (error.code === "validation_failed") return { ok: false, error: "invalid-email" };
+      if (error.code === "rate_limited") {
+        return {
+          ok: false,
+          error: "too-many-attempts",
+          retryAfterSeconds: error.retryAfterSeconds,
+        };
+      }
+    }
+    console.error("Mot de passe oublié : appel à l'API en échec", error);
+    return { ok: false, error: "unavailable" };
+  }
+}
+
+/**
+ * Choisit un nouveau mot de passe avec le jeton du lien reçu par mail (valable 1 h, utilisable une
+ * fois). L'API ferme alors toutes les sessions du compte.
+ * API : `POST /auth/password-reset/confirm` avec `{ token, newPassword }`. Mock : tout jeton non
+ * vide est accepté.
+ */
+export async function confirmPasswordReset(
+  token: string,
+  newPassword: string,
+): Promise<PasswordResetConfirmResult> {
+  if (!isApiEnabled) {
+    return mockResponse(token ? { ok: true } : { ok: false, error: "invalid-token" });
+  }
+
+  try {
+    await apiFetch("/auth/password-reset/confirm", {
+      method: "POST",
+      body: { token, newPassword },
+    });
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof ApiError) {
+      // Jeton invalide (`invalid_token`) ou mal formé (`bad_request`) : même réponse pour le visiteur.
+      if (error.status === 400) return { ok: false, error: "invalid-token" };
+      // Seul champ validé par l'API à part le jeton : le mot de passe trop faible ou trop long.
+      if (error.code === "validation_failed") return { ok: false, error: "weak-password" };
+    }
+    console.error("Réinitialisation du mot de passe : appel à l'API en échec", error);
+    return { ok: false, error: "unavailable" };
+  }
 }
 
 /**

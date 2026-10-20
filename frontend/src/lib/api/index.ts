@@ -10,6 +10,7 @@ export {
 } from "./account";
 export {
   activateAccount,
+  confirmPasswordReset,
   getSessionUser,
   login,
   logout,

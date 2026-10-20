@@ -85,6 +85,20 @@ function validateBirthDate(value: string): string | undefined {
   return undefined;
 }
 
+/**
+ * Règles d'un nouveau mot de passe (inscription, réinitialisation) : les mêmes que l'API, qui
+ * refuse sinon le mot de passe (`weak`).
+ */
+export function validateNewPassword(value: string): string | undefined {
+  if (!value) return "Veuillez choisir un mot de passe.";
+  const isStrong =
+    value.length >= PASSWORD_MIN_LENGTH &&
+    /[a-z]/.test(value) &&
+    /[A-Z]/.test(value) &&
+    /\d/.test(value);
+  return isStrong ? undefined : `Le mot de passe est trop faible. ${PASSWORD_RULES}`;
+}
+
 const validators: Record<SignupField, (value: string, values: SignupValues) => string | undefined> =
   {
     civility: (value) =>
@@ -120,15 +134,7 @@ const validators: Record<SignupField, (value: string, values: SignupValues) => s
     city: (value) => (value ? undefined : "Veuillez saisir votre ville."),
     country: (value) =>
       countries.some((country) => country.code === value) ? undefined : "Veuillez choisir un pays.",
-    password: (value) => {
-      if (!value) return "Veuillez choisir un mot de passe.";
-      const isStrong =
-        value.length >= PASSWORD_MIN_LENGTH &&
-        /[a-z]/.test(value) &&
-        /[A-Z]/.test(value) &&
-        /\d/.test(value);
-      return isStrong ? undefined : `Le mot de passe est trop faible. ${PASSWORD_RULES}`;
-    },
+    password: validateNewPassword,
     passwordConfirmation: (value, values) => {
       if (!value) return "Veuillez confirmer votre mot de passe.";
       return value === values.password ? undefined : "Les mots de passe ne correspondent pas.";

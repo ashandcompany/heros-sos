@@ -9,6 +9,8 @@ export const routes = {
   login: "/connexion",
   signup: "/inscription",
   forgotPassword: "/mot-de-passe-oublie",
+  /** Lien du mail de réinitialisation (`?token=…`) : doit rester égal à HEROS_PASSWORD_RESET_PATH du backend. */
+  passwordReset: "/reinitialisation-mot-de-passe",
   /** Lien du mail d'activation (`?token=…`) : doit rester égal à HEROS_ACTIVATION_PATH du backend. */
   activation: "/activation",
   profile: "/profil",

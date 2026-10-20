@@ -5,8 +5,10 @@ Le contrat de l'API Go est [backend/openapi/openapi.yaml](../../backend/openapi/
 dit **où le frontend actuel s'écarte de ce contrat** et ce qu'il faut changer au moment du
 branchement. À mettre à jour à chaque fonction branchée.
 
-> État au 20/10/2026 : **connexion, session et déconnexion sont branchées** sur l'API dès que
-> `API_URL` est renseignée. Tout le reste fonctionne encore sur des mocks, y compris avec l'API.
+> État au 20/10/2026 : **connexion, session, déconnexion, activation et réinitialisation du mot
+> de passe (demande et nouveau mot de passe) sont branchées** sur l'API dès que `API_URL` est
+> renseignée.
+> Tout le reste fonctionne encore sur des mocks, y compris avec l'API.
 
 ## 1. Couverture : ce qui est dans le contrat, et le reste
 
@@ -18,7 +20,8 @@ du frontend n'a pas encore de contrat.
 | Connexion, session, déconnexion    | `login`, `getSessionUser`, `logout`            | `/auth/login`, `/auth/me`, `/auth/logout`    | ✅ branché |
 | Inscription                        | `register`                                     | `/auth/register`                             | mock       |
 | Activation du compte               | `activateAccount`, `resendActivation`          | `/auth/activate`, `/auth/resend-activation`  | ✅ branché |
-| Mot de passe oublié                | `requestPasswordReset`                         | `/auth/password-reset` (+ `/confirm`)        | mock       |
+| Mot de passe oublié (demande)      | `requestPasswordReset`                         | `/auth/password-reset`                       | ✅ branché |
+| Nouveau mot de passe (jeton)       | `confirmPasswordReset`                         | `/auth/password-reset/confirm`               | ✅ branché |
 | Demande de statut super-héros      | `getHeroApplications`, `reviewHeroApplication` | `/heroes/requests`, `/admin/hero-requests/*` | mock       |
 | Comptes (suspension, vérification) | `getCitizenAccounts`, `moderateAccount`        | `/admin/users/*`                             | mock       |
 | Incidents, interventions, notes    | `lib/api/incidents.ts`, `ratings.ts`           | ❌ aucun                                     | mock       |
@@ -127,7 +130,6 @@ La traduction se fait **à un seul endroit**, `fromApiUser` dans
 | ------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | Résultat de l'inscription | `SignupResult` : `{ ok, user, token }` (connexion immédiate)                | `{ user, activationRequired: true }` : **pas de session**, un e-mail d'activation est envoyé |
 | Activation                | Page `/activation?token=…` : bouton de confirmation, renvoi du lien         | Jeton reçu par e-mail à confirmer (`HEROS_ACTIVATION_PATH` = `routes.activation`)            |
-| Mot de passe oublié       | Page de demande seulement                                                   | Il manque la page qui consomme le jeton (`/auth/password-reset/confirm`)                     |
 | Adresse                   | `PostalAddress` : rue, code postal, ville, pays                             | Idem + champ `complement` facultatif                                                         |
 | Mot de passe              | `lib/validation/signup.ts` : ≥ 10 caractères, majuscule, minuscule, chiffre | Mêmes règles (`weak` sinon) : déjà alignés                                                   |
 | Téléphone                 | Règles frontend                                                             | Mobile FR (06/07) ou international (+33…), espaces et tirets ignorés                         |

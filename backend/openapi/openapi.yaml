@@ -142,11 +142,21 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Health" }
+              examples:
+                pret:
+                  summary: La base de données répond
+                  value:
+                    status: ok
         "503":
           description: La base de données ne répond pas.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Health" }
+              examples:
+                indisponible:
+                  summary: La base de données ne répond pas
+                  value:
+                    status: unavailable
 
   /auth/register:
     post:
@@ -163,12 +173,38 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/RegisterRequest" }
+            examples:
+              citoyen:
+                summary: Un citoyen (changez l'adresse email à chaque essai)
+                value:
+                  civility: madame
+                  firstName: Natasha
+                  lastName: Romanoff
+                  birthDate: '1984-11-22'
+                  email: natasha.romanoff@example.org
+                  mobilePhone: 06 12 34 56 78
+                  address:
+                    street: 10 rue de Rivoli
+                    postalCode: '75004'
+                    city: Paris
+                    country: FR
+                  password: MotDePasse2026
       responses:
         "201":
           description: Compte créé, en attente d'activation.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/RegisterResponse" }
+              examples:
+                compte-cree:
+                  summary: Compte créé, en attente d'activation
+                  value:
+                    user:
+                      id: 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
+                      displayName: Natasha
+                      role: citizen
+                      email: natasha.romanoff@example.org
+                    activationRequired: true
         "400": { $ref: "#/components/responses/BadRequest" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "409":
@@ -176,6 +212,13 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                email-deja-utilisee:
+                  summary: Adresse déjà inscrite
+                  value:
+                    error:
+                      code: email_already_used
+                      message: Cette adresse email est déjà utilisée.
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
@@ -193,6 +236,11 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/TokenRequest" }
+            examples:
+              lien-recu:
+                summary: Le jeton du lien reçu par mail (à remplacer)
+                value:
+                  token: collez-ici-le-jeton-du-lien-recu-par-mail
       responses:
         "204": { description: Compte activé. }
         "400": { $ref: "#/components/responses/BadRequestOrInvalidToken" }
@@ -215,6 +263,11 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/EmailRequest" }
+            examples:
+              compte-en-attente:
+                summary: L'adresse d'un compte pas encore activé
+                value:
+                  email: natasha.romanoff@example.org
       responses:
         "202": { description: Demande prise en compte. }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -241,6 +294,13 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/LoginRequest" }
+            examples:
+              citoyen:
+                summary: Connexion par adresse email
+                value:
+                  identifier: natasha.romanoff@example.org
+                  password: MotDePasse2026
+                  rememberMe: false
       responses:
         "200":
           description: Connecté. Le cookie de session est posé.
@@ -251,17 +311,54 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/LoginResponse" }
+              examples:
+                connecte:
+                  summary: 'Connecté : copiez csrfToken dans Authorize'
+                  value:
+                    user:
+                      id: 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
+                      displayName: Natasha
+                      role: citizen
+                      email: natasha.romanoff@example.org
+                    csrfToken: t3rS7fGZpLRHk0evrzh9Q1oSSA0NxbjgQsTImRWH0IA
+                    expiresAt: '2026-10-27T10:30:00Z'
         "400": { $ref: "#/components/responses/BadRequest" }
         "401":
           description: Identifiant ou mot de passe incorrect (`invalid_credentials`).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                identifiants-incorrects:
+                  summary: Identifiant ou mot de passe incorrect
+                  value:
+                    error:
+                      code: invalid_credentials
+                      message: Identifiant ou mot de passe incorrect.
         "403":
           description: Origine non autorisée, compte non activé (`account_not_activated`) ou désactivé (`account_deactivated`).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                compte-non-active:
+                  summary: Compte pas encore activé
+                  value:
+                    error:
+                      code: account_not_activated
+                      message: 'Votre compte n''est pas encore activé : consultez le mail d''activation.'
+                compte-desactive:
+                  summary: Compte désactivé
+                  value:
+                    error:
+                      code: account_deactivated
+                      message: Ce compte a été désactivé.
+                origine:
+                  summary: Origine non autorisée
+                  value:
+                    error:
+                      code: origin_not_allowed
+                      message: Origine non autorisée.
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
         "429": { $ref: "#/components/responses/RateLimited" }
@@ -310,6 +407,16 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/MeResponse" }
+              examples:
+                connecte:
+                  summary: L'utilisateur de la session
+                  value:
+                    user:
+                      id: 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
+                      displayName: Natasha
+                      role: citizen
+                      email: natasha.romanoff@example.org
+                    csrfToken: t3rS7fGZpLRHk0evrzh9Q1oSSA0NxbjgQsTImRWH0IA
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "500": { $ref: "#/components/responses/InternalError" }
 
@@ -326,6 +433,11 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/EmailRequest" }
+            examples:
+              compte:
+                summary: L'adresse du compte
+                value:
+                  email: natasha.romanoff@example.org
       responses:
         "202": { description: Demande prise en compte. }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -349,6 +461,12 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/PasswordResetConfirmRequest" }
+            examples:
+              lien-recu:
+                summary: Le jeton du lien reçu par mail (à remplacer)
+                value:
+                  token: collez-ici-le-jeton-du-lien-recu-par-mail
+                  newPassword: NouveauMotDePasse2026
       responses:
         "204": { description: Mot de passe changé. }
         "400": { $ref: "#/components/responses/BadRequestOrInvalidToken" }
@@ -372,12 +490,25 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/HeroRequestPayload" }
+            examples:
+              demande:
+                summary: Une demande avec pseudo, description et message
+                value:
+                  alias: Veuve Noire
+                  bio: Ancienne espionne, spécialiste de l'infiltration.
+                  requestMessage: Je peux fournir mes états de service sur demande.
       responses:
         "201":
           description: Demande enregistrée, en attente.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/HeroRequestStatus" }
+              examples:
+                en-attente:
+                  summary: Demande enregistrée
+                  value:
+                    status: pending
+                    alias: Veuve Noire
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403":
@@ -385,11 +516,43 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                non-eligible:
+                  summary: Compte qui ne peut pas faire de demande
+                  value:
+                    error:
+                      code: hero_request_not_eligible
+                      message: Votre compte ne peut pas faire cette demande.
+                csrf:
+                  summary: Jeton CSRF absent ou invalide
+                  value:
+                    error:
+                      code: csrf_invalid
+                      message: Jeton CSRF absent ou invalide.
         "409":
           description: Demande déjà en attente (`hero_request_pending`), déjà super-héros (`already_hero`) ou pseudo pris (`alias_already_used`).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                deja-en-attente:
+                  summary: Demande déjà en attente
+                  value:
+                    error:
+                      code: hero_request_pending
+                      message: Une demande est déjà en cours d'examen.
+                deja-super-heros:
+                  summary: Déjà super-héros
+                  value:
+                    error:
+                      code: already_hero
+                      message: Vous êtes déjà super-héros.
+                pseudo-pris:
+                  summary: Pseudo déjà pris
+                  value:
+                    error:
+                      code: alias_already_used
+                      message: Ce pseudo est déjà utilisé.
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
@@ -411,12 +574,31 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/HeroRequestStatus" }
+              examples:
+                en-attente:
+                  summary: Demande en attente
+                  value:
+                    status: pending
+                    alias: Veuve Noire
+                refusee:
+                  summary: Demande refusée
+                  value:
+                    status: rejected
+                    alias: Veuve Noire
+                    rejectionReason: Le dossier ne permet pas de vérifier l'identité du demandeur.
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "404":
           description: Aucune demande (`hero_request_not_found`).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                aucune-demande:
+                  summary: Aucune demande n'a été déposée
+                  value:
+                    error:
+                      code: hero_request_not_found
+                      message: Aucune demande trouvée.
         "500": { $ref: "#/components/responses/InternalError" }
 
   /admin/hero-requests:
@@ -439,6 +621,23 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/HeroApplicantPage" }
+              examples:
+                une-demande:
+                  summary: Une demande en attente
+                  value:
+                    items:
+                    - userId: 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
+                      alias: Veuve Noire
+                      bio: Ancienne espionne, spécialiste de l'infiltration.
+                      requestMessage: Je peux fournir mes états de service sur demande.
+                      status: pending
+                      createdAt: '2026-10-20T09:15:00Z'
+                      email: natasha.romanoff@example.org
+                      firstName: Natasha
+                      lastName: Romanoff
+                    total: 1
+                    limit: 20
+                    offset: 0
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
@@ -463,6 +662,13 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                deja-traitee:
+                  summary: Demande déjà traitée
+                  value:
+                    error:
+                      code: hero_request_not_pending
+                      message: Cette demande a déjà été traitée.
         "500": { $ref: "#/components/responses/InternalError" }
 
   /admin/hero-requests/{userId}/reject:
@@ -481,6 +687,11 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/RejectPayload" }
+            examples:
+              motif:
+                summary: Un motif de refus
+                value:
+                  reason: Le dossier ne permet pas de vérifier l'identité du demandeur.
       responses:
         "204": { description: Demande refusée. }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -492,6 +703,13 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                deja-traitee:
+                  summary: Demande déjà traitée
+                  value:
+                    error:
+                      code: hero_request_not_pending
+                      message: Cette demande a déjà été traitée.
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
@@ -526,6 +744,21 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/UserSummaryPage" }
+              examples:
+                un-compte:
+                  summary: Un compte actif
+                  value:
+                    items:
+                    - id: 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
+                      email: natasha.romanoff@example.org
+                      firstName: Natasha
+                      lastName: Romanoff
+                      role: citizen
+                      status: active
+                      createdAt: '2026-10-20T09:00:00Z'
+                    total: 1
+                    limit: 20
+                    offset: 0
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
@@ -554,6 +787,13 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                son-propre-compte:
+                  summary: Action sur son propre compte
+                  value:
+                    error:
+                      code: self_action_forbidden
+                      message: Vous ne pouvez pas effectuer cette action sur votre propre compte.
         "500": { $ref: "#/components/responses/InternalError" }
 
   /admin/users/{id}/reactivate:
@@ -1099,16 +1339,43 @@ components:
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            json-invalide:
+              summary: Corps qui n'est pas du JSON valide
+              value:
+                error:
+                  code: bad_request
+                  message: Le corps de la requête n'est pas un JSON valide.
     BadRequestOrInvalidToken:
       description: Requête mal formée (`bad_request`) ou lien invalide, expiré ou déjà utilisé (`invalid_token`).
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            lien-invalide:
+              summary: Lien invalide, expiré ou déjà utilisé
+              value:
+                error:
+                  code: invalid_token
+                  message: Ce lien est invalide, expiré ou déjà utilisé.
+            json-invalide:
+              summary: Corps qui n'est pas du JSON valide
+              value:
+                error:
+                  code: bad_request
+                  message: Le corps de la requête n'est pas un JSON valide.
     Unauthenticated:
       description: Session absente ou expirée (`unauthenticated`).
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            session-absente:
+              summary: Session absente ou expirée
+              value:
+                error:
+                  code: unauthenticated
+                  message: Authentification requise.
     Forbidden:
       description: |
         Refusé : origine non autorisée (`origin_not_allowed`), jeton CSRF absent ou invalide
@@ -1116,26 +1383,82 @@ components:
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            origine:
+              summary: Origine non autorisée
+              value:
+                error:
+                  code: origin_not_allowed
+                  message: Origine non autorisée.
+            csrf:
+              summary: Jeton CSRF absent ou invalide
+              value:
+                error:
+                  code: csrf_invalid
+                  message: Jeton CSRF absent ou invalide.
+            role:
+              summary: Rôle insuffisant
+              value:
+                error:
+                  code: forbidden
+                  message: Vous n'avez pas les droits nécessaires.
+            compte-protege:
+              summary: Compte de modérateur
+              value:
+                error:
+                  code: protected_account
+                  message: Les comptes de modérateur ne peuvent pas être désactivés par l'API.
     NotFound:
       description: Ressource introuvable (`not_found`).
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            utilisateur:
+              summary: Utilisateur introuvable
+              value:
+                error:
+                  code: not_found
+                  message: Utilisateur introuvable.
     PayloadTooLarge:
       description: Corps de requête trop volumineux (`payload_too_large`).
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            trop-gros:
+              summary: Corps trop volumineux
+              value:
+                error:
+                  code: payload_too_large
+                  message: Le corps de la requête est trop volumineux.
     UnsupportedMediaType:
       description: Le corps doit être de type `application/json` (`unsupported_media_type`).
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            pas-json:
+              summary: Corps qui n'est pas en application/json
+              value:
+                error:
+                  code: unsupported_media_type
+                  message: Le corps de la requête doit être au format application/json.
     ValidationFailed:
       description: Données invalides (`validation_failed`) ; `fields` détaille chaque champ.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            champs-invalides:
+              summary: Deux champs invalides
+              value:
+                error:
+                  code: validation_failed
+                  message: Certaines informations sont invalides.
+                  fields:
+                    email: invalid
+                    password: weak
     RateLimited:
       description: Trop de requêtes (`rate_limited`) ou compte verrouillé (`account_locked`).
       headers:
@@ -1145,11 +1468,31 @@ components:
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            trop-de-requetes:
+              summary: Trop de requêtes
+              value:
+                error:
+                  code: rate_limited
+                  message: Trop de tentatives, réessayez plus tard.
+            compte-verrouille:
+              summary: Compte verrouillé
+              value:
+                error:
+                  code: account_locked
+                  message: Compte temporairement verrouillé après trop d'échecs de connexion.
     InternalError:
       description: Erreur interne (`internal_error`). Le détail n'est jamais exposé.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            erreur-interne:
+              summary: Erreur interne
+              value:
+                error:
+                  code: internal_error
+                  message: Une erreur interne est survenue.
 
   schemas:
     Health:

@@ -1,7 +1,7 @@
 # Reverse proxy : le navigateur ne parle qu'à une seule origine.
 #
-#   /api/*  →  l'API Go
-#   le reste →  le front Next.js
+#   /api/v1/*  →  l'API Go (son préfixe, voir APIPrefix dans internal/server/router.go)
+#   le reste   →  le front Next.js, y compris ses propres routes /api/… (ex. /api/adresses)
 #
 # Une seule origine, c'est ce qui permet au cookie de session (HttpOnly, SameSite=Lax, sans Domain)
 # de fonctionner sans CORS. Variables d'environnement :
@@ -31,7 +31,9 @@
 
 	# Caddy est le premier saut : il remplace tout X-Forwarded-For fourni par le client, puis
 	# transmet l'adresse réelle à l'API (qui ne fait confiance qu'aux adresses fixes du proxy et du front).
-	handle /api/* {
+	# Seulement /api/v1 : le front a ses propres routes sous /api (autocomplétion d'adresse), qui
+	# doivent lui parvenir et non être prises pour des routes de l'API Go.
+	handle /api/v1/* {
 		reverse_proxy api:8080 {
 			health_uri /api/v1/health
 			health_interval 10s

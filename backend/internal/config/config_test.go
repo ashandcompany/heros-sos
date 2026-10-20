@@ -33,6 +33,7 @@ func productionEnv() map[string]string {
 	env[envAllowedOrigins] = "https://heros-sos.example"
 	env[envPublicBaseURL] = "https://heros-sos.example"
 	env[envSMTPHost] = "smtp.example"
+	env[envOMDbAPIKey] = "test-key"
 	return env
 }
 

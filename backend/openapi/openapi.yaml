@@ -112,6 +112,8 @@ tags:
     description: Les super-vilains que l'on peut associer à un incident. Tout utilisateur connecté peut en déclarer un et modifier ses spécialités.
   - name: Réputation
     description: Notes des citoyens après intervention, réponses des héros et modération des avis.
+  - name: Films
+    description: Catalogue OMDb, vidéothèques des héros, associations des vilains et modération.
 
 paths:
   /me/interventions:
@@ -1187,6 +1189,355 @@ paths:
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/InternalError" }
 
+  /films:
+    get:
+      tags: [Films]
+      summary: Vidéothèque publique
+      description: Films ayant au moins un rattachement validé à un super-héros.
+      operationId: listPublicFilms
+      parameters:
+        - name: hero
+          in: query
+          schema: { type: string, format: uuid }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Une page de films publiés.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HeroFilmPage" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /heroes/{heroId}/films:
+    get:
+      tags: [Films]
+      summary: Films publiés d'un super-héros
+      operationId: listHeroFilms
+      parameters:
+        - { $ref: "#/components/parameters/HeroId" }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Films liés au héros et approuvés par un modérateur.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HeroFilmPage" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /villains/{villainId}/films:
+    get:
+      tags: [Films]
+      summary: Films associés à un super-vilain
+      operationId: listVillainFilms
+      parameters:
+        - { $ref: "#/components/parameters/VillainId" }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Films associés au vilain, visibles dès leur rattachement par un modérateur.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VillainFilmPage" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /imdb/titles:
+    get:
+      tags: [Films]
+      summary: Rechercher un film dans OMDb
+      operationId: searchFilmTitles
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 100 }
+      responses:
+        "200":
+          description: Résultats de la recherche, au plus dix titres.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/FilmTitle" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "502":
+          description: Catalogue OMDb indisponible (`catalog_unavailable`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /imdb/titles/{id}:
+    get:
+      tags: [Films]
+      summary: Lire un film dans OMDb par identifiant IMDb
+      operationId: getFilmTitle
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, pattern: "^tt[0-9]{7,12}$" }
+      responses:
+        "200":
+          description: Détail du film.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FilmTitle" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Film absent du catalogue (`film_not_found`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "502":
+          description: Catalogue OMDb indisponible (`catalog_unavailable`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /hero/films:
+    get:
+      tags: [Films]
+      summary: Ma vidéothèque de héros
+      operationId: listMyFilms
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Films du héros courant, tous statuts de modération confondus.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HeroFilmPage" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    post:
+      tags: [Films]
+      summary: Ajouter un film à ma vidéothèque
+      operationId: addMyFilm
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FilmInput" }
+            examples:
+              catalogue-omdb:
+                value: { imdbId: tt0133093 }
+              video-libre:
+                value:
+                  {
+                    title: "Conseils de terrain",
+                    description: "Préparer une intervention.",
+                    videoUrl: "https://example.org/video",
+                  }
+      responses:
+        "201":
+          description: Film ajouté en attente de modération.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Film" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { description: Ce film est déjà présent dans la vidéothèque. }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "502":
+          description: Catalogue OMDb indisponible.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /hero/films/{filmId}:
+    delete:
+      tags: [Films]
+      summary: Retirer un film de ma vidéothèque
+      operationId: deleteMyFilm
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/FilmId" }
+      responses:
+        "204": { description: Film retiré. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/hero-films:
+    get:
+      tags: [Films]
+      summary: Lister les films des héros à modérer
+      operationId: listHeroFilmsForModeration
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [pending, approved, rejected] }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Tous les statuts si le filtre est absent.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HeroFilmPage" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    post:
+      tags: [Films]
+      summary: Ajouter directement un film approuvé à un héros
+      operationId: addFilmToHeroByModerator
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminHeroFilmInput" }
+            example:
+              {
+                heroId: 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10,
+                imdbId: tt0133093,
+              }
+      responses:
+        "201":
+          description: Film rattaché et approuvé.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Film" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { description: Le film est déjà lié à ce héros. }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "502":
+          description: Catalogue OMDb indisponible.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/hero-films/{heroId}/{filmId}/approve:
+    post:
+      tags: [Films]
+      summary: Approuver ou republier un film lié à un héros
+      operationId: approveHeroFilm
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/HeroId" }
+        - { $ref: "#/components/parameters/FilmId" }
+      responses:
+        "204": { description: Rattachement approuvé. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: Le rattachement n'est plus en attente. }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/hero-films/{heroId}/{filmId}/reject:
+    post:
+      tags: [Films]
+      summary: Rejeter ou dépublier un film lié à un héros
+      operationId: rejectHeroFilm
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/HeroId" }
+        - { $ref: "#/components/parameters/FilmId" }
+      responses:
+        "204": { description: Rattachement rejeté. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: Le rattachement n'est plus en attente. }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/hero-films/{heroId}/{filmId}:
+    delete:
+      tags: [Films]
+      summary: Supprimer le rattachement d'un film à un héros
+      operationId: deleteHeroFilmByModerator
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/HeroId" }
+        - { $ref: "#/components/parameters/FilmId" }
+      responses:
+        "204": { description: Rattachement supprimé. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/villain-films:
+    post:
+      tags: [Films]
+      summary: Associer un film à un vilain
+      operationId: addFilmToVillain
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminVillainFilmInput" }
+            example:
+              {
+                villainId: 1b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10,
+                imdbId: tt0133093,
+              }
+      responses:
+        "201":
+          description: Association créée, sans modération supplémentaire.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Film" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: Le film est déjà lié à ce vilain. }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "502":
+          description: Catalogue OMDb indisponible.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/villains/{villainId}/films/{filmId}:
+    delete:
+      tags: [Films]
+      summary: Retirer un film de la fiche d'un vilain
+      operationId: deleteVillainFilm
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/VillainId" }
+        - { $ref: "#/components/parameters/FilmId" }
+      responses:
+        "204": { description: Association supprimée. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
   /villains/{id}:
     patch:
       tags: [Vilains]
@@ -1547,6 +1898,24 @@ components:
         Exigé sur les écritures authentifiées. À coller ici après la connexion.
 
   parameters:
+    HeroId:
+      name: heroId
+      in: path
+      required: true
+      description: Identifiant du super-héros.
+      schema: { type: string, format: uuid }
+    VillainId:
+      name: villainId
+      in: path
+      required: true
+      description: Identifiant du super-vilain.
+      schema: { type: string, format: uuid }
+    FilmId:
+      name: filmId
+      in: path
+      required: true
+      description: Identifiant du film.
+      schema: { type: string, format: uuid }
     UserId:
       name: userId
       in: path
@@ -2187,6 +2556,100 @@ components:
         items:
           type: array
           items: { $ref: "#/components/schemas/Villain" }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+
+    FilmTitle:
+      type: object
+      required: [id, title]
+      properties:
+        id: { type: string, pattern: "^tt[0-9]{7,12}$" }
+        title: { type: string }
+        year: { type: integer, format: int32 }
+        plot: { type: string }
+        posterUrl: { type: string, format: uri }
+
+    FilmInput:
+      type: object
+      additionalProperties: false
+      description: Fournir imdbId pour un film OMDb, ou title, description et videoUrl pour une vidéo libre.
+      properties:
+        imdbId: { type: string, pattern: "^tt[0-9]{7,12}$" }
+        title: { type: string, maxLength: 200 }
+        description: { type: string, maxLength: 4000 }
+        videoUrl: { type: string, format: uri, maxLength: 2048 }
+
+    AdminHeroFilmInput:
+      type: object
+      required: [heroId]
+      additionalProperties: false
+      description: Fournir imdbId pour un film OMDb, ou title, description et videoUrl pour une vidéo libre.
+      properties:
+        heroId: { type: string, format: uuid }
+        imdbId: { type: string, pattern: "^tt[0-9]{7,12}$" }
+        title: { type: string, maxLength: 200 }
+        description: { type: string, maxLength: 4000 }
+        videoUrl: { type: string, format: uri, maxLength: 2048 }
+
+    AdminVillainFilmInput:
+      type: object
+      required: [villainId]
+      additionalProperties: false
+      description: Fournir filmId pour un film en base, ou imdbId pour le rechercher sur OMDb.
+      properties:
+        villainId: { type: string, format: uuid }
+        filmId: { type: string, format: uuid }
+        imdbId: { type: string, pattern: "^tt[0-9]{7,12}$" }
+
+    Film:
+      type: object
+      required: [id, title, plot, addedAt]
+      properties:
+        id: { type: string, format: uuid }
+        imdbId: { type: string }
+        videoUrl: { type: string, format: uri }
+        title: { type: string }
+        releaseYear: { type: integer, format: int32 }
+        posterUrl: { type: string, format: uri }
+        plot: { type: string }
+        addedAt: { type: string, format: date-time }
+        moderation: { type: string, enum: [pending, approved, rejected] }
+        hero: { $ref: "#/components/schemas/FilmHero" }
+        villain: { $ref: "#/components/schemas/FilmVillain" }
+
+    FilmHero:
+      type: object
+      required: [id, alias]
+      properties:
+        id: { type: string, format: uuid }
+        alias: { type: string }
+
+    FilmVillain:
+      type: object
+      required: [id, alias]
+      properties:
+        id: { type: string, format: uuid }
+        alias: { type: string }
+
+    HeroFilmPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Film" }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+
+    VillainFilmPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Film" }
         total: { type: integer }
         limit: { type: integer }
         offset: { type: integer }

@@ -170,15 +170,15 @@ Un fichier de base (`docker-compose.yml`) décrit ce qui est commun ; `docker-co
 `docker-compose.prod.yml` s'y ajoutent. Chaque environnement est un projet Compose distinct
 (`heros-sos-dev`, `heros-sos-prod`) : leurs conteneurs et leurs volumes ne se mélangent jamais.
 
-| | Développement (`make up-dev`) | Production (`make up-prod`) |
-|---|---|---|
-| Ports publiés | proxy `8088`, API `8081`, Mailpit `8025`, PostgreSQL `5432`, RabbitMQ — **sur `127.0.0.1` uniquement** | **proxy seul** : 80 et 443 |
-| Front | serveur de développement Next.js, code monté et rechargé à chaud | image de production (sortie `standalone` de Next.js, `node server.js`), sans dépendances de développement |
-| TLS | non (HTTP) | automatique (Let's Encrypt, via Caddy) |
-| Secrets | mots de passe publics de `.env.example` | fichiers dans `secrets/`, montés en `/run/secrets` |
-| Migrations | appliquées par l'API au démarrage | tâche `migrate` qui doit réussir avant l'API |
-| Mails | Mailpit (rien ne sort de la machine) | SMTP réel (`.env.production`) |
-| Réseau `backend` | ouvert | **interne** : la base et l'API n'ont aucun accès à Internet |
+|                  | Développement (`make up-dev`)                                                                          | Production (`make up-prod`)                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| Ports publiés    | proxy `8088`, API `8081`, Mailpit `8025`, PostgreSQL `5432`, RabbitMQ — **sur `127.0.0.1` uniquement** | **proxy seul** : 80 et 443                                                                                |
+| Front            | serveur de développement Next.js, code monté et rechargé à chaud                                       | image de production (sortie `standalone` de Next.js, `node server.js`), sans dépendances de développement |
+| TLS              | non (HTTP)                                                                                             | automatique (Let's Encrypt, via Caddy)                                                                    |
+| Secrets          | mots de passe publics de `.env.example`                                                                | fichiers dans `secrets/`, montés en `/run/secrets`                                                        |
+| Migrations       | appliquées par l'API au démarrage                                                                      | tâche `migrate` qui doit réussir avant l'API                                                              |
+| Mails            | Mailpit (rien ne sort de la machine)                                                                   | SMTP réel (`.env.production`)                                                                             |
+| Réseau `backend` | ouvert                                                                                                 | **interne** : la base et l'API n'ont aucun accès à Internet                                               |
 
 Ce qui est commun aux deux : l'API tourne sans root (`USER 65532`), système de fichiers en lecture
 seule, toutes les capacités Linux retirées, `no-new-privileges`, journaux tournants, et un
@@ -198,7 +198,8 @@ make moderator-prod EMAIL=… FIRST=… LAST=… BIRTH=AAAA-MM-JJ
 `secrets/` et `.env.production` ne sont jamais versionnés. Les secrets ne passent pas par
 l'environnement des conteneurs : l'API lit `HEROS_<NOM>_FILE` (chemin d'un fichier) à la place de
 `HEROS_<NOM>`. Définir les deux est une erreur, et le contenu d'un fichier n'apparaît jamais dans
-un message d'erreur. **`secrets/crypto_keys` se sauvegarde hors du serveur.**
+un message d'erreur. Renseigner `secrets/omdb_api_key` avec une clé OMDb après `make secrets`;
+la clé est obligatoire en production. **`secrets/crypto_keys` se sauvegarde hors du serveur.**
 
 - **PostgreSQL 18** : le volume se monte sur `/var/lib/postgresql` (et non plus sur
   `/var/lib/postgresql/data`). Un volume créé avec PostgreSQL 17 n'est pas réutilisable : en

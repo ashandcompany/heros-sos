@@ -61,8 +61,16 @@ type Config struct {
 	Security    Security
 	Crypto      Crypto
 	Mail        Mail
+	OMDb        OMDb
 	App         App
 	Jobs        Jobs
+}
+
+// OMDb regroupe les réglages du catalogue de films.
+type OMDb struct {
+	APIKey  string
+	BaseURL string
+	Timeout time.Duration
 }
 
 // HTTP regroupe les réglages du serveur.
@@ -343,7 +351,12 @@ func Load(getenv func(string) string) (Config, error) {
 			ActiveKeyID: l.activeKeyID(cryptoKeys),
 		},
 		Mail: l.mail(production),
-		App:  l.app(),
+		OMDb: OMDb{
+			APIKey:  l.text(envOMDbAPIKey, ""),
+			BaseURL: l.text(envOMDbBaseURL, defaultOMDbBaseURL),
+			Timeout: l.duration(envOMDbTimeout, defaultOMDbTimeout),
+		},
+		App: l.app(),
 		Jobs: Jobs{
 			CleanupInterval:  l.duration(envCleanupInterval, defaultCleanupInterval),
 			SessionRetention: l.duration(envSessionRetention, defaultSessionRetention),

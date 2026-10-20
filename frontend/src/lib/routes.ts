@@ -4,6 +4,7 @@ import type { UserRole } from "@/types";
 export const routes = {
   home: "/",
   encyclopedia: "/encyclopedie",
+  map: "/carte",
   videos: "/videotheque",
   blog: "/blog",
   login: "/connexion",
@@ -56,6 +57,7 @@ export interface NavItem {
 export const mainNav: NavItem[] = [
   { label: "Accueil", href: routes.home },
   { label: "Encyclopédie", href: routes.encyclopedia },
+  { label: "Carte", href: routes.map },
   { label: "Vidéothèque", href: routes.videos },
   { label: "Blog", href: routes.blog },
 ];

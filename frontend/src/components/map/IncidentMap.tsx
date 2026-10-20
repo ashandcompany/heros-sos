@@ -17,61 +17,122 @@ import type { IncidentMapData, MapIncident, MapTeam, MapZone } from "@/types";
 const FRANCE_CENTER: LatLngTuple = [46.6, 2.4];
 const FRANCE_ZOOM = 6;
 
-/**
- * Contenu d'une bulle, construit nœud par nœud : titres et lieux viennent des citoyens,
- * ils ne doivent jamais être interprétés comme du HTML.
- */
-function popupContent(lines: Array<string | null>, link?: { href: string; label: string }) {
-  const root = document.createElement("div");
-  root.className = "incident-map__popup";
-  lines.forEach((text, index) => {
-    if (!text) return;
-    const line = document.createElement(index === 0 ? "strong" : "p");
-    line.textContent = text;
-    root.append(line);
-  });
-  if (link) {
-    const anchor = document.createElement("a");
-    anchor.href = link.href;
-    anchor.textContent = link.label;
-    root.append(anchor);
-  }
-  return root;
+/** Bulles : assez larges pour un titre sur deux lignes, sans masquer toute la carte. */
+const POPUP_OPTIONS = { minWidth: 240, maxWidth: 300 };
+
+interface PopupCard {
+  /** Petite ligne au-dessus du titre (type d'incident…). */
+  eyebrow: string;
+  title: string;
+  badges?: Array<{ label: string; tone: string }>;
+  facts: Array<{ label: string; value: string | null }>;
+  link?: { href: string; label: string };
 }
 
-const incidentPopup = (incident: MapIncident) =>
-  popupContent(
-    [
-      incident.title,
-      `${incidentTypeLabels[incident.type]} · ${incidentStatusLabels[incident.status]} · priorité ${incidentPriorityLabels[incident.priority].toLowerCase()}`,
-      incident.place,
-      `Signalé le ${formatDateTime(incident.reportedAt)}`,
-    ],
-    { href: heroIncidentRoute(incident.id), label: "Voir l'incident" },
-  );
+/** Crée un élément avec sa classe et son texte (jamais de HTML : les titres viennent des citoyens). */
+function element<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text?: string) {
+  const node = document.createElement(tag);
+  node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
 
-const teamPopup = (team: MapTeam) =>
-  popupContent(
-    [
-      team.hero.alias,
-      "En intervention",
-      team.startedAt ? `Depuis le ${formatDateTime(team.startedAt)}` : null,
-    ],
-    { href: heroIncidentRoute(team.incidentId), label: "Voir l'intervention" },
-  );
+/** Fiche affichée dans une bulle, sur le modèle des dossiers du site (papier, liseré orange). */
+function popupCard({ eyebrow, title, badges = [], facts, link }: PopupCard) {
+  const card = element("article", "map-card");
+  card.append(element("p", "map-card__eyebrow", eyebrow), element("h3", "map-card__title", title));
 
-const zonePopup = (zone: MapZone) =>
-  popupContent([
-    zone.city,
-    `${zone.incidentsCount} incident${zone.incidentsCount > 1 ? "s" : ""} non résolu${zone.incidentsCount > 1 ? "s" : ""}`,
-  ]);
+  if (badges.length > 0) {
+    const row = element("p", "map-card__badges");
+    for (const { label, tone } of badges) {
+      row.append(element("span", `map-card__badge map-card__badge--${tone}`, label));
+    }
+    card.append(row);
+  }
+
+  const list = element("dl", "map-card__facts");
+  for (const { label, value } of facts) {
+    if (!value) continue;
+    const fact = element("div", "map-card__fact");
+    fact.append(element("dt", "", label), element("dd", "", value));
+    list.append(fact);
+  }
+  card.append(list);
+
+  if (link) {
+    const anchor = element("a", "map-card__link", link.label);
+    anchor.href = link.href;
+    card.append(anchor);
+  }
+  return card;
+}
 
 /**
- * Carte Leaflet des incidents non résolus, des super-héros en intervention et des zones touchées.
+ * `hero` : carte opérationnelle de l'espace pro (liens vers les incidents, héros en intervention).
+ * `public` : carte du site public, sans lien ni héros, avec des positions approximatives.
+ */
+export type IncidentMapVariant = "hero" | "public";
+
+/** Carte publique : les positions sont arrondies, inutile de zoomer plus près que le quartier. */
+const PUBLIC_MAX_ZOOM = 14;
+
+const incidentPopup = (incident: MapIncident, variant: IncidentMapVariant) =>
+  popupCard({
+    eyebrow: incidentTypeLabels[incident.type],
+    title: incident.title,
+    badges: [
+      { label: incidentPriorityLabels[incident.priority], tone: incident.priority },
+      { label: incidentStatusLabels[incident.status], tone: incident.status },
+    ],
+    facts: [
+      {
+        label: "Lieu",
+        value: variant === "public" ? `${incident.place} · approximatif` : incident.place,
+      },
+      { label: "Signalé", value: formatDateTime(incident.reportedAt) },
+    ],
+    link:
+      variant === "hero"
+        ? { href: heroIncidentRoute(incident.id), label: "Ouvrir le dossier" }
+        : undefined,
+  });
+
+const teamPopup = (team: MapTeam) =>
+  popupCard({
+    eyebrow: "Super-héros",
+    title: team.hero.alias,
+    badges: [{ label: "En intervention", tone: "en-cours" }],
+    facts: [{ label: "Depuis", value: team.startedAt && formatDateTime(team.startedAt) }],
+    link: { href: heroIncidentRoute(team.incidentId), label: "Voir l'intervention" },
+  });
+
+const zonePopup = (zone: MapZone) =>
+  popupCard({
+    eyebrow: "Zone touchée",
+    title: zone.city,
+    facts: [
+      {
+        label: "Non résolus",
+        value: `${zone.incidentsCount} incident${zone.incidentsCount > 1 ? "s" : ""}`,
+      },
+    ],
+  });
+
+/**
+ * Carte Leaflet des incidents non résolus, des zones touchées et, dans l'espace pro, des
+ * super-héros en intervention.
  * Leaflet manipule `window` dès son chargement : il est importé dans l'effet, côté navigateur.
  * La carte n'est pas accessible à tous : la page affiche aussi la liste des incidents.
  */
-export function IncidentMap({ data, tiles }: { data: IncidentMapData; tiles: MapTileConfig }) {
+export function IncidentMap({
+  data,
+  tiles,
+  variant = "hero",
+}: {
+  data: IncidentMapData;
+  tiles: MapTileConfig;
+  variant?: IncidentMapVariant;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -93,6 +154,7 @@ export function IncidentMap({ data, tiles }: { data: IncidentMapData; tiles: Map
         zoomAnimation: animate,
         fadeAnimation: animate,
         markerZoomAnimation: animate,
+        maxZoom: variant === "public" ? Math.min(PUBLIC_MAX_ZOOM, tiles.maxZoom) : tiles.maxZoom,
       });
       map.attributionControl.setPrefix(false);
 
@@ -107,7 +169,7 @@ export function IncidentMap({ data, tiles }: { data: IncidentMapData; tiles: Map
             radius: zone.radius,
             className: "incident-map__zone",
             interactive: true,
-          }).bindPopup(() => zonePopup(zone)),
+          }).bindPopup(() => zonePopup(zone), POPUP_OPTIONS),
         ),
       );
 
@@ -123,7 +185,7 @@ export function IncidentMap({ data, tiles }: { data: IncidentMapData; tiles: Map
               iconAnchor: [11, 11],
               popupAnchor: [0, -12],
             }),
-          }).bindPopup(() => incidentPopup(incident)),
+          }).bindPopup(() => incidentPopup(incident, variant), POPUP_OPTIONS),
         ),
       );
 
@@ -141,20 +203,20 @@ export function IncidentMap({ data, tiles }: { data: IncidentMapData; tiles: Map
               iconAnchor: [-4, 30],
               popupAnchor: [17, -30],
             }),
-          }).bindPopup(() => teamPopup(team)),
+          }).bindPopup(() => teamPopup(team), POPUP_OPTIONS),
         ),
       );
 
       zones.addTo(map);
       incidents.addTo(map);
-      teams.addTo(map);
+      if (variant === "hero") teams.addTo(map);
 
       L.control
         .layers(
           undefined,
           {
             "Incidents ouverts": incidents,
-            "Super-héros en intervention": teams,
+            ...(variant === "hero" && { "Super-héros en intervention": teams }),
             "Zones touchées": zones,
           },
           { collapsed: false },
@@ -166,7 +228,10 @@ export function IncidentMap({ data, tiles }: { data: IncidentMapData; tiles: Map
         position.lng,
       ]);
       if (points.length > 0) {
-        map.fitBounds(L.latLngBounds(points), { padding: [40, 40], maxZoom: 14 });
+        map.fitBounds(L.latLngBounds(points), {
+          padding: [40, 40],
+          maxZoom: variant === "public" ? 12 : 14,
+        });
       }
     });
 
@@ -174,13 +239,17 @@ export function IncidentMap({ data, tiles }: { data: IncidentMapData; tiles: Map
       cancelled = true;
       map?.remove();
     };
-  }, [data, tiles]);
+  }, [data, tiles, variant]);
 
   return (
     <div
       ref={containerRef}
       role="region"
-      aria-label="Carte des incidents et des super-héros en intervention"
+      aria-label={
+        variant === "hero"
+          ? "Carte des incidents et des super-héros en intervention"
+          : "Carte des incidents en cours"
+      }
       className="incident-map h-[min(70vh,560px)] w-full border-2 border-edge bg-surface shadow-[6px_6px_0_0_var(--color-shadow)]"
     />
   );

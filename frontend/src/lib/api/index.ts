@@ -40,6 +40,7 @@ export {
   getHeroIncidents,
   getIncident,
   getIncidentMap,
+  getPublicIncidentMap,
   getLatestResolvedIncidents,
   getMyIncidents,
   getIncidentsByVillain,

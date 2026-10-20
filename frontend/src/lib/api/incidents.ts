@@ -284,15 +284,16 @@ function toZone(city: string, incidents: MapIncident[]): MapZone {
   };
 }
 
+/** Deux décimales ≈ 1 km : assez pour situer le quartier, pas pour retrouver une adresse. */
+const roundCoordinate = (value: number) => Math.round(value * 100) / 100;
+
 /**
- * Carte opérationnelle : incidents non résolus, super-héros en intervention et zones touchées.
+ * Données d'une carte, à partir des incidents non résolus. `hero` : positions exactes, adresse et
+ * héros en intervention. `public` : positions arrondies, ville et quartier seulement, aucun héros.
  * Seuls les champs nécessaires à l'affichage sont renvoyés (ils partent vers le navigateur).
- * Future implémentation : `GET ${API_URL}/hero/incidents/map`
  */
-export async function getIncidentMap(token: string): Promise<IncidentMapData> {
-  await userFromToken(token, "super-heros");
-  const open = incidentsMock
-    .filter(isPublic)
+function buildIncidentMap(candidates: Incident[], audience: "hero" | "public"): IncidentMapData {
+  const open = candidates
     .filter((incident) => incident.status !== "resolu")
     .sort(
       (a, b) =>
@@ -305,8 +306,12 @@ export async function getIncidentMap(token: string): Promise<IncidentMapData> {
   const byCity = new Map<string, { city: string; incidents: MapIncident[] }>();
 
   for (const incident of open) {
-    const position = incident.location.coordinates;
-    if (!position || incident.status === "resolu") continue;
+    const exact = incident.location.coordinates;
+    if (!exact || incident.status === "resolu") continue;
+    const position =
+      audience === "public"
+        ? { lat: roundCoordinate(exact.lat), lng: roundCoordinate(exact.lng) }
+        : exact;
 
     const mapIncident: MapIncident = {
       id: incident.id,
@@ -314,9 +319,12 @@ export async function getIncidentMap(token: string): Promise<IncidentMapData> {
       type: incident.type,
       status: incident.status,
       priority: incident.priority ?? "normale",
-      place: [incident.location.address, formatLocation(incident.location)]
-        .filter(Boolean)
-        .join(", "),
+      place:
+        audience === "public"
+          ? formatLocation(incident.location)
+          : [incident.location.address, formatLocation(incident.location)]
+              .filter(Boolean)
+              .join(", "),
       position,
       reportedAt: incident.reportedAt,
     };
@@ -327,7 +335,7 @@ export async function getIncidentMap(token: string): Promise<IncidentMapData> {
     zone.incidents.push(mapIncident);
     byCity.set(key, zone);
 
-    if (incident.status === "en-cours" && incident.hero) {
+    if (audience === "hero" && incident.status === "en-cours" && incident.hero) {
       const intervention = interventionsMock.find(
         ({ incidentId, outcome }) => incidentId === incident.id && outcome === null,
       );
@@ -340,12 +348,35 @@ export async function getIncidentMap(token: string): Promise<IncidentMapData> {
     }
   }
 
-  return mockResponse({
+  return {
     incidents,
     teams,
     zones: Array.from(byCity.values(), ({ city, incidents: zone }) => toZone(city, zone)),
     unlocatedCount: open.length - incidents.length,
-  });
+  };
+}
+
+/**
+ * Carte opérationnelle : incidents non résolus, super-héros en intervention et zones touchées.
+ * Future implémentation : `GET ${API_URL}/hero/incidents/map`
+ */
+export async function getIncidentMap(token: string): Promise<IncidentMapData> {
+  await userFromToken(token, "super-heros");
+  return mockResponse(buildIncidentMap(incidentsMock.filter(isPublic), "hero"));
+}
+
+/**
+ * Carte publique, visible sans compte : seulement les incidents validés par la modération (un
+ * signalement en attente peut être faux), à une position approximative, sans les super-héros.
+ * Future implémentation : `GET ${API_URL}/incidents/map`
+ */
+export async function getPublicIncidentMap(): Promise<IncidentMapData> {
+  return mockResponse(
+    buildIncidentMap(
+      incidentsMock.filter((incident) => incident.moderation === "valide"),
+      "public",
+    ),
+  );
 }
 
 /** Incident diffusé et non résolu, sur lequel un héros peut agir. */

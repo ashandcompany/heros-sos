@@ -10,6 +10,7 @@ export {
 } from "./account";
 export {
   activateAccount,
+  confirmPasswordReset,
   getSessionUser,
   login,
   logout,
@@ -38,6 +39,8 @@ export {
   getHeroIncident,
   getHeroIncidents,
   getIncident,
+  getIncidentMap,
+  getPublicIncidentMap,
   getLatestResolvedIncidents,
   getMyIncidents,
   getIncidentsByVillain,

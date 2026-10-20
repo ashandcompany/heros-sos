@@ -20,6 +20,22 @@ export type ResendActivationResult =
       retryAfterSeconds?: number;
     };
 
+export type PasswordResetConfirmResult =
+  | { ok: true }
+  /**
+   * `invalid-token` : lien inconnu, expiré (1 h) ou déjà utilisé. `weak-password` : refusé par
+   * l'API sans consommer le jeton, le visiteur peut réessayer avec le même lien.
+   */
+  | { ok: false; error: "invalid-token" | "weak-password" | "unavailable" };
+
+export type PasswordResetRequestResult =
+  | { ok: true }
+  | {
+      ok: false;
+      error: "invalid-email" | "too-many-attempts" | "unavailable";
+      retryAfterSeconds?: number;
+    };
+
 export interface LoginCredentials {
   /** Adresse email, ou pseudo pour un super-héros. */
   identifier: string;
@@ -71,5 +87,13 @@ export interface SignupPayload {
   password: string;
 }
 
+/**
+ * Le compte est créé en attente d'activation : aucune session n'est ouverte, un mail contenant le
+ * lien d'activation est envoyé à l'adresse saisie.
+ */
 export type SignupResult =
-  { ok: true; user: AuthUser; token: string } | { ok: false; error: "email-already-used" };
+  | { ok: true; user: AuthUser }
+  | { ok: false; error: "email-already-used" | "unavailable" }
+  | { ok: false; error: "too-many-attempts"; retryAfterSeconds?: number }
+  /** Refusé par l'API (422) : champ du `SignupPayload` (`email`, `address.city`…) → code. */
+  | { ok: false; error: "invalid-fields"; fields: Record<string, string> };

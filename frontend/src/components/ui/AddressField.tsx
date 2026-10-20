@@ -44,7 +44,8 @@ function setFormValue(form: HTMLFormElement, name: string, value: string) {
 }
 
 /**
- * Champ d'adresse avec suggestions issues d'OpenStreetMap (route /api/adresses).
+ * Champ d'adresse avec suggestions issues de la Base Adresse Nationale (route /api/adresses).
+ * Adresses françaises uniquement : une adresse à l'étranger se saisit à la main.
  * Motif « combobox » ARIA 1.2 : flèches haut/bas, Entrée pour choisir, Échap pour fermer.
  * La saisie libre reste possible : les suggestions ne sont qu'une aide.
  */
@@ -241,19 +242,20 @@ export function AddressField({
               </li>
             ))}
           </ul>
-          {/* Attribution exigée par la licence ODbL des données OpenStreetMap. */}
+          {/* Mention de la source demandée par la Licence Ouverte (Etalab) des données. */}
           <p className="border-t border-border px-4 py-1.5 text-xs text-muted">
-            Données ©{" "}
+            Données :{" "}
             <a
-              href="https://www.openstreetmap.org/copyright"
+              href="https://adresse.data.gouv.fr"
               target="_blank"
               rel="noopener noreferrer"
               tabIndex={-1}
               onMouseDown={(event) => event.preventDefault()}
               className="underline"
             >
-              contributeurs OpenStreetMap
+              Base Adresse Nationale
             </a>
+            , IGN
           </p>
         </div>
       </div>

@@ -18,6 +18,8 @@ export class ApiError extends Error {
     readonly code: string,
     /** Délai annoncé par l'en-tête `Retry-After` (réponses 429). */
     readonly retryAfterSeconds?: number,
+    /** Erreurs de validation (422) : champ (`email`, `address.city`…) → code (`invalid`, `weak`…). */
+    readonly fields: Record<string, string> = {},
   ) {
     super(`API ${status} (${code})`);
     this.name = "ApiError";
@@ -60,22 +62,30 @@ export async function apiFetch(path: string, request: ApiRequest = {}): Promise<
 
 async function toApiError(response: Response): Promise<ApiError> {
   const body: unknown = await response.json().catch(() => null);
-  const code =
+  const error =
     typeof body === "object" &&
     body !== null &&
     "error" in body &&
     typeof body.error === "object" &&
-    body.error !== null &&
-    "code" in body.error &&
-    typeof body.error.code === "string"
-      ? body.error.code
-      : "unknown";
+    body.error !== null
+      ? body.error
+      : {};
+  const code = "code" in error && typeof error.code === "string" ? error.code : "unknown";
+  const fields =
+    "fields" in error && typeof error.fields === "object" && error.fields !== null
+      ? Object.fromEntries(
+          Object.entries(error.fields).filter(
+            (entry): entry is [string, string] => typeof entry[1] === "string",
+          ),
+        )
+      : {};
   const retryAfter = Number(response.headers.get("Retry-After"));
 
   return new ApiError(
     response.status,
     code,
     Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined,
+    fields,
   );
 }
 

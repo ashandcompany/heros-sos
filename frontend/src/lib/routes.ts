@@ -4,11 +4,14 @@ import type { UserRole } from "@/types";
 export const routes = {
   home: "/",
   encyclopedia: "/encyclopedie",
+  map: "/carte",
   videos: "/videotheque",
   blog: "/blog",
   login: "/connexion",
   signup: "/inscription",
   forgotPassword: "/mot-de-passe-oublie",
+  /** Lien du mail de réinitialisation (`?token=…`) : doit rester égal à HEROS_PASSWORD_RESET_PATH du backend. */
+  passwordReset: "/reinitialisation-mot-de-passe",
   /** Lien du mail d'activation (`?token=…`) : doit rester égal à HEROS_ACTIVATION_PATH du backend. */
   activation: "/activation",
   profile: "/profil",
@@ -17,6 +20,7 @@ export const routes = {
   heroSpace: "/heros",
   heroDashboard: "/heros/dashboard",
   heroIncidents: "/heros/incidents",
+  heroMap: "/heros/carte",
   heroProfile: "/heros/profil",
   heroVideos: "/heros/films",
   heroReputation: "/heros/reputation",
@@ -53,6 +57,7 @@ export interface NavItem {
 export const mainNav: NavItem[] = [
   { label: "Accueil", href: routes.home },
   { label: "Encyclopédie", href: routes.encyclopedia },
+  { label: "Carte", href: routes.map },
   { label: "Vidéothèque", href: routes.videos },
   { label: "Blog", href: routes.blog },
 ];
@@ -75,6 +80,7 @@ export const citizenNav: NavItem[] = [
 export const heroNav: NavItem[] = [
   { label: "Tableau de bord", href: routes.heroDashboard },
   { label: "Incidents", href: routes.heroIncidents },
+  { label: "Carte", href: routes.heroMap },
   { label: "Signaler un incident", href: routes.heroDeclare },
   { label: "Ma vidéothèque", href: routes.heroVideos },
   { label: "Ma réputation", href: routes.heroReputation },

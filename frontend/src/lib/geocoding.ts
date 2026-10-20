@@ -8,6 +8,8 @@
  * la limite annoncée (10 requêtes par seconde et par adresse IP).
  */
 
+import type { GeoPoint } from "@/types";
+
 const COMPLETION_URL = "https://data.geopf.fr/geocodage/completion/";
 const RESULT_LIMIT = 6;
 const TIMEOUT_MS = 4000;
@@ -110,4 +112,56 @@ export async function searchAddresses(
   if (cache.size >= CACHE_MAX_ENTRIES) cache.delete(cache.keys().next().value!);
   cache.set(key, { expiresAt: Date.now() + CACHE_TTL_MS, suggestions });
   return suggestions;
+}
+
+/* ---------- Géocodage d'un lieu (adresse + ville → coordonnées) ---------- */
+
+const SEARCH_URL = "https://data.geopf.fr/geocodage/search";
+/** En dessous, la BAN a deviné plus qu'elle n'a trouvé : mieux vaut ne pas placer l'incident. */
+const MIN_SCORE = 0.4;
+
+interface SearchResponse {
+  features?: Array<{
+    geometry?: { coordinates?: [number, number] };
+    properties?: { score?: number };
+  }>;
+}
+
+/**
+ * Coordonnées d'un lieu saisi dans un formulaire (adresse ou repère, et ville), `null` si la Base
+ * Adresse Nationale ne le trouve pas ou ne répond pas : le géocodage ne bloque jamais une
+ * déclaration. À n'appeler que côté serveur.
+ * Documentation : https://geoservices.ign.fr/documentation/services/services-geoplateforme/geocodage
+ */
+export async function geocodeLocation({
+  address,
+  city,
+}: {
+  address?: string;
+  city: string;
+}): Promise<GeoPoint | null> {
+  const url = new URL(SEARCH_URL);
+  url.searchParams.set("q", [address, city].filter(Boolean).join(", "));
+  url.searchParams.set("index", "address");
+  url.searchParams.set("limit", "1");
+
+  try {
+    const response = await fetch(url, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    if (!response.ok) throw new Error(`Géoplateforme : HTTP ${response.status}`);
+
+    const { features = [] } = (await response.json()) as SearchResponse;
+    const [best] = features;
+    const coordinates = best?.geometry?.coordinates;
+    if (!coordinates || (best.properties?.score ?? 0) < MIN_SCORE) return null;
+
+    // GeoJSON : [longitude, latitude].
+    const [lng, lat] = coordinates;
+    return { lat, lng };
+  } catch (error) {
+    console.error("Géocodage indisponible :", error);
+    return null;
+  }
 }

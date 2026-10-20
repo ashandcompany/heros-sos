@@ -1,3 +1,5 @@
+import { formatLocation } from "@/lib/format";
+import { geocodeLocation } from "@/lib/geocoding";
 import { incidentsMock } from "@/mocks/incidents";
 import { interventionsMock } from "@/mocks/interventions";
 import { ratingsMock } from "@/mocks/ratings";
@@ -5,13 +7,18 @@ import { superHeroesMock, superHeroProfilesMock } from "@/mocks/super-heroes";
 import { villainsMock } from "@/mocks/villains";
 import type {
   CitizenIncidentDetail,
+  GeoPoint,
   HeroIncident,
   Incident,
   IncidentDeclaration,
+  IncidentMapData,
   IncidentPriority,
   IncidentStatus,
   IncidentUpdate,
   InterventionOutcome,
+  MapIncident,
+  MapTeam,
+  MapZone,
   ModerationStatus,
   MutationResult,
   ResolvedIncident,
@@ -90,6 +97,7 @@ export async function declareIncident(
 ): Promise<MutationResult> {
   const user = await userFromToken(token, ["citoyen", "super-heros", "admin"]);
   const villain = villainsMock.find(({ id }) => id === declaration.villainId);
+  const coordinates = (await geocodeLocation(declaration.location)) ?? undefined;
 
   incidentsMock.push({
     id: `incident-${crypto.randomUUID()}`,
@@ -97,7 +105,7 @@ export async function declareIncident(
     type: declaration.type,
     status: "signale",
     moderation: user.role === "admin" ? "valide" : "en-attente",
-    location: declaration.location,
+    location: { ...declaration.location, coordinates },
     reportedAt: new Date().toISOString(),
     occurredAt: declaration.occurredAt ?? undefined,
     villain: villain ? { id: villain.id, alias: villain.alias } : null,
@@ -159,7 +167,14 @@ export async function updateIncident(
   incident.title = update.title;
   incident.type = update.type;
   incident.description = update.description;
-  incident.location = { ...incident.location, ...update.location };
+  // Le lieu change : on le géocode de nouveau (sinon on garde la position connue).
+  const moved =
+    update.location.address !== (incident.location.address ?? "") ||
+    normalizeCity(update.location.city) !== normalizeCity(incident.location.city);
+  const coordinates = moved
+    ? ((await geocodeLocation(update.location)) ?? undefined)
+    : incident.location.coordinates;
+  incident.location = { ...incident.location, ...update.location, coordinates };
   incident.villain = villain ? { id: villain.id, alias: villain.alias } : null;
   incident.hero =
     hero && update.status !== "signale" ? { id: hero.id, alias: hero.alias } : undefined;
@@ -239,6 +254,98 @@ export async function getHeroIncident(token: string, id: string): Promise<HeroIn
   await userFromToken(token, "super-heros");
   const incident = incidentsMock.find((existing) => existing.id === id && isPublic(existing));
   return mockResponse(incident ? toHeroIncident(incident) : null);
+}
+
+/** Rayon minimal d'une zone touchée, pour qu'un incident isolé reste visible. */
+const ZONE_MIN_RADIUS_M = 800;
+/** Marge autour de l'incident le plus éloigné du centre de la zone. */
+const ZONE_MARGIN_M = 400;
+
+/** Distance en mètres entre deux points (formule de haversine). */
+function distanceInMeters(a: GeoPoint, b: GeoPoint): number {
+  const toRad = (degrees: number) => (degrees * Math.PI) / 180;
+  const h =
+    Math.sin(toRad(b.lat - a.lat) / 2) ** 2 +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(toRad(b.lng - a.lng) / 2) ** 2;
+  return 2 * 6_371_000 * Math.asin(Math.sqrt(h));
+}
+
+function toZone(city: string, incidents: MapIncident[]): MapZone {
+  const center = {
+    lat: incidents.reduce((sum, { position }) => sum + position.lat, 0) / incidents.length,
+    lng: incidents.reduce((sum, { position }) => sum + position.lng, 0) / incidents.length,
+  };
+  const farthest = Math.max(...incidents.map(({ position }) => distanceInMeters(center, position)));
+  return {
+    city,
+    center,
+    radius: Math.max(ZONE_MIN_RADIUS_M, farthest + ZONE_MARGIN_M),
+    incidentsCount: incidents.length,
+  };
+}
+
+/**
+ * Carte opérationnelle : incidents non résolus, super-héros en intervention et zones touchées.
+ * Seuls les champs nécessaires à l'affichage sont renvoyés (ils partent vers le navigateur).
+ * Future implémentation : `GET ${API_URL}/hero/incidents/map`
+ */
+export async function getIncidentMap(token: string): Promise<IncidentMapData> {
+  await userFromToken(token, "super-heros");
+  const open = incidentsMock
+    .filter(isPublic)
+    .filter((incident) => incident.status !== "resolu")
+    .sort(
+      (a, b) =>
+        priorityRank[a.priority ?? "normale"] - priorityRank[b.priority ?? "normale"] ||
+        byMostRecent(a, b),
+    );
+
+  const incidents: MapIncident[] = [];
+  const teams: MapTeam[] = [];
+  const byCity = new Map<string, { city: string; incidents: MapIncident[] }>();
+
+  for (const incident of open) {
+    const position = incident.location.coordinates;
+    if (!position || incident.status === "resolu") continue;
+
+    const mapIncident: MapIncident = {
+      id: incident.id,
+      title: incident.title,
+      type: incident.type,
+      status: incident.status,
+      priority: incident.priority ?? "normale",
+      place: [incident.location.address, formatLocation(incident.location)]
+        .filter(Boolean)
+        .join(", "),
+      position,
+      reportedAt: incident.reportedAt,
+    };
+    incidents.push(mapIncident);
+
+    const key = normalizeCity(incident.location.city);
+    const zone = byCity.get(key) ?? { city: incident.location.city, incidents: [] };
+    zone.incidents.push(mapIncident);
+    byCity.set(key, zone);
+
+    if (incident.status === "en-cours" && incident.hero) {
+      const intervention = interventionsMock.find(
+        ({ incidentId, outcome }) => incidentId === incident.id && outcome === null,
+      );
+      teams.push({
+        hero: incident.hero,
+        incidentId: incident.id,
+        position,
+        startedAt: intervention?.startedAt ?? null,
+      });
+    }
+  }
+
+  return mockResponse({
+    incidents,
+    teams,
+    zones: Array.from(byCity.values(), ({ city, incidents: zone }) => toZone(city, zone)),
+    unlocatedCount: open.length - incidents.length,
+  });
 }
 
 /** Incident diffusé et non résolu, sur lequel un héros peut agir. */

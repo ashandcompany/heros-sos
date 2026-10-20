@@ -16,11 +16,22 @@ export type InterventionOutcome = "reussi" | "echoue";
 /** Le citoyen qui déclare est témoin ou victime de l'incident. */
 export type ReporterRole = "temoin" | "victime";
 
+/** Coordonnées WGS 84 (degrés décimaux). */
+export interface GeoPoint {
+  lat: number;
+  lng: number;
+}
+
 export interface IncidentLocation {
   city: string;
   district?: string;
   /** Lieu précis saisi par le déclarant (adresse, repère…). */
   address?: string;
+  /**
+   * Position géocodée à partir de l'adresse et de la ville (Base Adresse Nationale).
+   * Absente si le lieu n'a pas pu être géocodé : l'incident n'apparaît alors pas sur la carte.
+   */
+  coordinates?: GeoPoint;
 }
 
 export interface Incident {
@@ -160,4 +171,48 @@ export interface CitizenIncidentDetail {
   interventions: HeroIntervention[];
   /** Note déjà donnée par le citoyen (uniquement pour ses propres incidents). */
   rating: InterventionRating | null;
+}
+
+/** Incident placé sur la carte des super-héros : uniquement ce qu'il faut pour l'afficher. */
+export interface MapIncident {
+  id: string;
+  title: string;
+  type: IncidentType;
+  status: Exclude<IncidentStatus, "resolu">;
+  priority: IncidentPriority;
+  /** Ville et quartier, déjà mis en forme. */
+  place: string;
+  position: GeoPoint;
+  /** Date ISO 8601 du signalement. */
+  reportedAt: string;
+}
+
+/**
+ * Super-héros en intervention. Sa position est celle de l'incident qu'il traite : la plateforme
+ * ne suit pas la géolocalisation des héros en temps réel.
+ */
+export interface MapTeam {
+  hero: SuperHeroSummary;
+  incidentId: string;
+  position: GeoPoint;
+  /** Date ISO 8601 du début de l'intervention, `null` si elle n'est pas connue. */
+  startedAt: string | null;
+}
+
+/** Zone touchée : regroupement des incidents non résolus d'une même ville. */
+export interface MapZone {
+  city: string;
+  /** Centre des incidents de la zone. */
+  center: GeoPoint;
+  /** Distance en mètres entre le centre et l'incident le plus éloigné. */
+  radius: number;
+  incidentsCount: number;
+}
+
+export interface IncidentMapData {
+  incidents: MapIncident[];
+  teams: MapTeam[];
+  zones: MapZone[];
+  /** Incidents non résolus dont le lieu n'a pas pu être géocodé. */
+  unlocatedCount: number;
 }

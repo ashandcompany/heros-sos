@@ -159,3 +159,119 @@
     display: none;
   }
 }
+
+/*
+ * Carte des incidents (Leaflet, components/hero/IncidentMap). Les éléments sont créés par Leaflet,
+ * hors de React : ils se stylent ici, avec les tokens pour suivre le thème.
+ */
+.incident-map {
+  font-family: var(--font-sans);
+  /* Les contrôles et bulles de Leaflet passent au-dessus de l'en-tête collant sinon. */
+  isolation: isolate;
+  z-index: 0;
+}
+
+/* Thème sombre : tuiles inversées pour ne pas éblouir (les couleurs restent reconnaissables). */
+:root:not([data-theme="light"]) .incident-map .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9);
+}
+
+/* Incident : carré à fort contour, couleur selon la priorité */
+.incident-map__marker > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 3px solid var(--color-ink);
+  box-shadow: 2px 2px 0 0 var(--color-ink);
+}
+.incident-map__marker--basse > span {
+  background: var(--color-sage);
+}
+.incident-map__marker--normale > span {
+  background: var(--color-mustard);
+}
+.incident-map__marker--haute > span {
+  background: var(--color-primary);
+}
+.incident-map__marker--critique > span {
+  background: var(--color-brick);
+}
+/* Pris en charge : losange, pour ne pas reposer sur la seule couleur */
+.incident-map__marker--en-cours > span {
+  /* Leaflet positionne le marqueur avec transform : on ne fait tourner que la forme. */
+  rotate: 45deg;
+  scale: 0.85;
+}
+
+/* Super-héros en intervention : écusson turquoise */
+.incident-map__team {
+  display: grid;
+  place-items: center;
+  border: 3px solid var(--color-paper);
+  border-radius: 9999px;
+  background: var(--color-accent);
+  box-shadow: 2px 2px 0 0 var(--color-ink);
+  color: var(--color-paper);
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.incident-map__zone {
+  fill: var(--color-brick);
+  fill-opacity: 0.18;
+  stroke: var(--color-brick);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+}
+
+.incident-map__marker:focus-visible,
+.incident-map__team:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+/* Bulles et sélecteur de couches : papier, encre et ombre dure, sans arrondi */
+.incident-map .leaflet-popup-content-wrapper,
+.incident-map .leaflet-popup-tip,
+.incident-map .leaflet-control-layers,
+.incident-map .leaflet-bar a {
+  border-radius: 0;
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+.incident-map .leaflet-popup-content-wrapper,
+.incident-map .leaflet-control-layers,
+.incident-map .leaflet-bar {
+  border: 2px solid var(--color-ink);
+  box-shadow: 3px 3px 0 0 var(--color-ink);
+}
+.incident-map .leaflet-popup-content {
+  margin: 0.75rem 1rem;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+.incident-map__popup {
+  display: grid;
+  gap: 0.25rem;
+}
+.incident-map__popup strong {
+  font-family: var(--font-display);
+  font-size: 1rem;
+}
+.incident-map__popup p {
+  margin: 0;
+}
+.incident-map__popup a,
+.incident-map .leaflet-popup-content a {
+  color: var(--color-primary-ink);
+  font-weight: 600;
+  text-decoration: underline;
+}
+.incident-map .leaflet-control-attribution {
+  background: color-mix(in srgb, var(--color-paper) 85%, transparent);
+  color: var(--color-ink);
+}
+.incident-map .leaflet-control-attribution a {
+  color: var(--color-ink);
+}

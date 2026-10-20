@@ -56,7 +56,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       // data-theme est posé par themeInitScript avant l'hydratation.
       suppressHydrationWarning
     >
-      <body className="flex min-h-full flex-col">
+      <body
+        className="flex min-h-full flex-col"
+        // Des extensions de navigateur ajoutent des attributs à <body> avant l'hydratation
+        // (ex : cz-shortcut-listen de ColorZilla). Ne couvre que <body>, pas ses enfants.
+        suppressHydrationWarning
+      >
         {/* Injecté dans le HTML initial et exécuté avant l'affichage : pas de flash du thème sombre. */}
         <Script
           id="theme-init"

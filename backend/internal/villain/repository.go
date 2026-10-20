@@ -79,7 +79,7 @@ func (r *gormRepository) conn(ctx context.Context) *gorm.DB { return database.Co
 
 func (r *gormRepository) Create(ctx context.Context, v *Villain) error {
 	rec := record{
-		ID: v.ID, Alias: v.Alias, Description: v.Description, ThreatLevel: defaultThreatLevel,
+		ID: v.ID, Alias: v.Alias, Description: v.Description, ThreatLevel: v.ThreatLevel,
 		CreatedBy: v.CreatedBy, CreatedAt: v.CreatedAt, UpdatedAt: v.CreatedAt,
 	}
 	if err := r.conn(ctx).Create(&rec).Error; err != nil {

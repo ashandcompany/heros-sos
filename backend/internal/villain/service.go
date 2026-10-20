@@ -48,7 +48,8 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, in CreateInput, 
 
 	now := s.clock.Now()
 	created := &Villain{
-		ID: ids.New(), Alias: alias, Description: description, CreatedBy: &userID, CreatedAt: now,
+		ID: ids.New(), Alias: alias, Description: description, ThreatLevel: defaultThreatLevel,
+		CreatedBy: &userID, CreatedAt: now,
 	}
 	err := s.tx.WithinTx(ctx, func(ctx context.Context) error {
 		if err := s.repo.Create(ctx, created); err != nil {

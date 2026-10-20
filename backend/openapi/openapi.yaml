@@ -995,6 +995,10 @@ paths:
       operationId: listIncidents
       security: [{ sessionCookie: [] }]
       parameters:
+        - name: reporterId
+          in: query
+          description: Identifiant du déclarant; un citoyen ne peut filtrer que sur son propre identifiant.
+          schema: { type: string, format: uuid }
         - { $ref: "#/components/parameters/Limit" }
         - { $ref: "#/components/parameters/Offset" }
       responses:
@@ -1917,7 +1921,16 @@ components:
 
     Villain:
       type: object
-      required: [id, alias, typeIds, threatLevel, status, createdAt]
+      required:
+        [
+          id,
+          alias,
+          typeIds,
+          threatLevel,
+          status,
+          reportedIncidentsCount,
+          createdAt,
+        ]
       properties:
         id: { type: string, format: uuid }
         alias: { type: string }
@@ -1930,6 +1943,7 @@ components:
           items: { type: integer, format: int32 }
         threatLevel: { type: string, enum: [faible, modere, eleve, critique] }
         status: { type: string, enum: [en-liberte, emprisonne] }
+        reportedIncidentsCount: { type: integer, minimum: 0 }
         createdAt: { type: string, format: date-time }
 
     VillainPage:
@@ -1945,20 +1959,25 @@ components:
 
     IncidentPayload:
       type: object
-      required: [typeId, description, street, city]
+      required: [typeId, description, location]
       additionalProperties: false
       properties:
         typeId: { type: integer, format: int32 }
         description: { type: string }
         citizensRescued:
           { type: integer, format: int32, minimum: 0, default: 0 }
-        street: { type: string }
-        postalCode: { type: string }
-        city: { type: string }
-        country: { type: string }
-        addressComplement: { type: string }
-        latitude: { type: number, format: double, nullable: true }
-        longitude: { type: number, format: double, nullable: true }
+        location:
+          type: object
+          required: [address, city]
+          additionalProperties: false
+          properties:
+            address: { type: string }
+            city: { type: string }
+            postalCode: { type: string }
+            country: { type: string }
+            addressComplement: { type: string }
+            latitude: { type: number, format: double, nullable: true }
+            longitude: { type: number, format: double, nullable: true }
         occurredAt: { type: string, format: date-time, nullable: true }
         villainIds:
           type: array
@@ -1974,10 +1993,7 @@ components:
           status,
           priority,
           citizensRescued,
-          street,
-          postalCode,
-          city,
-          country,
+          location,
           villainIds,
           createdAt,
         ]
@@ -1991,13 +2007,17 @@ components:
           { type: string, enum: [reported, in_progress, succeeded, failed] }
         priority: { type: string, enum: [high, normal, low] }
         citizensRescued: { type: integer, format: int32 }
-        street: { type: string }
-        postalCode: { type: string }
-        city: { type: string }
-        country: { type: string }
-        addressComplement: { type: string }
-        latitude: { type: number, format: double, nullable: true }
-        longitude: { type: number, format: double, nullable: true }
+        location:
+          type: object
+          required: [address, city]
+          properties:
+            address: { type: string }
+            city: { type: string }
+            postalCode: { type: string }
+            country: { type: string }
+            addressComplement: { type: string }
+            latitude: { type: number, format: double, nullable: true }
+            longitude: { type: number, format: double, nullable: true }
         occurredAt: { type: string, format: date-time, nullable: true }
         villainIds:
           type: array

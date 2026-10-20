@@ -117,11 +117,11 @@ func (s *Service) validate(ctx context.Context, in CreateInput, now time.Time) (
 	}
 	created.Street = strings.TrimSpace(in.Street)
 	if created.Street == "" {
-		fields.Add("street", validation.CodeRequired)
+		fields.Add("location.address", validation.CodeRequired)
 	}
 	created.City = strings.TrimSpace(in.City)
 	if created.City == "" {
-		fields.Add("city", validation.CodeRequired)
+		fields.Add("location.city", validation.CodeRequired)
 	}
 	created.PostalCode = strings.TrimSpace(in.PostalCode)
 	created.Country = strings.TrimSpace(in.Country)
@@ -199,8 +199,8 @@ func (s *Service) resolveVillains(ctx context.Context, rawIDs []string, created 
 }
 
 // List retourne les incidents proposés aux héros, les plus récents d'abord.
-func (s *Service) List(ctx context.Context, limit, offset int) ([]Incident, int64, error) {
-	return s.Repo.List(ctx, limit, offset)
+func (s *Service) List(ctx context.Context, reporterID *uuid.UUID, limit, offset int) ([]Incident, int64, error) {
+	return s.Repo.List(ctx, reporterID, limit, offset)
 }
 
 // Get retourne le détail d'un incident.

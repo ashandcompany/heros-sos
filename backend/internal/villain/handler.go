@@ -58,6 +58,7 @@ type Response struct {
 	MainSector  string    `json:"mainSector,omitempty"`
 	Description string    `json:"description,omitempty"`
 	TypeIDs     []int16   `json:"typeIds"`
+	ReportedIncidentsCount int64 `json:"reportedIncidentsCount"`
 	ThreatLevel string    `json:"threatLevel"`
 	Status      string    `json:"status"`
 	CreatedAt   time.Time `json:"createdAt"`
@@ -67,6 +68,7 @@ func newResponse(v Villain) Response {
 	return Response{
 		ID: v.ID, Alias: v.Alias, LastName: v.LastName, FirstName: v.FirstName,
 		MainSector: v.MainSector, Description: v.Description, TypeIDs: v.TypeIDs,
+		ReportedIncidentsCount: v.ReportedIncidentsCount,
 		ThreatLevel: string(v.ThreatLevel), Status: string(v.Status), CreatedAt: v.CreatedAt,
 	}
 }

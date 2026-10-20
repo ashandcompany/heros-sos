@@ -14,8 +14,8 @@ type typeView struct {
 }
 
 type villainView struct {
-	ID, Alias string
-	TypeIDs   []int16
+	ID, Alias, ThreatLevel, Status string
+	TypeIDs                        []int16
 }
 
 func (e *e2e) createType(a *actor, code, label string, endangersLife bool) typeView {
@@ -90,7 +90,8 @@ func TestVillainsAreCreatedByUsers(t *testing.T) {
 	var villain villainView
 	created.decode(t, &villain)
 	if created.status != http.StatusCreated || villain.Alias != "Le Corbeau Gris" ||
-		len(villain.TypeIDs) != 2 || villain.TypeIDs[0] != theft.ID || villain.TypeIDs[1] != burglary.ID {
+		len(villain.TypeIDs) != 2 || villain.TypeIDs[0] != theft.ID || villain.TypeIDs[1] != burglary.ID ||
+		villain.ThreatLevel != "faible" || villain.Status != "en-liberte" {
 		t.Fatalf("création : %d %s", created.status, created.body)
 	}
 	if got := citizen.request(http.MethodPatch, "/villains/"+villain.ID, map[string]any{
@@ -107,6 +108,28 @@ func TestVillainsAreCreatedByUsers(t *testing.T) {
 		"alias": "Le Corbeau Gris", "typeIds": []int16{theft.ID},
 	}); got.status != http.StatusForbidden {
 		t.Errorf("un autre utilisateur ne modifie pas les spécialités : %d", got.status)
+	}
+	if got := citizen.request(http.MethodPatch, "/villains/"+villain.ID, map[string]any{
+		"alias": "Le Corbeau Gris", "typeIds": []int16{burglary.ID}, "threatLevel": "critique",
+	}); got.status != http.StatusForbidden {
+		t.Errorf("le créateur ne modifie pas le niveau de menace : %d", got.status)
+	}
+	if got := moderator.request(http.MethodPatch, "/villains/"+villain.ID, map[string]any{
+		"alias": "Le Corbeau Gris", "typeIds": []int16{burglary.ID},
+		"threatLevel": "eleve", "status": "emprisonne",
+	}); got.status != http.StatusOK {
+		t.Fatalf("modification des valeurs de modération : %d %s", got.status, got.body)
+	} else {
+		got.decode(t, &villain)
+		if villain.ThreatLevel != "eleve" || villain.Status != "emprisonne" {
+			t.Errorf("valeurs renvoyées : threatLevel=%q status=%q", villain.ThreatLevel, villain.Status)
+		}
+	}
+	if got := moderator.request(http.MethodPatch, "/villains/"+villain.ID, map[string]any{
+		"alias": "Le Corbeau Gris", "typeIds": []int16{burglary.ID},
+		"threatLevel": "apocalypse", "status": "libre",
+	}); got.status != http.StatusUnprocessableEntity || got.fields()["threatLevel"] != "invalid" || got.fields()["status"] != "invalid" {
+		t.Errorf("enums invalides : %d %s", got.status, got.body)
 	}
 	if got := moderator.post("/villains", map[string]string{"alias": "Le Corbeau Gris"}); got.status != http.StatusConflict ||
 		got.code() != "villain_alias_already_used" {

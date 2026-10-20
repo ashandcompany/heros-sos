@@ -45,6 +45,8 @@ type updatePayload struct {
 	MainSector  *string  `json:"mainSector"`
 	Description *string  `json:"description"`
 	TypeIDs     *[]int16 `json:"typeIds"`
+	ThreatLevel *string  `json:"threatLevel"`
+	Status      *string  `json:"status"`
 }
 
 // Response est un vilain.
@@ -56,13 +58,16 @@ type Response struct {
 	MainSector  string    `json:"mainSector,omitempty"`
 	Description string    `json:"description,omitempty"`
 	TypeIDs     []int16   `json:"typeIds"`
+	ThreatLevel string    `json:"threatLevel"`
+	Status      string    `json:"status"`
 	CreatedAt   time.Time `json:"createdAt"`
 }
 
 func newResponse(v Villain) Response {
 	return Response{
 		ID: v.ID, Alias: v.Alias, LastName: v.LastName, FirstName: v.FirstName,
-		MainSector: v.MainSector, Description: v.Description, TypeIDs: v.TypeIDs, CreatedAt: v.CreatedAt,
+		MainSector: v.MainSector, Description: v.Description, TypeIDs: v.TypeIDs,
+		ThreatLevel: string(v.ThreatLevel), Status: string(v.Status), CreatedAt: v.CreatedAt,
 	}
 }
 
@@ -89,6 +94,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	updated, err := h.service.Update(r.Context(), principal.UserID, principal.Role, id, UpdateInput{
 		Alias: body.Alias, LastName: body.LastName, FirstName: body.FirstName,
 		MainSector: body.MainSector, Description: body.Description, TypeIDs: *body.TypeIDs,
+		ThreatLevel: body.ThreatLevel, Status: body.Status,
 	}, httpx.ClientIPFrom(r.Context()))
 	if err != nil {
 		h.fail(w, r, err)

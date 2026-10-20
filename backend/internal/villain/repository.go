@@ -35,6 +35,8 @@ type Villain struct {
 	FirstName   string
 	MainSector  string
 	Description string
+	ThreatLevel ThreatLevel
+	Status      Status
 	CreatedBy   *uuid.UUID
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
@@ -48,6 +50,8 @@ type record struct {
 	FirstName   *string
 	MainSector  *string
 	Description *string
+	ThreatLevel string
+	Status      string
 	CreatedBy   *uuid.UUID
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
@@ -63,7 +67,10 @@ type specialtyRecord struct {
 func (specialtyRecord) TableName() string { return "villain_specialties" }
 
 func (r record) toVillain() Villain {
-	v := Villain{ID: r.ID, Alias: r.Alias, CreatedBy: r.CreatedBy, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}
+	v := Villain{
+		ID: r.ID, Alias: r.Alias, ThreatLevel: ThreatLevel(r.ThreatLevel), Status: Status(r.Status),
+		CreatedBy: r.CreatedBy, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+	}
 	if r.LastName != nil {
 		v.LastName = *r.LastName
 	}
@@ -102,6 +109,7 @@ func (r *gormRepository) Create(ctx context.Context, v *Villain) error {
 	rec := record{
 		ID: v.ID, Alias: v.Alias, LastName: optional(v.LastName), FirstName: optional(v.FirstName),
 		MainSector: optional(v.MainSector), Description: optional(v.Description),
+		ThreatLevel: string(v.ThreatLevel), Status: string(v.Status),
 		CreatedBy: v.CreatedBy, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt,
 	}
 	if err := r.conn(ctx).Create(&rec).Error; err != nil {
@@ -200,7 +208,8 @@ func (r *gormRepository) typeIDs(ctx context.Context, villainIDs []uuid.UUID) (m
 func (r *gormRepository) Update(ctx context.Context, v *Villain) error {
 	result := r.conn(ctx).Table(tableVillains).Where("id = ?", v.ID).Updates(map[string]any{
 		"alias": v.Alias, "last_name": optional(v.LastName), "first_name": optional(v.FirstName),
-		"main_sector": optional(v.MainSector), "description": optional(v.Description), "updated_at": v.UpdatedAt,
+		"main_sector": optional(v.MainSector), "description": optional(v.Description),
+		"threat_level": string(v.ThreatLevel), "status": string(v.Status), "updated_at": v.UpdatedAt,
 	})
 	if result.Error != nil {
 		if database.IsUniqueViolation(result.Error, aliasUniqueConstrain) {

@@ -12,7 +12,6 @@ import {
   formatDate,
   formatInteger,
   formatLocation,
-  incidentTypeLabels,
   threatLevelLabels,
   villainStatusLabels,
 } from "@/lib/format";
@@ -91,7 +90,7 @@ async function VillainSheet({ params }: { params: Promise<{ id: string }> }) {
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <StatusBadge status={incident.status} />
-                    <span className="text-xs text-muted">{incidentTypeLabels[incident.type]}</span>
+                    <span className="text-xs text-muted">{incident.type.label}</span>
                   </div>
                   <h3 className="mt-2 font-display font-semibold">{incident.title}</h3>
                   <p className="mt-1 text-sm text-muted">

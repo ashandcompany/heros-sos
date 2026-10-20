@@ -4,12 +4,7 @@ import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { RatingStars } from "@/components/ui/RatingStars";
 import { getCitizenIncident } from "@/lib/api";
-import {
-  formatDateTime,
-  incidentStatusLabels,
-  incidentTypeLabels,
-  reporterRoleLabels,
-} from "@/lib/format";
+import { formatDateTime, incidentStatusLabels, reporterRoleLabels } from "@/lib/format";
 import { heroSheetRoute, routes, villainSheetRoute } from "@/lib/routes";
 import { requireCitizenSession } from "@/lib/server-session";
 import type { CitizenIncidentDetail } from "@/types";
@@ -151,7 +146,7 @@ export async function IncidentDetail({ params }: { params: Promise<{ id: string 
       <header className="mb-8">
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone={statusTone[incident.status]}>{incidentStatusLabels[incident.status]}</Badge>
-          <Badge>{incidentTypeLabels[incident.type]}</Badge>
+          <Badge>{incident.type.label}</Badge>
           {isMine && incident.moderation === "en-attente" && (
             <Badge tone="warning">En cours de vérification</Badge>
           )}

@@ -1,12 +1,6 @@
 import { accountsMock } from "@/mocks/users";
 import { citizensMock } from "@/mocks/citizens";
-import type {
-  CitizenAccount,
-  ContactUpdate,
-  ModerationStatus,
-  MutationResult,
-  MyAccount,
-} from "@/types";
+import type { CitizenAccount, ContactUpdate, MutationResult, MyAccount } from "@/types";
 import { isApiEnabled, mockResponse } from "./config";
 import { getApiSession } from "./http";
 import { userFromToken } from "./session-user";
@@ -92,31 +86,14 @@ export async function updateNewsletterPreference(
 /* ---------- Back-office (rôle admin) ---------- */
 
 /**
- * Comptes citoyens, des plus récents aux plus anciens.
- * Future implémentation : `GET ${API_URL}/admin/citizens?sort=-registeredAt`
+ * Changements d'adresse email en attente de validation, ou `null` avec l'API : elle ne les gère
+ * pas encore (aucune route dans le contrat), la section est alors masquée.
+ * Future implémentation : `GET ${API_URL}/admin/email-change-requests`
  */
-export async function getCitizenAccounts(token: string): Promise<CitizenAccount[]> {
+export async function getEmailChangeRequests(token: string): Promise<CitizenAccount[] | null> {
+  if (isApiEnabled) return null;
   await userFromToken(token, "admin");
-  return mockResponse(
-    [...citizensMock].sort((a, b) => Date.parse(b.registeredAt) - Date.parse(a.registeredAt)),
-  );
-}
-
-/**
- * Valide un compte nouvellement créé, ou le suspend (`rejete` : connexion impossible).
- * Future implémentation : `PUT ${API_URL}/admin/citizens/${id}/moderation` avec `{ decision }`.
- */
-export async function moderateAccount(
-  token: string,
-  id: string,
-  decision: ModerationStatus,
-): Promise<MutationResult> {
-  await userFromToken(token, "admin");
-  const account = citizensMock.find((existing) => existing.id === id);
-  if (!account) return mockResponse({ ok: false, error: "Compte introuvable." });
-
-  account.moderation = decision;
-  return mockResponse({ ok: true });
+  return mockResponse(citizensMock.filter(({ pendingEmail }) => pendingEmail));
 }
 
 /**

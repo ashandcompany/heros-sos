@@ -1,7 +1,7 @@
 import { Avatar } from "@/components/ui/Avatar";
 import { RatingStars } from "@/components/ui/RatingStars";
 import { getMyInterventions } from "@/lib/api";
-import { formatDate, formatDateTime, incidentTypeLabels } from "@/lib/format";
+import { formatDate, formatDateTime } from "@/lib/format";
 import { requireCitizenSession } from "@/lib/server-session";
 import { RatingForm } from "./RatingForm";
 
@@ -49,7 +49,7 @@ export async function InterventionsList() {
                     {incident.title}
                   </h2>
                   <p className="mt-1 text-sm text-muted">
-                    {incidentTypeLabels[incident.type]} · {incident.location.city} · Résolu le{" "}
+                    {incident.type.label} · {incident.location.city} · Résolu le{" "}
                     <time dateTime={incident.resolvedAt}>{formatDate(incident.resolvedAt)}</time>
                   </p>
                 </div>

@@ -28,6 +28,7 @@ export const routes = {
   admin: "/admin",
   adminIncidents: "/admin/incidents",
   adminReportIncident: "/admin/incidents/signaler",
+  adminIncidentTypes: "/admin/types-incident",
   adminAccounts: "/admin/comptes",
   adminHeroes: "/admin/super-heros",
   adminVideos: "/admin/videotheque",
@@ -91,6 +92,7 @@ export const heroNav: NavItem[] = [
 export const adminNav: NavItem[] = [
   { label: "Tableau de bord", href: routes.admin },
   { label: "Incidents", href: routes.adminIncidents },
+  { label: "Types d'incident", href: routes.adminIncidentTypes },
   { label: "Comptes", href: routes.adminAccounts },
   { label: "Super-héros", href: routes.adminHeroes },
   { label: "Vidéothèque", href: routes.adminVideos },

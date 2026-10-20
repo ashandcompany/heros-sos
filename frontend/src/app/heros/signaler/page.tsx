@@ -5,17 +5,18 @@ import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { DeclareIncidentForm } from "@/components/citizen/DeclareIncidentForm";
 import { IncidentListItem } from "@/components/citizen/IncidentListItem";
 import { ListSkeleton } from "@/components/citizen/IncidentsSections";
-import { getMyIncidents, getVillains } from "@/lib/api";
+import { getIncidentTypes, getMyIncidents, getVillains } from "@/lib/api";
 import { requireHeroSession } from "@/lib/server-session";
 
 export const metadata: Metadata = { title: "Signaler un incident" };
 
 async function HeroDeclareIncident() {
-  await requireHeroSession();
-  const villains = await getVillains();
+  const { token } = await requireHeroSession();
+  const [villains, types] = await Promise.all([getVillains(), getIncidentTypes(token)]);
   return (
     <DeclareIncidentForm
       villains={villains.map(({ id, alias }) => ({ id, alias }))}
+      types={types}
       action={heroDeclareIncidentAction}
     />
   );

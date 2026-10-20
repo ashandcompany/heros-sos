@@ -202,15 +202,33 @@ export function readSessionCookie(response: Response): string {
   return header.slice(prefix.length).split(";", 1)[0];
 }
 
-const roleFromApi: Record<ApiSchema<"UserView">["role"], UserRole> = {
+type ApiRole = ApiSchema<"UserView">["role"];
+
+const roleFromApi: Record<ApiRole, UserRole> = {
   citizen: "citoyen",
   hero: "super-heros",
   moderator: "admin",
 };
 
-/** Convertit un compte de l'API vers `AuthUser` : seul endroit où les rôles de l'API apparaissent. */
+const roleToApiByRole: Record<UserRole, ApiRole> = {
+  citoyen: "citizen",
+  "super-heros": "hero",
+  admin: "moderator",
+};
+
+/** Rôle de l'API vers celui du frontend : seul endroit où les rôles de l'API apparaissent. */
+export function fromApiRole(role: ApiRole): UserRole {
+  const converted = roleFromApi[role];
+  if (!converted) throw new Error(`Rôle inconnu renvoyé par l'API : ${role}`);
+  return converted;
+}
+
+/** Rôle du frontend vers celui de l'API (filtres). */
+export function roleToApi(role: UserRole): ApiRole {
+  return roleToApiByRole[role];
+}
+
+/** Convertit un compte de l'API vers `AuthUser`. */
 export function fromApiUser(user: ApiSchema<"UserView">): AuthUser {
-  const role = roleFromApi[user.role];
-  if (!role) throw new Error(`Rôle inconnu renvoyé par l'API : ${user.role}`);
-  return { id: user.id, displayName: user.displayName, role };
+  return { id: user.id, displayName: user.displayName, role: fromApiRole(user.role) };
 }

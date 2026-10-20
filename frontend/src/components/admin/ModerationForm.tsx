@@ -6,10 +6,10 @@ import { buttonClasses } from "@/components/ui/ButtonLink";
 import { cn } from "@/components/ui/cn";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { idleFormState, type FormState } from "@/lib/validation/form-state";
-import type { ModerationStatus } from "@/types";
 
 export interface Decision {
-  value: ModerationStatus;
+  /** Valeur transmise dans `decision` : un statut de modération ou une action (`deactivate`…). */
+  value: string;
   label: string;
   variant?: "primary" | "secondary" | "danger";
 }

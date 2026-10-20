@@ -1,9 +1,39 @@
+import type { ApiFailure } from "./api";
 import type { ModerationStatus } from "./moderation";
 import type { SuperHeroSummary } from "./super-hero";
 import type { VillainSummary } from "./villain";
 
-export type IncidentType =
-  "vol" | "cambriolage" | "prise-d-otages" | "agression" | "sabotage" | "enlevement";
+/**
+ * Type d'un incident, tel qu'il est embarqué dans l'incident (`typeCode` et `typeLabel` de
+ * l'API). Les types forment un référentiel géré par la modération : aucune liste n'est écrite en dur.
+ */
+export interface IncidentType {
+  /** Code stable (`vol`, `prise-d-otages`…). */
+  code: string;
+  /** Libellé affiché. */
+  label: string;
+}
+
+/** Type du référentiel (`GET /intervention-types`), proposé dans les formulaires. */
+export interface IncidentTypeDefinition extends IncidentType {
+  /** Identifiant envoyé à l'API (`typeId`). */
+  id: number;
+  /** Le type d'incident met des vies en danger. */
+  endangersLife: boolean;
+}
+
+/** Saisie d'un nouveau type par la modération (`InterventionTypePayload`). */
+export interface IncidentTypeInput {
+  code: string;
+  label: string;
+  endangersLife: boolean;
+}
+
+export type IncidentTypeCreationResult =
+  | { ok: true; type: IncidentTypeDefinition }
+  | { ok: false; error: "code-already-used" }
+  | { ok: false; error: "invalid-fields"; fields: Record<string, string> }
+  | ApiFailure;
 
 export type IncidentStatus = "signale" | "en-cours" | "resolu";
 
@@ -72,7 +102,8 @@ export type ResolvedIncident = Incident & {
 
 /** Données saisies par un citoyen pour déclarer un incident. */
 export interface IncidentDeclaration {
-  type: IncidentType;
+  /** Identifiant du type dans le référentiel (`typeId` de l'API). */
+  typeId: number;
   title: string;
   description: string;
   reporterRole: ReporterRole;
@@ -112,7 +143,8 @@ export interface RatingForModeration extends InterventionRating {
 /** Modifications d'un incident par la modération. */
 export interface IncidentUpdate {
   title: string;
-  type: IncidentType;
+  /** Identifiant du type dans le référentiel. */
+  typeId: number;
   status: IncidentStatus;
   description: string;
   location: { address: string; city: string };

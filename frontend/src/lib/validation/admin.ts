@@ -1,12 +1,12 @@
-import { incidentStatusLabels, incidentTypeLabels } from "@/lib/format";
+import { incidentStatusLabels } from "@/lib/format";
 import type {
   ArticleInput,
   ArticleStatus,
   IncidentStatus,
-  IncidentType,
+  IncidentTypeInput,
   IncidentUpdate,
 } from "@/types";
-import { DESCRIPTION_MAX_LENGTH, TITLE_MAX_LENGTH } from "./incident";
+import { DESCRIPTION_MAX_LENGTH, TITLE_MAX_LENGTH, isKnownTypeId } from "./incident";
 
 /* ---------- Correction d'un incident par la modération ---------- */
 
@@ -31,14 +31,14 @@ export function readIncidentEditValues(formData: FormData): IncidentEditValues {
 
 export function validateIncidentEdit(
   values: IncidentEditValues,
-  { villainIds, heroIds }: { villainIds: string[]; heroIds: string[] },
+  { villainIds, heroIds, typeIds }: { villainIds: string[]; heroIds: string[]; typeIds: number[] },
 ): Partial<Record<IncidentEditField, string>> {
   return {
     title:
       values.title.length < 5 || values.title.length > TITLE_MAX_LENGTH
         ? `Le titre doit contenir entre 5 et ${TITLE_MAX_LENGTH} caractères.`
         : undefined,
-    type: values.type in incidentTypeLabels ? undefined : "Choisissez le type d'incident.",
+    type: isKnownTypeId(values.type, typeIds) ? undefined : "Choisissez le type d'incident.",
     status: values.status in incidentStatusLabels ? undefined : "Choisissez un statut.",
     description:
       values.description.length > DESCRIPTION_MAX_LENGTH
@@ -60,7 +60,7 @@ export function validateIncidentEdit(
 export function toIncidentUpdate(values: IncidentEditValues): IncidentUpdate {
   return {
     title: values.title,
-    type: values.type as IncidentType,
+    typeId: Number(values.type),
     status: values.status as IncidentStatus,
     description: values.description,
     location: { address: values.address, city: values.city },
@@ -134,4 +134,46 @@ export function toArticleInput(values: Record<ArticleField, string>): ArticleInp
     content: values.content,
     status: values.status as ArticleStatus,
   };
+}
+
+/* ---------- Référentiel des types d'incident ---------- */
+
+export const incidentTypeFields = ["code", "label", "endangersLife"] as const;
+export type IncidentTypeField = (typeof incidentTypeFields)[number];
+export type IncidentTypeValues = Record<IncidentTypeField, string>;
+
+export const INCIDENT_TYPE_CODE_MAX_LENGTH = 40;
+export const INCIDENT_TYPE_LABEL_MAX_LENGTH = 60;
+/** Code stable, en minuscules et sans accent : `prise-d-otages`. */
+const INCIDENT_TYPE_CODE_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+export function readIncidentTypeValues(formData: FormData): IncidentTypeValues {
+  return {
+    code: String(formData.get("code") ?? "").trim(),
+    label: String(formData.get("label") ?? "").trim(),
+    endangersLife: formData.get("endangersLife") === "on" ? "on" : "",
+  };
+}
+
+export function validateIncidentType(
+  values: IncidentTypeValues,
+): Partial<Record<IncidentTypeField, string>> {
+  return {
+    code: !values.code
+      ? "Indiquez le code du type."
+      : values.code.length > INCIDENT_TYPE_CODE_MAX_LENGTH ||
+          !INCIDENT_TYPE_CODE_PATTERN.test(values.code)
+        ? `Le code ne contient que des minuscules sans accent, des chiffres et des tirets (${INCIDENT_TYPE_CODE_MAX_LENGTH} caractères au plus).`
+        : undefined,
+    label: !values.label
+      ? "Indiquez le libellé affiché."
+      : values.label.length > INCIDENT_TYPE_LABEL_MAX_LENGTH
+        ? `Le libellé ne doit pas dépasser ${INCIDENT_TYPE_LABEL_MAX_LENGTH} caractères.`
+        : undefined,
+    endangersLife: undefined,
+  };
+}
+
+export function toIncidentTypeInput(values: IncidentTypeValues): IncidentTypeInput {
+  return { code: values.code, label: values.label, endangersLife: values.endangersLife === "on" };
 }

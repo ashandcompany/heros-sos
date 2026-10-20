@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { routes } from "@/lib/routes";
-import { declareIncident, getVillains, rateIntervention } from "@/lib/api";
+import { declareIncident, getIncidentTypes, getVillains, rateIntervention } from "@/lib/api";
 import {
   requireAdminSession,
   requireCitizenSession,
@@ -50,8 +50,11 @@ async function submitDeclaration(
   const occurredAtIso = String(formData.get("occurredAtIso") ?? "");
   const validated = { ...values, occurredAt: occurredAtIso || values.occurredAt };
 
-  const villainIds = (await getVillains()).map(({ id }) => id);
-  const fieldErrors = validateDeclaration(validated, villainIds);
+  const [villains, types] = await Promise.all([getVillains(), getIncidentTypes(token)]);
+  const fieldErrors = validateDeclaration(validated, {
+    villainIds: villains.map(({ id }) => id),
+    typeIds: types.map(({ id }) => id),
+  });
 
   if (hasFieldErrors(fieldErrors)) return { status: "error", fieldErrors, values };
 

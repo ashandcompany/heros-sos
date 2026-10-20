@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { formatDateTime, incidentTypeLabels } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
 import { heroIncidentRoute } from "@/lib/routes";
 import type { Incident } from "@/types";
 import { PriorityBadge, StatusBadge } from "./IncidentBadges";
@@ -22,7 +22,7 @@ export function HeroIncidentCard({ incident, heroId }: { incident: Incident; her
       <div className="flex flex-wrap items-center gap-2">
         <PriorityBadge priority={incident.priority ?? "normale"} />
         <StatusBadge status={incident.status} />
-        <span className="text-xs text-muted">{incidentTypeLabels[incident.type]}</span>
+        <span className="text-xs text-muted">{incident.type.label}</span>
       </div>
       <h3 className="mt-3 font-display font-semibold">
         <Link

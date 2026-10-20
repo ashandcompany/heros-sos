@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { dossierNumber } from "@/lib/dossier";
-import { formatDate, formatLocation, incidentTypeLabels } from "@/lib/format";
+import { formatDate, formatLocation } from "@/lib/format";
 import type { ResolvedIncident } from "@/types";
 
 /** Ligne de formulaire : intitulé imprimé, valeur tapée à la machine sur une ligne pointillée. */
@@ -73,7 +73,7 @@ export function IncidentCard({ incident }: { incident: ResolvedIncident }) {
         </h3>
 
         <dl className="mt-3 space-y-2 text-sm">
-          <Field label="Nature">{incidentTypeLabels[incident.type]}</Field>
+          <Field label="Nature">{incident.type.label}</Field>
           <Field label="Lieu">{formatLocation(incident.location)}</Field>
           <Field label="Agent">{incident.hero.alias}</Field>
           <Field label="Suspect">{incident.villain?.alias ?? "Non identifié"}</Field>

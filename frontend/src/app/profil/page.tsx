@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { AccountDetails, AccountDetailsSkeleton } from "@/components/citizen/AccountDetails";
+import { HeroRequestPanel } from "@/components/citizen/HeroRequestPanel";
 
 export const metadata: Metadata = { title: "Mon compte" };
 
@@ -11,6 +12,18 @@ export default function MyAccountPage() {
       <Suspense fallback={<AccountDetailsSkeleton />}>
         <AccountDetails />
       </Suspense>
+      <div className="mt-6">
+        <Suspense
+          fallback={
+            <div
+              aria-hidden="true"
+              className="h-64 border-2 border-border bg-surface motion-safe:animate-pulse"
+            />
+          }
+        >
+          <HeroRequestPanel />
+        </Suspense>
+      </div>
     </>
   );
 }

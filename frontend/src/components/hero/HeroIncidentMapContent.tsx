@@ -3,7 +3,7 @@ import { EmptyState } from "@/components/admin/ModerationFilter";
 import { IncidentMap } from "@/components/map/IncidentMap";
 import { MapLegend } from "@/components/map/MapLegend";
 import { getIncidentMap } from "@/lib/api";
-import { formatDateTime, incidentTypeLabels } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
 import { getMapTileConfig } from "@/lib/map";
 import { heroIncidentRoute } from "@/lib/routes";
 import { requireHeroSession } from "@/lib/server-session";
@@ -53,7 +53,7 @@ export async function HeroIncidentMapContent() {
                     {incident.title}
                   </Link>
                   <span className="text-sm text-muted">
-                    {incidentTypeLabels[incident.type]} · {incident.place} ·{" "}
+                    {incident.type.label} · {incident.place} ·{" "}
                     <time dateTime={incident.reportedAt} className="font-mono">
                       {formatDateTime(incident.reportedAt)}
                     </time>

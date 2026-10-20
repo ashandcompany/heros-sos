@@ -11,7 +11,7 @@ import {
 export const metadata: Metadata = { title: "Super-héros" };
 
 /** Back-office, réservé aux administrateurs (src/proxy.ts + vérification dans les composants). */
-export default function AdminSuperHeroesPage() {
+export default function AdminSuperHeroesPage({ searchParams }: PageProps<"/admin/super-heros">) {
   return (
     <>
       <AdminPageHeader
@@ -24,7 +24,7 @@ export default function AdminSuperHeroesPage() {
           Demandes en attente
         </h2>
         <Suspense fallback={<AdminListSkeleton items={2} />}>
-          <HeroApplications />
+          <HeroApplications searchParams={searchParams} />
         </Suspense>
       </section>
 

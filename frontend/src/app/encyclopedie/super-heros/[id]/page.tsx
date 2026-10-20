@@ -13,7 +13,7 @@ import {
   getSuperHero,
 } from "@/lib/api";
 import { dossierNumber } from "@/lib/dossier";
-import { formatDate, formatInteger, formatLocation, incidentTypeLabels } from "@/lib/format";
+import { formatDate, formatInteger, formatLocation } from "@/lib/format";
 import { routes, villainSheetRoute } from "@/lib/routes";
 
 export async function generateMetadata({
@@ -111,9 +111,7 @@ async function HeroSheet({ params }: { params: Promise<{ id: string }> }) {
                   >
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge tone="success">Résolu</Badge>
-                      <span className="text-xs text-muted">
-                        {incidentTypeLabels[incident.type]}
-                      </span>
+                      <span className="text-xs text-muted">{incident.type.label}</span>
                     </div>
                     <h3 className="mt-2 font-display font-semibold">{incident.title}</h3>
                     <p className="mt-1 text-sm text-muted">

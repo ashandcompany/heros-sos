@@ -5,7 +5,9 @@ import { redirect } from "next/navigation";
 import {
   createArticle,
   deleteArticle,
+  createIncidentType,
   deleteVideo,
+  getIncidentTypes,
   getSuperHeroes,
   getVillains,
   moderateAccount,
@@ -23,15 +25,26 @@ import { requireAdminSession } from "@/lib/server-session";
 import {
   readArticleValues,
   readIncidentEditValues,
+  readIncidentTypeValues,
+  toIncidentTypeInput,
   toArticleInput,
   toIncidentUpdate,
   validateArticle,
   validateIncidentEdit,
+  validateIncidentType,
   type ArticleField,
   type IncidentEditField,
+  type IncidentTypeField,
 } from "@/lib/validation/admin";
-import { hasFieldErrors, type FormState } from "@/lib/validation/form-state";
-import type { ModerationStatus, MutationResult } from "@/types";
+import { apiFailureMessage, hasFieldErrors, type FormState } from "@/lib/validation/form-state";
+import { validateRejectionReason } from "@/lib/validation/hero";
+import type {
+  AccountModerationAction,
+  AccountModerationResult,
+  HeroReviewResult,
+  ModerationStatus,
+  MutationResult,
+} from "@/types";
 
 /*
  * Server Actions du back-office. Chacune revérifie la session admin (le proxy ne suffit pas)
@@ -94,10 +107,15 @@ export async function updateIncidentAction(
   const id = String(formData.get("id") ?? "");
   const values = readIncidentEditValues(formData);
 
-  const [villains, heroes] = await Promise.all([getVillains(), getSuperHeroes()]);
+  const [villains, heroes, types] = await Promise.all([
+    getVillains(),
+    getSuperHeroes(),
+    getIncidentTypes(token),
+  ]);
   const fieldErrors = validateIncidentEdit(values, {
     villainIds: villains.map(({ id: villainId }) => villainId),
     heroIds: heroes.map(({ id: heroId }) => heroId),
+    typeIds: types.map(({ id: typeId }) => typeId),
   });
   if (hasFieldErrors(fieldErrors)) return { status: "error", fieldErrors, values };
 
@@ -116,6 +134,47 @@ export async function updateIncidentAction(
   return { status: "success", message: "Les modifications ont été enregistrées.", fieldErrors: {} };
 }
 
+/* ---------- Types d'incident ---------- */
+
+export async function createIncidentTypeAction(
+  _previousState: FormState<IncidentTypeField>,
+  formData: FormData,
+): Promise<FormState<IncidentTypeField>> {
+  const token = await requireAdminSession();
+  const values = readIncidentTypeValues(formData);
+  const fieldErrors = validateIncidentType(values);
+  if (hasFieldErrors(fieldErrors)) return { status: "error", fieldErrors, values };
+
+  const result = await createIncidentType(token, toIncidentTypeInput(values));
+  if (!result.ok) {
+    switch (result.error) {
+      case "code-already-used":
+        return { status: "error", fieldErrors: { code: "Ce code est déjà utilisé." }, values };
+      case "invalid-fields":
+        return {
+          status: "error",
+          fieldErrors: {
+            code: result.fields.code && "Ce code n'a pas été accepté.",
+            label: result.fields.label && "Ce libellé n'a pas été accepté.",
+          },
+          values,
+        };
+      default:
+        return { status: "error", message: apiFailureMessage(result), fieldErrors: {}, values };
+    }
+  }
+
+  // Les formulaires de déclaration proposent aussitôt le nouveau type.
+  for (const path of [routes.adminIncidentTypes, routes.profileIncidents, routes.heroDeclare]) {
+    revalidatePath(path);
+  }
+  return {
+    status: "success",
+    message: `Type « ${result.type.label} » créé : il est proposé dans les formulaires de déclaration.`,
+    fieldErrors: {},
+  };
+}
+
 /* ---------- Comptes ---------- */
 
 export async function moderateAccountAction(
@@ -123,19 +182,41 @@ export async function moderateAccountAction(
   formData: FormData,
 ): Promise<FormState> {
   const token = await requireAdminSession();
-  const request = readDecision(formData);
-  if (!request) return invalidRequest;
+  const id = String(formData.get("id") ?? "");
+  const action = String(formData.get("decision") ?? "");
+  if (!id || !isAccountModerationAction(action)) return invalidRequest;
 
-  const result = await moderateAccount(token, request.id, request.decision);
-  return settle(
-    result,
-    [routes.adminAccounts],
-    {
-      "en-attente": "Compte remis en attente de vérification.",
-      valide: "Compte validé.",
-      rejete: "Compte suspendu : la personne ne peut plus se connecter.",
-    }[request.decision],
-  );
+  const result = await moderateAccount(token, id, action);
+  if (!result.ok) {
+    return { status: "error", message: accountModerationErrorMessage(result), fieldErrors: {} };
+  }
+
+  for (const path of [routes.admin, routes.adminAccounts]) revalidatePath(path);
+  return { status: "success", message: accountModerationMessages[action], fieldErrors: {} };
+}
+
+const accountModerationMessages: Record<AccountModerationAction, string> = {
+  deactivate: "Compte désactivé : la personne est déconnectée et ne peut plus se connecter.",
+  reactivate: "Compte réactivé : la personne peut de nouveau se connecter.",
+  verify: "Compte marqué comme vérifié.",
+};
+
+const isAccountModerationAction = (value: string): value is AccountModerationAction =>
+  value in accountModerationMessages;
+
+function accountModerationErrorMessage(
+  result: Extract<AccountModerationResult, { ok: false }>,
+): string {
+  switch (result.error) {
+    case "not-found":
+      return "Ce compte n'existe plus.";
+    case "self-action":
+      return "Vous ne pouvez pas effectuer cette action sur votre propre compte.";
+    case "protected-account":
+      return "Un compte de modérateur ne peut pas être désactivé depuis le back-office.";
+    default:
+      return apiFailureMessage(result);
+  }
 }
 
 export async function reviewEmailChangeAction(
@@ -157,21 +238,70 @@ export async function reviewEmailChangeAction(
 
 /* ---------- Super-héros ---------- */
 
+function heroReviewError(
+  result: Extract<HeroReviewResult, { ok: false }>,
+  reason: string,
+): FormState<"reason"> {
+  const values = { reason };
+  switch (result.error) {
+    case "already-reviewed":
+      return {
+        status: "error",
+        message: "Cette demande a déjà été traitée.",
+        fieldErrors: {},
+        values,
+      };
+    case "not-found":
+      return { status: "error", message: "Cette demande n'existe plus.", fieldErrors: {}, values };
+    case "invalid-reason":
+      return {
+        status: "error",
+        fieldErrors: { reason: "Ce motif n'a pas été accepté : vérifiez sa longueur." },
+        values,
+      };
+    default:
+      return { status: "error", message: apiFailureMessage(result), fieldErrors: {}, values };
+  }
+}
+
+/**
+ * Accepte ou refuse une demande de statut super-héros. Le motif est obligatoire pour un refus :
+ * il est communiqué au demandeur.
+ */
 export async function reviewHeroApplicationAction(
-  _previousState: FormState,
+  _previousState: FormState<"reason">,
   formData: FormData,
-): Promise<FormState> {
+): Promise<FormState<"reason">> {
   const token = await requireAdminSession();
   const request = readDecision(formData);
   if (!request || request.decision === "en-attente") return invalidRequest;
 
   const approve = request.decision === "valide";
-  const result = await reviewHeroApplication(token, request.id, approve);
-  return settle(
-    result,
-    [routes.adminHeroes, routes.home, routes.encyclopedia],
-    approve ? "Demande validée : le super-héros a rejoint la plateforme." : "Demande refusée.",
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!approve) {
+    const reasonError = validateRejectionReason(reason);
+    if (reasonError) {
+      return { status: "error", fieldErrors: { reason: reasonError }, values: { reason } };
+    }
+  }
+
+  const result = await reviewHeroApplication(
+    token,
+    request.id,
+    approve ? { approve: true } : { approve: false, reason },
   );
+  if (!result.ok) return heroReviewError(result, reason);
+
+  for (const path of [routes.admin, routes.adminHeroes, routes.home, routes.encyclopedia]) {
+    revalidatePath(path);
+  }
+  return {
+    status: "success",
+    message: approve
+      ? "Demande acceptée : le compte a maintenant accès à l'espace super-héros."
+      : "Demande refusée : le motif a été communiqué au demandeur.",
+    fieldErrors: {},
+  };
 }
 
 /* ---------- Vidéothèque ---------- */

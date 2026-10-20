@@ -1,12 +1,7 @@
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
 import { getHeroIncident } from "@/lib/api";
-import {
-  formatDateTime,
-  incidentTypeLabels,
-  interventionOutcomeLabels,
-  reporterRoleLabels,
-} from "@/lib/format";
+import { formatDateTime, interventionOutcomeLabels, reporterRoleLabels } from "@/lib/format";
 import { requireHeroSession } from "@/lib/server-session";
 import { FinishInterventionForm, PriorityForm, TakeChargeForm } from "./IncidentActions";
 import { PriorityBadge, StatusBadge } from "./IncidentBadges";
@@ -33,7 +28,7 @@ export async function HeroIncidentDetail({ params }: { params: Promise<{ id: str
         <div className="flex flex-wrap items-center gap-2">
           <PriorityBadge priority={incident.priority} />
           <StatusBadge status={incident.status} />
-          <Badge>{incidentTypeLabels[incident.type]}</Badge>
+          <Badge>{incident.type.label}</Badge>
         </div>
         <h1 className="mt-3 font-display text-3xl font-bold">{incident.title}</h1>
         <p className="mt-2 text-sm text-muted">

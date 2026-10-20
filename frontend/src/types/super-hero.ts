@@ -1,29 +1,64 @@
+import type { ApiFailure } from "./api";
 import type { Civility, PostalAddress } from "./auth";
 import type { Incident, IncidentType, InterventionRating } from "./incident";
 import type { ModerationStatus } from "./moderation";
 import type { VillainSummary } from "./villain";
 
-/** Demande d'inscription d'un nouveau super-héros, validée ou refusée par la modération. */
+/**
+ * Demande de statut super-héros déposée par un citoyen, vue par la modération (schéma
+ * `HeroApplicant`). Un compte n'a qu'une demande : elle est identifiée par son demandeur.
+ */
 export interface HeroApplication {
-  id: string;
+  /** Identifiant du compte demandeur (routes de décision). */
+  userId: string;
   alias: string;
-  power: string;
-  civility: Civility;
+  /** Description publique proposée (peut être vide). */
+  bio: string;
+  /** Message adressé aux modérateurs, jamais public (peut être vide). */
+  requestMessage: string;
   firstName: string;
   lastName: string;
-  /** Date ISO `YYYY-MM-DD`. */
-  birthDate: string;
   email: string;
-  mobilePhone: string;
-  address: PostalAddress;
-  /** Présentation et motivations du candidat. */
-  motivation: string;
   /** Date ISO 8601 du dépôt de la demande. */
   submittedAt: string;
   status: ModerationStatus;
-  /** Date ISO 8601 de la décision, `null` tant que la demande est en attente. */
-  reviewedAt: string | null;
 }
+
+/** Ce que le citoyen saisit pour demander le statut de super-héros (`HeroRequestPayload`). */
+export interface HeroRequestInput {
+  alias: string;
+  bio: string;
+  requestMessage: string;
+}
+
+/** État de la demande du citoyen connecté (`HeroRequestStatus`). */
+export interface MyHeroRequest {
+  status: ModerationStatus;
+  alias: string;
+  /** Motif communiqué par la modération, seulement pour une demande refusée. */
+  rejectionReason: string | null;
+}
+
+export type HeroRequestResult =
+  | { ok: true }
+  | {
+      ok: false;
+      error:
+        | "already-pending"
+        | "already-hero"
+        | "alias-already-used"
+        /** Compte qui ne peut pas faire de demande (désactivé, non citoyen…). */
+        | "not-eligible";
+    }
+  /** Champs refusés par l'API : champ (`alias`, `bio`, `requestMessage`) → code (`invalid`…). */
+  | { ok: false; error: "invalid-fields"; fields: Record<string, string> }
+  | ApiFailure;
+
+export type HeroReviewResult =
+  | { ok: true }
+  | { ok: false; error: "not-found" | "already-reviewed" }
+  | { ok: false; error: "invalid-reason" }
+  | ApiFailure;
 
 export interface SuperHero {
   id: string;
@@ -68,7 +103,8 @@ export interface HeroDashboard {
   /** Statistiques de toute la plateforme. */
   global: {
     interventions: number;
-    incidentsByType: Record<IncidentType, number>;
+    /** Incidents par type, du plus fréquent au moins fréquent. */
+    incidentsByType: Array<{ type: IncidentType; count: number }>;
     rescuedCitizens: number;
     villainsIdentified: number;
     villainsImprisoned: number;

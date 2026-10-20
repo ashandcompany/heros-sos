@@ -4,9 +4,9 @@ import { ratingsMock } from "@/mocks/ratings";
 import { superHeroesMock, superHeroProfilesMock } from "@/mocks/super-heroes";
 import { videosMock } from "@/mocks/videos";
 import { villainsMock } from "@/mocks/villains";
-import { incidentTypeLabels } from "@/lib/format";
-import type { HeroDashboard, IncidentType, VillainSummary } from "@/types";
+import type { HeroDashboard, VillainSummary } from "@/types";
 import { mockResponse } from "./config";
+import { getIncidentTypes } from "./incident-types";
 import { summarizeRatings } from "./ratings";
 import { userFromToken } from "./session-user";
 
@@ -22,10 +22,12 @@ export async function getHeroDashboard(token: string): Promise<HeroDashboard> {
   const profile = superHeroProfilesMock.find(({ id }) => id === user.id);
   const incidents = incidentsMock.filter(({ moderation }) => moderation !== "rejete");
 
-  const incidentsByType = Object.fromEntries(
-    Object.keys(incidentTypeLabels).map((type) => [type, 0]),
-  ) as Record<IncidentType, number>;
-  for (const { type } of incidents) incidentsByType[type] += 1;
+  // Tous les types du référentiel, y compris ceux qui n'ont encore aucun signalement.
+  const counts = new Map<string, number>();
+  for (const { type } of incidents) counts.set(type.code, (counts.get(type.code) ?? 0) + 1);
+  const incidentsByType = (await getIncidentTypes(token))
+    .map(({ code, label }) => ({ type: { code, label }, count: counts.get(code) ?? 0 }))
+    .sort((a, b) => b.count - a.count);
 
   const myInterventions = interventionsMock.filter(({ hero }) => hero.id === user.id);
   const myVideos = videosMock.filter(({ hero }) => hero.id === user.id);

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { routes } from "@/lib/routes";
 import {
   requestEmailChange,
+  requestHeroStatus,
   updateMyAvatar,
   updateMyContact,
   updateNewsletterPreference,
@@ -16,7 +17,13 @@ import {
   validateEmail,
   type ContactField,
 } from "@/lib/validation/account";
-import { hasFieldErrors, type FormState } from "@/lib/validation/form-state";
+import { apiFailureMessage, hasFieldErrors, type FormState } from "@/lib/validation/form-state";
+import {
+  heroRequestFieldErrors,
+  readHeroRequestValues,
+  validateHeroRequest,
+  type HeroRequestField,
+} from "@/lib/validation/hero";
 
 export async function updateContactAction(
   _previousState: FormState<ContactField>,
@@ -107,6 +114,57 @@ export async function updateNewsletterAction(
     message: subscribed
       ? "Vous êtes abonné·e à la newsletter."
       : "Vous ne recevrez plus la newsletter.",
+    fieldErrors: {},
+  };
+}
+
+/* ---------- Demande de statut super-héros ---------- */
+
+const heroRequestErrorMessages = {
+  "already-pending": "Votre demande est déjà en cours d'examen.",
+  "already-hero": "Vous êtes déjà super-héros : rechargez la page pour ouvrir votre espace.",
+  "not-eligible": "Votre compte ne peut pas faire cette demande. Contactez le Bureau.",
+} as const;
+
+export async function requestHeroStatusAction(
+  _previousState: FormState<HeroRequestField>,
+  formData: FormData,
+): Promise<FormState<HeroRequestField>> {
+  const token = await requireCitizenSession();
+  const values = readHeroRequestValues(formData);
+  const fieldErrors = validateHeroRequest(values);
+
+  if (hasFieldErrors(fieldErrors)) return { status: "error", fieldErrors, values };
+
+  const result = await requestHeroStatus(token, values);
+  if (!result.ok) {
+    switch (result.error) {
+      case "alias-already-used":
+        return {
+          status: "error",
+          fieldErrors: { alias: "Ce pseudo est déjà utilisé : choisissez-en un autre." },
+          values,
+        };
+      case "invalid-fields":
+        return { status: "error", fieldErrors: heroRequestFieldErrors(result.fields), values };
+      case "already-pending":
+      case "already-hero":
+      case "not-eligible":
+        return {
+          status: "error",
+          message: heroRequestErrorMessages[result.error],
+          fieldErrors: {},
+          values,
+        };
+      default:
+        return { status: "error", message: apiFailureMessage(result), fieldErrors: {}, values };
+    }
+  }
+
+  revalidatePath(routes.profile);
+  return {
+    status: "success",
+    message: "Demande envoyée : le Bureau l'examinera dans les meilleurs délais.",
     fieldErrors: {},
   };
 }

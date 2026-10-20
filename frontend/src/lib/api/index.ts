@@ -24,12 +24,15 @@ export {
   declareIncident,
   finishIntervention,
   getAllIncidents,
+  getCitizenIncident,
   getHeroIncident,
   getHeroIncidents,
   getIncident,
   getLatestResolvedIncidents,
   getMyIncidents,
+  getIncidentsByVillain,
   getOngoingIncidents,
+  getResolvedIncidentsByHero,
   moderateIncident,
   setIncidentPriority,
   takeChargeOfIncident,
@@ -39,6 +42,7 @@ export { getModerationSummary } from "./moderation";
 export { subscribeToNewsletter } from "./newsletter";
 export {
   getMyInterventions,
+  getHeroPublicReviews,
   getMyReputation,
   getRatingsForModeration,
   moderateComment,
@@ -49,6 +53,7 @@ export {
   getFeaturedSuperHeroes,
   getHeroApplications,
   getMyHeroProfile,
+  getSuperHero,
   getSuperHeroes,
   getSuperHeroProfiles,
   requestHeroEmailChange,
@@ -65,4 +70,4 @@ export {
   getPublishedVideos,
   moderateVideo,
 } from "./videos";
-export { getVillains } from "./villains";
+export { getVillain, getVillains } from "./villains";

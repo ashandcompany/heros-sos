@@ -45,7 +45,7 @@ function GridSkeleton() {
       {Array.from({ length: 4 }, (_, index) => (
         <div
           key={index}
-          className="h-56 rounded-2xl border border-border bg-surface motion-safe:animate-pulse"
+          className="h-56 border-2 border-border bg-surface motion-safe:animate-pulse"
         />
       ))}
     </div>

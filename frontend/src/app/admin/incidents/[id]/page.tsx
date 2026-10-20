@@ -46,7 +46,7 @@ async function IncidentEditor({ params }: { params: Promise<{ id: string }> }) {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
         <section
           aria-labelledby="edit-title"
-          className="rounded-2xl border border-border bg-surface p-5 sm:p-8"
+          className="border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-5 sm:p-8"
         >
           <h2 id="edit-title" className="mb-6 font-display text-xl font-semibold">
             Informations de l&apos;incident
@@ -60,7 +60,7 @@ async function IncidentEditor({ params }: { params: Promise<{ id: string }> }) {
 
         <section
           aria-labelledby="decision-title"
-          className="rounded-2xl border border-border bg-surface p-5 sm:p-6"
+          className="border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-5 sm:p-6"
         >
           <h2 id="decision-title" className="font-display text-xl font-semibold">
             Décision
@@ -93,7 +93,7 @@ export default function AdminIncidentPage({ params }: PageProps<"/admin/incident
         fallback={
           <div
             aria-hidden="true"
-            className="h-[40rem] rounded-2xl border border-border bg-surface motion-safe:animate-pulse"
+            className="h-[40rem] border-2 border-border bg-surface motion-safe:animate-pulse"
           />
         }
       >

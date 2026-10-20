@@ -18,7 +18,7 @@ export function HeroIncidentCard({ incident, heroId }: { incident: Incident; her
       : null;
 
   return (
-    <article className="relative rounded-2xl border border-border bg-surface p-4 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary hover:border-muted sm:p-5">
+    <article className="relative border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-4 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary hover:border-muted sm:p-5">
       <div className="flex flex-wrap items-center gap-2">
         <PriorityBadge priority={incident.priority ?? "normale"} />
         <StatusBadge status={incident.status} />

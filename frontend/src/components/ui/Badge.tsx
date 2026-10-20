@@ -9,12 +9,12 @@ type Tone = "neutral" | "paper" | "accent" | "success" | "warning" | "danger" | 
  * danger = échoué / priorité haute (rouge brique), sage = priorité basse.
  */
 const toneClasses: Record<Tone, string> = {
-  neutral: "border-border bg-surface-raised text-foreground",
+  neutral: "border-edge bg-surface-raised text-foreground",
   // Texte clair sur fond sombre, foncé sur fond clair (foreground = papier en thème sombre).
-  paper: "border-foreground/50 bg-foreground/10 text-foreground",
-  accent: "border-accent/50 bg-accent/10 text-accent",
-  success: "border-success/50 bg-success/10 text-success",
-  warning: "border-rating/50 bg-rating/10 text-rating",
+  paper: "border-foreground bg-transparent text-foreground",
+  accent: "border-accent bg-transparent text-accent",
+  success: "border-success bg-transparent text-success",
+  warning: "border-rating bg-transparent text-rating",
   danger: "border-brick bg-brick text-paper",
   sage: "border-sage bg-sage text-paper",
 };
@@ -23,7 +23,7 @@ export function Badge({ tone = "neutral", children }: { tone?: Tone; children: R
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-sm border px-2 py-0.5 font-mono text-xs font-medium tracking-wider uppercase",
+        "inline-flex items-center gap-1 border-2 px-2 py-0.5 font-mono text-xs font-semibold tracking-wider uppercase",
         toneClasses[tone],
       )}
     >

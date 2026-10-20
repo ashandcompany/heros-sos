@@ -14,7 +14,7 @@ export default function ForgotPasswordPage() {
   return (
     <Container className="flex justify-center py-12 sm:py-20">
       <div className="w-full max-w-md">
-        <div className="rounded-2xl border border-border bg-surface p-6 sm:p-8">
+        <div className="border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-6 sm:p-8">
           <h1 className="font-display text-3xl font-bold">Mot de passe oublié</h1>
           <p className="mt-2 mb-8 text-muted">
             Saisissez l&apos;adresse email de votre compte : nous vous enverrons un lien pour

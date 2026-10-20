@@ -178,3 +178,8 @@ export async function requestHeroEmailChange(
   profile.pendingEmail = normalized;
   return mockResponse({ ok: true });
 }
+
+/** Profil public d'un super-héros. Future implémentation : `GET ${API_URL}/heroes/${id}` (404 → `null`). */
+export async function getSuperHero(id: string): Promise<SuperHero | null> {
+  return mockResponse(superHeroesMock.find((hero) => hero.id === id) ?? null);
+}

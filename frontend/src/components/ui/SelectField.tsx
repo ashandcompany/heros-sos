@@ -29,7 +29,7 @@ export function SelectField({
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? errorId : undefined}
         className={cn(
-          "min-h-12 w-full rounded-xl border bg-background px-4 text-foreground",
+          "min-h-12 w-full border-2 bg-background px-4 text-foreground",
           error ? "border-danger" : "border-border",
         )}
         {...selectProps}

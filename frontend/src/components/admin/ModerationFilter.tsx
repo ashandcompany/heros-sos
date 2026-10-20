@@ -73,7 +73,7 @@ export function AdminListSkeleton({ items = 3 }: { items?: number }) {
       {Array.from({ length: items }, (_, index) => (
         <div
           key={index}
-          className="h-40 rounded-2xl border border-border bg-surface motion-safe:animate-pulse"
+          className="h-40 border-2 border-border bg-surface motion-safe:animate-pulse"
         />
       ))}
     </div>

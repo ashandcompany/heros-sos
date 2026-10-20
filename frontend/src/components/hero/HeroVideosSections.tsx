@@ -108,7 +108,7 @@ export async function MyVideos() {
           <li key={video.id}>
             <article
               aria-labelledby={titleId}
-              className="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-border bg-surface p-5"
+              className="flex flex-wrap items-start justify-between gap-4 border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-5"
             >
               <div className="min-w-0 flex-1">
                 <ModerationBadge status={video.moderation} labels={videoStatusLabels} />

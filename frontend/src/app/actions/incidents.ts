@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { routes } from "@/lib/routes";
 import { declareIncident, getVillains, rateIntervention } from "@/lib/api";
-import { requireAdminSession, requireCitizenSession } from "@/lib/server-session";
+import {
+  requireAdminSession,
+  requireCitizenSession,
+  requireHeroSession,
+} from "@/lib/server-session";
 import { hasFieldErrors, type FormState } from "@/lib/validation/form-state";
 import {
   readDeclarationValues,
@@ -97,4 +101,17 @@ export async function rateInterventionAction(
 
   revalidatePath(routes.profileInterventions);
   return { status: "success", message: "Merci, votre avis a été enregistré.", fieldErrors: {} };
+}
+
+/** Signalement par un super-héros, comme un citoyen : il attend la vérification de la modération. */
+export async function heroDeclareIncidentAction(
+  _previousState: FormState<DeclarationField>,
+  formData: FormData,
+): Promise<FormState<DeclarationField>> {
+  const state = await submitDeclaration((await requireHeroSession()).token, formData);
+  if (state.status === "success") {
+    revalidatePath(routes.heroDeclare);
+    revalidatePath(routes.heroIncidents);
+  }
+  return state;
 }

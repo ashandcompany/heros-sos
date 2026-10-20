@@ -18,6 +18,7 @@ export const routes = {
   heroProfile: "/heros/profil",
   heroVideos: "/heros/films",
   heroReputation: "/heros/reputation",
+  heroDeclare: "/heros/signaler",
   admin: "/admin",
   adminIncidents: "/admin/incidents",
   adminReportIncident: "/admin/incidents/signaler",
@@ -36,8 +37,11 @@ export const routes = {
 
 export const adminIncidentRoute = (id: string) => `${routes.adminIncidents}/${id}`;
 export const adminArticleRoute = (id: string) => `${routes.adminBlog}/${id}`;
+export const citizenIncidentRoute = (id: string) => `${routes.profileIncidents}/${id}`;
 export const heroIncidentRoute = (id: string) => `${routes.heroIncidents}/${id}`;
 export const blogArticleRoute = (slug: string) => `${routes.blog}/${slug}`;
+export const heroSheetRoute = (id: string) => `${routes.encyclopedia}/super-heros/${id}`;
+export const villainSheetRoute = (id: string) => `${routes.encyclopedia}/super-vilains/${id}`;
 
 export interface NavItem {
   label: string;
@@ -69,6 +73,7 @@ export const citizenNav: NavItem[] = [
 export const heroNav: NavItem[] = [
   { label: "Tableau de bord", href: routes.heroDashboard },
   { label: "Incidents", href: routes.heroIncidents },
+  { label: "Signaler un incident", href: routes.heroDeclare },
   { label: "Ma vidéothèque", href: routes.heroVideos },
   { label: "Ma réputation", href: routes.heroReputation },
   { label: "Mon profil", href: routes.heroProfile },

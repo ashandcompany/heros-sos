@@ -43,7 +43,7 @@ async function ArticleEditor({ params }: { params: Promise<{ id: string }> }) {
           description="L'article sera définitivement retiré du blog. Cette action est irréversible."
         />
       </div>
-      <div className="max-w-3xl rounded-2xl border border-border bg-surface p-5 sm:p-8">
+      <div className="max-w-3xl border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-5 sm:p-8">
         <ArticleForm article={article} />
       </div>
     </>
@@ -62,7 +62,7 @@ export default function AdminArticlePage({ params }: PageProps<"/admin/blog/[id]
         fallback={
           <div
             aria-hidden="true"
-            className="h-[40rem] rounded-2xl border border-border bg-surface motion-safe:animate-pulse"
+            className="h-[40rem] border-2 border-border bg-surface motion-safe:animate-pulse"
           />
         }
       >

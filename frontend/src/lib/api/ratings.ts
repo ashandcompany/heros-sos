@@ -6,6 +6,7 @@ import type {
   InterventionRating,
   ModerationStatus,
   MutationResult,
+  PublicReview,
   RateableIntervention,
   RatingForModeration,
   ResolvedIncident,
@@ -173,4 +174,21 @@ export async function replyToRating(
 
   rating.reply = { content, repliedAt: new Date().toISOString() };
   return mockResponse({ ok: true });
+}
+
+/* ---------- Fiches publiques de l'encyclopédie ---------- */
+
+/**
+ * Commentaires publiés sur un super-héros, des plus récents aux plus anciens.
+ * Future implémentation : `GET ${API_URL}/heroes/${heroId}/reviews`
+ */
+export async function getHeroPublicReviews(heroId: string): Promise<PublicReview[]> {
+  return mockResponse(
+    ratingsMock
+      .filter((rating) => rating.heroId === heroId && rating.commentModeration === "valide")
+      .flatMap(({ incidentId, rating, comment, ratedAt, reply }) =>
+        comment ? [{ incidentId, rating, comment, ratedAt, reply: reply ?? null }] : [],
+      )
+      .sort((a, b) => Date.parse(b.ratedAt) - Date.parse(a.ratedAt)),
+  );
 }

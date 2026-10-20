@@ -1,8 +1,10 @@
 import { incidentsMock } from "@/mocks/incidents";
 import { interventionsMock } from "@/mocks/interventions";
+import { ratingsMock } from "@/mocks/ratings";
 import { superHeroesMock, superHeroProfilesMock } from "@/mocks/super-heroes";
 import { villainsMock } from "@/mocks/villains";
 import type {
+  CitizenIncidentDetail,
   HeroIncident,
   Incident,
   IncidentDeclaration,
@@ -70,7 +72,7 @@ export async function getOngoingIncidents(city?: string): Promise<Incident[]> {
  * Future implémentation : `GET ${API_URL}/me/incidents`
  */
 export async function getMyIncidents(token: string): Promise<Incident[]> {
-  const user = await userFromToken(token, "citoyen");
+  const user = await userFromToken(token, ["citoyen", "super-heros"]);
   return mockResponse(
     incidentsMock.filter((incident) => incident.reporterId === user.id).sort(byMostRecent),
   );
@@ -78,15 +80,15 @@ export async function getMyIncidents(token: string): Promise<Incident[]> {
 
 /**
  * Déclare un incident ; il est diffusé aux super-héros à proximité.
- * Un citoyen ou un modérateur peut déclarer : la déclaration d'un modérateur est validée d'office,
- * celle d'un citoyen attend la vérification de la modération.
+ * Un citoyen, un super-héros ou un modérateur peut déclarer : la déclaration d'un modérateur est validée d'office,
+ * celle d'un citoyen ou d'un super-héros attend la vérification de la modération.
  * Future implémentation : `POST ${API_URL}/incidents` avec l'`IncidentDeclaration`.
  */
 export async function declareIncident(
   token: string,
   declaration: IncidentDeclaration,
 ): Promise<MutationResult> {
-  const user = await userFromToken(token, ["citoyen", "admin"]);
+  const user = await userFromToken(token, ["citoyen", "super-heros", "admin"]);
   const villain = villainsMock.find(({ id }) => id === declaration.villainId);
 
   incidentsMock.push({
@@ -346,4 +348,66 @@ export async function finishIntervention(
   if (profile) profile.lastInterventionAt = now;
 
   return mockResponse({ ok: true });
+}
+
+/* ---------- Fiches publiques de l'encyclopédie ---------- */
+
+/**
+ * Interventions réussies d'un super-héros, des plus récentes aux plus anciennes.
+ * Future implémentation : `GET ${API_URL}/heroes/${heroId}/incidents?status=resolu&limit=${limit}`
+ */
+export async function getResolvedIncidentsByHero(
+  heroId: string,
+  limit = 6,
+): Promise<ResolvedIncident[]> {
+  return mockResponse(
+    incidentsMock
+      .filter(isPublic)
+      .filter(isResolved)
+      .filter((incident) => incident.hero.id === heroId)
+      .sort((a, b) => Date.parse(b.resolvedAt) - Date.parse(a.resolvedAt))
+      .slice(0, limit),
+  );
+}
+
+/**
+ * Incidents attribués à un super-vilain, du plus récent au plus ancien.
+ * Future implémentation : `GET ${API_URL}/villains/${villainId}/incidents?limit=${limit}`
+ */
+export async function getIncidentsByVillain(villainId: string, limit = 6): Promise<Incident[]> {
+  return mockResponse(
+    incidentsMock
+      .filter(isPublic)
+      .filter((incident) => incident.villain?.id === villainId)
+      .sort(byMostRecent)
+      .slice(0, limit),
+  );
+}
+
+/* ---------- Détail d'un incident (espace citoyen) ---------- */
+
+/**
+ * Un citoyen peut consulter ses propres déclarations (y compris rejetées, pour en être informé)
+ * et les incidents diffusés publiquement. Pour ces derniers, l'identité du déclarant est retirée.
+ * Future implémentation : `GET ${API_URL}/incidents/${id}` (404 → `null`).
+ */
+export async function getCitizenIncident(
+  token: string,
+  id: string,
+): Promise<CitizenIncidentDetail | null> {
+  const user = await userFromToken(token, "citoyen");
+  const incident = incidentsMock.find((existing) => existing.id === id);
+  if (!incident) return mockResponse(null);
+
+  const isMine = incident.reporterId === user.id;
+  if (!isMine && !isPublic(incident)) return mockResponse(null);
+
+  return mockResponse({
+    incident: isMine ? incident : { ...incident, reporterId: undefined },
+    isMine,
+    interventions: interventionsMock
+      .filter(({ incidentId }) => incidentId === id)
+      .sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt)),
+    rating: isMine ? (ratingsMock.find(({ incidentId }) => incidentId === id) ?? null) : null,
+  });
 }

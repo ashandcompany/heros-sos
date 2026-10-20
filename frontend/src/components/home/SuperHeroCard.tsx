@@ -1,14 +1,19 @@
+import Link from "next/link";
 import { Avatar } from "@/components/ui/Avatar";
 import { dossierNumber } from "@/lib/dossier";
 import { formatRating } from "@/lib/format";
+import { heroSheetRoute } from "@/lib/routes";
 import type { SuperHero } from "@/types";
 
 const interventionsFormatter = new Intl.NumberFormat("fr-FR");
 
-/** Fiche d'agent : badge d'identification avec photo N&B, matricule et compteurs numériques. */
+/**
+ * Fiche d'agent : badge d'identification avec photo N&B, matricule et compteurs numériques.
+ * Le pseudo est un lien étiré : toute la carte mène à la fiche détaillée.
+ */
 export function SuperHeroCard({ hero }: { hero: SuperHero }) {
   return (
-    <article className="panel paper flex h-full flex-col p-4 pt-6 text-center">
+    <article className="panel paper flex h-full flex-col p-4 pt-6 text-center focus-within:outline-2 focus-within:outline-offset-4 focus-within:outline-primary">
       {/* Fente du cordon */}
       <span
         aria-hidden="true"
@@ -26,7 +31,14 @@ export function SuperHeroCard({ hero }: { hero: SuperHero }) {
         <Avatar name={hero.alias} src={hero.avatarUrl} size={88} square />
       </div>
 
-      <h3 className="mt-3 font-display text-lg font-bold tracking-wider uppercase">{hero.alias}</h3>
+      <h3 className="mt-3 font-display text-lg font-bold tracking-wider uppercase">
+        <Link
+          href={heroSheetRoute(hero.id)}
+          className="after:absolute after:inset-0 after:z-10 hover:underline focus-visible:outline-none"
+        >
+          {hero.alias}
+        </Link>
+      </h3>
       <p className="mt-1 text-sm text-pretty text-ink/85">{hero.power}</p>
 
       <p className="mx-auto mt-3 inline-flex items-center gap-2 border-2 border-sage bg-sage px-2 py-0.5 font-mono text-[0.7rem] font-medium tracking-widest text-paper uppercase">

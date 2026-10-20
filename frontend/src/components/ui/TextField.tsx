@@ -42,7 +42,7 @@ export function TextField({
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy}
           className={cn(
-            "min-h-12 w-full rounded-xl border bg-background px-4 text-foreground placeholder:text-muted",
+            "min-h-12 w-full border-2 bg-background px-4 text-foreground placeholder:text-muted",
             error ? "border-danger" : "border-border",
             trailing ? "pr-14" : undefined,
           )}

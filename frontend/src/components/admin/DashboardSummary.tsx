@@ -74,7 +74,7 @@ export async function DashboardSummary() {
         {tiles.map((tile) => (
           <li
             key={tile.label}
-            className="flex flex-col rounded-2xl border border-border bg-surface p-5"
+            className="flex flex-col border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-5"
           >
             <p className="text-sm text-muted">{tile.label}</p>
             <p
@@ -107,7 +107,7 @@ export function DashboardSummarySkeleton() {
       {Array.from({ length: 7 }, (_, index) => (
         <div
           key={index}
-          className="h-40 rounded-2xl border border-border bg-surface motion-safe:animate-pulse"
+          className="h-40 border-2 border-border bg-surface motion-safe:animate-pulse"
         />
       ))}
     </div>

@@ -5,19 +5,30 @@ import { cn } from "./cn";
 type Variant = "primary" | "secondary" | "danger" | "ghost" | "console";
 type Size = "md" | "lg";
 
+// Boutons brutalistes : cadre épais, ombre dure décalée qui s'écrase au survol et au clic.
+const lift =
+  "hover:translate-x-px hover:translate-y-px active:translate-x-[3px] active:translate-y-[3px] active:shadow-none";
+
 const variantClasses: Record<Variant, string> = {
-  // Touches de console : reflet en haut, tranche en bas qui s'écrase au clic.
-  primary:
-    "border border-[#8f3a12] bg-primary text-primary-foreground shadow-[inset_0_1px_0_rgb(255_255_255/0.3),inset_0_-2px_0_rgb(0_0_0/0.2),0_3px_0_#7a2f0f,0_4px_0_var(--color-shadow-deep)] hover:bg-primary-hover active:translate-y-0.5 active:shadow-[inset_0_1px_0_rgb(255_255_255/0.2),0_1px_0_#7a2f0f,0_2px_0_var(--color-shadow-deep)]",
-  secondary:
-    "border border-border bg-surface-raised text-foreground shadow-[inset_0_1px_0_rgb(255_255_255/0.12),inset_0_-2px_0_rgb(0_0_0/0.25),0_3px_0_var(--color-shadow)] hover:bg-surface hover:border-muted active:translate-y-0.5 active:shadow-[0_1px_0_var(--color-shadow)]",
+  primary: cn(
+    "border-2 border-edge bg-primary text-primary-foreground shadow-[3px_3px_0_0_var(--color-shadow)] hover:bg-primary-hover hover:shadow-[2px_2px_0_0_var(--color-shadow)]",
+    lift,
+  ),
+  secondary: cn(
+    "border-2 border-edge bg-surface-raised text-foreground shadow-[3px_3px_0_0_var(--color-shadow)] hover:bg-surface hover:shadow-[2px_2px_0_0_var(--color-shadow)]",
+    lift,
+  ),
   // Actions destructrices ou de refus (rejeter, suspendre, supprimer).
-  danger:
-    "border border-[#6e1f19] bg-brick text-paper shadow-[inset_0_1px_0_rgb(255_255_255/0.2),inset_0_-2px_0_rgb(0_0_0/0.25),0_3px_0_#6e1f19,0_4px_0_var(--color-shadow-deep)] hover:bg-[#bd3b31] active:translate-y-0.5 active:shadow-[0_1px_0_#6e1f19,0_2px_0_var(--color-shadow-deep)]",
+  danger: cn(
+    "border-2 border-edge bg-brick text-paper shadow-[3px_3px_0_0_var(--color-shadow)] hover:bg-[#c9382a] hover:shadow-[2px_2px_0_0_var(--color-shadow)]",
+    lift,
+  ),
   ghost: "text-foreground hover:bg-surface-raised hover:text-accent",
-  // Gros bouton de console industrielle.
-  console:
-    "border-2 border-[#8f3a12] bg-primary text-primary-foreground shadow-[inset_0_2px_0_rgb(255_255_255/0.3),inset_0_-4px_0_rgb(0_0_0/0.2),0_7px_0_#7a2f0f,0_9px_0_var(--color-shadow-deep)] hover:bg-primary-hover active:translate-y-1.5 active:shadow-[inset_0_2px_0_rgb(255_255_255/0.2),0_1px_0_#7a2f0f,0_3px_0_var(--color-shadow-deep)]",
+  // Gros bouton d'appel : orange atomique, ombre profonde.
+  console: cn(
+    "border-[3px] border-edge bg-primary text-primary-foreground shadow-[4px_4px_0_0_var(--color-shadow)] hover:bg-primary-hover hover:shadow-[3px_3px_0_0_var(--color-shadow)]",
+    "hover:translate-x-px hover:translate-y-px active:translate-x-1.5 active:translate-y-1.5 active:shadow-none",
+  ),
 };
 
 const sizeClasses: Record<Size, string> = {
@@ -27,7 +38,7 @@ const sizeClasses: Record<Size, string> = {
 
 export const buttonClasses = (variant: Variant = "primary", size: Size = "md") =>
   cn(
-    "inline-flex items-center justify-center gap-2 rounded-md font-display font-semibold tracking-[0.08em] uppercase",
+    "inline-flex items-center justify-center gap-2 font-display font-bold tracking-[0.1em] uppercase",
     "transition-none",
     variantClasses[variant],
     sizeClasses[size],

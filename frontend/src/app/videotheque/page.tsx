@@ -23,7 +23,7 @@ function VideoCard({ video }: { video: HeroVideo }) {
   return (
     <article
       aria-labelledby={titleId}
-      className="flex h-full flex-col rounded-2xl border border-border bg-surface p-5"
+      className="flex h-full flex-col border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-5"
     >
       <p className="font-mono text-xs tracking-widest text-accent uppercase">
         {video.imdbId ? "Film" : "Vidéo"} · {video.hero.alias}
@@ -124,7 +124,7 @@ function GallerySkeleton() {
       {Array.from({ length: 3 }, (_, index) => (
         <div
           key={index}
-          className="h-56 rounded-2xl border border-border bg-surface motion-safe:animate-pulse"
+          className="h-56 border-2 border-border bg-surface motion-safe:animate-pulse"
         />
       ))}
     </div>

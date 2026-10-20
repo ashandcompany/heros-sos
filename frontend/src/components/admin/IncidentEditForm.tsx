@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { updateIncidentAction } from "@/app/actions/admin";
+import { AddressField } from "@/components/ui/AddressField";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { SelectField } from "@/components/ui/SelectField";
 import { SubmitButton } from "@/components/ui/SubmitButton";
@@ -84,11 +85,13 @@ export function IncidentEditForm({
       />
 
       <div className="grid gap-5 sm:grid-cols-[1fr_12rem]">
-        <TextField
+        <AddressField
+          kind="place"
           label="Lieu précis"
           name="address"
           defaultValue={value("address", incident.location.address)}
           error={errors.address}
+          fill={{ city: "city" }}
         />
         <TextField
           label="Ville"

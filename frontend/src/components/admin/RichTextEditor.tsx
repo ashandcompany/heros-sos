@@ -205,7 +205,7 @@ export function RichTextEditor({ label, name, defaultValue, hint, error }: RichT
       <input type="hidden" name={name} value={html} />
       <div
         className={cn(
-          "overflow-hidden rounded-xl border bg-background has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-primary",
+          "overflow-hidden border-2 bg-background has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-primary",
           error ? "border-danger" : "border-border",
         )}
       >

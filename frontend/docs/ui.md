@@ -79,6 +79,8 @@ Ne jamais pré-remplir sa valeur après une erreur.
 
 Champ d'adresse en combobox ARIA 1.2 (flèches, Entrée, Échap). Interroge `/api/adresses` après
 300 ms et 3 caractères minimum. La saisie libre reste possible : les suggestions sont une aide.
+Les suggestions viennent de la Base Adresse Nationale : adresses françaises uniquement (outre-mer
+compris). `kind="place"` ajoute les lieux nommés (gares, monuments…).
 
 ```tsx
 <AddressField

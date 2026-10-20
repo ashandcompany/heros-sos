@@ -49,11 +49,10 @@ par mail (Mailpit, `http://localhost:8025`, avec `make up-dev`).
 Copier `.env.example` vers `.env.local` (jamais versionné). Next.js ne charge les variables qu'au
 démarrage : redémarrer `npm run dev` après modification.
 
-| Variable     | Obligatoire | Défaut                          | Lue par                                   | Rôle                                                                                             |
-| ------------ | ----------- | ------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `API_URL`    | Non         | vide → données mockées          | `src/lib/api/config.ts`                   | Base de l'API Go **avec son préfixe**, ex : `http://localhost:8081/api/v1`                       |
-| `PHOTON_URL` | Non         | `https://photon.komoot.io/api/` | `src/lib/geocoding.ts`                    | Géocodeur Photon (OpenStreetMap) de l'autocomplétion d'adresses                                  |
-| `NODE_ENV`   | Non         | défini par Next                 | `lib/cookies.ts`, `actions/newsletter.ts` | `production` : cookies `secure`, cookie de session `__Host-session`. Ne pas le définir à la main |
+| Variable   | Obligatoire | Défaut                 | Lue par                                   | Rôle                                                                                             |
+| ---------- | ----------- | ---------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `API_URL`  | Non         | vide → données mockées | `src/lib/api/config.ts`                   | Base de l'API Go **avec son préfixe**, ex : `http://localhost:8081/api/v1`                       |
+| `NODE_ENV` | Non         | défini par Next        | `lib/cookies.ts`, `actions/newsletter.ts` | `production` : cookies `secure`, cookie de session `__Host-session`. Ne pas le définir à la main |
 
 - `API_URL` est lue **par le serveur, au démarrage** : elle n'est jamais envoyée au navigateur et
   n'est pas figée au build (la même image Docker sert dans tous les environnements). Dans la pile
@@ -62,8 +61,8 @@ démarrage : redémarrer `npm run dev` après modification.
   `__Host-session` en production. Côté backend, c'est `HEROS_COOKIE_SECURE` (vrai par défaut en
   production) : un front en mode production face à une API de développement fait échouer la
   connexion avec une erreur explicite.
-- `PHOTON_URL` : l'instance publique de Komoot est soumise à un usage raisonnable ; en
-  production, pointer vers une instance dédiée (ex : `http://photon:2322/api/`).
+- L'autocomplétion des adresses n'a besoin d'aucune variable : elle interroge le service public
+  de la Géoplateforme de l'IGN (Base Adresse Nationale), sans clé. Voir `src/lib/geocoding.ts`.
 
 ## Documentation détaillée
 

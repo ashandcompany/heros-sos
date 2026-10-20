@@ -1,70 +1,67 @@
 /**
- * Autocomplétion d'adresses avec les données OpenStreetMap, via le géocodeur Photon.
- * Nominatim (le géocodeur officiel d'OSM) interdit l'autocomplétion dans sa politique
- * d'utilisation ; Photon est conçu pour la recherche au fil de la frappe.
+ * Autocomplétion d'adresses avec la Base Adresse Nationale, via le service d'autocomplétion de la
+ * Géoplateforme de l'IGN : gratuit, sans clé, France métropolitaine et outre-mer.
+ * Documentation : https://cartes.gouv.fr/aide/fr/guides-utilisateur/utiliser-les-services-de-la-geoplateforme/autocompletion/
  *
  * À n'importer que côté serveur (route /api/adresses) : l'adresse IP des visiteurs n'est pas
- * transmise au service. L'instance publique de Komoot est soumise à un usage raisonnable :
- * en production, prévoir une instance Photon dédiée (PHOTON_URL) ou un relais par l'API Go.
+ * transmise au service, et le cache ci-dessous, commun à tous les visiteurs, aide à rester sous
+ * la limite annoncée (10 requêtes par seconde et par adresse IP).
  */
 
-const PHOTON_URL = process.env.PHOTON_URL || "https://photon.komoot.io/api/";
-const USER_AGENT = "Heros-SOS (https://github.com/ashandcompany/heros-sos)";
+const COMPLETION_URL = "https://data.geopf.fr/geocodage/completion/";
 const RESULT_LIMIT = 6;
 const TIMEOUT_MS = 4000;
 
-/** `postal` : adresses postales (numéro et rue). `place` : tout lieu (commerce, gare, rue…). */
+/** `postal` : adresses postales (numéro et rue). `place` : tout lieu (gare, monument, rue…). */
 export type AddressSearchKind = "postal" | "place";
 
 export interface AddressSuggestion {
   id: string;
   /** Texte principal, recopié dans le champ à la sélection. */
   label: string;
-  /** Précision affichée sous le libellé (code postal, ville, pays). */
+  /** Précision affichée sous le libellé (code postal, ville). */
   context: string;
   street: string;
   postalCode: string;
   city: string;
-  /** Code pays ISO 3166-1 alpha-2, ou chaîne vide si inconnu. */
+  /** Code pays ISO 3166-1 alpha-2 : toujours `FR`, outre-mer compris. */
   country: string;
 }
 
-interface PhotonProperties {
-  osm_type?: string;
-  osm_id?: number;
-  type?: string;
-  name?: string;
-  housenumber?: string;
-  street?: string;
-  postcode?: string;
-  city?: string;
-  locality?: string;
-  district?: string;
+interface CompletionResult {
+  /** Malgré son nom, le type de résultat : `StreetAddress` ou `PositionOfInterest`. */
   country?: string;
-  countrycode?: string;
+  /** `housenumber`, `street`, `locality`… pour une adresse ; nature du lieu sinon. */
+  kind?: string;
+  /** Nom d'un lieu (`PositionOfInterest`). */
+  names?: string[];
+  street?: string;
+  zipcode?: string;
+  city?: string;
+  /** Ex : `12 Rue Victor Hugo, 76000 Rouen`. */
+  fulltext?: string;
+  x?: number;
+  y?: number;
 }
 
-function toSuggestion(properties: PhotonProperties): AddressSuggestion | null {
-  const streetLine = properties.street
-    ? [properties.housenumber, properties.street].filter(Boolean).join(" ")
-    : properties.type === "street"
-      ? (properties.name ?? "")
-      : "";
-  // Un lieu nommé (gare, commerce…) garde son nom : c'est ce que l'utilisateur a cherché.
-  const placeName = properties.type !== "street" && !properties.housenumber ? properties.name : "";
-  const label = [placeName, streetLine].filter(Boolean).join(", ");
-  const city = properties.city ?? properties.locality ?? properties.district ?? "";
+function toSuggestion(result: CompletionResult): AddressSuggestion | null {
+  const { fulltext = "", zipcode = "", city = "" } = result;
+  // Le numéro n'a pas de champ à lui : la première partie du texte complet donne « 12 Rue … ».
+  const separator = fulltext.lastIndexOf(", ");
+  const streetLine = separator > 0 ? fulltext.slice(0, separator) : (result.street ?? "");
+  const placeName = result.country === "PositionOfInterest" ? result.names?.[0] : undefined;
+  const label = placeName ?? streetLine;
 
   if (!label) return null;
 
   return {
-    id: `${properties.osm_type ?? ""}${properties.osm_id ?? label}`,
+    id: `${result.kind ?? ""}:${fulltext}:${result.x ?? ""},${result.y ?? ""}`,
     label,
-    context: [properties.postcode, city, properties.country].filter(Boolean).join(" · "),
+    context: [zipcode, city].filter(Boolean).join(" · "),
     street: streetLine || label,
-    postalCode: properties.postcode ?? "",
+    postalCode: zipcode,
     city,
-    country: properties.countrycode?.toUpperCase() ?? "",
+    country: "FR",
   };
 }
 
@@ -81,29 +78,26 @@ export async function searchAddresses(
   const cached = cache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.suggestions;
 
-  const url = new URL(PHOTON_URL);
-  url.searchParams.set("q", query);
-  url.searchParams.set("lang", "fr");
-  url.searchParams.set("limit", String(RESULT_LIMIT * 2));
-  if (kind === "postal") {
-    url.searchParams.append("layer", "house");
-    url.searchParams.append("layer", "street");
-  }
+  const url = new URL(COMPLETION_URL);
+  url.searchParams.set("text", query);
+  url.searchParams.set(
+    "type",
+    kind === "postal" ? "StreetAddress" : "StreetAddress,PositionOfInterest",
+  );
+  url.searchParams.set("maximumResponses", String(RESULT_LIMIT * 2));
 
   const response = await fetch(url, {
-    headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
+    headers: { Accept: "application/json" },
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
-  if (!response.ok) throw new Error(`Photon : HTTP ${response.status}`);
+  if (!response.ok) throw new Error(`Géoplateforme : HTTP ${response.status}`);
 
-  const { features = [] } = (await response.json()) as {
-    features?: Array<{ properties?: PhotonProperties }>;
-  };
+  const { results = [] } = (await response.json()) as { results?: CompletionResult[] };
 
-  // OSM contient des doublons (même adresse sur plusieurs objets) : on garde le premier.
+  // Un même lieu peut revenir plusieurs fois (codes postaux, anciennes communes) : on garde le premier.
   const seen = new Set<string>();
-  const suggestions = features
-    .map(({ properties }) => (properties ? toSuggestion(properties) : null))
+  const suggestions = results
+    .map(toSuggestion)
     .filter((suggestion): suggestion is AddressSuggestion => {
       if (!suggestion) return false;
       const signature = `${suggestion.label}|${suggestion.context}`;

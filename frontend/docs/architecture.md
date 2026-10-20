@@ -186,13 +186,13 @@ useActionState(action, idleFormState)  1. const token = await requireCitizenSess
 
 ## Autres mécanismes à connaître
 
-| Sujet                  | Où                                                     | À savoir                                                                                             |
-| ---------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| Thème clair / sombre   | [lib/theme.ts](../src/lib/theme.ts), `ThemeToggle`     | Choix en `localStorage`, appliqué par un script dans `<head>` (anti-flash). Sombre par défaut        |
-| Design tokens          | bloc `@theme` de [globals.css](../src/app/globals.css) | Voir [ui.md](./ui.md#design-tokens)                                                                  |
-| Autocomplétion adresse | `app/api/adresses/route.ts`, `lib/geocoding.ts`        | Proxy vers Photon (`PHOTON_URL`), cache privé 10 min, pour ne pas exposer le géocodeur au navigateur |
-| Assainissement HTML    | [lib/sanitize.ts](../src/lib/sanitize.ts)              | Articles de blog (éditeur Tiptap) : à passer avant tout affichage public                             |
-| Newsletter             | cookie `newsletter_subscribed`                         | Mémorise l'inscription côté navigateur                                                               |
+| Sujet                  | Où                                                     | À savoir                                                                                                |
+| ---------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| Thème clair / sombre   | [lib/theme.ts](../src/lib/theme.ts), `ThemeToggle`     | Choix en `localStorage`, appliqué par un script dans `<head>` (anti-flash). Sombre par défaut           |
+| Design tokens          | bloc `@theme` de [globals.css](../src/app/globals.css) | Voir [ui.md](./ui.md#design-tokens)                                                                     |
+| Autocomplétion adresse | `app/api/adresses/route.ts`, `lib/geocoding.ts`        | Relais vers la Base Adresse Nationale (Géoplateforme IGN), cache 10 min, IP des visiteurs non transmise |
+| Assainissement HTML    | [lib/sanitize.ts](../src/lib/sanitize.ts)              | Articles de blog (éditeur Tiptap) : à passer avant tout affichage public                                |
+| Newsletter             | cookie `newsletter_subscribed`                         | Mémorise l'inscription côté navigateur                                                                  |
 
 ## Checklists
 

@@ -1,7 +1,8 @@
 // Commande api : serveur HTTP de l'API Heros-SOS.
 //
-//	go run ./cmd/api            démarre le serveur
-//	go run ./cmd/api -migrate   applique les migrations SQL puis quitte
+//	go run ./cmd/api               démarre le serveur
+//	go run ./cmd/api -migrate      applique les migrations SQL puis quitte
+//	go run ./cmd/api -healthcheck  interroge /ready (code 0 si prêt) : contrôle de santé du conteneur
 package main
 
 import (
@@ -27,11 +28,17 @@ func main() {
 
 func run() error {
 	migrateOnly := flag.Bool("migrate", false, "applique les migrations SQL puis quitte")
+	healthcheck := flag.Bool("healthcheck", false, "interroge /ready puis quitte (code 0 si le serveur est prêt)")
 	flag.Parse()
 
 	cfg, err := config.FromEnv()
 	if err != nil {
 		return fmt.Errorf("configuration invalide :\n%w", err)
+	}
+
+	// Une image `scratch` n'a ni shell ni curl : le binaire se sonde lui-même.
+	if *healthcheck {
+		return server.Probe(context.Background(), cfg.HTTP)
 	}
 	logger := newLogger(cfg)
 

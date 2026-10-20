@@ -1,0 +1,33 @@
+# Contexte de build de l'API : on n'envoie au démon Docker que ce dont la compilation a besoin.
+# Surtout, jamais de secrets : un .env copié dans une couche de build y reste dans le cache.
+
+# Secrets et configuration locale
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+
+# Git, CI et éditeurs
+.git
+.github
+.gitignore
+.idea
+.vscode
+.DS_Store
+
+# Fichiers sans effet sur la compilation (openapi/ n'en fait PAS partie : openapi.yaml est embarqué
+# dans le binaire pour la documentation de l'API)
+**/*_test.go
+*.md
+Makefile
+bin/
+tmp/
+coverage.*
+
+# Déploiement : l'image n'a pas besoin de décrire son propre déploiement
+DOCKERFILE
+.dockerignore
+docker-compose*.yml
+docker/

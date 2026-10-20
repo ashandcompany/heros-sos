@@ -74,6 +74,8 @@ type HTTP struct {
 	IdleTimeout       time.Duration
 	ShutdownTimeout   time.Duration
 	MaxBodyBytes      int64
+	// HealthcheckTimeout borne le délai de `api -healthcheck` (contrôle de santé du conteneur).
+	HealthcheckTimeout time.Duration
 	// TrustedProxies liste les proxys dont l'en-tête X-Forwarded-For est cru pour
 	// déterminer l'adresse IP du client.
 	TrustedProxies []netip.Prefix
@@ -258,15 +260,16 @@ func Load(getenv func(string) string) (Config, error) {
 		LogLevel:    l.logLevel(),
 		AutoMigrate: l.boolean(envAutoMigrate, false),
 		HTTP: HTTP{
-			Addr:              l.text(envHTTPAddr, defaultHTTPAddr),
-			ReadHeaderTimeout: l.duration(envHTTPReadHeaderTimeout, defaultReadHeaderTimeout),
-			ReadTimeout:       l.duration(envHTTPReadTimeout, defaultReadTimeout),
-			WriteTimeout:      l.duration(envHTTPWriteTimeout, defaultWriteTimeout),
-			IdleTimeout:       l.duration(envHTTPIdleTimeout, defaultIdleTimeout),
-			ShutdownTimeout:   l.duration(envHTTPShutdownTimeout, defaultShutdownTimeout),
-			MaxBodyBytes:      int64(l.positiveInt(envHTTPMaxBodyBytes, defaultMaxBodyBytes)),
-			TrustedProxies:    l.trustedProxies(),
-			AllowedOrigins:    l.list(envAllowedOrigins),
+			Addr:               l.text(envHTTPAddr, defaultHTTPAddr),
+			ReadHeaderTimeout:  l.duration(envHTTPReadHeaderTimeout, defaultReadHeaderTimeout),
+			ReadTimeout:        l.duration(envHTTPReadTimeout, defaultReadTimeout),
+			WriteTimeout:       l.duration(envHTTPWriteTimeout, defaultWriteTimeout),
+			IdleTimeout:        l.duration(envHTTPIdleTimeout, defaultIdleTimeout),
+			ShutdownTimeout:    l.duration(envHTTPShutdownTimeout, defaultShutdownTimeout),
+			MaxBodyBytes:       int64(l.positiveInt(envHTTPMaxBodyBytes, defaultMaxBodyBytes)),
+			HealthcheckTimeout: l.duration(envHealthcheckTimeout, defaultHealthcheckTimeout),
+			TrustedProxies:     l.trustedProxies(),
+			AllowedOrigins:     l.list(envAllowedOrigins),
 		},
 		Database: Database{
 			URL:                l.text(envDatabaseURL, ""),

@@ -1,0 +1,51 @@
+# Reverse proxy : le navigateur ne parle qu'à une seule origine.
+#
+#   /api/v1/*  →  l'API Go (son préfixe, voir APIPrefix dans internal/server/router.go)
+#   le reste   →  le front Next.js, y compris ses propres routes /api/… (ex. /api/adresses)
+#
+# Une seule origine, c'est ce qui permet au cookie de session (HttpOnly, SameSite=Lax, sans Domain)
+# de fonctionner sans CORS. Variables d'environnement :
+#   SITE_ADDRESS  ":80" en développement (HTTP seul) ; le nom de domaine en production, ce qui
+#                 déclenche l'obtention et le renouvellement automatiques du certificat TLS.
+#   ACME_EMAIL    adresse de contact pour Let's Encrypt (production).
+
+{
+	# Sans effet en HTTP seul. En production, Let's Encrypt prévient à cette adresse en cas de problème.
+	email {$ACME_EMAIL:contact@heros-sos.invalid}
+}
+
+{$SITE_ADDRESS::80} {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		# Ne révèle ni le serveur ni la technologie du front.
+		-Server
+		-X-Powered-By
+	}
+	# HSTS sur les réponses servies en HTTPS. Le « ? » ne l'ajoute que s'il est absent : l'API le pose
+	# déjà elle-même en production, et il ne doit pas apparaître en double.
+	@secure protocol https
+	header @secure ?Strict-Transport-Security "max-age=31536000"
+
+	# Caddy est le premier saut : il remplace tout X-Forwarded-For fourni par le client, puis
+	# transmet l'adresse réelle à l'API (qui ne fait confiance qu'aux adresses fixes du proxy et du front).
+	# Seulement /api/v1 : le front a ses propres routes sous /api (autocomplétion d'adresse), qui
+	# doivent lui parvenir et non être prises pour des routes de l'API Go.
+	handle /api/v1/* {
+		reverse_proxy api:8080 {
+			health_uri /api/v1/health
+			health_interval 10s
+		}
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

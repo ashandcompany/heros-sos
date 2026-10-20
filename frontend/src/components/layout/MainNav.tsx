@@ -8,11 +8,15 @@ import { buttonClasses } from "@/components/ui/ButtonLink";
 import { cn } from "@/components/ui/cn";
 import { logoutAction } from "@/app/actions/auth";
 import { mainNav, routes } from "@/lib/routes";
+import type { AvatarData } from "@/lib/api";
 import type { AuthUser } from "@/types";
 
-/** Utilisateur connecté (`null` : visiteur, `undefined` : session en cours de lecture). */
+/**
+ * Utilisateur connecté (`null` : visiteur, `undefined` : session en cours de lecture).
+ * `avatar` est `null` pour un compte sans profil (administrateur) : initiales du `displayName`.
+ */
 type NavUser =
-  (Pick<AuthUser, "displayName" | "role"> & { avatarUrl: string | null }) | null | undefined;
+  (Pick<AuthUser, "displayName" | "role"> & { avatar: AvatarData | null }) | null | undefined;
 
 function MenuIcon({ open }: { open: boolean }) {
   return (
@@ -78,7 +82,11 @@ function AccountActions({ user, variant, isSpacePage, onNavigate }: AccountActio
         title={mobile ? undefined : user.displayName}
         className={cn("flex items-center gap-3 text-sm text-muted", mobile && "col-span-2")}
       >
-        <Avatar name={user.displayName} src={user.avatarUrl} size={mobile ? 40 : 32} />
+        <Avatar
+          name={user.avatar?.name ?? user.displayName}
+          src={user.avatar?.src ?? null}
+          size={mobile ? 40 : 32}
+        />
         <span className={cn(!mobile && "sr-only xl:not-sr-only")}>
           Connecté·e : <span className="font-semibold text-foreground">{user.displayName}</span>
         </span>

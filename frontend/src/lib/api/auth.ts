@@ -4,10 +4,12 @@ import { MOCK_SESSION_MAX_AGE } from "@/lib/cookies";
 import { citizensMock } from "@/mocks/citizens";
 import { accountsMock } from "@/mocks/users";
 import type {
+  ActivationResult,
   AuthUser,
   LoginCredentials,
   LoginError,
   LoginResult,
+  ResendActivationResult,
   SignupPayload,
   SignupResult,
 } from "@/types";
@@ -58,23 +60,28 @@ export async function login(credentials: LoginCredentials): Promise<LoginResult>
   return isApiEnabled ? loginWithApi(credentials) : loginWithMocks(credentials);
 }
 
-async function loginWithApi({ identifier, password }: LoginCredentials): Promise<LoginResult> {
-  // L'API limite les tentatives par adresse IP et enregistre l'appareil de chaque session : on lui
-  // transmet l'adresse du visiteur (posée par le reverse proxy) et son navigateur, sinon elle ne
-  // verrait que le serveur Next.
+/**
+ * L'API limite les demandes par adresse IP et enregistre l'appareil de chaque session : on lui
+ * transmet l'adresse du visiteur (posée par le reverse proxy) et son navigateur, sinon elle ne
+ * verrait que le serveur Next.
+ */
+async function visitorHeaders(): Promise<Headers> {
   const incoming = await headers();
   const forwarded = new Headers();
   const forwardedFor = incoming.get("x-forwarded-for");
   const userAgent = incoming.get("user-agent");
   if (forwardedFor) forwarded.set("X-Forwarded-For", forwardedFor);
   if (userAgent) forwarded.set("User-Agent", userAgent);
+  return forwarded;
+}
 
+async function loginWithApi({ identifier, password }: LoginCredentials): Promise<LoginResult> {
   let response: Response;
   try {
     response = await apiFetch("/auth/login", {
       method: "POST",
       body: { identifier, password },
-      headers: forwarded,
+      headers: await visitorHeaders(),
     });
   } catch (error) {
     const loginError = error instanceof ApiError ? loginErrorByCode.get(error.code) : undefined;
@@ -178,6 +185,59 @@ export async function logout(token: string): Promise<void> {
     });
   } catch (error) {
     console.error("Déconnexion : révocation de la session par l'API en échec", error);
+  }
+}
+
+/**
+ * Active un compte avec le jeton du lien reçu par mail (valable 24 h, utilisable une fois).
+ * API : `POST /auth/activate` avec `{ token }`. Mock : tout jeton non vide est accepté.
+ */
+export async function activateAccount(token: string): Promise<ActivationResult> {
+  if (!isApiEnabled) {
+    return mockResponse(token ? { ok: true } : { ok: false, error: "invalid-token" });
+  }
+
+  try {
+    await apiFetch("/auth/activate", { method: "POST", body: { token } });
+    return { ok: true };
+  } catch (error) {
+    // Jeton invalide (`invalid_token`) ou mal formé (`bad_request`) : même réponse pour le visiteur.
+    if (error instanceof ApiError && error.status === 400) {
+      return { ok: false, error: "invalid-token" };
+    }
+    console.error("Activation : appel à l'API en échec", error);
+    return { ok: false, error: "unavailable" };
+  }
+}
+
+/**
+ * Renvoie un lien d'activation (les précédents sont invalidés). La réponse ne dit pas si l'adresse
+ * correspond à un compte en attente, pour ne pas révéler quels comptes sont inscrits.
+ * API : `POST /auth/resend-activation` avec `{ email }`.
+ */
+export async function resendActivation(email: string): Promise<ResendActivationResult> {
+  if (!isApiEnabled) return mockResponse({ ok: true });
+
+  try {
+    await apiFetch("/auth/resend-activation", {
+      method: "POST",
+      body: { email },
+      headers: await visitorHeaders(),
+    });
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof ApiError) {
+      if (error.code === "validation_failed") return { ok: false, error: "invalid-email" };
+      if (error.code === "rate_limited") {
+        return {
+          ok: false,
+          error: "too-many-attempts",
+          retryAfterSeconds: error.retryAfterSeconds,
+        };
+      }
+    }
+    console.error("Renvoi du lien d'activation : appel à l'API en échec", error);
+    return { ok: false, error: "unavailable" };
   }
 }
 

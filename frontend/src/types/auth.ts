@@ -7,6 +7,19 @@ export interface AuthUser {
   role: UserRole;
 }
 
+export type ActivationResult =
+  | { ok: true }
+  /** Lien inconnu, expiré (24 h) ou déjà utilisé : l'API ne distingue pas ces cas. */
+  | { ok: false; error: "invalid-token" | "unavailable" };
+
+export type ResendActivationResult =
+  | { ok: true }
+  | {
+      ok: false;
+      error: "invalid-email" | "too-many-attempts" | "unavailable";
+      retryAfterSeconds?: number;
+    };
+
 export interface LoginCredentials {
   /** Adresse email, ou pseudo pour un super-héros. */
   identifier: string;

@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { asMockDataUser, getMyAvatarUrl } from "@/lib/api";
+import { asMockDataUser, getMyAvatar, type AvatarData } from "@/lib/api";
 import { SESSION_COOKIE } from "@/lib/cookies";
 import { accountHomeByRole, routes } from "@/lib/routes";
 import { getUserFromToken } from "@/lib/session";
@@ -16,10 +16,10 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   return getUserFromToken((await cookies()).get(SESSION_COOKIE)?.value);
 }
 
-/** Photo de profil de l'utilisateur connecté, ou `null` (visiteur, ou initiales à afficher). */
-export async function getCurrentUserAvatarUrl(): Promise<string | null> {
+/** Photo de profil de l'utilisateur connecté, ou `null` (visiteur, ou compte sans profil). */
+export async function getCurrentUserAvatar(): Promise<AvatarData | null> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
-  return token ? getMyAvatarUrl(token) : null;
+  return token ? getMyAvatar(token) : null;
 }
 
 /**

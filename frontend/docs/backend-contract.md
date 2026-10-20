@@ -13,18 +13,19 @@ branchement. À mettre à jour à chaque fonction branchée.
 Le contrat décrit aujourd'hui **20 opérations** (identité et modération des comptes). Tout le reste
 du frontend n'a pas encore de contrat.
 
-| Domaine frontend                   | Fonctions `lib/api/`                           | Contrat OpenAPI                                               | État       |
-| ---------------------------------- | ---------------------------------------------- | ------------------------------------------------------------- | ---------- |
-| Connexion, session, déconnexion    | `login`, `getSessionUser`, `logout`            | `/auth/login`, `/auth/me`, `/auth/logout`                     | ✅ branché |
-| Inscription                        | `register`                                     | `/auth/register`, `/auth/activate`, `/auth/resend-activation` | mock       |
-| Mot de passe oublié                | `requestPasswordReset`                         | `/auth/password-reset` (+ `/confirm`)                         | mock       |
-| Demande de statut super-héros      | `getHeroApplications`, `reviewHeroApplication` | `/heroes/requests`, `/admin/hero-requests/*`                  | mock       |
-| Comptes (suspension, vérification) | `getCitizenAccounts`, `moderateAccount`        | `/admin/users/*`                                              | mock       |
-| Incidents, interventions, notes    | `lib/api/incidents.ts`, `ratings.ts`           | ❌ aucun                                                      | mock       |
-| Fiches super-héros / super-vilains | `super-heroes.ts` (profils), `villains.ts`     | ❌ aucun                                                      | mock       |
-| Vidéothèque, blog, newsletter      | `videos.ts`, `blog.ts`, `newsletter.ts`        | ❌ aucun                                                      | mock       |
-| Profil (email, téléphone, avatar)  | `account.ts`, `super-heroes.ts` (`updateMy…`)  | ❌ aucun                                                      | mock       |
-| Tableau de bord héros, modération  | `hero-dashboard.ts`, `moderation.ts`           | ❌ aucun                                                      | mock       |
+| Domaine frontend                   | Fonctions `lib/api/`                           | Contrat OpenAPI                              | État       |
+| ---------------------------------- | ---------------------------------------------- | -------------------------------------------- | ---------- |
+| Connexion, session, déconnexion    | `login`, `getSessionUser`, `logout`            | `/auth/login`, `/auth/me`, `/auth/logout`    | ✅ branché |
+| Inscription                        | `register`                                     | `/auth/register`                             | mock       |
+| Activation du compte               | `activateAccount`, `resendActivation`          | `/auth/activate`, `/auth/resend-activation`  | ✅ branché |
+| Mot de passe oublié                | `requestPasswordReset`                         | `/auth/password-reset` (+ `/confirm`)        | mock       |
+| Demande de statut super-héros      | `getHeroApplications`, `reviewHeroApplication` | `/heroes/requests`, `/admin/hero-requests/*` | mock       |
+| Comptes (suspension, vérification) | `getCitizenAccounts`, `moderateAccount`        | `/admin/users/*`                             | mock       |
+| Incidents, interventions, notes    | `lib/api/incidents.ts`, `ratings.ts`           | ❌ aucun                                     | mock       |
+| Fiches super-héros / super-vilains | `super-heroes.ts` (profils), `villains.ts`     | ❌ aucun                                     | mock       |
+| Vidéothèque, blog, newsletter      | `videos.ts`, `blog.ts`, `newsletter.ts`        | ❌ aucun                                     | mock       |
+| Profil (email, téléphone, avatar)  | `account.ts`, `super-heroes.ts` (`updateMy…`)  | ❌ aucun                                     | mock       |
+| Tableau de bord héros, modération  | `hero-dashboard.ts`, `moderation.ts`           | ❌ aucun                                     | mock       |
 
 Les « Future implémentation » écrites dans les commentaires de `lib/api/` pour les domaines non
 couverts sont des **hypothèses** du frontend, pas un contrat. Il faudra les faire valider (ou les
@@ -125,7 +126,7 @@ La traduction se fait **à un seul endroit**, `fromApiUser` dans
 | Sujet                     | Frontend actuel                                                             | Contrat                                                                                      |
 | ------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | Résultat de l'inscription | `SignupResult` : `{ ok, user, token }` (connexion immédiate)                | `{ user, activationRequired: true }` : **pas de session**, un e-mail d'activation est envoyé |
-| Activation                | **Aucune page** (`/auth/activate`, `/auth/resend-activation`)               | Jeton reçu par e-mail à confirmer                                                            |
+| Activation                | Page `/activation?token=…` : bouton de confirmation, renvoi du lien         | Jeton reçu par e-mail à confirmer (`HEROS_ACTIVATION_PATH` = `routes.activation`)            |
 | Mot de passe oublié       | Page de demande seulement                                                   | Il manque la page qui consomme le jeton (`/auth/password-reset/confirm`)                     |
 | Adresse                   | `PostalAddress` : rue, code postal, ville, pays                             | Idem + champ `complement` facultatif                                                         |
 | Mot de passe              | `lib/validation/signup.ts` : ≥ 10 caractères, majuscule, minuscule, chiffre | Mêmes règles (`weak` sinon) : déjà alignés                                                   |

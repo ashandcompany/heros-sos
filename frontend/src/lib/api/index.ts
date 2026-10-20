@@ -29,6 +29,7 @@ export {
   getPublishedArticles,
   updateArticle,
 } from "./blog";
+export { sendContactMessage } from "./contact";
 export { getHeroDashboard } from "./hero-dashboard";
 export { searchImdbTitles } from "./imdb";
 export {

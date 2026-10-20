@@ -26,6 +26,7 @@ du frontend n'a pas encore de contrat.
 | Incidents, interventions, notes    | `lib/api/incidents.ts`, `ratings.ts`           | ❌ aucun                                     | mock       |
 | Fiches super-héros / super-vilains | `super-heroes.ts` (profils), `villains.ts`     | ❌ aucun                                     | mock       |
 | Vidéothèque, blog, newsletter      | `videos.ts`, `blog.ts`, `newsletter.ts`        | ❌ aucun                                     | mock       |
+| Formulaire de contact              | `sendContactMessage` (`contact.ts`)            | ❌ aucun                                     | mock       |
 | Profil (email, téléphone, avatar)  | `account.ts`, `super-heroes.ts` (`updateMy…`)  | ❌ aucun                                     | mock       |
 | Tableau de bord héros, modération  | `hero-dashboard.ts`, `moderation.ts`           | ❌ aucun                                     | mock       |
 

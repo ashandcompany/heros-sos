@@ -14,8 +14,9 @@ type typeView struct {
 }
 
 type villainView struct {
-	ID, Alias string
-	TypeIDs   []int16
+	ID, Alias, ThreatLevel, Status string
+	TypeIDs                        []int16
+	ReportedIncidentsCount       int64
 }
 
 func (e *e2e) createType(a *actor, code, label string, endangersLife bool) typeView {
@@ -35,10 +36,9 @@ func validIncident(typeID int16) map[string]any {
 	return map[string]any{
 		"typeId":      typeID,
 		"description": "Deux individus forcent la porte de la bijouterie.",
-		"street":      "12 rue des Lilas",
-		"postalCode":  "69001",
-		"city":        "Lyon",
-		"country":     "FR",
+		"location": map[string]any{
+			"address": "12 rue des Lilas", "postalCode": "69001", "city": "Lyon", "country": "FR",
+		},
 		"occurredAt":  nil,
 		"villainIds":  []string{},
 	}
@@ -90,7 +90,8 @@ func TestVillainsAreCreatedByUsers(t *testing.T) {
 	var villain villainView
 	created.decode(t, &villain)
 	if created.status != http.StatusCreated || villain.Alias != "Le Corbeau Gris" ||
-		len(villain.TypeIDs) != 2 || villain.TypeIDs[0] != theft.ID || villain.TypeIDs[1] != burglary.ID {
+		len(villain.TypeIDs) != 2 || villain.TypeIDs[0] != theft.ID || villain.TypeIDs[1] != burglary.ID ||
+		villain.ThreatLevel != "faible" || villain.Status != "en-liberte" {
 		t.Fatalf("création : %d %s", created.status, created.body)
 	}
 	if got := citizen.request(http.MethodPatch, "/villains/"+villain.ID, map[string]any{
@@ -107,6 +108,28 @@ func TestVillainsAreCreatedByUsers(t *testing.T) {
 		"alias": "Le Corbeau Gris", "typeIds": []int16{theft.ID},
 	}); got.status != http.StatusForbidden {
 		t.Errorf("un autre utilisateur ne modifie pas les spécialités : %d", got.status)
+	}
+	if got := citizen.request(http.MethodPatch, "/villains/"+villain.ID, map[string]any{
+		"alias": "Le Corbeau Gris", "typeIds": []int16{burglary.ID}, "threatLevel": "critique",
+	}); got.status != http.StatusForbidden {
+		t.Errorf("le créateur ne modifie pas le niveau de menace : %d", got.status)
+	}
+	if got := moderator.request(http.MethodPatch, "/villains/"+villain.ID, map[string]any{
+		"alias": "Le Corbeau Gris", "typeIds": []int16{burglary.ID},
+		"threatLevel": "eleve", "status": "emprisonne",
+	}); got.status != http.StatusOK {
+		t.Fatalf("modification des valeurs de modération : %d %s", got.status, got.body)
+	} else {
+		got.decode(t, &villain)
+		if villain.ThreatLevel != "eleve" || villain.Status != "emprisonne" {
+			t.Errorf("valeurs renvoyées : threatLevel=%q status=%q", villain.ThreatLevel, villain.Status)
+		}
+	}
+	if got := moderator.request(http.MethodPatch, "/villains/"+villain.ID, map[string]any{
+		"alias": "Le Corbeau Gris", "typeIds": []int16{burglary.ID},
+		"threatLevel": "apocalypse", "status": "libre",
+	}); got.status != http.StatusUnprocessableEntity || got.fields()["threatLevel"] != "invalid" || got.fields()["status"] != "invalid" {
+		t.Errorf("enums invalides : %d %s", got.status, got.body)
 	}
 	if got := moderator.post("/villains", map[string]string{"alias": "Le Corbeau Gris"}); got.status != http.StatusConflict ||
 		got.code() != "villain_alias_already_used" {
@@ -160,13 +183,14 @@ func TestIncidentDeclaration(t *testing.T) {
 	before := len(e.mailer.Messages())
 	created := citizen.post("/incidents", body)
 	var incident struct {
-		ID, Status, Street, City, Priority string
-		TypeID                             int16
-		VillainIDs                         []string
+		ID, Status, Priority string
+		TypeID               int16
+		Location             struct{ Address, City string }
+		VillainIDs           []string
 	}
 	created.decode(t, &incident)
 	if created.status != http.StatusCreated || incident.Status != "reported" || incident.Priority != "normal" ||
-		incident.TypeID != incidentType.ID || incident.Street != "12 rue des Lilas" || incident.City != "Lyon" ||
+		incident.TypeID != incidentType.ID || incident.Location.Address != "12 rue des Lilas" || incident.Location.City != "Lyon" ||
 		len(incident.VillainIDs) != 1 || incident.VillainIDs[0] != villain.ID {
 		t.Fatalf("déclaration : %d %s", created.status, created.body)
 	}
@@ -191,6 +215,27 @@ func TestIncidentDeclaration(t *testing.T) {
 	if e.count("audit_logs", "action = 'incident.declare'") != 1 {
 		t.Error("la déclaration doit être journalisée")
 	}
+	var ownIncidents struct {
+		Items []struct{ ID string }
+		Total int
+	}
+	citizen.get("/incidents?reporterId=" + citizen.userID()).decode(t, &ownIncidents)
+	if ownIncidents.Total != 1 || ownIncidents.Items[0].ID != incident.ID {
+		t.Errorf("liste personnelle filtrée : %+v", ownIncidents)
+	}
+	other := e.signUpAndLogin("other-reporter@example.org")
+	if got := other.get("/incidents?reporterId=" + citizen.userID()); got.status != http.StatusForbidden {
+		t.Errorf("un citoyen ne filtre pas sur un autre déclarant : %d", got.status)
+	}
+	var villains struct{ Items []villainView }
+	if got := citizen.get("/villains?q=Le%20Corbeau"); got.status != http.StatusOK {
+		t.Fatalf("liste des vilains : %d %s", got.status, got.body)
+	} else {
+		got.decode(t, &villains)
+		if len(villains.Items) != 1 || villains.Items[0].ReportedIncidentsCount != 1 {
+			t.Errorf("nombre d'incidents du vilain : %+v", villains.Items)
+		}
+	}
 
 	// Un héros ou un modérateur peut aussi déclarer.
 	if got := moderator.post("/incidents", validIncident(incidentType.ID)); got.status != http.StatusCreated {
@@ -206,14 +251,14 @@ func TestIncidentDeclarationValidation(t *testing.T) {
 
 	bad := map[string]any{
 		"typeId": 0, "description": "", "citizensRescued": -1,
-		"street": "", "city": "", "occurredAt": "2999-01-01T00:00:00Z",
+		"location": map[string]string{"address": "", "city": ""}, "occurredAt": "2999-01-01T00:00:00Z",
 		"villainIds": []string{"00000000-0000-0000-0000-000000000000"},
 	}
 	got := citizen.post("/incidents", bad)
 	fields := got.fields()
 	want := map[string]string{
 		"typeId": "invalid", "description": "required",
-		"citizensRescued": "invalid", "street": "required", "city": "required",
+		"citizensRescued": "invalid", "location.address": "required", "location.city": "required",
 		"occurredAt": "invalid", "villainIds": "invalid",
 	}
 	if got.status != http.StatusUnprocessableEntity {

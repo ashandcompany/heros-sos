@@ -35,10 +35,13 @@ type Villain struct {
 	FirstName   string
 	MainSector  string
 	Description string
+	ThreatLevel ThreatLevel
+	Status      Status
 	CreatedBy   *uuid.UUID
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	TypeIDs     []int16
+	ReportedIncidentsCount int64
 }
 
 type record struct {
@@ -48,9 +51,16 @@ type record struct {
 	FirstName   *string
 	MainSector  *string
 	Description *string
+	ThreatLevel string
+	Status      string
 	CreatedBy   *uuid.UUID
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+}
+
+type viewRecord struct {
+	Record                 record `gorm:"embedded"`
+	ReportedIncidentsCount int64
 }
 
 func (record) TableName() string { return tableVillains }
@@ -63,7 +73,10 @@ type specialtyRecord struct {
 func (specialtyRecord) TableName() string { return "villain_specialties" }
 
 func (r record) toVillain() Villain {
-	v := Villain{ID: r.ID, Alias: r.Alias, CreatedBy: r.CreatedBy, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}
+	v := Villain{
+		ID: r.ID, Alias: r.Alias, ThreatLevel: ThreatLevel(r.ThreatLevel), Status: Status(r.Status),
+		CreatedBy: r.CreatedBy, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+	}
 	if r.LastName != nil {
 		v.LastName = *r.LastName
 	}
@@ -76,6 +89,12 @@ func (r record) toVillain() Villain {
 	if r.Description != nil {
 		v.Description = *r.Description
 	}
+	return v
+}
+
+func (r viewRecord) toVillain() Villain {
+	v := r.Record.toVillain()
+	v.ReportedIncidentsCount = r.ReportedIncidentsCount
 	return v
 }
 
@@ -102,6 +121,7 @@ func (r *gormRepository) Create(ctx context.Context, v *Villain) error {
 	rec := record{
 		ID: v.ID, Alias: v.Alias, LastName: optional(v.LastName), FirstName: optional(v.FirstName),
 		MainSector: optional(v.MainSector), Description: optional(v.Description),
+		ThreatLevel: string(v.ThreatLevel), Status: string(v.Status),
 		CreatedBy: v.CreatedBy, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt,
 	}
 	if err := r.conn(ctx).Create(&rec).Error; err != nil {
@@ -127,8 +147,8 @@ func optional(value string) *string {
 }
 
 func (r *gormRepository) Find(ctx context.Context, id uuid.UUID) (*Villain, error) {
-	var found record
-	err := r.conn(ctx).Where("id = ?", id).Take(&found).Error
+	var found viewRecord
+	err := r.viewQuery(ctx).Where("villains.id = ?", id).Take(&found).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrNotFound
 	}
@@ -146,9 +166,9 @@ func (r *gormRepository) Find(ctx context.Context, id uuid.UUID) (*Villain, erro
 
 func (r *gormRepository) List(ctx context.Context, aliasPrefix string, limit, offset int) ([]Villain, int64, error) {
 	filtered := func() *gorm.DB {
-		query := r.conn(ctx).Model(&record{})
+		query := r.conn(ctx).Table(tableVillains)
 		if aliasPrefix != "" {
-			query = query.Where("alias LIKE ?", escapeLike(aliasPrefix)+"%")
+			query = query.Where("villains.alias LIKE ?", escapeLike(aliasPrefix)+"%")
 		}
 		return query
 	}
@@ -157,8 +177,12 @@ func (r *gormRepository) List(ctx context.Context, aliasPrefix string, limit, of
 	if err := filtered().Count(&total).Error; err != nil {
 		return nil, 0, fmt.Errorf("villain : comptage : %w", err)
 	}
-	var records []record
-	if err := filtered().Order("alias ASC, id ASC").Limit(limit).Offset(offset).Find(&records).Error; err != nil {
+	query := r.viewQuery(ctx)
+	if aliasPrefix != "" {
+		query = query.Where("villains.alias LIKE ?", escapeLike(aliasPrefix)+"%")
+	}
+	var records []viewRecord
+	if err := query.Order("villains.alias ASC, villains.id ASC").Limit(limit).Offset(offset).Find(&records).Error; err != nil {
 		return nil, 0, fmt.Errorf("villain : liste : %w", err)
 	}
 	villains := make([]Villain, len(records))
@@ -167,7 +191,7 @@ func (r *gormRepository) List(ctx context.Context, aliasPrefix string, limit, of
 	}
 	ids := make([]uuid.UUID, len(records))
 	for i, rec := range records {
-		ids[i] = rec.ID
+		ids[i] = rec.Record.ID
 	}
 	typeIDs, err := r.typeIDs(ctx, ids)
 	if err != nil {
@@ -177,6 +201,13 @@ func (r *gormRepository) List(ctx context.Context, aliasPrefix string, limit, of
 		villains[i].TypeIDs = typeIDs[villains[i].ID]
 	}
 	return villains, total, nil
+}
+
+func (r *gormRepository) viewQuery(ctx context.Context) *gorm.DB {
+	return r.conn(ctx).Table(tableVillains).
+		Select("villains.*, COUNT(incident_villains.incident_id) AS reported_incidents_count").
+		Joins("LEFT JOIN incident_villains ON incident_villains.villain_id = villains.id").
+		Group("villains.id")
 }
 
 func (r *gormRepository) typeIDs(ctx context.Context, villainIDs []uuid.UUID) (map[uuid.UUID][]int16, error) {
@@ -200,7 +231,8 @@ func (r *gormRepository) typeIDs(ctx context.Context, villainIDs []uuid.UUID) (m
 func (r *gormRepository) Update(ctx context.Context, v *Villain) error {
 	result := r.conn(ctx).Table(tableVillains).Where("id = ?", v.ID).Updates(map[string]any{
 		"alias": v.Alias, "last_name": optional(v.LastName), "first_name": optional(v.FirstName),
-		"main_sector": optional(v.MainSector), "description": optional(v.Description), "updated_at": v.UpdatedAt,
+		"main_sector": optional(v.MainSector), "description": optional(v.Description),
+		"threat_level": string(v.ThreatLevel), "status": string(v.Status), "updated_at": v.UpdatedAt,
 	})
 	if result.Error != nil {
 		if database.IsUniqueViolation(result.Error, aliasUniqueConstrain) {

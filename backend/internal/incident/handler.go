@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,6 +14,7 @@ import (
 	"github.com/ashandcompany/heros-sos/backend/internal/config"
 	"github.com/ashandcompany/heros-sos/backend/internal/httpx"
 	"github.com/ashandcompany/heros-sos/backend/internal/ratelimit"
+	"github.com/ashandcompany/heros-sos/backend/internal/user"
 )
 
 // HandlerDeps regroupe les dépendances du handler.
@@ -42,18 +44,22 @@ func NewHandler(deps HandlerDeps) *Handler {
 func (h *Handler) SweepLimiters() { h.createPerUser.Sweep() }
 
 type createPayload struct {
-	TypeID            int16    `json:"typeId"`
-	Description       string   `json:"description"`
-	CitizensRescued   int16    `json:"citizensRescued"`
-	Street            string   `json:"street"`
-	PostalCode        string   `json:"postalCode"`
+	TypeID          int16    `json:"typeId"`
+	Description     string   `json:"description"`
+	CitizensRescued int16    `json:"citizensRescued"`
+	Location        location `json:"location"`
+	OccurredAt      *string  `json:"occurredAt"`
+	VillainIDs      []string `json:"villainIds"`
+}
+
+type location struct {
+	Address           string   `json:"address"`
 	City              string   `json:"city"`
+	PostalCode        string   `json:"postalCode"`
 	Country           string   `json:"country"`
 	AddressComplement string   `json:"addressComplement"`
 	Latitude          *float64 `json:"latitude"`
 	Longitude         *float64 `json:"longitude"`
-	OccurredAt        *string  `json:"occurredAt"`
-	VillainIDs        []string `json:"villainIds"`
 }
 
 // Response est un incident vu par son déclarant ou un modérateur.
@@ -66,18 +72,22 @@ type Response struct {
 	Status            string           `json:"status"`
 	Priority          string           `json:"priority"`
 	CitizensRescued   int16            `json:"citizensRescued"`
-	Street            string           `json:"street"`
-	PostalCode        string           `json:"postalCode"`
-	City              string           `json:"city"`
-	Country           string           `json:"country"`
-	AddressComplement string           `json:"addressComplement,omitempty"`
-	Latitude          *float64         `json:"latitude,omitempty"`
-	Longitude         *float64         `json:"longitude,omitempty"`
+	Location          locationResponse `json:"location"`
 	OccurredAt        *time.Time       `json:"occurredAt,omitempty"`
 	VillainIDs        []string         `json:"villainIds"`
 	Villains          []villainSummary `json:"villains"`
 	InterventionID    *uuid.UUID       `json:"interventionId,omitempty"`
 	CreatedAt         time.Time        `json:"createdAt"`
+}
+
+type locationResponse struct {
+	Address           string   `json:"address"`
+	City              string   `json:"city"`
+	PostalCode        string   `json:"postalCode,omitempty"`
+	Country           string   `json:"country,omitempty"`
+	AddressComplement string   `json:"addressComplement,omitempty"`
+	Latitude          *float64 `json:"latitude,omitempty"`
+	Longitude         *float64 `json:"longitude,omitempty"`
 }
 
 type villainSummary struct {
@@ -97,21 +107,43 @@ func newResponse(in Incident) Response {
 	return Response{
 		ID: in.ID, TypeID: in.TypeID, TypeCode: in.TypeCode, TypeLabel: in.TypeLabel,
 		Description: in.Description, Status: string(in.Status), Priority: string(in.Priority),
-		CitizensRescued: in.CitizensRescued, Street: in.Street, PostalCode: in.PostalCode,
-		City: in.City, Country: in.Country, AddressComplement: in.AddressComplement,
-		Latitude: in.Latitude, Longitude: in.Longitude, OccurredAt: in.OccurredAt,
+		CitizensRescued: in.CitizensRescued,
+		Location: locationResponse{
+			Address: in.Street, City: in.City, PostalCode: in.PostalCode, Country: in.Country,
+			AddressComplement: in.AddressComplement, Latitude: in.Latitude, Longitude: in.Longitude,
+		}, OccurredAt: in.OccurredAt,
 		VillainIDs: villainIDs, Villains: villains, InterventionID: in.InterventionID, CreatedAt: in.CreatedAt,
 	}
 }
 
 // List traite GET /incidents.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
+	principal, _ := auth.PrincipalFrom(r.Context())
 	page, err := httpx.ParsePage(r)
 	if err != nil {
 		h.fail(w, r, err)
 		return
 	}
-	incidents, total, err := h.Service.List(r.Context(), page.Limit, page.Offset)
+	var reporterID *uuid.UUID
+	if raw := strings.TrimSpace(r.URL.Query().Get("reporterId")); raw != "" {
+		parsed, err := uuid.Parse(raw)
+		if err != nil {
+			h.fail(w, r, &httpx.Error{
+				Status: http.StatusUnprocessableEntity, Code: httpx.CodeValidationFailed,
+				Message: "Certains paramètres sont invalides.", Fields: map[string]string{"reporterId": "invalid"},
+			})
+			return
+		}
+		reporterID = &parsed
+	}
+	if principal.Role == user.RoleCitizen {
+		if reporterID != nil && *reporterID != principal.UserID {
+			h.fail(w, r, httpx.Forbidden("Vous ne pouvez consulter que vos propres signalements."))
+			return
+		}
+		reporterID = &principal.UserID
+	}
+	incidents, total, err := h.Service.List(r.Context(), reporterID, page.Limit, page.Offset)
 	if err != nil {
 		h.fail(w, r, err)
 		return
@@ -152,9 +184,9 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	in := CreateInput{
 		TypeID: body.TypeID, Description: body.Description,
-		CitizensRescued: body.CitizensRescued, Street: body.Street, PostalCode: body.PostalCode,
-		City: body.City, Country: body.Country, AddressComplement: body.AddressComplement,
-		Latitude: body.Latitude, Longitude: body.Longitude, VillainIDs: body.VillainIDs,
+		CitizensRescued: body.CitizensRescued, Street: body.Location.Address, PostalCode: body.Location.PostalCode,
+		City: body.Location.City, Country: body.Location.Country, AddressComplement: body.Location.AddressComplement,
+		Latitude: body.Location.Latitude, Longitude: body.Location.Longitude, VillainIDs: body.VillainIDs,
 	}
 	if body.OccurredAt != nil {
 		in.OccurredAt = *body.OccurredAt

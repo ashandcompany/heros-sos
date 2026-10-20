@@ -14,6 +14,7 @@ const (
 	envHTTPIdleTimeout       = "HEROS_HTTP_IDLE_TIMEOUT"
 	envHTTPShutdownTimeout   = "HEROS_HTTP_SHUTDOWN_TIMEOUT"
 	envHTTPMaxBodyBytes      = "HEROS_HTTP_MAX_BODY_BYTES"
+	envHealthcheckTimeout    = "HEROS_HEALTHCHECK_TIMEOUT"
 	envTrustedProxies        = "HEROS_TRUSTED_PROXIES"
 	envAllowedOrigins        = "HEROS_ALLOWED_ORIGINS"
 
@@ -90,7 +91,7 @@ func EnvVarNames() []string {
 	return []string{
 		envEnvironment, envLogLevel, envAutoMigrate,
 		envHTTPAddr, envHTTPReadHeaderTimeout, envHTTPReadTimeout, envHTTPWriteTimeout,
-		envHTTPIdleTimeout, envHTTPShutdownTimeout, envHTTPMaxBodyBytes, envTrustedProxies,
+		envHTTPIdleTimeout, envHTTPShutdownTimeout, envHTTPMaxBodyBytes, envHealthcheckTimeout, envTrustedProxies,
 		envAllowedOrigins,
 		envDatabaseURL, envDatabaseMaxOpenConns, envDatabaseMaxIdleConns,
 		envDatabaseConnMaxLifetime, envDatabaseConnMaxIdleTime, envDatabasePingTimeout,

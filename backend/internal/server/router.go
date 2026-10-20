@@ -39,6 +39,13 @@ func (r *Router) HandleFunc(method, path string, handler http.HandlerFunc) {
 	r.Handle(method, path, handler)
 }
 
+// HandleOutsideContract enregistre une route qui ne fait pas partie de l'API décrite par le contrat
+// OpenAPI (la documentation elle-même, par exemple). Elle est servie comme les autres, sous
+// APIPrefix, mais n'apparaît pas dans Routes() : le test de conformité ne la compare pas au contrat.
+func (r *Router) HandleOutsideContract(method, path string, handler http.Handler) {
+	r.mux.Handle(method+" "+APIPrefix+path, handler)
+}
+
 // Routes retourne les routes enregistrées.
 func (r *Router) Routes() []Route {
 	return append([]Route(nil), r.routes...)

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -50,6 +51,7 @@ func TestLoadAppliesDefaults(t *testing.T) {
 		{"niveau de log", cfg.LogLevel, slog.LevelInfo},
 		{"adresse HTTP", cfg.HTTP.Addr, defaultHTTPAddr},
 		{"taille max du corps", cfg.HTTP.MaxBodyBytes, int64(defaultMaxBodyBytes)},
+		{"délai du healthcheck", cfg.HTTP.HealthcheckTimeout, defaultHealthcheckTimeout},
 		{"session membre : inactivité", cfg.Session.Member.IdleTimeout, defaultMemberSessionIdle},
 		{"session modérateur : durée max", cfg.Session.Moderator.MaxLifetime, defaultModeratorMax},
 		{"cookie sécurisé", cfg.Session.CookieSecure, false},
@@ -261,7 +263,10 @@ func TestEnvExampleStaysInSync(t *testing.T) {
 
 	documented := make(map[string]bool)
 	for _, match := range regexp.MustCompile(`(?m)^#?\s*(HEROS_[A-Z0-9_]+)=`).FindAllStringSubmatch(string(content), -1) {
-		documented[match[1]] = true
+		// Les variantes NOM_FILE sont décrites une fois pour toutes, pas variable par variable.
+		if !strings.HasSuffix(match[1], fileSuffix) {
+			documented[match[1]] = true
+		}
 	}
 
 	known := make(map[string]bool)
@@ -275,5 +280,87 @@ func TestEnvExampleStaysInSync(t *testing.T) {
 		if !known[name] {
 			t.Errorf("%s est dans .env.example mais n'est lue par aucun code", name)
 		}
+	}
+}
+
+// ---- Secrets fournis par des fichiers ---------------------------------------------------------
+
+func writeSecret(t *testing.T, content string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "secret")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestSecretsCanComeFromFiles(t *testing.T) {
+	direct := validEnv()
+	env := map[string]string{
+		// Un saut de ligne final, comme en laisse un `echo` ou un éditeur, est ignoré.
+		envDatabaseURL + fileSuffix: writeSecret(t, direct[envDatabaseURL]+"\n"),
+		envCryptoKeys + fileSuffix:  writeSecret(t, direct[envCryptoKeys]+"\r\n"),
+		envCSRFSecret + fileSuffix:  writeSecret(t, direct[envCSRFSecret]+"\n"),
+		envCryptoActiveK:            direct[envCryptoActiveK],
+	}
+
+	cfg, err := Load(fakeEnv(env))
+	if err != nil {
+		t.Fatalf("Load() : %v", err)
+	}
+	if cfg.Database.URL != direct[envDatabaseURL] {
+		t.Errorf("URL de base lue depuis le fichier = %q", cfg.Database.URL)
+	}
+	if len(cfg.Crypto.Keys[1]) != MasterKeyLength || len(cfg.Security.CSRFSecret) != minCSRFSecret {
+		t.Errorf("clés lues depuis les fichiers : %d et %d octets", len(cfg.Crypto.Keys[1]), len(cfg.Security.CSRFSecret))
+	}
+}
+
+func TestSecretFileProblemsAreReportedWithoutLeakingContent(t *testing.T) {
+	const secretContent = "contenu-ultra-secret"
+
+	tests := []struct {
+		name    string
+		mutate  func(env map[string]string)
+		wantErr string
+	}{
+		{"valeur directe et fichier", func(env map[string]string) {
+			env[envDatabaseURL+fileSuffix] = writeSecret(t, secretContent)
+		}, "tous deux définis"},
+		{"fichier absent", func(env map[string]string) {
+			delete(env, envDatabaseURL)
+			env[envDatabaseURL+fileSuffix] = filepath.Join(t.TempDir(), "absent")
+		}, "lecture impossible"},
+		{"fichier vide", func(env map[string]string) {
+			delete(env, envDatabaseURL)
+			env[envDatabaseURL+fileSuffix] = writeSecret(t, "  \n")
+		}, envDatabaseURL + " est obligatoire"},
+		{"fichier de clés invalide", func(env map[string]string) {
+			delete(env, envCryptoKeys)
+			env[envCryptoKeys+fileSuffix] = writeSecret(t, secretContent)
+		}, envCryptoKeys},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			env := validEnv()
+			test.mutate(env)
+			_, err := Load(fakeEnv(env))
+			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("erreur = %v, attendu un message contenant %q", err, test.wantErr)
+			}
+			if strings.Contains(err.Error(), secretContent) {
+				t.Fatalf("l'erreur ne doit jamais citer le contenu d'un secret : %v", err)
+			}
+		})
+	}
+}
+
+func TestProductionRulesStillApplyToSecretsFromFiles(t *testing.T) {
+	env := productionEnv()
+	delete(env, envDatabaseURL)
+	env[envDatabaseURL+fileSuffix] = writeSecret(t, "postgres://u:p@db/herossos?sslmode=disable")
+
+	if _, err := Load(fakeEnv(env)); err == nil || !strings.Contains(err.Error(), "sslmode=disable") {
+		t.Fatalf("la validation de production doit s'appliquer à une valeur lue depuis un fichier : %v", err)
 	}
 }

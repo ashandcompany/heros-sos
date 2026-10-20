@@ -6,14 +6,25 @@ personnelles, mails.
 
 ## Démarrage rapide
 
-Prérequis : Go (voir `go.mod`), Docker (pour PostgreSQL), `openssl`.
+Prérequis : Go (voir `go.mod`), Docker, `openssl`.
+
+**Toute l'application dans Docker** (proxy, front, API, PostgreSQL 18, Mailpit, RabbitMQ) :
 
 ```bash
 cd backend
-make db-start        # PostgreSQL dans Docker (bases herossos et herossos_test)
+make env             # crée .env avec des secrets aléatoires
+make up-dev          # http://localhost:8088 (front + API) · /api/v1/docs (Swagger) · :8025 (mails reçus)
+make moderator-dev EMAIL=modo@example.org FIRST=Nick LAST=Fury BIRTH=1950-12-04
+```
+
+**API seule, lancée depuis Go** (le plus rapide pour travailler sur le backend) :
+
+```bash
+cd backend
+make db-start        # PostgreSQL 18 dans Docker (bases herossos et herossos_test)
 make env             # crée .env avec des secrets aléatoires
 make migrate         # applique les migrations
-make run             # API sur http://localhost:8080/api/v1
+make run             # API sur http://localhost:8080/api/v1 (HEROS_HTTP_ADDR pour changer de port)
 ```
 
 Créer le premier modérateur (il valide ensuite les super-héros) :
@@ -22,8 +33,9 @@ Créer le premier modérateur (il valide ensuite les super-héros) :
 make createmoderator EMAIL=modo@example.org FIRST=Nick LAST=Fury BIRTH=1950-12-04
 ```
 
-En développement, les mails ne sont pas envoyés : le driver `log` les écrit dans la sortie du
-serveur, avec les liens d'activation et de réinitialisation.
+Avec `make run`, les mails ne sont pas envoyés : le driver `log` les écrit dans la sortie du
+serveur, avec les liens d'activation et de réinitialisation. Avec `make up-dev`, ils partent par
+SMTP vers Mailpit et se lisent sur http://localhost:8025.
 
 > **Sauvegardez `HEROS_CRYPTO_KEYS`.** Sans cette clé, les données personnelles chiffrées en base
 > sont définitivement illisibles.
@@ -36,8 +48,9 @@ make test       # go test ./... -race -count=1
 make check      # tout ce que vérifie le CI : formatage, vet, tests, vulnérabilités
 ```
 
-Les tests d'intégration utilisent un vrai PostgreSQL (`HEROS_TEST_DATABASE_URL`, défini par le
-Makefile) et chacun travaille dans son propre schéma : ils tournent en parallèle sans se gêner. En
+Les tests d'intégration utilisent un vrai PostgreSQL 18, comme le CI et la production
+(`HEROS_TEST_DATABASE_URL`, défini par le Makefile ; `make db-stop` supprime la base de test avec ses
+données) et chacun travaille dans son propre schéma : ils tournent en parallèle sans se gêner. En
 CI (`CI=true`), l'absence de base fait **échouer** les tests au lieu de les ignorer.
 
 Ce qui protège de la régression :
@@ -51,13 +64,37 @@ Ce qui protège de la régression :
   verrouillages simultanés.
 - `.env.example` est vérifié contre les variables réellement lues par le code.
 
+## Documentation interactive (Swagger UI)
+
+En développement, l'API sert sa propre documentation, générée à partir du contrat
+`openapi/openapi.yaml` : **http://localhost:8088/api/v1/docs** avec `make up-dev`, ou
+http://localhost:8080/api/v1/docs avec `make run`. On y lit chaque route, ses champs et ses erreurs,
+et on peut l'essayer (« Try it out »).
+
+- **Une écriture authentifiée** demande une session et le jeton CSRF : appeler `POST /auth/login`
+  (le cookie est posé par le navigateur), copier le `csrfToken` de la réponse dans « Authorize »
+  (`csrfToken`), puis essayer la route. L'origine de la page doit figurer dans
+  `HEROS_ALLOWED_ORIGINS`, sinon les écritures sont refusées (`origin_not_allowed`) : c'est le cas du
+  proxy (`:8088`) avec `make up-dev`, mais pas de l'accès direct à l'API (`:8081`). Avec `make run`,
+  ajouter `http://localhost:8080` à cette variable dans `.env`. Les lectures (`GET`) n'y sont pas soumises.
+- **Rien ne sort de la machine** : Swagger UI est embarqué dans le binaire (pas de CDN), le validateur
+  en ligne est désactivé et la politique de sécurité de la page interdit les scripts en ligne et
+  toute ressource extérieure. Seule cette page assouplit la politique de l'API.
+- **Absente en production** : les routes `/docs` ne sont pas enregistrées (404).
+- Le contrat n'a pas besoin d'être répété : ajouter une route dans `openapi.yaml` (voir plus bas) la
+  fait apparaître dans la page. Les routes de la documentation elles-mêmes ne font pas partie du
+  contrat (`Router.HandleOutsideContract`).
+- Les fichiers de Swagger UI (`internal/apidocs/assets/`) sont ceux de la distribution officielle,
+  sans modification, et vérifiés par un test : voir `internal/apidocs/THIRD_PARTY.md` pour la version
+  et la mise à jour.
+
 ## Organisation du code
 
 ```
 cmd/api                 serveur HTTP (-migrate pour appliquer les migrations)
 cmd/createmoderator     crée un modérateur (mot de passe par HEROS_MODERATOR_PASSWORD)
 migrations/             SQL versionné par horodatage (golang-migrate), embarqué dans le binaire
-openapi/openapi.yaml    contrat de l'API (référence)
+openapi/openapi.yaml    contrat de l'API (référence), embarqué par openapi/openapi.go
 internal/
   config/               TOUTE la configuration : variables d'environnement, valeurs par défaut,
                         validation (plus stricte en production)
@@ -68,6 +105,7 @@ internal/
   moderation/           actions des modérateurs sur les comptes
   crypto/               cascade AES-256-GCM puis XChaCha20-Poly1305 (clé de 512 bits)
   mail/                 construction MIME, SMTP, file d'envoi asynchrone, modèles
+  apidocs/              documentation interactive (Swagger UI embarqué), hors production
   audit/                journal des actions sensibles
   httpx/                format des erreurs, JSON strict, IP client, middlewares
   validation/           règles de saisie (alignées sur le formulaire du frontend)
@@ -126,15 +164,73 @@ Envoyer un mail : dépendre de l'interface `mail.Mailer` (la file asynchrone l'i
 - **Rôles** : `citizen`, `hero`, `moderator` (le frontend actuel utilise `citoyen` et `super-heros`).
 - **2FA** : prévue en version 2 ; une session est complète dès la connexion.
 
+## Environnements Docker
+
+Un fichier de base (`docker-compose.yml`) décrit ce qui est commun ; `docker-compose.dev.yml` et
+`docker-compose.prod.yml` s'y ajoutent. Chaque environnement est un projet Compose distinct
+(`heros-sos-dev`, `heros-sos-prod`) : leurs conteneurs et leurs volumes ne se mélangent jamais.
+
+| | Développement (`make up-dev`) | Production (`make up-prod`) |
+|---|---|---|
+| Ports publiés | proxy `8088`, API `8081`, Mailpit `8025`, PostgreSQL `5432`, RabbitMQ — **sur `127.0.0.1` uniquement** | **proxy seul** : 80 et 443 |
+| Front | serveur de développement Next.js, code monté et rechargé à chaud | image de production (sortie `standalone` de Next.js, `node server.js`), sans dépendances de développement |
+| TLS | non (HTTP) | automatique (Let's Encrypt, via Caddy) |
+| Secrets | mots de passe publics de `.env.example` | fichiers dans `secrets/`, montés en `/run/secrets` |
+| Migrations | appliquées par l'API au démarrage | tâche `migrate` qui doit réussir avant l'API |
+| Mails | Mailpit (rien ne sort de la machine) | SMTP réel (`.env.production`) |
+| Réseau `backend` | ouvert | **interne** : la base et l'API n'ont aucun accès à Internet |
+
+Ce qui est commun aux deux : l'API tourne sans root (`USER 65532`), système de fichiers en lecture
+seule, toutes les capacités Linux retirées, `no-new-privileges`, journaux tournants, et un
+**healthcheck** : `/api -healthcheck` interroge `/api/v1/ready` (base comprise) depuis l'intérieur du
+conteneur. Une image `FROM scratch` n'a ni shell ni `curl` : la sonde est donc dans le binaire du
+serveur (`cmd/api`, `internal/server/probe.go`), délai réglable par `HEROS_HEALTHCHECK_TIMEOUT`.
+
+**Premier déploiement en production**
+
+```bash
+cp .env.production.example .env.production   # DOMAIN, ACME_EMAIL, SMTP… (aucun secret ici)
+make secrets                                  # génère secrets/ (ne remplace jamais un secret existant)
+make up-prod
+make moderator-prod EMAIL=… FIRST=… LAST=… BIRTH=AAAA-MM-JJ
+```
+
+`secrets/` et `.env.production` ne sont jamais versionnés. Les secrets ne passent pas par
+l'environnement des conteneurs : l'API lit `HEROS_<NOM>_FILE` (chemin d'un fichier) à la place de
+`HEROS_<NOM>`. Définir les deux est une erreur, et le contenu d'un fichier n'apparaît jamais dans
+un message d'erreur. **`secrets/crypto_keys` se sauvegarde hors du serveur.**
+
+- **PostgreSQL 18** : le volume se monte sur `/var/lib/postgresql` (et non plus sur
+  `/var/lib/postgresql/data`). Un volume créé avec PostgreSQL 17 n'est pas réutilisable : en
+  développement, `make down-dev V=1` le supprime, avec ses données.
+- **Adresse IP des visiteurs** : le proxy et le front ont des adresses fixes (`PROXY_IP`, `WEB_IP`,
+  réseau `EDGE_SUBNET`), et seules elles sont dans `HEROS_TRUSTED_PROXIES`. Quand le serveur Next.js
+  appelle l'API (Server Actions, rendu serveur), il doit **transmettre l'en-tête `X-Forwarded-For`**
+  reçu du proxy. Sinon l'API ne voit que l'adresse du conteneur front, et tous les visiteurs
+  partagent les mêmes limites de débit.
+- **Nettoyage** : le front de développement garde `node_modules` et `.next` dans des volumes
+  anonymes ; `make up-dev` et `make down-dev` les suppriment avec le conteneur.
+- `make compose-check` valide la syntaxe des deux fichiers Compose, sans aucune configuration
+  préalable (`.env`, `.env.production` ni `secrets/` n'ont besoin d'exister). À lancer après toute
+  modification des fichiers Compose : le CI ne le fait pas encore.
+- Les variables des conteneurs (`POSTGRES_*`, `RABBITMQ_*`, ports, adresses) sont documentées dans
+  `.env.example` et `.env.production.example`.
+
+**RabbitMQ n'est pas encore utilisé par le code.** Le service est démarré (en développement, et en
+production avec `--profile rabbitmq`) pour être prêt, mais aucun paquet Go ne s'y connecte : les
+mails passent aujourd'hui par `mail.Queue`, une file en mémoire dans le processus de l'API (bornée,
+avec reprises, vidée à l'arrêt propre). RabbitMQ n'interviendra qu'avec un worker de mails, derrière
+la même interface `mail.Mailer`.
+
 ## Production
 
 - `HEROS_ENV=production` active des contrôles stricts au démarrage : cookie `Secure`, SMTP chiffré,
   base en TLS, origines en HTTPS, paramètres argon2id minimaux. Une configuration incohérente
   empêche le démarrage.
 - Derrière un reverse proxy, renseigner `HEROS_TRUSTED_PROXIES` : sinon tous les clients partagent
-  l'adresse IP du proxy, et donc les mêmes limites de débit.
+  l'adresse IP du proxy, et donc les mêmes limites de débit (déjà fait par les fichiers Compose).
 - Le limiteur de débit est en mémoire : exact pour une seule instance de l'API.
-- Les mails en file sont perdus si le processus est tué brutalement (RabbitMQ les rendra durables
-  sans changer le code appelant : seul `mail.Mailer` est connu des autres paquets).
+- Les mails en file sont perdus si le processus est tué brutalement (un worker RabbitMQ les rendra
+  durables sans changer le code appelant : seul `mail.Mailer` est connu des autres paquets).
 - Sauvegarder `HEROS_CRYPTO_KEYS` séparément de la base ; pour une rotation, ajouter une clé puis
   changer `HEROS_CRYPTO_ACTIVE_KEY_ID` (les anciennes valeurs restent lisibles).

@@ -52,6 +52,7 @@ const (
 	envRateRegisterPerIP       = "HEROS_RATE_REGISTER_PER_IP"
 	envRatePasswordResetPerIP  = "HEROS_RATE_PASSWORD_RESET_PER_IP"
 	envRatePasswordResetPerKey = "HEROS_RATE_PASSWORD_RESET_PER_EMAIL"
+	envRateIncidentCreatePerUser = "HEROS_RATE_INCIDENT_CREATE_PER_USER"
 	envMaxTrackedRateKeys      = "HEROS_RATE_MAX_TRACKED_KEYS"
 
 	envActivationTokenTTL    = "HEROS_ACTIVATION_TOKEN_TTL"
@@ -103,7 +104,7 @@ func EnvVarNames() []string {
 		envPasswordMinLength, envPasswordMaxLength,
 		envLockoutMaxFailures, envLockoutBaseDelay, envLockoutMaxDelay,
 		envRateLoginPerIP, envRateLoginPerIdentifier, envRateRegisterPerIP,
-		envRatePasswordResetPerIP, envRatePasswordResetPerKey, envMaxTrackedRateKeys,
+		envRatePasswordResetPerIP, envRatePasswordResetPerKey, envRateIncidentCreatePerUser, envMaxTrackedRateKeys,
 		envActivationTokenTTL, envPasswordResetTokenTTL,
 		envCSRFSecret, envCryptoKeys, envCryptoActiveK,
 		envMailDriver, envMailFromAddress, envMailFromName, envSMTPHost, envSMTPPort,

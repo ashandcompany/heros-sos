@@ -76,6 +76,7 @@ var (
 	defaultRateRegisterPerIP       = RateRule{Max: 5, Window: time.Hour}
 	defaultRatePasswordResetPerIP  = RateRule{Max: 10, Window: time.Hour}
 	defaultRatePasswordResetPerKey = RateRule{Max: 3, Window: time.Hour}
+	defaultRateIncidentCreatePerUser = RateRule{Max: 10, Window: time.Hour}
 )
 
 // Plancher de sécurité imposé en production pour le hachage des mots de passe

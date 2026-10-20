@@ -110,8 +110,242 @@ tags:
     description: "Les types d'incident (catégories) proposés à la déclaration. Les modérateurs les gèrent sous `/admin`."
   - name: Vilains
     description: Les super-vilains que l'on peut associer à un incident. Tout utilisateur connecté peut en déclarer un et modifier ses spécialités.
+  - name: Réputation
+    description: Notes des citoyens après intervention, réponses des héros et modération des avis.
 
 paths:
+  /me/interventions:
+    get:
+      tags: [Réputation]
+      summary: Interventions terminées à noter
+      description: Liste les héros confirmés des interventions clôturées sur les incidents déclarés par l'utilisateur connecté (citoyen ou héros), avec ses avis déjà déposés. Un héros déclarant ne peut pas se noter lui-même.
+      operationId: listMyRateableInterventions
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Interventions et héros susceptibles d'être notés.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RateableInterventionPage" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /interventions/{interventionId}/reviews:
+    post:
+      tags: [Réputation]
+      summary: Noter un héros de l'intervention
+      description: Seul le déclarant connecté (citoyen ou héros) peut noter chaque participant confirmé d'une intervention clôturée, une fois par héros; un héros déclarant ne peut pas se noter lui-même.
+      operationId: createHeroReview
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - name: interventionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HeroReviewPayload" }
+      responses:
+        "204": { description: Avis créé et publié. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Ce héros a déjà été noté pour cette intervention.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /hero/reviews:
+    get:
+      tags: [Réputation]
+      summary: Avis reçus par le héros connecté
+      description: Le héros voit ses avis et leur statut de modération; un commentaire masqué n'est pas renvoyé.
+      operationId: listMyHeroReviews
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Résumé et page des avis reçus; moyenne et compteur basés sur les avis publiés uniquement.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HeroReputation" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /hero/reviews/{reviewId}/reply:
+    put:
+      tags: [Réputation]
+      summary: Répondre à un avis ou modifier sa réponse
+      description: Seul le héros évalué peut répondre. La réponse est publiée à sa création; chaque modification la remet en attente de modération.
+      operationId: saveHeroReviewReply
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - name: reviewId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HeroReviewReplyPayload" }
+      responses:
+        "204": { description: Réponse enregistrée ou modifiée. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: L'avis ne contient pas de commentaire publiable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /heroes/{heroId}/reviews:
+    get:
+      tags: [Réputation]
+      summary: Avis publics d'un héros
+      description: Retourne uniquement les avis publiés et calcule la moyenne sur tous les avis publiés, indépendamment de la pagination.
+      operationId: listPublicHeroReviews
+      parameters:
+        - name: heroId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Moyenne et page d'avis publics.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicHeroReputation" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/hero-reviews:
+    get:
+      tags: [Réputation]
+      summary: Lister les avis à modérer
+      operationId: listHeroReviewsForModeration
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [published, hidden] }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Page d'avis avec leurs réponses éventuelles.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HeroReviewPage" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/hero-reviews/{reviewId}:
+    patch:
+      tags: [Réputation]
+      summary: Publier ou masquer un avis
+      operationId: moderateHeroReview
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - name: reviewId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HeroReviewStatusPayload" }
+      responses:
+        "204": { description: Modération enregistrée. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/hero-review-replies:
+    get:
+      tags: [Réputation]
+      summary: Lister les réponses à modérer
+      operationId: listHeroReviewRepliesForModeration
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [published, pending, hidden] }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Page de réponses et avis associés.
+          content:
+            application/json:
+              schema:
+                { $ref: "#/components/schemas/HeroReviewReplyModerationPage" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/hero-review-replies/{reviewId}:
+    patch:
+      tags: [Réputation]
+      summary: Publier ou masquer une réponse
+      operationId: moderateHeroReviewReply
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - name: reviewId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HeroReviewStatusPayload" }
+      responses:
+        "204": { description: Modération enregistrée. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
   /health:
     get:
       tags: [Santé]
@@ -2040,6 +2274,150 @@ components:
         items:
           type: array
           items: { $ref: "#/components/schemas/Incident" }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+
+    RateableInterventionPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/RateableIntervention" }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+
+    RateableIntervention:
+      type: object
+      required:
+        [
+          interventionId,
+          incidentId,
+          outcome,
+          endedAt,
+          heroId,
+          heroAlias,
+          review,
+        ]
+      properties:
+        interventionId: { type: string, format: uuid }
+        incidentId: { type: string, format: uuid }
+        outcome: { type: string, enum: [succeeded, failed] }
+        endedAt: { type: string, format: date-time }
+        heroId: { type: string, format: uuid }
+        heroAlias: { type: string }
+        review:
+          allOf: [{ $ref: "#/components/schemas/HeroReview" }]
+          nullable: true
+
+    HeroReviewPayload:
+      type: object
+      required: [heroId, rating]
+      additionalProperties: false
+      properties:
+        heroId: { type: string, format: uuid }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: string, maxLength: 500 }
+
+    HeroReview:
+      type: object
+      required: [id, interventionId, heroId, rating, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        interventionId: { type: string, format: uuid }
+        heroId: { type: string, format: uuid }
+        heroAlias: { type: string }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: string, nullable: true }
+        status: { type: string, enum: [published, hidden] }
+        moderatedAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        reply: { $ref: "#/components/schemas/HeroReviewReply" }
+
+    HeroReviewPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/HeroReview" }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+
+    HeroReputation:
+      type: object
+      required: [averageRating, ratingsCount, ratings, total, limit, offset]
+      properties:
+        averageRating: { type: number, format: double, minimum: 0, maximum: 5 }
+        ratingsCount:
+          type: integer
+          minimum: 0
+          description: "Nombre d'avis publiés inclus dans la moyenne."
+        ratings:
+          type: array
+          items: { $ref: "#/components/schemas/HeroReview" }
+        total:
+          type: integer
+          minimum: 0
+          description: "Nombre total d'avis reçus, tous statuts confondus."
+        limit: { type: integer }
+        offset: { type: integer }
+
+    HeroReviewReplyPayload:
+      type: object
+      required: [content]
+      additionalProperties: false
+      properties:
+        content: { type: string, minLength: 1, maxLength: 500 }
+
+    HeroReviewReply:
+      type: object
+      required: [reviewId, content, status, createdAt]
+      properties:
+        reviewId: { type: string, format: uuid }
+        content: { type: string }
+        status: { type: string, enum: [published, pending, hidden] }
+        moderatedAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        editedAt: { type: string, format: date-time }
+
+    PublicHeroReputation:
+      type: object
+      required: [averageRating, ratingsCount, reviews]
+      properties:
+        averageRating: { type: number, format: double, minimum: 0, maximum: 5 }
+        ratingsCount: { type: integer, minimum: 0 }
+        reviews:
+          type: array
+          items: { $ref: "#/components/schemas/HeroReview" }
+
+    HeroReviewStatusPayload:
+      type: object
+      required: [status]
+      additionalProperties: false
+      properties:
+        status: { type: string, enum: [published, hidden] }
+
+    HeroReviewReplyModerationItem:
+      type: object
+      required: [reply, heroAlias, rating, reviewStatus]
+      properties:
+        reply: { $ref: "#/components/schemas/HeroReviewReply" }
+        heroAlias: { type: string }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: string, nullable: true }
+        reviewStatus: { type: string, enum: [published, hidden] }
+
+    HeroReviewReplyModerationPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/HeroReviewReplyModerationItem" }
         total: { type: integer }
         limit: { type: integer }
         offset: { type: integer }

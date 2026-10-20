@@ -76,6 +76,7 @@ type Participant struct {
 type Intervention struct {
 	ID             uuid.UUID
 	IncidentID     uuid.UUID
+	ReporterID     *uuid.UUID
 	Status         Status
 	ProposedStatus *Status
 	ProposedBy     *uuid.UUID

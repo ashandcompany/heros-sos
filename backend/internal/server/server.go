@@ -26,6 +26,7 @@ import (
 	"github.com/ashandcompany/heros-sos/backend/internal/interventiontype"
 	"github.com/ashandcompany/heros-sos/backend/internal/mail"
 	"github.com/ashandcompany/heros-sos/backend/internal/moderation"
+	"github.com/ashandcompany/heros-sos/backend/internal/reputation"
 	"github.com/ashandcompany/heros-sos/backend/internal/user"
 	"github.com/ashandcompany/heros-sos/backend/internal/villain"
 )
@@ -49,6 +50,7 @@ type components struct {
 	moderationHandler   *moderation.Handler
 	incidentHandler     *incident.Handler
 	interventionHandler *intervention.Handler
+	reputationHandler   *reputation.Handler
 	villainHandler      *villain.Handler
 	typeHandler         *interventiontype.Handler
 }
@@ -168,7 +170,10 @@ func NewWithDB(cfg config.Config, logger *slog.Logger, db *gorm.DB, opts ...Opti
 	})
 	c.interventionHandler = intervention.NewHandler(intervention.NewService(intervention.ServiceDeps{
 		Repo: intervention.NewRepository(db), Users: c.users, Heroes: heroProfiles,
-		Audit: c.audit, Tx: c.tx, Clock: c.clock, Notifier: mailService, Logger: logger,
+		Audit: c.audit, Tx: c.tx, Clock: c.clock, App: cfg.App, Notifier: mailService, Logger: logger,
+	}), logger, cfg.HTTP)
+	c.reputationHandler = reputation.NewHandler(reputation.NewService(reputation.ServiceDeps{
+		Repo: reputation.NewRepository(db), Audit: c.audit, Tx: c.tx, Clock: c.clock,
 	}), logger, cfg.HTTP)
 	router := newRouter()
 	registerRoutes(router, c)

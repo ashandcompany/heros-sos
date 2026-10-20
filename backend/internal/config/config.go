@@ -224,6 +224,14 @@ func (a App) PasswordResetLink(token string) string {
 	return a.link(a.PasswordResetPath, token)
 }
 
+// HeroReviewLink construit le lien de notation d'un héros après une intervention.
+func (a App) HeroReviewLink(interventionID, heroID string) string {
+	target := *a.PublicBaseURL
+	target.Path = "/profil/interventions"
+	target.RawQuery = url.Values{"interventionId": {interventionID}, "heroId": {heroID}}.Encode()
+	return target.String()
+}
+
 func (a App) link(path, token string) string {
 	target := *a.PublicBaseURL
 	target.Path = path

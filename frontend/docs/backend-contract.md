@@ -11,24 +11,28 @@ branchement. À mettre à jour à chaque fonction branchée.
 
 ## 1. Couverture : ce qui est dans le contrat, et le reste
 
-Le contrat décrit aujourd'hui **20 opérations** (identité et modération des comptes). Tout le reste
-du frontend n'a pas encore de contrat.
+Le contrat décrit aujourd'hui **40 opérations** : identité et modération des comptes, mais aussi
+incidents, interventions, types d'incident et super-vilains (plus `/health` et `/ready`). Les
+autres domaines du frontend n'ont pas encore de contrat.
 
-| Domaine frontend                   | Fonctions `lib/api/`                           | Contrat OpenAPI                              | État       |
-| ---------------------------------- | ---------------------------------------------- | -------------------------------------------- | ---------- |
-| Connexion, session, déconnexion    | `login`, `getSessionUser`, `logout`            | `/auth/login`, `/auth/me`, `/auth/logout`    | ✅ branché |
-| Inscription                        | `register`                                     | `/auth/register`                             | ✅ branché |
-| Activation du compte               | `activateAccount`, `resendActivation`          | `/auth/activate`, `/auth/resend-activation`  | ✅ branché |
-| Mot de passe oublié (demande)      | `requestPasswordReset`                         | `/auth/password-reset`                       | ✅ branché |
-| Nouveau mot de passe (jeton)       | `confirmPasswordReset`                         | `/auth/password-reset/confirm`               | ✅ branché |
-| Demande de statut super-héros      | `getHeroApplications`, `reviewHeroApplication` | `/heroes/requests`, `/admin/hero-requests/*` | mock       |
-| Comptes (suspension, vérification) | `getCitizenAccounts`, `moderateAccount`        | `/admin/users/*`                             | mock       |
-| Incidents, interventions, notes    | `lib/api/incidents.ts`, `ratings.ts`           | ❌ aucun                                     | mock       |
-| Fiches super-héros / super-vilains | `super-heroes.ts` (profils), `villains.ts`     | ❌ aucun                                     | mock       |
-| Vidéothèque, blog, newsletter      | `videos.ts`, `blog.ts`, `newsletter.ts`        | ❌ aucun                                     | mock       |
-| Formulaire de contact              | `sendContactMessage` (`contact.ts`)            | ❌ aucun                                     | mock       |
-| Profil (email, téléphone, avatar)  | `account.ts`, `super-heroes.ts` (`updateMy…`)  | ❌ aucun                                     | mock       |
-| Tableau de bord héros, modération  | `hero-dashboard.ts`, `moderation.ts`           | ❌ aucun                                     | mock       |
+| Domaine frontend                   | Fonctions `lib/api/`                           | Contrat OpenAPI                                    | État       |
+| ---------------------------------- | ---------------------------------------------- | -------------------------------------------------- | ---------- |
+| Connexion, session, déconnexion    | `login`, `getSessionUser`, `logout`            | `/auth/login`, `/auth/me`, `/auth/logout`          | ✅ branché |
+| Inscription                        | `register`                                     | `/auth/register`                                   | ✅ branché |
+| Activation du compte               | `activateAccount`, `resendActivation`          | `/auth/activate`, `/auth/resend-activation`        | ✅ branché |
+| Mot de passe oublié (demande)      | `requestPasswordReset`                         | `/auth/password-reset`                             | ✅ branché |
+| Nouveau mot de passe (jeton)       | `confirmPasswordReset`                         | `/auth/password-reset/confirm`                     | ✅ branché |
+| Demande de statut super-héros      | `getHeroApplications`, `reviewHeroApplication` | `/heroes/requests`, `/admin/hero-requests/*`       | mock       |
+| Comptes (suspension, vérification) | `getCitizenAccounts`, `moderateAccount`        | `/admin/users/*`                                   | mock       |
+| Incidents, interventions           | `lib/api/incidents.ts`                         | `/incidents/*`, `/interventions/*` (§ 3)           | mock       |
+| Types d'incident                   | `IncidentType` (`types/incident.ts`), en dur   | `/intervention-types`, `/admin/intervention-types` | en dur     |
+| Notes et avis                      | `ratings.ts`                                   | ❌ aucun                                           | mock       |
+| Super-vilains                      | `villains.ts`                                  | `/villains` (liste, création, modification)        | mock       |
+| Fiches super-héros                 | `super-heroes.ts` (profils)                    | ❌ aucun                                           | mock       |
+| Vidéothèque, blog, newsletter      | `videos.ts`, `blog.ts`, `newsletter.ts`        | ❌ aucun                                           | mock       |
+| Formulaire de contact              | `sendContactMessage` (`contact.ts`)            | ❌ aucun                                           | mock       |
+| Profil (email, téléphone, avatar)  | `account.ts`, `super-heroes.ts` (`updateMy…`)  | ❌ aucun                                           | mock       |
+| Tableau de bord héros, modération  | `hero-dashboard.ts`, `moderation.ts`           | Partiel : `/admin/interventions/{id}/decision`     | mock       |
 
 Les « Future implémentation » écrites dans les commentaires de `lib/api/` pour les domaines non
 couverts sont des **hypothèses** du frontend, pas un contrat. Il faudra les faire valider (ou les
@@ -144,6 +148,25 @@ Le contrat expose `GET /admin/hero-requests` et
 `POST /admin/hero-requests/{userId}/approve|reject`, avec un motif obligatoire au rejet
 (`RejectPayload.reason`, 1000 caractères max). Le statut est `pending | approved | rejected`
 (le frontend utilise `ModerationStatus`, en français : correspondance à écrire dans le mapper).
+
+### Incidents, interventions et super-vilains : modèles différents
+
+Le contrat existe désormais, mais les « Future implémentation » de `lib/api/` ont été écrites
+avant lui et ne lui correspondent pas. Il faudra **réécrire les fonctions d'après `openapi.yaml`**,
+pas seulement changer les URL.
+
+| Sujet            | Frontend actuel (hypothèses)                                                             | Contrat                                                                                                                                          |
+| ---------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Espaces          | Routes par rôle : `/hero/incidents…`, `/me/incidents`, `/admin/incidents…`               | Routes communes à tous les rôles (`/incidents`, `/interventions/{id}`) ; « mes incidents » = `GET /incidents?reporterId=…`                       |
+| Intervention     | `POST` / `PUT /hero/incidents/{id}/intervention` : un héros se positionne sur l'incident | Ressource à part : `POST /incidents/{incidentId}/interventions`, puis `join`, invitations (`confirm` / `decline`), `outcome`, `outcome/validate` |
+| Types d'incident | Énumération `IncidentType` en dur                                                        | Liste lue par `GET /intervention-types`, gérée par les modérateurs                                                                               |
+| Carte, priorité  | `GET /incidents/map`, `GET /hero/incidents/map`, `PUT /hero/incidents/{id}/priority`     | Absents du contrat                                                                                                                               |
+| Modération       | `PUT /admin/incidents/{id}/moderation`, `PATCH /admin/incidents/{id}`                    | Absente du contrat (seul l'arbitrage du résultat d'une intervention existe)                                                                      |
+| Super-vilains    | Lecture seule : `GET /villains`, `/villains/{id}`, `/villains/{id}/incidents`            | `GET /villains` (recherche `q`), `POST /villains`, `PATCH /villains/{id}` ; ni détail ni incidents d'un vilain                                   |
+
+À trancher avec le backend avant de brancher : ce qui manque au contrat (carte, priorité,
+modération des incidents, fiche d'un vilain) est-il à ajouter, ou les écrans du frontend
+doivent-ils changer ?
 
 ### Pagination
 

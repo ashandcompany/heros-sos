@@ -43,6 +43,12 @@ export const incidentTypeLabels: Record<IncidentType, string> = {
   enlevement: "Enlèvement",
 };
 
+/** Délai avant de réessayer (`Retry-After`), arrondi à la minute supérieure : « 2 minutes ». */
+export function formatRetryDelay(retryAfterSeconds: number | undefined): string {
+  const minutes = Math.ceil((retryAfterSeconds ?? 60) / 60);
+  return `${minutes} minute${minutes > 1 ? "s" : ""}`;
+}
+
 const integerFormatter = new Intl.NumberFormat("fr-FR");
 
 export function formatInteger(value: number): string {

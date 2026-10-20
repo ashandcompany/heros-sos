@@ -10,13 +10,15 @@ npm install
 npm run dev
 ```
 
-| Script                 | Rôle                          |
-| ---------------------- | ----------------------------- |
-| `npm run dev`          | Serveur de développement      |
-| `npm run build`        | Build de production           |
-| `npm run lint`         | ESLint                        |
-| `npm run format`       | Formate le code avec Prettier |
-| `npm run format:check` | Vérifie le formatage (CI)     |
+| Script                    | Rôle                                                                     |
+| ------------------------- | ------------------------------------------------------------------------ |
+| `npm run dev`             | Serveur de développement                                                 |
+| `npm run build`           | Build de production                                                      |
+| `npm run lint`            | ESLint                                                                   |
+| `npm run format`          | Formate le code avec Prettier                                            |
+| `npm run format:check`    | Vérifie le formatage (CI)                                                |
+| `npm run api:types`       | Régénère `src/lib/api/schema.d.ts` depuis `backend/openapi/openapi.yaml` |
+| `npm run api:types:check` | Vérifie que ces types sont à jour (CI)                                   |
 
 Sans configuration, toute l'application tourne sur les mocks (comptes de test dans
 [src/mocks/users.ts](src/mocks/users.ts), ex : `citoyen@heros-sos.fr` / `Citoyen123!`).

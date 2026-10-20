@@ -1,6 +1,7 @@
 "use server";
 
 import { activateAccount, resendActivation } from "@/lib/api";
+import { formatRetryDelay } from "@/lib/format";
 import type { ActivationResult } from "@/types";
 
 export type ActivationFormState =
@@ -36,14 +37,12 @@ export async function resendActivationAction(
   switch (result.error) {
     case "invalid-email":
       return { status: "error", message: invalidEmail, email };
-    case "too-many-attempts": {
-      const minutes = Math.ceil((result.retryAfterSeconds ?? 60) / 60);
+    case "too-many-attempts":
       return {
         status: "error",
-        message: `Trop de demandes. Réessayez dans ${minutes} minute${minutes > 1 ? "s" : ""}.`,
+        message: `Trop de demandes. Réessayez dans ${formatRetryDelay(result.retryAfterSeconds)}.`,
         email,
       };
-    }
     case "unavailable":
       return {
         status: "error",

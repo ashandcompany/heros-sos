@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { login, logout } from "@/lib/api";
 import { SESSION_COOKIE, sessionCookieAttributes } from "@/lib/cookies";
+import { formatRetryDelay } from "@/lib/format";
 import { accountHomeByRole, routes } from "@/lib/routes";
 import type { LoginResult } from "@/types";
 
@@ -63,10 +64,8 @@ function loginErrorMessage(result: Extract<LoginResult, { ok: false }>): string 
       return "Ce compte a été suspendu par la modération. Contactez-nous pour en savoir plus.";
     case "account-not-activated":
       return "Votre compte n'est pas encore activé : consultez le mail d'activation.";
-    case "too-many-attempts": {
-      const minutes = Math.ceil((result.retryAfterSeconds ?? 60) / 60);
-      return `Trop de tentatives de connexion. Réessayez dans ${minutes} minute${minutes > 1 ? "s" : ""}.`;
-    }
+    case "too-many-attempts":
+      return `Trop de tentatives de connexion. Réessayez dans ${formatRetryDelay(result.retryAfterSeconds)}.`;
     case "unavailable":
       return "La connexion est momentanément indisponible. Réessayez dans quelques instants.";
     case "invalid-credentials":

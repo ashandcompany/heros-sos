@@ -116,16 +116,35 @@ La traduction se fait **à un seul endroit**, `fromApiUser` dans
 
 ### Erreurs : enveloppe `{ error: { code, message, fields } }`
 
-- `apiFetch` lève `ApiError` (`status`, `code`, `retryAfterSeconds`) pour toute réponse non 2xx.
-  Chaque fonction mappe les codes vers son `{ ok: false, error }` typé ; un code inconnu tombe sur
-  un message générique, jamais sur le `message` brut de l'API.
+- `apiFetch` lève `ApiError` (`status`, `code`, `retryAfterSeconds`, `fields`) pour toute réponse
+  non 2xx. Chaque fonction mappe d'abord **ses** codes métier vers son `{ ok: false, error }`
+  typé, puis délègue le reste à `toApiFailure` ; un code inconnu tombe sur un message générique,
+  jamais sur le `message` brut de l'API.
 - Codes de champ de validation (422) : `required`, `invalid`, `too_short`, `too_long`, `weak`,
   dans `ApiError.fields` (champ imbriqué : `address.city`). Exemple de table _code → message_ :
   `toSignupErrors` dans [actions/signup.ts](../src/app/actions/signup.ts).
-- Statuts à traiter explicitement : `401` (session expirée → rediriger vers `/connexion`),
-  `403` (origine/CSRF/rôle), `429` (`Retry-After`), `413` et `415`.
-- Écritures authentifiées : envoyer le `csrfToken` de `GET /auth/me` dans `X-CSRF-Token`
-  (option `csrfToken` d'`apiFetch`, voir `logout`).
+- Statuts communs, traités une fois pour toutes dans [http.ts](../src/lib/api/http.ts) :
+
+  | Statut | Traitement                                                                                        | Message (`apiFailureMessage`)      |
+  | ------ | ------------------------------------------------------------------------------------------------- | ---------------------------------- |
+  | 401    | Appel authentifié : `apiFetch` redirige vers `/connexion` (`redirectOnUnauthorized: false` sinon) | aucun                              |
+  | 403    | `toApiFailure` → `forbidden`, journalisé (signe d'un bug : origine, CSRF ou rôle)                 | Action non autorisée               |
+  | 413    | `toApiFailure` → `payload-too-large`                                                              | Fichier trop volumineux            |
+  | 415    | `toApiFailure` → `unsupported-media-type`                                                         | Type de fichier refusé             |
+  | 429    | `toApiFailure` → `too-many-attempts`, avec `retryAfterSeconds`                                    | Réessayer dans N minutes           |
+  | autre  | `toApiFailure` → `unavailable`, journalisé                                                        | Service momentanément indisponible |
+
+  Les résultats des fonctions incluent `ApiFailure` ([src/types/api.ts](../src/types/api.ts)) ;
+  les actions affichent `apiFailureMessage(result)`
+  ([form-state.ts](../src/lib/validation/form-state.ts)) pour ces cas. Attention : certains codes
+  métier sont des 403 ou des 429 (`hero_request_not_eligible`, `account_locked`…), à traiter
+  **avant** `toApiFailure`. Comme `redirect()` de Next lève une exception, un `catch` qui
+  n'appelle pas `toApiFailure` doit appeler `unstable_rethrow(error)` en premier.
+
+- Écritures authentifiées : `apiFetch` ajoute seul le `csrfToken` de `GET /auth/me` dans
+  `X-CSRF-Token` dès qu'il reçoit un `sessionToken` sur une méthode autre que `GET`. La session
+  est lue par `getApiSession`, mémorisée le temps d'un rendu : la page et ses écritures ne
+  déclenchent qu'un seul `GET /auth/me`.
 
 ### Inscription et activation de compte
 
@@ -171,8 +190,17 @@ doivent-ils changer ?
 ### Pagination
 
 Les listes du contrat utilisent `limit` (1–100, défaut 20) et `offset`, et renvoient une page
-(`HeroApplicantPage`, `UserSummaryPage`). Les fonctions `getXxx` du frontend renvoient
-aujourd'hui des tableaux complets : les écrans d'administration devront gérer la pagination.
+(`HeroApplicantPage`, `UserSummaryPage`, `IncidentPage`…). Les fonctions `getXxx` du frontend
+renvoient aujourd'hui des tableaux complets : en les branchant, leur passer un `PageRequest` et
+leur faire renvoyer un `Page<T>` ([src/types/api.ts](../src/types/api.ts)), avec les outils de
+[pagination.ts](../src/lib/api/pagination.ts) :
+
+| Outil          | Rôle                                                                                          |
+| -------------- | --------------------------------------------------------------------------------------------- |
+| `pageQuery`    | Chaîne de requête : `limit`, `offset` ramenés dans les bornes de l'API, filtres non vides     |
+| `fromApiPage`  | Page de l'API → `Page<T>`, avec la conversion de chaque élément                               |
+| `toMockPage`   | Découpe une liste mockée comme l'API, pour garder la même signature avec et sans backend      |
+| `pagePosition` | Page courante et nombre de pages, pour le composant de pagination des écrans d'administration |
 
 ### Variable d'environnement
 
@@ -189,24 +217,22 @@ Voir le [README](../README.md#variables-denvironnement).
 
 ## 4. Garder types et contrat synchronisés
 
-Aujourd'hui `src/types/` est écrit à la main et les formes de l'API ne sont décrites que dans
-l'OpenAPI : aucun mécanisme n'empêche une divergence silencieuse.
+Les formes de l'API sont générées depuis l'OpenAPI par
+[`openapi-typescript`](https://openapi-ts.dev/) dans
+[src/lib/api/schema.d.ts](../src/lib/api/schema.d.ts) (`npm run api:types`). Le fichier est
+versionné : l'image Docker du frontend est construite sans le dossier `backend/`.
 
-Règle de travail en attendant mieux :
-
-1. Un type de `src/types/` qui correspond à un schéma OpenAPI porte un commentaire
-   `/** Schéma OpenAPI : LoginResponse */`.
-2. Les fonctions de `lib/api/` branchées convertissent la forme de l'API vers les types du
-   frontend (rôles, statuts, dates) ; **les composants ne manipulent jamais la forme brute**.
-3. Une route ajoutée au backend sans contrat est refusée par ses propres tests : le frontend
+1. Une réponse brute de l'API se type avec `ApiSchema<"NomDuSchéma">` ([http.ts](../src/lib/api/http.ts)),
+   **jamais** avec une interface écrite à la main : le compilateur vérifie alors chaque
+   conversion.
+2. `src/types/` reste la forme « frontend » (rôles, statuts en français). Les fonctions de
+   `lib/api/` branchées convertissent la forme de l'API vers ces types ; **les composants ne
+   manipulent jamais la forme brute**.
+3. Après toute modification de `backend/openapi/openapi.yaml` : `npm run api:types`, puis
+   corriger ce que `tsc` signale. La CI du frontend (lancée aussi quand le contrat change)
+   échoue si `schema.d.ts` n'est pas à jour (`npm run api:types:check`).
+4. Une route ajoutée au backend sans contrat est refusée par ses propres tests : le frontend
    n'a donc pas à anticiper de route absente de `openapi.yaml`.
-
-Option recommandée quand le branchement commencera : générer les types de l'API avec
-[`openapi-typescript`](https://openapi-ts.dev/) dans un fichier non versionné ou versionné à
-part (`src/lib/api/schema.d.ts`), via un script `npm run api:types`. Les types écrits à la main
-resteraient la forme « frontend », et le mapper de chaque fonction serait alors vérifié par le
-compilateur. À ne faire que pour les domaines couverts par le contrat : générer des types pour
-des routes qui n'existent pas ne servirait à rien.
 
 ## Checklist de branchement d'une fonction
 
@@ -216,9 +242,12 @@ Modèle à suivre : [src/lib/api/auth.ts](../src/lib/api/auth.ts) (`login`, `get
 1. La route existe-t-elle dans `openapi.yaml` ? Sinon, la faire ajouter côté backend d'abord.
 2. Garder la signature ; brancher sur `isApiEnabled` : `apiFetch(…)` si l'API est configurée,
    le mock sinon (l'application doit toujours démarrer sans backend).
-3. Passer le jeton dans `sessionToken`, et le `csrfToken` de `GET /auth/me` pour une écriture.
-4. Convertir la réponse (rôles, statuts, dates) vers les types de `src/types/`, avec un
-   commentaire `/** Schéma OpenAPI : … */` sur l'interface de la réponse brute.
-5. Mapper les codes d'erreur (`ApiError.code`) vers le résultat `{ ok: false, error }` existant.
+3. Passer le jeton dans `sessionToken` (le jeton CSRF est ajouté seul aux écritures).
+4. Typer la réponse brute avec `ApiSchema<"…">` et la convertir (rôles, statuts, dates) vers les
+   types de `src/types/`. Liste : `PageRequest` en entrée, `Page<T>` en sortie (`pageQuery`,
+   `fromApiPage`, `toMockPage` pour le mock).
+5. Mapper les codes métier (`ApiError.code`) vers le résultat `{ ok: false, error }`, puis
+   `return toApiFailure(error, "…")` ; ajouter `ApiFailure` au type du résultat et afficher
+   `apiFailureMessage` dans l'action.
 6. Mettre à jour le tableau de la section 1. Quand le domaine n'utilise plus `userFromToken`,
    vérifier si `asMockDataUser` sert encore.

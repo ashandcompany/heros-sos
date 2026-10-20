@@ -4,3 +4,6 @@ out
 build
 package-lock.json
 next-env.d.ts
+
+# Généré par `npm run api:types` depuis backend/openapi/openapi.yaml
+src/lib/api/schema.d.ts

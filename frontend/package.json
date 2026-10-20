@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "api:types": "openapi-typescript ../backend/openapi/openapi.yaml -o src/lib/api/schema.d.ts",
+    "api:types:check": "openapi-typescript ../backend/openapi/openapi.yaml -o src/lib/api/schema.d.ts --check"
   },
   "dependencies": {
     "@tiptap/pm": "^3.32.0",
@@ -31,6 +33,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
     "eslint-config-prettier": "^10.1.8",
+    "openapi-typescript": "^7.13.0",
     "prettier": "^3.9.10",
     "tailwindcss": "^4",
     "typescript": "^5"

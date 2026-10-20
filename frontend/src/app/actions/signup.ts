@@ -1,6 +1,7 @@
 "use server";
 
 import { register } from "@/lib/api";
+import { formatRetryDelay } from "@/lib/format";
 import {
   firstInvalidField,
   hasErrors,
@@ -84,15 +85,13 @@ export async function signupAction(
         formError: field ? undefined : "Certaines informations n'ont pas été acceptées.",
       };
     }
-    case "too-many-attempts": {
-      const minutes = Math.ceil((result.retryAfterSeconds ?? 60) / 60);
+    case "too-many-attempts":
       return {
         step: 2,
         values: safeValues,
         fieldErrors: {},
-        formError: `Trop d'inscriptions depuis votre connexion. Réessayez dans ${minutes} minute${minutes > 1 ? "s" : ""}.`,
+        formError: `Trop d'inscriptions depuis votre connexion. Réessayez dans ${formatRetryDelay(result.retryAfterSeconds)}.`,
       };
-    }
     case "unavailable":
       return {
         step: 2,

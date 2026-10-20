@@ -12,6 +12,36 @@ info:
     enregistrées sont exactement celles décrites ici : une route ou un statut non documenté
     fait échouer les tests.
 
+    ## Essayer l'API depuis cette page
+
+    Cette page n'existe qu'en développement et parle à la vraie API, sur la même origine que le
+    site. Pour parcourir le cycle complet d'un compte :
+
+    1. **Inscription** : `POST /auth/register` puis **Try it out**. L'exemple est valide ;
+       changez l'adresse email à chaque essai (sinon `email_already_used`).
+    2. **Activation** : le mail d'activation est reçu dans Mailpit (http://localhost:8025 avec
+       `make up-dev`). Copiez le `token` du lien, puis `POST /auth/activate`.
+    3. **Connexion** : `POST /auth/login`. Le navigateur conserve le cookie de session ; copiez le
+       `csrfToken` de la réponse.
+    4. **Écritures authentifiées** : cliquez sur **Authorize**, collez le `csrfToken` dans la case
+       `csrfToken` (laissez `sessionCookie` vide : le navigateur l'envoie tout seul), puis
+       essayez la route.
+    5. **Routes `/admin`** : elles demandent un compte modérateur, créé en ligne de commande avec
+       `make moderator-dev`.
+
+    ## Rôles
+
+    | Rôle | Qui | Ce qu'il peut faire |
+    |---|---|---|
+    | `citizen` | tout compte activé | demander le statut de super-héros et suivre sa demande |
+    | `hero` | citoyen accepté par un modérateur | idem ; une nouvelle demande répond `already_hero` |
+    | `moderator` | créé en ligne de commande | décider des demandes, lister, désactiver, réactiver et vérifier les comptes |
+
+    ## Pagination
+
+    Les listes (`/admin/…`) acceptent `limit` (1 à 100, 20 par défaut) et `offset`. La réponse
+    contient `items`, `total`, `limit` et `offset`.
+
     ## Session et CSRF
 
     La session est un cookie opaque (`HttpOnly`, `SameSite=Lax`, sans `Domain`) posé par
@@ -30,23 +60,65 @@ info:
     validation (422) détaillent les champs : `fields` associe un nom de champ à un code
     (`required`, `invalid`, `too_short`, `too_long`, `weak`).
 
+    | Code | Statut | Quand |
+    |---|---|---|
+    | `bad_request` | 400 | JSON invalide, champ inconnu, corps vide |
+    | `invalid_token` | 400 | lien d'activation ou de réinitialisation invalide, expiré ou déjà utilisé |
+    | `unauthenticated` | 401 | session absente ou expirée |
+    | `invalid_credentials` | 401 | identifiant ou mot de passe incorrect |
+    | `origin_not_allowed` | 403 | `Origin` absente de la liste du serveur (écritures) |
+    | `csrf_invalid` | 403 | en-tête `X-CSRF-Token` absent ou invalide |
+    | `forbidden` | 403 | rôle insuffisant |
+    | `protected_account` | 403 | action interdite sur un compte de modérateur |
+    | `account_not_activated` | 403 | compte pas encore activé (révélé avec le bon mot de passe) |
+    | `account_deactivated` | 403 | compte désactivé (révélé avec le bon mot de passe) |
+    | `hero_request_not_eligible` | 403 | compte qui ne peut pas faire de demande (modérateur) |
+    | `not_found` | 404 | ressource ou route introuvable |
+    | `hero_request_not_found` | 404 | aucune demande déposée par l'utilisateur |
+    | `email_already_used` | 409 | adresse email déjà inscrite |
+    | `hero_request_pending` | 409 | demande déjà en attente |
+    | `already_hero` | 409 | utilisateur déjà super-héros |
+    | `alias_already_used` | 409 | pseudo déjà pris |
+    | `hero_request_not_pending` | 409 | demande déjà traitée |
+    | `self_action_forbidden` | 409 | action interdite sur son propre compte |
+    | `payload_too_large` | 413 | corps de requête trop volumineux |
+    | `unsupported_media_type` | 415 | corps qui n'est pas en `application/json` |
+    | `validation_failed` | 422 | données invalides ; `fields` détaille chaque champ |
+    | `rate_limited` | 429 | trop de requêtes ; `Retry-After` indique le délai |
+    | `account_locked` | 429 | compte verrouillé après plusieurs échecs ; `Retry-After` indique le délai |
+    | `internal_error` | 500 | erreur interne, sans détail |
+  contact:
+    name: Équipe Heros-SOS
+    url: https://github.com/ashandcompany/heros-sos
+
 servers:
   - url: /api/v1
+    description: Même origine que le site (le reverse proxy route /api/v1 vers l'API).
 
 tags:
   - name: Santé
+    description: Sondes de vie et de disponibilité, utilisées par Docker et la supervision. Publiques, sans session.
   - name: Authentification
+    description: Inscription, activation par mail, connexion par cookie de session, déconnexion et réinitialisation du mot de passe.
   - name: Super-héros
+    description: Demande du statut de super-héros par un citoyen connecté, et suivi de cette demande.
   - name: Modération
+    description: Réservé aux modérateurs. Décision sur les demandes de statut de super-héros et gestion des comptes (désactiver, réactiver, vérifier).
   - name: Incidents
+    description: "Déclaration et consultation des incidents, puis cycle d'une intervention : démarrer, rejoindre ou inviter des héros, proposer et valider le résultat."
   - name: Types d'intervention
+    description: "Les types d'incident (catégories) proposés à la déclaration. Les modérateurs les gèrent sous `/admin`."
   - name: Vilains
+    description: Les super-vilains que l'on peut associer à un incident. Tout utilisateur connecté peut en déclarer un et modifier ses spécialités.
 
 paths:
   /health:
     get:
       tags: [Santé]
       summary: Le processus répond
+      description: |
+        Sonde de vie : répond 200 tant que le processus tourne, sans interroger la base de données.
+        Utilisée par le reverse proxy pour surveiller l'API.
       operationId: health
       responses:
         "200":
@@ -59,6 +131,10 @@ paths:
     get:
       tags: [Santé]
       summary: La base de données répond
+      description: |
+        Sonde de disponibilité : interroge la base de données, avec un délai borné. Répond 200 si
+        elle répond, 503 sinon. C'est ce que vérifie le contrôle de santé du conteneur
+        (`api -healthcheck`).
       operationId: ready
       responses:
         "200":
@@ -195,6 +271,7 @@ paths:
     post:
       tags: [Authentification]
       summary: Déconnexion de l'appareil courant
+      description: Ferme la session de cet appareil et efface le cookie. Les sessions des autres appareils restent ouvertes.
       operationId: logout
       security: [{ sessionCookie: [], csrfToken: [] }]
       responses:
@@ -208,6 +285,7 @@ paths:
     post:
       tags: [Authentification]
       summary: Déconnexion de tous les appareils
+      description: Ferme toutes les sessions de l'utilisateur, sur tous ses appareils, celle-ci comprise.
       operationId: logoutAll
       security: [{ sessionCookie: [], csrfToken: [] }]
       responses:
@@ -221,7 +299,9 @@ paths:
     get:
       tags: [Authentification]
       summary: Utilisateur courant
-      description: Sert aussi à redirection du frontend selon le rôle, et à récupérer le jeton CSRF.
+      description: |
+        Retourne l'utilisateur de la session et un jeton CSRF à jour. Le frontend s'en sert pour
+        rediriger selon le rôle et pour récupérer le jeton CSRF après un rechargement de page.
       operationId: me
       security: [{ sessionCookie: [] }]
       responses:
@@ -319,6 +399,10 @@ paths:
     get:
       tags: [Super-héros]
       summary: État de ma demande
+      description: |
+        Retourne la demande de l'utilisateur connecté : `pending` (en attente), `approved` ou
+        `rejected` (avec le motif du refus dans `rejectionReason`). Répond 404 tant qu'aucune demande
+        n'a été déposée.
       operationId: myHeroRequest
       security: [{ sessionCookie: [] }]
       responses:
@@ -345,6 +429,7 @@ paths:
       parameters:
         - name: status
           in: query
+          description: Ne garde que les demandes dans cet état. Sans valeur, toutes les demandes sont listées.
           schema: { type: string, enum: [pending, approved, rejected] }
         - { $ref: "#/components/parameters/Limit" }
         - { $ref: "#/components/parameters/Offset" }
@@ -363,7 +448,7 @@ paths:
     post:
       tags: [Modération]
       summary: Accepter une demande
-      description: Le demandeur devient super-héros immédiatement, sans reconnexion.
+      description: Réservé aux modérateurs. Le demandeur devient super-héros immédiatement, sans reconnexion.
       operationId: approveHeroRequest
       security: [{ sessionCookie: [], csrfToken: [] }]
       parameters:
@@ -384,6 +469,9 @@ paths:
     post:
       tags: [Modération]
       summary: Refuser une demande
+      description: |
+        Réservé aux modérateurs. Le motif est conservé et retourné au demandeur dans
+        `rejectionReason` ; il peut ensuite déposer une nouvelle demande.
       operationId: rejectHeroRequest
       security: [{ sessionCookie: [], csrfToken: [] }]
       parameters:
@@ -419,14 +507,17 @@ paths:
       parameters:
         - name: role
           in: query
+          description: Ne garde que les comptes de ce rôle.
           schema: { type: string, enum: [citizen, hero, moderator] }
         - name: status
           in: query
-          schema:
-            { type: string, enum: [pending_activation, active, deactivated] }
+          description: "Ne garde que les comptes dans cet état (`pending_activation` : le lien d'activation n'a pas encore été utilisé)."
+          schema: { type: string, enum: [pending_activation, active, deactivated] }
         - name: email
           in: query
+          description: Début de l'adresse email, sans tenir compte de la casse.
           schema: { type: string }
+          example: demo
         - { $ref: "#/components/parameters/Limit" }
         - { $ref: "#/components/parameters/Offset" }
       responses:
@@ -445,7 +536,8 @@ paths:
       tags: [Modération]
       summary: Désactiver un compte
       description: |
-        Le compte ne peut plus se connecter et toutes ses sessions sont fermées immédiatement.
+        Réservé aux modérateurs. Le compte ne peut plus se connecter et toutes ses sessions sont
+        fermées immédiatement.
         Idempotent. Impossible sur son propre compte (`self_action_forbidden`) et sur un compte de
         modérateur (`protected_account`).
       operationId: deactivateUser
@@ -468,6 +560,7 @@ paths:
     post:
       tags: [Modération]
       summary: Réactiver un compte
+      description: Réservé aux modérateurs. Le compte désactivé peut de nouveau se connecter.
       operationId: reactivateUser
       security: [{ sessionCookie: [], csrfToken: [] }]
       parameters:
@@ -483,7 +576,7 @@ paths:
     post:
       tags: [Modération]
       summary: Marquer un citoyen comme vérifié
-      description: "Information de confiance uniquement : elle ne donne aucun droit supplémentaire."
+      description: "Réservé aux modérateurs. Information de confiance uniquement : elle ne donne aucun droit supplémentaire."
       operationId: verifyUser
       security: [{ sessionCookie: [], csrfToken: [] }]
       parameters:
@@ -962,26 +1055,33 @@ components:
       type: apiKey
       in: cookie
       name: session
-      description: Cookie de session (`__Host-session` en production).
+      description: |
+        Cookie de session, posé par `POST /auth/login` (`__Host-session` en production). Un
+        navigateur l'envoie tout seul : **ne rien saisir ici**. Il existe pour indiquer quelles
+        routes demandent d'être connecté.
     csrfToken:
       type: apiKey
       in: header
       name: X-CSRF-Token
-      description: Jeton CSRF renvoyé par `/auth/login` et `/auth/me`, exigé sur les écritures authentifiées.
+      description: |
+        Jeton CSRF : la valeur de `csrfToken` renvoyée par `POST /auth/login` et `GET /auth/me`.
+        Exigé sur les écritures authentifiées. À coller ici après la connexion.
 
   parameters:
     UserId:
       name: userId
       in: path
       required: true
-      description: Identifiant de l'utilisateur dont la demande est traitée.
+      description: Identifiant de l'utilisateur dont la demande est traitée (champ `userId` de la liste des demandes).
       schema: { type: string, format: uuid }
+      example: 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
     Id:
       name: id
       in: path
       required: true
-      description: Identifiant de la ressource.
+      description: Identifiant de l'utilisateur (champ `id` de la liste des comptes).
       schema: { type: string, format: uuid }
+      example: 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
     Limit:
       name: limit
       in: query
@@ -1082,22 +1182,22 @@ components:
       type: object
       required: [id, displayName, role, email]
       properties:
-        id: { type: string, format: uuid }
+        id: { type: string, format: uuid, description: Identifiant de l'utilisateur. }
         displayName:
           type: string
           description: Pseudo pour un super-héros, prénom sinon.
-        role: { type: string, enum: [citizen, hero, moderator] }
-        email: { type: string, format: email }
+        role: { type: string, enum: [citizen, hero, moderator], description: Rôle de l'utilisateur. }
+        email: { type: string, format: email, description: Adresse email du compte. }
 
     Address:
       type: object
       required: [street, postalCode, city, country]
       additionalProperties: false
       properties:
-        street: { type: string, maxLength: 200 }
-        complement: { type: string, maxLength: 200 }
-        postalCode: { type: string }
-        city: { type: string, maxLength: 100 }
+        street: { type: string, maxLength: 200, description: Numéro et nom de la voie. }
+        complement: { type: string, maxLength: 200, description: "Complément d'adresse (bâtiment, étage…), facultatif." }
+        postalCode: { type: string, description: Code postal. }
+        city: { type: string, maxLength: 100, description: Commune. }
         country:
           type: string
           description: Code pays ISO 3166-1 alpha-2, en majuscules.
@@ -1118,14 +1218,14 @@ components:
         ]
       additionalProperties: false
       properties:
-        civility: { type: string, enum: [madame, monsieur, non-precise] }
-        firstName: { type: string }
-        lastName: { type: string }
+        civility: { type: string, enum: [madame, monsieur, non-precise], description: Civilité. }
+        firstName: { type: string, description: Prénom. }
+        lastName: { type: string, description: Nom de famille. }
         birthDate:
           type: string
           format: date
           description: Date ISO AAAA-MM-JJ, ni future ni antérieure à 120 ans.
-        email: { type: string, format: email }
+        email: { type: string, format: email, description: "Adresse email, unique : elle sert d'identifiant de connexion." }
         mobilePhone:
           type: string
           description: Mobile français (06 ou 07) ou international (+33…). Les espaces, points et tirets sont ignorés.
@@ -1140,7 +1240,10 @@ components:
       required: [user, activationRequired]
       properties:
         user: { $ref: "#/components/schemas/UserView" }
-        activationRequired: { type: boolean, enum: [true] }
+        activationRequired:
+          type: boolean
+          enum: [true]
+          description: "Toujours vrai : le compte doit être activé par le lien reçu par mail avant toute connexion."
 
     TokenRequest:
       type: object
@@ -1154,7 +1257,7 @@ components:
       required: [email]
       additionalProperties: false
       properties:
-        email: { type: string, format: email }
+        email: { type: string, format: email, description: Adresse email du compte concerné. }
 
     LoginRequest:
       type: object
@@ -1187,15 +1290,20 @@ components:
       required: [user, csrfToken]
       properties:
         user: { $ref: "#/components/schemas/UserView" }
-        csrfToken: { type: string }
+        csrfToken:
+          type: string
+          description: Jeton CSRF à jour, à renvoyer dans `X-CSRF-Token` sur les écritures authentifiées.
 
     PasswordResetConfirmRequest:
       type: object
       required: [token, newPassword]
       additionalProperties: false
       properties:
-        token: { type: string }
-        newPassword: { type: string, format: password }
+        token: { type: string, description: Jeton du lien de réinitialisation reçu par mail. }
+        newPassword:
+          type: string
+          format: password
+          description: Au moins 10 caractères, avec une minuscule, une majuscule et un chiffre.
 
     HeroRequestPayload:
       type: object
@@ -1218,16 +1326,19 @@ components:
       type: object
       required: [status, alias]
       properties:
-        status: { type: string, enum: [pending, approved, rejected] }
-        alias: { type: string }
-        rejectionReason: { type: string }
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+          description: "`pending` : en attente d'un modérateur ; `approved` : l'utilisateur est super-héros ; `rejected` : refusée."
+        alias: { type: string, description: Pseudo demandé. }
+        rejectionReason: { type: string, description: "Motif du refus, présent seulement si la demande est `rejected`." }
 
     RejectPayload:
       type: object
       required: [reason]
       additionalProperties: false
       properties:
-        reason: { type: string, maxLength: 1000 }
+        reason: { type: string, maxLength: 1000, description: "Motif du refus, retourné au demandeur." }
 
     HeroApplicant:
       type: object
@@ -1244,15 +1355,15 @@ components:
           lastName,
         ]
       properties:
-        userId: { type: string, format: uuid }
-        alias: { type: string }
-        bio: { type: string }
-        requestMessage: { type: string }
-        status: { type: string, enum: [pending, approved, rejected] }
-        createdAt: { type: string, format: date-time }
-        email: { type: string, format: email }
-        firstName: { type: string }
-        lastName: { type: string }
+        userId: { type: string, format: uuid, description: Identifiant du demandeur (paramètre `userId` des routes de décision). }
+        alias: { type: string, description: Pseudo demandé. }
+        bio: { type: string, description: Description publique proposée. }
+        requestMessage: { type: string, description: Message adressé aux modérateurs. }
+        status: { type: string, enum: [pending, approved, rejected], description: État de la demande. }
+        createdAt: { type: string, format: date-time, description: Date de dépôt de la demande. }
+        email: { type: string, format: email, description: Adresse email du demandeur. }
+        firstName: { type: string, description: Prénom du demandeur. }
+        lastName: { type: string, description: Nom du demandeur. }
 
     HeroApplicantPage:
       type: object
@@ -1261,24 +1372,23 @@ components:
         items:
           type: array
           items: { $ref: "#/components/schemas/HeroApplicant" }
-        total: { type: integer }
-        limit: { type: integer }
-        offset: { type: integer }
+        total: { type: integer, description: "Nombre total de demandes correspondant au filtre, toutes pages confondues." }
+        limit: { type: integer, description: Taille de page appliquée. }
+        offset: { type: integer, description: Nombre d'éléments sautés. }
 
     UserSummary:
       type: object
       required: [id, email, firstName, lastName, role, status, createdAt]
       properties:
-        id: { type: string, format: uuid }
-        email: { type: string, format: email }
-        firstName: { type: string }
-        lastName: { type: string }
-        alias: { type: string }
-        role: { type: string, enum: [citizen, hero, moderator] }
-        status:
-          { type: string, enum: [pending_activation, active, deactivated] }
-        verifiedAt: { type: string, format: date-time }
-        createdAt: { type: string, format: date-time }
+        id: { type: string, format: uuid, description: Identifiant du compte (paramètre `id` des routes de modération). }
+        email: { type: string, format: email, description: Adresse email du compte. }
+        firstName: { type: string, description: Prénom. }
+        lastName: { type: string, description: Nom de famille. }
+        alias: { type: string, description: "Pseudo, pour un super-héros." }
+        role: { type: string, enum: [citizen, hero, moderator], description: Rôle du compte. }
+        status: { type: string, enum: [pending_activation, active, deactivated], description: État du compte. }
+        verifiedAt: { type: string, format: date-time, description: "Date de vérification par un modérateur, absente si le compte n'est pas vérifié." }
+        createdAt: { type: string, format: date-time, description: Date de création du compte. }
 
     UserSummaryPage:
       type: object
@@ -1287,9 +1397,9 @@ components:
         items:
           type: array
           items: { $ref: "#/components/schemas/UserSummary" }
-        total: { type: integer }
-        limit: { type: integer }
-        offset: { type: integer }
+        total: { type: integer, description: "Nombre total de comptes correspondant aux filtres, toutes pages confondues." }
+        limit: { type: integer, description: Taille de page appliquée. }
+        offset: { type: integer, description: Nombre d'éléments sautés. }
 
     InterventionTypePayload:
       type: object

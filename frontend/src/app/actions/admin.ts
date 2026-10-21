@@ -7,6 +7,7 @@ import {
   createArticle,
   deleteArticle,
   createIncidentType,
+  createVillain,
   deleteVideo,
   getIncidentTypes,
   getSuperHeroes,
@@ -21,23 +22,34 @@ import {
   reviewHeroApplication,
   updateArticle,
   updateIncident,
+  updateVillain,
 } from "@/lib/api";
 import { isModerationStatus } from "@/lib/format";
-import { adminArticleRoute, adminIncidentRoute, routes } from "@/lib/routes";
+import {
+  adminArticleRoute,
+  adminIncidentRoute,
+  adminVillainRoute,
+  routes,
+  villainSheetRoute,
+} from "@/lib/routes";
 import { requireAdminSession } from "@/lib/server-session";
 import {
   readArticleValues,
   readIncidentEditValues,
   readIncidentTypeValues,
+  readVillainValues,
   toIncidentTypeInput,
   toArticleInput,
   toIncidentUpdate,
+  toVillainInput,
   validateArticle,
   validateIncidentEdit,
   validateIncidentType,
+  validateVillain,
   type ArticleField,
   type IncidentEditField,
   type IncidentTypeField,
+  type VillainField,
 } from "@/lib/validation/admin";
 import { apiFailureMessage, hasFieldErrors, type FormState } from "@/lib/validation/form-state";
 import { validateRejectionReason } from "@/lib/validation/hero";
@@ -174,6 +186,75 @@ export async function createIncidentTypeAction(
   return {
     status: "success",
     message: `Type « ${result.type.label} » créé : il est proposé dans les formulaires de déclaration.`,
+    fieldErrors: {},
+  };
+}
+
+/* ---------- Super-vilains ---------- */
+
+/** Création (sans `id`, puis redirection vers la fiche) ou modification d'un super-vilain. */
+export async function saveVillainAction(
+  _previousState: FormState<VillainField>,
+  formData: FormData,
+): Promise<FormState<VillainField>> {
+  const token = await requireAdminSession();
+  const id = String(formData.get("id") ?? "");
+  const values = readVillainValues(formData);
+  const types = await getIncidentTypes(token);
+  const fieldErrors = validateVillain(values, { typeIds: types.map(({ id: typeId }) => typeId) });
+  if (hasFieldErrors(fieldErrors)) return { status: "error", fieldErrors, values };
+
+  const input = toVillainInput(values);
+  const result = id ? await updateVillain(token, id, input) : await createVillain(token, input);
+  if (!result.ok) {
+    switch (result.error) {
+      case "alias-already-used":
+        return {
+          status: "error",
+          fieldErrors: { alias: "Un super-vilain porte déjà cet alias." },
+          values,
+        };
+      case "not-found":
+        return {
+          status: "error",
+          message: "Ce super-vilain n'existe plus.",
+          fieldErrors: {},
+          values,
+        };
+      case "invalid-fields":
+        return {
+          status: "error",
+          message: "Certains champs n'ont pas été acceptés.",
+          fieldErrors: {
+            alias: result.fields.alias && "Cet alias n'a pas été accepté.",
+            typeIds: result.fields.typeIds && "Une spécialité n'a pas été acceptée.",
+            threatLevel: result.fields.threatLevel && "Ce niveau n'a pas été accepté.",
+            status: result.fields.status && "Ce statut n'a pas été accepté.",
+          },
+          values,
+        };
+      default:
+        return { status: "error", message: apiFailureMessage(result), fieldErrors: {}, values };
+    }
+  }
+
+  // Encyclopédie et formulaires de déclaration (liste des vilains) affichent aussitôt la fiche.
+  const { villain } = result;
+  for (const path of [
+    routes.adminVillains,
+    adminVillainRoute(villain.id),
+    routes.encyclopedia,
+    villainSheetRoute(villain.id),
+    routes.profileIncidents,
+    routes.heroDeclare,
+    routes.adminReportIncident,
+  ]) {
+    revalidatePath(path);
+  }
+  if (!id) redirect(adminVillainRoute(villain.id));
+  return {
+    status: "success",
+    message: `Fiche de « ${villain.alias} » enregistrée.`,
     fieldErrors: {},
   };
 }

@@ -30,6 +30,7 @@ export const routes = {
   adminIncidents: "/admin/incidents",
   adminReportIncident: "/admin/incidents/signaler",
   adminIncidentTypes: "/admin/types-incident",
+  adminVillains: "/admin/super-vilains",
   adminAccounts: "/admin/comptes",
   adminHeroes: "/admin/super-heros",
   adminVideos: "/admin/videotheque",
@@ -44,6 +45,7 @@ export const routes = {
 } as const;
 
 export const adminIncidentRoute = (id: string) => `${routes.adminIncidents}/${id}`;
+export const adminVillainRoute = (id: string) => `${routes.adminVillains}/${id}`;
 export const adminArticleRoute = (id: string) => `${routes.adminBlog}/${id}`;
 export const citizenIncidentRoute = (id: string) => `${routes.profileIncidents}/${id}`;
 export const heroIncidentRoute = (id: string) => `${routes.heroIncidents}/${id}`;
@@ -97,6 +99,7 @@ export const adminNav: NavItem[] = [
   { label: "Types d'incident", href: routes.adminIncidentTypes },
   { label: "Comptes", href: routes.adminAccounts },
   { label: "Super-héros", href: routes.adminHeroes },
+  { label: "Super-vilains", href: routes.adminVillains },
   { label: "Vidéothèque", href: routes.adminVideos },
   { label: "Commentaires", href: routes.adminComments },
   { label: "Blog", href: routes.adminBlog },

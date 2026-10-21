@@ -97,4 +97,4 @@ export {
   moderateVideo,
   parseHeroVideoKey,
 } from "./videos";
-export { getVillain, getVillains } from "./villains";
+export { createVillain, getVillain, getVillains, getVillainsPage, updateVillain } from "./villains";

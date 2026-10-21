@@ -1,10 +1,13 @@
-import { incidentStatusLabels } from "@/lib/format";
+import { incidentStatusLabels, threatLevelLabels, villainStatusLabels } from "@/lib/format";
 import type {
   ArticleInput,
   ArticleStatus,
   IncidentStatus,
   IncidentTypeInput,
   IncidentUpdate,
+  ThreatLevel,
+  VillainInput,
+  VillainStatus,
 } from "@/types";
 import { DESCRIPTION_MAX_LENGTH, TITLE_MAX_LENGTH, isKnownTypeId } from "./incident";
 
@@ -176,4 +179,80 @@ export function validateIncidentType(
 
 export function toIncidentTypeInput(values: IncidentTypeValues): IncidentTypeInput {
   return { code: values.code, label: values.label, endangersLife: values.endangersLife === "on" };
+}
+
+/* ---------- Fiches des super-vilains ---------- */
+
+export const villainFields = [
+  "alias",
+  "firstName",
+  "lastName",
+  "mainSector",
+  "description",
+  "typeIds",
+  "threatLevel",
+  "status",
+] as const;
+export type VillainField = (typeof villainFields)[number];
+/** Saisie brute ; `typeIds` : identifiants des spécialités cochées, séparés par des virgules. */
+export type VillainValues = Record<VillainField, string>;
+
+export const VILLAIN_ALIAS_MAX_LENGTH = 80;
+export const VILLAIN_NAME_MAX_LENGTH = 80;
+export const VILLAIN_SECTOR_MAX_LENGTH = 120;
+export const VILLAIN_DESCRIPTION_MAX_LENGTH = 2000;
+
+export function readVillainValues(formData: FormData): VillainValues {
+  const text = (field: VillainField) => String(formData.get(field) ?? "").trim();
+  return {
+    alias: text("alias"),
+    firstName: text("firstName"),
+    lastName: text("lastName"),
+    mainSector: text("mainSector"),
+    description: text("description"),
+    typeIds: formData.getAll("typeIds").map(String).join(","),
+    threatLevel: text("threatLevel"),
+    status: text("status"),
+  };
+}
+
+/** Identifiants des spécialités cochées (la saisie brute les sépare par des virgules). */
+export function parseVillainTypeIds(typeIds: string): number[] {
+  return typeIds ? [...new Set(typeIds.split(",").map(Number))] : [];
+}
+
+const tooLong = (value: string, max: number, label: string) =>
+  value.length > max ? `${label} ne doit pas dépasser ${max} caractères.` : undefined;
+
+export function validateVillain(
+  values: VillainValues,
+  { typeIds }: { typeIds: number[] },
+): Partial<Record<VillainField, string>> {
+  return {
+    alias: !values.alias
+      ? "Indiquez l'alias du super-vilain."
+      : tooLong(values.alias, VILLAIN_ALIAS_MAX_LENGTH, "L'alias"),
+    firstName: tooLong(values.firstName, VILLAIN_NAME_MAX_LENGTH, "Le prénom"),
+    lastName: tooLong(values.lastName, VILLAIN_NAME_MAX_LENGTH, "Le nom"),
+    mainSector: tooLong(values.mainSector, VILLAIN_SECTOR_MAX_LENGTH, "Le secteur"),
+    description: tooLong(values.description, VILLAIN_DESCRIPTION_MAX_LENGTH, "La description"),
+    typeIds: parseVillainTypeIds(values.typeIds).every((id) => typeIds.includes(id))
+      ? undefined
+      : "Une spécialité cochée n'existe plus. Rechargez la page.",
+    threatLevel: values.threatLevel in threatLevelLabels ? undefined : "Choisissez un niveau.",
+    status: values.status in villainStatusLabels ? undefined : "Choisissez un statut.",
+  };
+}
+
+export function toVillainInput(values: VillainValues): VillainInput {
+  return {
+    alias: values.alias,
+    firstName: values.firstName,
+    lastName: values.lastName,
+    mainSector: values.mainSector,
+    description: values.description,
+    typeIds: parseVillainTypeIds(values.typeIds),
+    threatLevel: values.threatLevel as ThreatLevel,
+    status: values.status as VillainStatus,
+  };
 }

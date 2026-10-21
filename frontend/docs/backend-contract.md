@@ -79,8 +79,9 @@ Navigateur ──cookie session──► Next (serveur) ──Cookie: session=�
   `HEROS_ALLOWED_ORIGINS`. Cette liste ne sert qu'aux appels directs du navigateur.
 - `proxy.ts` appelle `getUserFromToken`, donc `GET /auth/me`, sur chaque page des espaces
   protégés (voir son `matcher`), en plus des vérifications de `requireRole()` pendant le rendu.
-- `rememberMe` (connexion prolongée, 30 j) existe côté API, pas encore dans `LoginCredentials`
-  ni dans le formulaire.
+- « Rester connecté 30 jours » (case du formulaire) envoie `rememberMe` : session de 30 jours
+  au lieu de 7, sans effet pour un modérateur (8 h). Le cookie suit l'`expiresAt` renvoyé ; le
+  mock applique les mêmes durées.
 
 ### Domaines encore mockés avec une session réelle
 
@@ -212,8 +213,12 @@ chaque modification de `lib/validation/`.
   | `catalog_unavailable` (502)         | Catalogue IMDb momentanément indisponible |
   | autre                               | `apiFailureMessage(toApiFailure(…))`      |
 
-- **Pas encore branché** : films des super-vilains (aucun écran), ajout direct d'un film à un
-  héros par un modérateur (`POST /admin/hero-films`), vidéos libres sans IMDb
+- **Ajout par un modérateur** (`/admin/videotheque`, section « Ajouter un film à un
+  super-héros ») : `POST /admin/hero-films` avec `{ heroId, imdbId }`, film publié aussitôt
+  (`addHeroVideo`). Les fiches super-héros étant mockées, la liste des héros vient des comptes
+  (`GET /admin/users?role=hero&status=active`, `getHeroesForVideos`) : seuls leurs identifiants
+  sont valides pour l'API.
+- **Pas encore branché** : films des super-vilains (aucun écran), vidéos libres sans IMDb
   (`title`, `description`, `videoUrl` dans `FilmInput`).
 
 ### Avis : choix du branchement
@@ -248,9 +253,11 @@ Types dans [src/types/review.ts](../src/types/review.ts) (`HeroReview`, `ReviewR
 - **Fiche publique** : `GET /heroes/{heroId}/reviews` ne renvoie pas de `total` : les pages sont
   lues jusqu'à une page incomplète. Un héros inconnu de l'API (404, ou identifiant mock en 422,
   tant que les fiches super-héros sont mockées) n'a aucun avis, comme pour ses films.
-- **Pas encore branché** : la notation par un héros déclarant (l'API l'accepte, l'écran est
-  dans l'espace citoyen), la note moyenne des fiches publiques
-  (`averageRating` de l'API, les fiches restant mockées).
+- **Héros déclarant** : un héros qui a signalé un incident note les héros intervenus depuis
+  `/heros/noter` (même `InterventionsList`, avec `role="super-heros"`). Il ne s'y voit jamais
+  lui-même : l'API l'exclut de `/me/interventions`.
+- **Pas encore branché** : la note moyenne des fiches publiques (`averageRating` de l'API, les
+  fiches restant mockées).
 - **Erreurs** :
 
   | Code API (statut)                     | Message affiché                                            |

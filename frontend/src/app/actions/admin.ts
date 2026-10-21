@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
+  addHeroVideo,
   createArticle,
   deleteArticle,
   createIncidentType,
@@ -321,6 +322,23 @@ export async function moderateVideoAction(
 
   const result = await moderateVideo(token, film.heroId, film.filmId, request.decision);
   return settle(result, [routes.adminVideos], decisionMessages[request.decision]);
+}
+
+export async function addHeroVideoAction(
+  _previousState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const token = await requireAdminSession();
+  const heroId = String(formData.get("heroId") ?? "");
+  const imdbId = String(formData.get("imdbId") ?? "");
+  if (!heroId || !/^tt\d{7,}$/.test(imdbId)) return invalidRequest;
+
+  const result = await addHeroVideo(token, heroId, imdbId);
+  return settle(
+    result,
+    [routes.adminVideos, routes.videos],
+    "Film ajouté et publié dans la vidéothèque du super-héros.",
+  );
 }
 
 export async function deleteVideoAction(

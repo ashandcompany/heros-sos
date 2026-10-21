@@ -40,6 +40,8 @@ export interface LoginCredentials {
   /** Adresse email, ou pseudo pour un super-héros. */
   identifier: string;
   password: string;
+  /** « Rester connecté » : session de 30 jours au lieu de 7 (sans effet pour un modérateur). */
+  rememberMe?: boolean;
 }
 
 export type LoginError =

@@ -11,6 +11,8 @@ import type { LoginResult } from "@/types";
 export interface LoginFormState {
   /** Identifiant renvoyé pour pré-remplir le champ (le mot de passe ne l'est jamais). */
   identifier: string;
+  /** Case « Rester connecté », renvoyée pour rester cochée après une erreur. */
+  rememberMe?: boolean;
   fieldErrors: Partial<Record<"identifier" | "password", string>>;
   formError?: string;
 }
@@ -32,6 +34,7 @@ export async function loginAction(
 ): Promise<LoginFormState> {
   const identifier = String(formData.get("identifier") ?? "").trim();
   const password = String(formData.get("password") ?? "");
+  const rememberMe = formData.get("rememberMe") === "on";
 
   const fieldErrors: LoginFormState["fieldErrors"] = {
     identifier: validateIdentifier(identifier),
@@ -39,13 +42,13 @@ export async function loginAction(
   };
 
   if (fieldErrors.identifier || fieldErrors.password) {
-    return { identifier, fieldErrors };
+    return { identifier, rememberMe, fieldErrors };
   }
 
-  const result = await login({ identifier, password });
+  const result = await login({ identifier, password, rememberMe });
 
   if (!result.ok) {
-    return { identifier, fieldErrors: {}, formError: loginErrorMessage(result) };
+    return { identifier, rememberMe, fieldErrors: {}, formError: loginErrorMessage(result) };
   }
 
   // Le cookie de l'API est recopié vers le navigateur avec la même durée de vie que la session.

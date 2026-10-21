@@ -6,6 +6,7 @@ import { declareIncident, getIncidentTypes, getVillains, rateIntervention } from
 import {
   requireAdminSession,
   requireCitizenSession,
+  requireRole,
   requireHeroSession,
 } from "@/lib/server-session";
 import { hasFieldErrors, type FormState } from "@/lib/validation/form-state";
@@ -77,7 +78,8 @@ export async function rateInterventionAction(
   _previousState: FormState<RatingField>,
   formData: FormData,
 ): Promise<FormState<RatingField>> {
-  const token = await requireCitizenSession();
+  // Le déclarant note les héros intervenus : un citoyen, ou un héros qui a signalé l'incident.
+  const { token } = await requireRole(["citoyen", "super-heros"]);
   const interventionId = String(formData.get("interventionId") ?? "");
   const heroId = String(formData.get("heroId") ?? "");
   const rating = Number(formData.get("rating"));
@@ -110,6 +112,7 @@ export async function rateInterventionAction(
   }
 
   revalidatePath(routes.profileInterventions);
+  revalidatePath(routes.heroRate);
   return { status: "success", message: "Merci, votre avis a été publié.", fieldErrors: {} };
 }
 

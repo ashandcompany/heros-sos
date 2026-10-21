@@ -85,9 +85,11 @@ export {
   updateMyHeroContact,
 } from "./super-heroes";
 export {
+  addHeroVideo,
   addMyVideo,
   deleteMyVideo,
   deleteVideo,
+  getHeroesForVideos,
   getHeroVideos,
   getMyVideos,
   getPublishedVideos,

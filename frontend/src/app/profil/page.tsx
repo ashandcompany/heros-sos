@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { AccountDetails, AccountDetailsSkeleton } from "@/components/citizen/AccountDetails";
+import { LogoutEverywhereForm } from "@/components/auth/LogoutEverywhereForm";
+import { AccountDetails, AccountDetailsSkeleton, Panel } from "@/components/citizen/AccountDetails";
 import { HeroRequestPanel } from "@/components/citizen/HeroRequestPanel";
 
 export const metadata: Metadata = { title: "Mon compte" };
@@ -23,6 +24,11 @@ export default function MyAccountPage() {
         >
           <HeroRequestPanel />
         </Suspense>
+      </div>
+      <div className="mt-6">
+        <Panel id="security-title" title="Sécurité">
+          <LogoutEverywhereForm />
+        </Panel>
       </div>
     </>
   );

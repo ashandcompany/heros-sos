@@ -4,6 +4,7 @@ import { citizensMock } from "@/mocks/citizens";
 import { accountsMock } from "@/mocks/users";
 import type {
   ActivationResult,
+  ApiFailure,
   AuthUser,
   LoginCredentials,
   LoginError,
@@ -22,6 +23,7 @@ import {
   fromApiUser,
   getApiSession,
   readSessionCookie,
+  toApiFailure,
   visitorHeaders,
 } from "./http";
 
@@ -166,6 +168,27 @@ export async function logout(token: string): Promise<void> {
     });
   } catch (error) {
     console.error("Déconnexion : révocation de la session par l'API en échec", error);
+  }
+}
+
+/**
+ * Ferme toutes les sessions de l'utilisateur, sur tous ses appareils, celle-ci comprise. Une
+ * session déjà fermée (401) compte comme un succès : l'action efface le cookie ensuite.
+ * API : `POST /auth/logout-all` (jeton CSRF ajouté par `apiFetch`). Mock : rien à révoquer.
+ */
+export async function logoutEverywhere(token: string): Promise<{ ok: true } | ApiFailure> {
+  if (!isApiEnabled) return mockResponse({ ok: true });
+
+  try {
+    await apiFetch("/auth/logout-all", {
+      method: "POST",
+      sessionToken: token,
+      redirectOnUnauthorized: false,
+    });
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) return { ok: true };
+    return toApiFailure(error, "Déconnexion de tous les appareils");
   }
 }
 

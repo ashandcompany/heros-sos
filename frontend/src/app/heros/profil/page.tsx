@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { AccountDetailsSkeleton } from "@/components/citizen/AccountDetails";
+import { LogoutEverywhereForm } from "@/components/auth/LogoutEverywhereForm";
+import { AccountDetailsSkeleton, Panel } from "@/components/citizen/AccountDetails";
 import { HeroProfileDetails } from "@/components/hero/HeroProfileDetails";
 
 export const metadata: Metadata = { title: "Mon profil" };
@@ -12,6 +13,11 @@ export default function HeroProfilePage() {
       <Suspense fallback={<AccountDetailsSkeleton />}>
         <HeroProfileDetails />
       </Suspense>
+      <div className="mt-6">
+        <Panel id="security-title" title="Sécurité">
+          <LogoutEverywhereForm />
+        </Panel>
+      </div>
     </>
   );
 }

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import { VillainFilms } from "@/components/admin/VillainFilms";
 import { VillainForm } from "@/components/admin/VillainForm";
 import { getIncidentTypes, getVillain } from "@/lib/api";
 import { formatInteger } from "@/lib/format";
@@ -10,10 +11,11 @@ import { requireAdminSession } from "@/lib/server-session";
 
 export const metadata: Metadata = { title: "Fiche d'un super-vilain" };
 
-/** Lit la session et les paramètres d'URL : rendu sous <Suspense>. */
-async function VillainEditor({ params }: { params: Promise<{ id: string }> }) {
+/** Lit la session et les paramètres d'URL (`?q=` : recherche de films) : rendu sous <Suspense>. */
+async function VillainEditor({ params, searchParams }: PageProps<"/admin/super-vilains/[id]">) {
   const token = await requireAdminSession();
-  const { id } = await params;
+  const [{ id }, { q }] = await Promise.all([params, searchParams]);
+  const query = (Array.isArray(q) ? q[0] : q)?.trim() ?? "";
   const [villain, types] = await Promise.all([getVillain(id), getIncidentTypes(token)]);
   if (!villain) notFound();
 
@@ -42,11 +44,16 @@ async function VillainEditor({ params }: { params: Promise<{ id: string }> }) {
         </h2>
         <VillainForm villain={villain} types={types} />
       </section>
+
+      <VillainFilms token={token} villain={villain} query={query} />
     </>
   );
 }
 
-export default function AdminVillainPage({ params }: PageProps<"/admin/super-vilains/[id]">) {
+export default function AdminVillainPage({
+  params,
+  searchParams,
+}: PageProps<"/admin/super-vilains/[id]">) {
   return (
     <>
       <p className="mb-4 text-sm">
@@ -62,7 +69,7 @@ export default function AdminVillainPage({ params }: PageProps<"/admin/super-vil
           />
         }
       >
-        <VillainEditor params={params} />
+        <VillainEditor params={params} searchParams={searchParams} />
       </Suspense>
     </>
   );

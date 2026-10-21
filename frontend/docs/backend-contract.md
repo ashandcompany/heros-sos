@@ -25,7 +25,7 @@ publics, tableaux de bord, fiches complètes du back-office) n'ont pas encore de
 
 | Domaine frontend                      | Fichier de `lib/api/`                    | Contrat OpenAPI                                                                                                         |
 | ------------------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Connexion, session, déconnexion       | `auth.ts`                                | `/auth/login`, `/auth/me`, `/auth/logout`                                                                               |
+| Connexion, session, déconnexion       | `auth.ts`                                | `/auth/login`, `/auth/me`, `/auth/logout`, `/auth/logout-all`                                                           |
 | Inscription                           | `auth.ts`                                | `/auth/register`                                                                                                        |
 | Activation du compte                  | `auth.ts`                                | `/auth/activate`, `/auth/resend-activation`                                                                             |
 | Mot de passe oublié (demande, jeton)  | `auth.ts`                                | `/auth/password-reset`, `/auth/password-reset/confirm`                                                                  |
@@ -38,14 +38,15 @@ publics, tableaux de bord, fiches complètes du back-office) n'ont pas encore de
 | Super-vilains                         | `villains.ts`                            | `GET /villains`, `GET /villains/{id}` (publics), `POST /villains`, `PATCH /villains/{id}`                               |
 | Fiches publiques super-héros          | `super-heroes.ts` (§ 3)                  | `GET /heroes`, `GET /heroes/{heroId}` (publics)                                                                         |
 | Vidéothèque (films)                   | `videos.ts`, `imdb.ts` (§ 3)             | `/films`, `/heroes/{heroId}/films`, `/hero/films*`, `/admin/hero-films*`, `/imdb/titles*`                               |
+| Films des super-vilains               | `videos.ts` (§ 3)                        | `GET /villains/{villainId}/films` (public), `POST /admin/villain-films`, `DELETE /admin/villains/{villainId}/films/*`   |
 | Blog                                  | `blog.ts` (§ 3)                          | `GET /articles`, `GET /articles/{slug}` (publics), `/admin/articles`, `/admin/articles/{id}`                            |
 | Newsletter publique                   | `newsletter.ts` (§ 3)                    | `POST /newsletter/subscriptions`, `POST /newsletter/subscriptions/confirm`                                              |
 | Formulaire de contact                 | `contact.ts` (§ 3)                       | `POST /contact/messages`                                                                                                |
 
 Fonctions de chaque fichier :
 
-- `auth.ts` : `login`, `getSessionUser`, `logout`, `register`, `activateAccount`,
-  `resendActivation`, `requestPasswordReset`, `confirmPasswordReset`.
+- `auth.ts` : `login`, `getSessionUser`, `logout`, `logoutEverywhere`, `register`,
+  `activateAccount`, `resendActivation`, `requestPasswordReset`, `confirmPasswordReset`.
 - `hero-requests.ts` : `requestHeroStatus`, `getMyHeroRequest`, `getHeroApplications`,
   `reviewHeroApplication`.
 - `user-moderation.ts` : `getAccounts`, `moderateAccount`.
@@ -60,7 +61,8 @@ Fonctions de chaque fichier :
 - `villains.ts` : `getVillains`, `getVillainsPage`, `getVillain`, `createVillain`, `updateVillain`.
 - `super-heroes.ts` (fiches publiques) : `getSuperHeroes`, `getFeaturedSuperHeroes`, `getSuperHero`.
 - `videos.ts` : `getMyVideos`, `addMyVideo`, `deleteMyVideo`, `getHeroVideos`, `moderateVideo`,
-  `deleteVideo`, `getPublishedVideos` ; `imdb.ts` : `searchImdbTitles`, `getImdbTitle`.
+  `deleteVideo`, `getPublishedVideos`, `getVillainFilms`, `addVillainFilm`, `deleteVillainFilm` ;
+  `imdb.ts` : `searchImdbTitles`, `getImdbTitle`.
 - `blog.ts` : `getPublishedArticles`, `getPublishedArticle`, `getAllArticles`, `getArticle`,
   `countDraftArticles`, `createArticle`, `updateArticle`, `deleteArticle`.
 - `newsletter.ts` : `subscribeToNewsletter`, `confirmNewsletterSubscription` ; `contact.ts` :
@@ -68,13 +70,11 @@ Fonctions de chaque fichier :
 
 ### ⏳ Encore sur les mocks (ou à faire)
 
-| Domaine frontend                  | Fonctions `lib/api/`                                                                                 | Contrat OpenAPI                                                                                                     | État    |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------- |
-| Incidents résolus publics         | `incidents.ts` : `getLatestResolvedIncidents`, `getResolvedIncidentsByHero`, `getIncidentsByVillain` | ❌ aucun (`GET /incidents` public ne renvoie pas les résolus, ni filtre héros/vilain)                               | mock    |
-| Fiches complètes super-héros      | `super-heroes.ts` : `getSuperHeroProfiles` (back-office)                                             | ❌ aucun                                                                                                            | mock    |
-| Tableau de bord héros, modération | `hero-dashboard.ts`, `moderation.ts`                                                                 | ❌ aucun (statistiques)                                                                                             | mock    |
-| Déconnexion de tous les appareils | aucune (pas d'écran)                                                                                 | `POST /auth/logout-all`                                                                                             | à faire |
-| Films des super-vilains           | aucune (pas d'écran)                                                                                 | `GET /villains/{villainId}/films`, `POST /admin/villain-films`, `DELETE /admin/villains/{villainId}/films/{filmId}` | à faire |
+| Domaine frontend                  | Fonctions `lib/api/`                                                                                 | Contrat OpenAPI                                                                       | État |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ---- |
+| Incidents résolus publics         | `incidents.ts` : `getLatestResolvedIncidents`, `getResolvedIncidentsByHero`, `getIncidentsByVillain` | ❌ aucun (`GET /incidents` public ne renvoie pas les résolus, ni filtre héros/vilain) | mock |
+| Fiches complètes super-héros      | `super-heroes.ts` : `getSuperHeroProfiles` (back-office)                                             | ❌ aucun                                                                              | mock |
+| Tableau de bord héros, modération | `hero-dashboard.ts`, `moderation.ts`                                                                 | ❌ aucun (statistiques)                                                               | mock |
 
 > [!WARNING]
 > Les « Future implémentation » écrites dans les commentaires de `lib/api/` pour les domaines non
@@ -109,15 +109,16 @@ flowchart LR
     next -.->|"cookie recopié"| nav
 ```
 
-|               | Fonctionnement                                                                                                                                 |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Connexion     | `loginAction` → `login()` → `POST /auth/login`. Le jeton du `Set-Cookie` de l'API est recopié dans le cookie du navigateur (même nom)          |
-| Durée         | Celle de la session API : le cookie expire à `expiresAt` (7 j max pour un citoyen ou un héros, 8 h pour un modérateur)                         |
-| Lecture       | `getSessionUser(token)` → `GET /auth/me`, le jeton dans l'en-tête `Cookie`. Mémorisé le temps d'un rendu (`cache` de React)                    |
-| Déconnexion   | `logoutAction` → `logout()` : `GET /auth/me` (jeton CSRF) puis `POST /auth/logout` avec `X-CSRF-Token`. Le cookie est effacé dans tous les cas |
-| Nom du cookie | [cookies.ts](../src/lib/cookies.ts) : `__Host-session` en production, `session` sinon : même règle que l'API (`HEROS_COOKIE_SECURE`)           |
-| API en panne  | `getSessionUser` renvoie `null` (visiteur, espaces protégés fermés) et journalise l'erreur ; `login` renvoie `unavailable`                     |
-| Adresse IP    | `login` transmet `X-Forwarded-For` et `User-Agent` du visiteur : l'API limite les tentatives par IP et enregistre l'appareil de la session     |
+|               | Fonctionnement                                                                                                                                                                                                                                                           |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Connexion     | `loginAction` → `login()` → `POST /auth/login`. Le jeton du `Set-Cookie` de l'API est recopié dans le cookie du navigateur (même nom)                                                                                                                                    |
+| Durée         | Celle de la session API : le cookie expire à `expiresAt` (7 j max pour un citoyen ou un héros, 8 h pour un modérateur)                                                                                                                                                   |
+| Lecture       | `getSessionUser(token)` → `GET /auth/me`, le jeton dans l'en-tête `Cookie`. Mémorisé le temps d'un rendu (`cache` de React)                                                                                                                                              |
+| Déconnexion   | `logoutAction` → `logout()` : `GET /auth/me` (jeton CSRF) puis `POST /auth/logout` avec `X-CSRF-Token`. Le cookie est effacé dans tous les cas                                                                                                                           |
+| Partout       | « Sécurité » de « Mon compte » et « Mon profil » : `logoutEverywhereAction` → `POST /auth/logout-all`, puis cookie effacé et retour à la connexion. En cas d'échec, la session reste ouverte et l'erreur s'affiche ; un 401 (session déjà fermée) compte comme un succès |
+| Nom du cookie | [cookies.ts](../src/lib/cookies.ts) : `__Host-session` en production, `session` sinon : même règle que l'API (`HEROS_COOKIE_SECURE`)                                                                                                                                     |
+| API en panne  | `getSessionUser` renvoie `null` (visiteur, espaces protégés fermés) et journalise l'erreur ; `login` renvoie `unavailable`                                                                                                                                               |
+| Adresse IP    | `login` transmet `X-Forwarded-For` et `User-Agent` du visiteur : l'API limite les tentatives par IP et enregistre l'appareil de la session                                                                                                                               |
 
 À savoir :
 
@@ -337,8 +338,15 @@ qu'un seul `GET /auth/me`.
   (`addHeroVideo`). Les fiches complètes des super-héros étant mockées, la liste des héros vient des comptes
   (`GET /admin/users?role=hero&status=active`, `getHeroesForVideos`) : seuls leurs identifiants
   sont valides pour l'API.
-- **Pas encore branché** : films des super-vilains (aucun écran), vidéos libres sans IMDb
-  (`title`, `description`, `videoUrl` dans `FilmInput`).
+- **Films des super-vilains** : rattachés par un modérateur depuis la fiche du vilain
+  (`/admin/super-vilains/{id}#films`, recherche IMDb par `?q=`), visibles aussitôt, sans
+  modération, dans la section « Au cinéma » de la fiche publique. Ajout : `POST /admin/villain-films`
+  avec `{ villainId, imdbId }` ; son `409` n'a pas de corps documenté, le frontend se fie au
+  statut (« déjà sur la fiche »). Retrait : la clé `villainId/filmId` du formulaire, puis
+  `DELETE /admin/villains/{villainId}/films/{filmId}`. Un vilain inconnu de l'API (404, ou ancien
+  identifiant mock en 422) n'a aucun film.
+- **Pas encore branché** : vidéos libres sans IMDb (`title`, `description`, `videoUrl` dans
+  `FilmInput`).
 
 ### Avis : choix du branchement
 

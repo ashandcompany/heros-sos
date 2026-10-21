@@ -2,10 +2,11 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { login, logout } from "@/lib/api";
+import { login, logout, logoutEverywhere } from "@/lib/api";
 import { SESSION_COOKIE, sessionCookieAttributes } from "@/lib/cookies";
 import { formatRetryDelay } from "@/lib/format";
 import { accountHomeByRole, routes } from "@/lib/routes";
+import { apiFailureMessage, type FormState } from "@/lib/validation/form-state";
 import type { LoginResult } from "@/types";
 
 export interface LoginFormState {
@@ -85,4 +86,20 @@ export async function logoutAction(): Promise<void> {
   if (token) await logout(token);
   cookieStore.delete({ name: SESSION_COOKIE, ...sessionCookieAttributes });
   redirect(routes.home);
+}
+
+/**
+ * Ferme toutes les sessions du compte (appareil perdu, mot de passe partagé…), celle-ci comprise,
+ * puis renvoie vers la connexion. En cas d'échec, la session courante reste ouverte.
+ */
+export async function logoutEverywhereAction(): Promise<FormState> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE)?.value;
+
+  if (token) {
+    const result = await logoutEverywhere(token);
+    if (!result.ok) return { status: "error", message: apiFailureMessage(result), fieldErrors: {} };
+  }
+  cookieStore.delete({ name: SESSION_COOKIE, ...sessionCookieAttributes });
+  redirect(routes.login);
 }

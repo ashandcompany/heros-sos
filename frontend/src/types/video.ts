@@ -18,6 +18,20 @@ export interface HeroVideo {
   moderation: ModerationStatus;
 }
 
+/** Film rattaché à la fiche d'un super-vilain par la modération, visible aussitôt. */
+export interface VillainFilm {
+  id: string;
+  villain: { id: string; alias: string };
+  title: string;
+  description: string;
+  /** Lien vers la vidéo ou la fiche IMDb. */
+  videoUrl: string;
+  imdbId?: string;
+  year?: number;
+  /** Date ISO 8601 du rattachement. */
+  addedAt: string;
+}
+
 /** Film du catalogue IMDb. */
 export interface ImdbTitle {
   /** Identifiant IMDb, ex : `tt0000001`. */

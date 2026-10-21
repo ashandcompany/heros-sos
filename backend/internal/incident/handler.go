@@ -45,6 +45,7 @@ func (h *Handler) SweepLimiters() { h.createPerUser.Sweep() }
 
 type createPayload struct {
 	TypeID          int16    `json:"typeId"`
+	Title           string   `json:"title"`
 	Description     string   `json:"description"`
 	CitizensRescued int16    `json:"citizensRescued"`
 	Location        location `json:"location"`
@@ -64,20 +65,21 @@ type location struct {
 
 // Response est un incident vu par son déclarant ou un modérateur.
 type Response struct {
-	ID                uuid.UUID        `json:"id"`
-	TypeID            int16            `json:"typeId"`
-	TypeCode          string           `json:"typeCode"`
-	TypeLabel         string           `json:"typeLabel"`
-	Description       string           `json:"description"`
-	Status            string           `json:"status"`
-	Priority          string           `json:"priority"`
-	CitizensRescued   int16            `json:"citizensRescued"`
-	Location          locationResponse `json:"location"`
-	OccurredAt        *time.Time       `json:"occurredAt,omitempty"`
-	VillainIDs        []string         `json:"villainIds"`
-	Villains          []villainSummary `json:"villains"`
-	InterventionID    *uuid.UUID       `json:"interventionId,omitempty"`
-	CreatedAt         time.Time        `json:"createdAt"`
+	ID              uuid.UUID        `json:"id"`
+	TypeID          int16            `json:"typeId"`
+	TypeCode        string           `json:"typeCode"`
+	TypeLabel       string           `json:"typeLabel"`
+	Title           string           `json:"title"`
+	Description     string           `json:"description"`
+	Status          string           `json:"status"`
+	Priority        string           `json:"priority"`
+	CitizensRescued int16            `json:"citizensRescued"`
+	Location        locationResponse `json:"location"`
+	OccurredAt      *time.Time       `json:"occurredAt,omitempty"`
+	VillainIDs      []string         `json:"villainIds"`
+	Villains        []villainSummary `json:"villains"`
+	InterventionID  *uuid.UUID       `json:"interventionId,omitempty"`
+	CreatedAt       time.Time        `json:"createdAt"`
 }
 
 type locationResponse struct {
@@ -105,7 +107,7 @@ func newResponse(in Incident) Response {
 		villains[i] = villainSummary{ID: villain.ID, Alias: villain.Alias}
 	}
 	return Response{
-		ID: in.ID, TypeID: in.TypeID, TypeCode: in.TypeCode, TypeLabel: in.TypeLabel,
+		ID: in.ID, TypeID: in.TypeID, TypeCode: in.TypeCode, TypeLabel: in.TypeLabel, Title: in.Title,
 		Description: in.Description, Status: string(in.Status), Priority: string(in.Priority),
 		CitizensRescued: in.CitizensRescued,
 		Location: locationResponse{
@@ -183,7 +185,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in := CreateInput{
-		TypeID: body.TypeID, Description: body.Description,
+		TypeID: body.TypeID, Title: body.Title, Description: body.Description,
 		CitizensRescued: body.CitizensRescued, Street: body.Location.Address, PostalCode: body.Location.PostalCode,
 		City: body.Location.City, Country: body.Location.Country, AddressComplement: body.Location.AddressComplement,
 		Latitude: body.Location.Latitude, Longitude: body.Location.Longitude, VillainIDs: body.VillainIDs,

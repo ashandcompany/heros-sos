@@ -5,12 +5,16 @@ import {
   addMyVideo,
   deleteMyVideo,
   finishIntervention,
+  inviteHeroes,
+  joinIntervention,
   replyToReview,
   requestHeroEmailChange,
+  respondToInvitation,
   setIncidentPriority,
   takeChargeOfIncident,
   updateMyHeroAvatar,
   updateMyHeroContact,
+  voteOnOutcome,
 } from "@/lib/api";
 import { isIncidentPriority } from "@/lib/format";
 import { heroIncidentRoute, routes } from "@/lib/routes";
@@ -23,8 +27,8 @@ import {
   type ContactField,
 } from "@/lib/validation/account";
 import { hasFieldErrors, type FormState } from "@/lib/validation/form-state";
-import { REPLY_MAX_LENGTH } from "@/lib/validation/hero";
-import type { InterventionOutcome, MutationResult } from "@/types";
+import { OUTCOME_NOTES_MAX_LENGTH, REPLY_MAX_LENGTH } from "@/lib/validation/hero";
+import type { InterventionOutcome, InterventionRef, MutationResult } from "@/types";
 
 /*
  * Server Actions de l'espace super-héros. Chacune revérifie la session (le proxy ne suffit pas)
@@ -90,20 +94,108 @@ const outcomeMessages: Record<InterventionOutcome, string> = {
   echoue: "Intervention terminée en échec : l'incident est de nouveau proposé aux super-héros.",
 };
 
+/** Intervention visée par un formulaire de l'équipe (champs cachés `id` et `interventionId`). */
+function readInterventionRef(formData: FormData): InterventionRef | null {
+  const incidentId = String(formData.get("id") ?? "");
+  const interventionId = String(formData.get("interventionId") ?? "");
+  return incidentId && interventionId ? { incidentId, interventionId } : null;
+}
+
+const readOutcome = (formData: FormData): InterventionOutcome | null => {
+  const outcome = String(formData.get("outcome") ?? "");
+  return outcome === "reussi" || outcome === "echoue" ? outcome : null;
+};
+
 export async function finishInterventionAction(
   _previousState: FormState,
   formData: FormData,
 ): Promise<FormState> {
   const { token } = await requireHeroSession();
-  const id = String(formData.get("id") ?? "");
-  const outcome = String(formData.get("outcome") ?? "");
-  if (!id || (outcome !== "reussi" && outcome !== "echoue")) return invalidRequest;
+  const ref = readInterventionRef(formData);
+  const outcome = readOutcome(formData);
+  const notes = String(formData.get("notes") ?? "").trim();
+  if (!ref || !outcome || notes.length > OUTCOME_NOTES_MAX_LENGTH) return invalidRequest;
 
-  const result = await finishIntervention(token, id, outcome);
+  const result = await finishIntervention(token, ref, outcome, notes);
+  if (!result.ok) return { status: "error", message: result.error, fieldErrors: {} };
   return settle(
     result,
-    [...incidentPaths(id), routes.profileInterventions],
-    outcomeMessages[outcome],
+    [...incidentPaths(ref.incidentId), routes.profileInterventions],
+    result.closed
+      ? outcomeMessages[outcome]
+      : "Résultat soumis à l'équipe : l'intervention sera close quand tous ses membres l'auront validé.",
+  );
+}
+
+export async function joinInterventionAction(
+  _previousState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const { token } = await requireHeroSession();
+  const ref = readInterventionRef(formData);
+  if (!ref) return invalidRequest;
+
+  const result = await joinIntervention(token, ref);
+  return settle(result, incidentPaths(ref.incidentId), "Vous avez rejoint l'équipe.");
+}
+
+export async function inviteHeroesAction(
+  _previousState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const { token } = await requireHeroSession();
+  const ref = readInterventionRef(formData);
+  const heroIds = [...new Set(formData.getAll("heroIds").map(String).filter(Boolean))];
+  if (!ref) return invalidRequest;
+  if (heroIds.length === 0) {
+    return { status: "error", message: "Choisissez au moins un super-héros.", fieldErrors: {} };
+  }
+
+  const result = await inviteHeroes(token, ref, heroIds);
+  return settle(
+    result,
+    [heroIncidentRoute(ref.incidentId)],
+    heroIds.length > 1
+      ? "Invitations envoyées : chaque super-héros doit confirmer sa présence."
+      : "Invitation envoyée : le super-héros doit confirmer sa présence.",
+  );
+}
+
+export async function respondToInvitationAction(
+  _previousState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const { token } = await requireHeroSession();
+  const ref = readInterventionRef(formData);
+  const answer = String(formData.get("answer") ?? "");
+  if (!ref || (answer !== "accept" && answer !== "decline")) return invalidRequest;
+
+  const accept = answer === "accept";
+  const result = await respondToInvitation(token, ref, accept);
+  return settle(
+    result,
+    incidentPaths(ref.incidentId),
+    accept ? "Vous faites partie de l'équipe." : "Invitation refusée.",
+  );
+}
+
+export async function voteOnOutcomeAction(
+  _previousState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const { token } = await requireHeroSession();
+  const ref = readInterventionRef(formData);
+  const vote = String(formData.get("vote") ?? "");
+  if (!ref || (vote !== "approve" && vote !== "reject")) return invalidRequest;
+
+  const approved = vote === "approve";
+  const result = await voteOnOutcome(token, ref, approved);
+  return settle(
+    result,
+    [...incidentPaths(ref.incidentId), routes.profileInterventions],
+    approved
+      ? "Vote enregistré. L'intervention sera close quand toute l'équipe aura validé."
+      : "Résultat refusé : la modération va arbitrer.",
   );
 }
 

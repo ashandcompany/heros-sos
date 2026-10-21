@@ -4,13 +4,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
   addHeroVideo,
+  arbitrateIntervention,
   createArticle,
   deleteArticle,
   createIncidentType,
   createVillain,
   deleteVideo,
+  getIncidentHeroes,
   getIncidentTypes,
-  getSuperHeroes,
   getVillains,
   moderateAccount,
   moderateReply,
@@ -52,7 +53,7 @@ import {
   type VillainField,
 } from "@/lib/validation/admin";
 import { apiFailureMessage, hasFieldErrors, type FormState } from "@/lib/validation/form-state";
-import { validateRejectionReason } from "@/lib/validation/hero";
+import { OUTCOME_NOTES_MAX_LENGTH, validateRejectionReason } from "@/lib/validation/hero";
 import type {
   AccountModerationAction,
   AccountModerationResult,
@@ -94,6 +95,38 @@ const decisionMessages: Record<ModerationStatus, string> = {
 
 /* ---------- Incidents ---------- */
 
+/**
+ * Arbitrage d'un désaccord : un membre de l'équipe a refusé le résultat proposé, la modération
+ * tranche et clôt l'intervention.
+ */
+export async function arbitrateInterventionAction(
+  _previousState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const token = await requireAdminSession();
+  const incidentId = String(formData.get("id") ?? "");
+  const interventionId = String(formData.get("interventionId") ?? "");
+  const outcome = String(formData.get("outcome") ?? "");
+  const notes = String(formData.get("notes") ?? "").trim();
+  if (
+    !incidentId ||
+    !interventionId ||
+    (outcome !== "reussi" && outcome !== "echoue") ||
+    notes.length > OUTCOME_NOTES_MAX_LENGTH
+  ) {
+    return invalidRequest;
+  }
+
+  const result = await arbitrateIntervention(token, { incidentId, interventionId }, outcome, notes);
+  return settle(
+    result,
+    [routes.adminIncidents, adminIncidentRoute(incidentId), routes.heroIncidents],
+    outcome === "reussi"
+      ? "Intervention close comme réussie : l'incident est résolu."
+      : "Intervention close en échec : l'incident est de nouveau proposé aux super-héros.",
+  );
+}
+
 export async function moderateIncidentAction(
   _previousState: FormState,
   formData: FormData,
@@ -124,7 +157,7 @@ export async function updateIncidentAction(
 
   const [villains, heroes, types] = await Promise.all([
     getVillains(),
-    getSuperHeroes(),
+    getIncidentHeroes(),
     getIncidentTypes(token),
   ]);
   const fieldErrors = validateIncidentEdit(values, {

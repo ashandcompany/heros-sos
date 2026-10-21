@@ -107,7 +107,8 @@ export interface IncidentDeclaration {
   typeId: number;
   title: string;
   description: string;
-  reporterRole: ReporterRole;
+  /** `null` quand le formulaire ne le demande pas (l'API ne le connaît pas). */
+  reporterRole: ReporterRole | null;
   location: { address: string; city: string };
   /** Date ISO 8601 des faits, `null` si l'incident est en cours. */
   occurredAt: string | null;
@@ -143,12 +144,60 @@ export interface HeroIntervention {
   outcome: InterventionOutcome | null;
 }
 
-/** Incident vu depuis l'espace super-héros : priorité et historique des interventions. */
+/** Place d'un héros dans l'équipe : le lead a démarré l'intervention. */
+export type TeamRole = "lead" | "membre";
+
+/** Un héros invité doit confirmer sa présence avant de faire partie de l'équipe. */
+export type TeamParticipation = "invite" | "confirme";
+
+/** Vote d'un membre confirmé sur le résultat proposé. */
+export type OutcomeVote = "en-attente" | "approuve" | "refuse";
+
+export interface TeamMember {
+  hero: SuperHeroSummary;
+  role: TeamRole;
+  participation: TeamParticipation;
+  vote: OutcomeVote;
+  /** Le membre est le super-héros connecté. */
+  isMe: boolean;
+}
+
+/**
+ * Équipe engagée sur un incident (`Intervention` de l'API). Un héros seul clôt directement
+ * l'intervention ; une équipe soumet le résultat proposé au vote unanime de ses membres confirmés.
+ * Un refus renvoie la décision à la modération, qui arbitre.
+ */
+export interface InterventionTeam {
+  /** Identifiant de l'intervention (routes `/interventions/{id}`). */
+  id: string;
+  /** Date ISO 8601 du début de l'intervention. */
+  startedAt: string;
+  members: TeamMember[];
+  /** Résultat proposé, en attente du vote de l'équipe ; `null` s'il n'y en a pas. */
+  proposedOutcome: InterventionOutcome | null;
+  /** Auteur de la proposition. */
+  proposedBy: SuperHeroSummary | null;
+  /** Compte rendu joint au résultat proposé. */
+  notes: string;
+}
+
+/** Incident vu depuis l'espace super-héros : priorité, équipe et historique des interventions. */
 export interface HeroIncident extends Incident {
   priority: IncidentPriority;
-  /** Interventions sur cet incident, des plus récentes aux plus anciennes. */
+  /** Interventions terminées sur cet incident, des plus récentes aux plus anciennes. */
   interventions: HeroIntervention[];
+  /** Équipe de l'intervention en cours, `null` si personne n'intervient. */
+  team: InterventionTeam | null;
 }
+
+/** Désignation d'une intervention dans les formulaires : l'API la retrouve par son id, le mock par son incident. */
+export interface InterventionRef {
+  incidentId: string;
+  interventionId: string;
+}
+
+/** Résultat d'une déclaration de résultat : clos aussitôt (héros seul) ou soumis au vote de l'équipe. */
+export type OutcomeProposalResult = { ok: true; closed: boolean } | { ok: false; error: string };
 
 /** Détail d'un incident consulté depuis l'espace citoyen. */
 export interface CitizenIncidentDetail {
@@ -181,7 +230,10 @@ export interface MapIncident {
  * ne suit pas la géolocalisation des héros en temps réel.
  */
 export interface MapTeam {
+  /** Lead de l'équipe. */
   hero: SuperHeroSummary;
+  /** Le super-héros connecté fait partie de l'équipe. */
+  isMe: boolean;
   incidentId: string;
   position: GeoPoint;
   /** Date ISO 8601 du début de l'intervention, `null` si elle n'est pas connue. */

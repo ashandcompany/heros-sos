@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { RatingStars } from "@/components/ui/RatingStars";
-import { getCitizenIncident } from "@/lib/api";
+import { getCitizenIncident, incidentFeatures } from "@/lib/api";
 import { formatDateTime, incidentStatusLabels, reporterRoleLabels } from "@/lib/format";
 import { heroSheetRoute, routes, villainSheetRoute } from "@/lib/routes";
 import { requireCitizenSession } from "@/lib/server-session";
@@ -50,11 +50,14 @@ function timelineSteps({ incident, interventions }: CitizenIncidentDetail): Time
     });
     return steps;
   }
-  steps.push(
-    incident.moderation === "valide"
-      ? { key: "moderation", label: "Signalement vérifié par la modération", state: "done" }
-      : { key: "moderation", label: "Vérification par la modération", state: "current" },
-  );
+  // Avec l'API, un incident est diffusé dès sa déclaration : pas d'étape de vérification.
+  if (incidentFeatures.moderation) {
+    steps.push(
+      incident.moderation === "valide"
+        ? { key: "moderation", label: "Signalement vérifié par la modération", state: "done" }
+        : { key: "moderation", label: "Vérification par la modération", state: "current" },
+    );
+  }
 
   for (const intervention of interventions) {
     steps.push({
@@ -160,9 +163,11 @@ export async function IncidentDetail({ params }: { params: Promise<{ id: string 
           <time dateTime={incident.reportedAt} className="font-mono">
             {formatDateTime(incident.reportedAt)}
           </time>
-          {isMine && incident.reporterRole
-            ? ` · Vous l'avez déclaré en tant que ${reporterRoleLabels[incident.reporterRole].toLowerCase()}`
-            : " · Déclaré par un autre citoyen"}
+          {!isMine
+            ? " · Déclaré par un autre citoyen"
+            : incident.reporterRole
+              ? ` · Vous l'avez déclaré en tant que ${reporterRoleLabels[incident.reporterRole].toLowerCase()}`
+              : " · Vous l'avez déclaré"}
         </p>
       </header>
 
@@ -247,10 +252,31 @@ export async function IncidentDetail({ params }: { params: Promise<{ id: string 
               <p className="text-sm text-muted">
                 {incident.moderation === "rejete"
                   ? "Aucun super-héros n'interviendra sur ce signalement."
-                  : "Aucun super-héros n'intervient encore. Les héros à proximité ont été prévenus."}
+                  : incident.status === "en-cours"
+                    ? "Une équipe de super-héros intervient en ce moment."
+                    : incident.status === "resolu"
+                      ? "Des super-héros ont résolu cet incident."
+                      : "Aucun super-héros n'intervient encore. Les héros ont été prévenus."}
               </p>
             )}
           </section>
+
+          {isMine && incident.status === "resolu" && !incident.hero && (
+            <section aria-labelledby="rating-title" className={panelClasses}>
+              <h2 id="rating-title" className="mb-3 font-display text-xl font-semibold">
+                Votre avis
+              </h2>
+              <p className="mb-4 text-sm text-muted">
+                Comment s&apos;est passée l&apos;intervention&nbsp;?
+              </p>
+              <Link
+                href={routes.profileInterventions}
+                className="font-semibold text-accent hover:underline"
+              >
+                Noter les super-héros<span aria-hidden="true">&nbsp;→</span>
+              </Link>
+            </section>
+          )}
 
           {isMine && incident.status === "resolu" && incident.hero && (
             <section aria-labelledby="rating-title" className={panelClasses}>

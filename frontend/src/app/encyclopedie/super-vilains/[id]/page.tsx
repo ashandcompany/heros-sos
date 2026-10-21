@@ -3,19 +3,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { StatusBadge } from "@/components/hero/IncidentBadges";
-import { threatTone } from "@/components/encyclopedia/VillainCard";
+import { ThreatMeter } from "@/components/encyclopedia/ThreatMeter";
+import { VillainStatusStamp } from "@/components/encyclopedia/VillainCard";
+import { VillainMugshot } from "@/components/encyclopedia/VillainMugshot";
 import { VillainSpecialties } from "@/components/encyclopedia/VillainSpecialties";
-import { Badge } from "@/components/ui/Badge";
 import { Container } from "@/components/ui/Container";
 import { getIncidentsByVillain, getVillain } from "@/lib/api";
 import { dossierNumber } from "@/lib/dossier";
-import {
-  formatDate,
-  formatInteger,
-  formatLocation,
-  threatLevelLabels,
-  villainStatusLabels,
-} from "@/lib/format";
+import { formatDate, formatInteger, formatLocation } from "@/lib/format";
 import { heroSheetRoute, routes } from "@/lib/routes";
 
 export async function generateMetadata({
@@ -41,42 +36,67 @@ async function VillainSheet({ params }: { params: Promise<{ id: string }> }) {
 
   return (
     <div className="space-y-12">
-      <header className="border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-6 sm:p-8">
-        <p className="font-mono text-xs tracking-widest text-muted uppercase">
-          Dossier {dossierNumber(villain.id, "SV")}
-        </p>
-        <h1 className="mt-1 font-display text-3xl font-bold sm:text-4xl">{villain.alias}</h1>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Badge tone={threatTone[villain.threatLevel]}>
-            Menace {threatLevelLabels[villain.threatLevel].toLowerCase()}
-          </Badge>
-          <Badge tone={villain.status === "emprisonne" ? "sage" : "warning"}>
-            {villainStatusLabels[villain.status]}
-          </Badge>
-        </div>
-        <p className="mt-4 max-w-2xl text-lg text-pretty">{villain.description}</p>
-        {villain.specialties.length > 0 && (
-          <div className="mt-5">
-            <h2 className="mb-2 text-sm font-medium text-muted">Spécialités</h2>
-            <VillainSpecialties specialties={villain.specialties} />
+      <header className="panel paper paper--wanted flex flex-col items-center gap-6 p-6 text-center sm:flex-row sm:items-start sm:p-8 sm:text-left">
+        <VillainMugshot alias={villain.alias} size={128} />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <p className="font-mono text-xs tracking-widest text-ink/75 uppercase">
+                Dossier {dossierNumber(villain.id, "SV")}
+              </p>
+              <h1 className="mt-1 font-display text-3xl font-bold tracking-wider uppercase sm:text-4xl">
+                {villain.alias}
+              </h1>
+            </div>
+            <VillainStatusStamp status={villain.status} className="mt-1 sm:mt-3" />
           </div>
-        )}
-        <p className="mt-6 text-sm">
-          <span className="font-mono text-2xl font-semibold">
-            {formatInteger(villain.reportedIncidentsCount)}
-          </span>{" "}
-          <span className="text-muted">incidents signalés</span>
-        </p>
-        {villain.status === "en-liberte" && (
-          <p className="mt-6 rounded-xl border border-rating/40 bg-rating/10 px-4 py-3 text-sm">
-            <span className="font-semibold text-rating">Vous pensez l&apos;avoir vu&nbsp;?</span> Ne
-            l&apos;approchez pas : éloignez-vous puis{" "}
-            <Link href={routes.profileIncidents} className="text-accent underline">
-              déclarez l&apos;incident
-            </Link>
-            .
-          </p>
-        )}
+          <p className="mt-3 max-w-2xl text-lg text-pretty text-ink/85">{villain.description}</p>
+
+          <dl className="mt-6 grid grid-cols-2 gap-4 text-left sm:max-w-md">
+            <div>
+              <dt className="font-mono text-xs tracking-widest text-ink/75 uppercase">Menace</dt>
+              <dd className="mt-2">
+                <ThreatMeter level={villain.threatLevel} />
+              </dd>
+            </div>
+            <div>
+              <dt className="font-mono text-xs tracking-widest text-ink/75 uppercase">
+                Incidents signalés
+              </dt>
+              <dd className="mt-1">
+                <span className="digital text-xl">
+                  {formatInteger(villain.reportedIncidentsCount)}
+                </span>
+              </dd>
+            </div>
+          </dl>
+
+          {villain.specialties.length > 0 && (
+            <div className="mt-6">
+              <h2 className="mb-2 font-mono text-xs tracking-widest text-ink/75 uppercase">
+                Spécialités
+              </h2>
+              <VillainSpecialties
+                specialties={villain.specialties}
+                className="justify-center sm:justify-start"
+              />
+            </div>
+          )}
+
+          {villain.status === "en-liberte" && (
+            <p className="mt-6 border-2 border-brick bg-brick/10 px-4 py-3 text-left text-sm text-pretty">
+              <span className="font-semibold text-brick">Vous pensez l&apos;avoir vu&nbsp;?</span>{" "}
+              Ne l&apos;approchez pas : éloignez-vous puis{" "}
+              <Link
+                href={routes.profileIncidents}
+                className="font-semibold text-primary-ink underline"
+              >
+                déclarez l&apos;incident
+              </Link>
+              .
+            </p>
+          )}
+        </div>
       </header>
 
       <div className="grid gap-12 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
@@ -161,10 +181,7 @@ export default function VillainSheetPage({
       </p>
       <Suspense
         fallback={
-          <div
-            aria-hidden="true"
-            className="h-72 border-2 border-border bg-surface motion-safe:animate-pulse"
-          />
+          <div aria-hidden="true" className="panel h-72 opacity-40 motion-safe:animate-pulse" />
         }
       >
         <VillainSheet params={params} />

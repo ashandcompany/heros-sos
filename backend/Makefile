@@ -103,10 +103,12 @@ COMPOSE_PROD = docker compose -p heros-sos-prod --env-file .env.production -f ..
 # Le disque de la machine virtuelle de Docker (Docker Desktop) se remplit vite : images, cache de build,
 # volumes. Faute de place, un build échoue et un conteneur peut redémarrer en boucle (ENOSPC) : on vérifie
 # donc l'espace libre AVANT de toucher aux conteneurs.
+# MSYS_NO_PATHCONV : sous Windows, Git Bash réécrirait le `/` de `df -k /` en `C:/Program Files/Git/`, df
+# échouerait et la cible annoncerait toujours 0 Mo libres. Sans effet sous Linux et macOS.
 DISK_MIN_MB ?= 1536
 .PHONY: disk-check
 disk-check:
-	@free=$$(docker run --rm alpine:3 df -k / 2>/dev/null | awk 'NR==2 {print int($$4/1024)}'); \
+	@free=$$(MSYS_NO_PATHCONV=1 docker run --rm alpine:3 df -k / 2>/dev/null | awk 'NR==2 {print int($$4/1024)}'); \
 	if [ -z "$$free" ] || { [ "$$free" -lt $(DISK_MIN_MB) ] && [ -z "$(FORCE)" ]; }; then \
 		echo "Le disque de Docker est presque plein : $${free:-0} Mo libres, $(DISK_MIN_MB) Mo au moins sont nécessaires."; \
 		echo "Sinon un build échoue, ou un conteneur ne peut plus écrire et redémarre en boucle."; \

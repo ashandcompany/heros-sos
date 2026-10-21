@@ -2003,6 +2003,8 @@ export interface components {
         IncidentPayload: {
             /** Format: int32 */
             typeId: number;
+            /** @description Titre court, affiché dans les listes. */
+            title: string;
             description: string;
             /**
              * Format: int32
@@ -2031,6 +2033,8 @@ export interface components {
             typeId: number;
             typeCode?: string;
             typeLabel?: string;
+            /** @description Titre court de l'incident ; vide pour un incident déclaré avant son introduction. */
+            title: string;
             description: string;
             /** @enum {string} */
             status: "reported" | "in_progress" | "succeeded" | "failed";

@@ -22,6 +22,8 @@ import (
 
 const (
 	entityType = "incident"
+	// titleMaxLength borne le titre affiché dans les listes (même limite que le frontend).
+	titleMaxLength = 80
 	// futureTolerance absorbe le décalage d'horloge entre le navigateur et le serveur.
 	futureTolerance = time.Minute
 )
@@ -65,6 +67,7 @@ func NewService(deps ServiceDeps) *Service { return &Service{ServiceDeps: deps} 
 // CreateInput est la saisie d'une déclaration (valeurs brutes, non validées).
 type CreateInput struct {
 	TypeID            int16
+	Title             string
 	Description       string
 	CitizensRescued   int16
 	Street            string
@@ -110,6 +113,11 @@ func (s *Service) Create(ctx context.Context, reporterID uuid.UUID, in CreateInp
 func (s *Service) validate(ctx context.Context, in CreateInput, now time.Time) (*Incident, error) {
 	var fields validation.Collector
 	created := &Incident{}
+
+	var code string
+	if created.Title, code = validation.RequiredText(in.Title, titleMaxLength); code != "" {
+		fields.Add("title", code)
+	}
 
 	created.Description = strings.TrimSpace(in.Description)
 	if created.Description == "" {
@@ -225,7 +233,7 @@ func (s *Service) notify(ctx context.Context, created *Incident) {
 		if to == reporter.Email {
 			continue
 		}
-		if err := s.Notifier.SendIncidentReported(ctx, to, created.Description, created.TypeLabel); err != nil {
+		if err := s.Notifier.SendIncidentReported(ctx, to, created.Title, created.TypeLabel); err != nil {
 			s.Logger.ErrorContext(ctx, "notification d'incident impossible", "incident_id", created.ID, "error", err)
 		}
 	}

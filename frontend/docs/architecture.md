@@ -5,27 +5,27 @@ Ce document explique **comment les pièces s'articulent**. Pour démarrer le pro
 
 ## Vue d'ensemble
 
-```
-Navigateur
-   │  requête
-   ▼
-src/proxy.ts ──────────────► redirige si l'accès n'est pas autorisé (rôle, visiteur)
-   │
-   ▼
-src/app/**/page.tsx  (Server Components, rendus sous <Suspense>)
-   │  lisent la session avec lib/server-session.ts
-   │  lisent les données avec lib/api/
-   ▼
-src/components/**    (Server Components par défaut, "use client" seulement si nécessaire)
-   │  <form action={…}>
-   ▼
-src/app/actions/*.ts (Server Actions)
-   │  requireXxxSession() → validation (lib/validation/) → lib/api/
-   ▼
-src/lib/api/*.ts     (seule couche qui connaît les mocks et l'API Go)
-   ▼                          ▼
-src/mocks/*.ts         API REST Go, via lib/api/http.ts (si API_URL est renseignée :
-(données fictives)     comptes et session aujourd'hui, voir backend-contract.md)
+```mermaid
+flowchart TB
+    nav(["<b>Navigateur</b>"])
+    proxy["<b>src/proxy.ts</b><br/>contrôle d'accès"]
+    redirect["redirection<br/>(rôle, visiteur)"]
+    pages["<b>src/app/**/page.tsx</b><br/>Server Components sous #lt;Suspense#gt;<br/>lisent la session et les données"]
+    components["<b>src/components/**</b><br/>serveur par défaut,<br/>#quot;use client#quot; si nécessaire"]
+    actions["<b>src/app/actions/*.ts</b><br/>Server Actions<br/>session → validation → lib/api"]
+    api["<b>src/lib/api/*.ts</b><br/>seule couche qui connaît<br/>les mocks et l'API Go"]
+    mocks[("<b>src/mocks/*.ts</b><br/>données fictives")]
+    go["<b>API REST Go</b><br/>via lib/api/http.ts"]
+
+    nav -->|"requête"| proxy
+    proxy -.->|"accès refusé"| redirect
+    proxy --> pages
+    pages --> components
+    components -->|"#lt;form action#gt;"| actions
+    pages -->|"lecture"| api
+    actions -->|"écriture"| api
+    api -->|"API_URL vide"| mocks
+    api -->|"API_URL renseignée"| go
 ```
 
 Tout le code qui touche aux données ou à la session s'exécute **côté serveur**. Les composants
@@ -102,13 +102,15 @@ efface le cookie **avec ses attributs** : un cookie `__Host-` ne s'efface que pa
    données protégées revérifie le rôle au plus près des données. Le proxy n'est **pas** une
    barrière de sécurité suffisante à lui seul.
 
+> [!WARNING]
 > Le `matcher` de `proxy.ts` doit contenir des **valeurs littérales** (analysées au build) : si
 > vous ajoutez un espace protégé, ajoutez-le à la fois dans `protectedAreas` et dans `matcher`.
 
 ### Règle d'or
 
-Une Server Action qui modifie des données **commence par `requireXxxSession()`**. C'est ce qui
-fournit le jeton à transmettre à `lib/api/`, et c'est la vraie vérification d'autorisation.
+> [!IMPORTANT]
+> Une Server Action qui modifie des données **commence par `requireXxxSession()`**. C'est ce qui
+> fournit le jeton à transmettre à `lib/api/`, et c'est la vraie vérification d'autorisation.
 
 ## Couche de données : `src/lib/api/`
 
@@ -147,24 +149,45 @@ Listes paginées : [pagination.ts](../src/lib/api/pagination.ts) (`pageQuery`, `
 Le contrat d'API est décrit dans [backend/openapi/openapi.yaml](../../backend/openapi/openapi.yaml) ;
 ce qui est branché et ce qui reste à faire, dans [backend-contract.md](./backend-contract.md).
 
+> [!NOTE]
 > Avec l'API, les domaines encore mockés reçoivent une session réelle, mais leurs données sont
-> indexées par les comptes mock : `asMockDataUser` donne au vrai compte l'identifiant du compte
-> mock de son rôle (voir [backend-contract.md](./backend-contract.md#domaines-encore-mockés-avec-une-session-réelle)).
+> indexées par les comptes mock : un vrai compte n'y retrouve rien (listes vides, 404 sur les
+> profils ; voir [backend-contract.md](./backend-contract.md#domaines-encore-mockés-avec-une-session-réelle)).
 
 ## Formulaires et Server Actions
 
 Le motif utilisé partout :
 
+```mermaid
+sequenceDiagram
+    participant C as Composant client<br/>("use client")
+    participant A as Server Action<br/>("use server")
+    participant L as lib/api
+
+    Note over C: useActionState(action, idleFormState)<br/>#lt;form action={formAction}#gt;
+    C->>A: envoi du formulaire (FormData)
+    A->>A: 1. token = await requireCitizenSession()
+    A->>A: 2. lire le FormData (readXxxValues)
+    A->>A: 3. valider (validateXxx → fieldErrors)
+    alt erreurs de saisie
+        A-->>C: { status: "error", fieldErrors, values }
+    else saisie valide
+        A->>L: 4. appel avec le jeton
+        L-->>A: { ok: false, error } ou { ok: true, … }
+        A-->>C: 5. { status: "error", message }<br/>ou revalidatePath(…) puis { status: "success", message }
+    end
+    Note over C: TextField error={…}, SubmitButton,<br/>FormMessage state={state}
 ```
-composant client ("use client")        Server Action ("use server")
-───────────────────────────────        ─────────────────────────────────────────
-useActionState(action, idleFormState)  1. const token = await requireCitizenSession()
-<form action={formAction}>             2. lire le FormData (readXxxValues)
-  <TextField error={…} />              3. valider (validateXxx → fieldErrors)
-  <SubmitButton>                       4. si erreurs → { status:"error", fieldErrors, values }
-  <FormMessage state={state} />        5. appeler lib/api → si !ok → { status:"error", message }
-</form>                                6. revalidatePath(…) puis { status:"success", message }
-```
+
+Côté composant : `useActionState(action, idleFormState)`, un `<form action={formAction}>`, des champs
+qui affichent `error`, un `SubmitButton` et un `FormMessage`. Côté action, dans l'ordre :
+
+1. `const token = await requireCitizenSession()` (ou le rôle voulu) ;
+2. lire le `FormData` (`readXxxValues`) ;
+3. valider (`validateXxx` → `fieldErrors`) ; en cas d'erreur, renvoyer
+   `{ status: "error", fieldErrors, values }` ;
+4. appeler `lib/api` ; si `!ok`, renvoyer `{ status: "error", message }` ;
+5. `revalidatePath(…)`, puis renvoyer `{ status: "success", message }`.
 
 - **`FormState<Field>`** ([form-state.ts](../src/lib/validation/form-state.ts)) est le contrat
   entre action et composant : `status`, `message` global, `fieldErrors` par champ, `values` pour
@@ -193,34 +216,79 @@ useActionState(action, idleFormState)  1. const token = await requireCitizenSess
 
 ## Autres mécanismes à connaître
 
-| Sujet                   | Où                                                                          | À savoir                                                                                                                                                                                                                                                                                                                                                           |
-| ----------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Thème clair / sombre    | [lib/theme.ts](../src/lib/theme.ts), `ThemeToggle`                          | Choix en `localStorage`, appliqué par un script dans `<head>` (anti-flash). Sombre par défaut                                                                                                                                                                                                                                                                      |
-| Design tokens           | bloc `@theme` de [globals.css](../src/app/globals.css)                      | Voir [ui.md](./ui.md#design-tokens)                                                                                                                                                                                                                                                                                                                                |
-| Autocomplétion adresse  | `app/api/adresses/route.ts`, `lib/geocoding.ts`                             | Relais vers la Base Adresse Nationale (Géoplateforme IGN), cache 10 min, IP des visiteurs non transmise                                                                                                                                                                                                                                                            |
-| Géocodage d'un incident | `geocodeLocation` dans `lib/geocoding.ts`                                   | À la déclaration et quand la modération change le lieu : adresse + ville → `location.coordinates` (BAN). Échec : incident sans position, déclaration acceptée quand même                                                                                                                                                                                           |
-| Carte des incidents     | `app/carte` (publique), `app/heros/carte`, `components/map/`, `lib/map.ts`  | Leaflet chargé côté navigateur uniquement. Fond de carte : `MAP_TILE_URL` (OpenStreetMap par défaut, voir la politique d'usage dans `lib/map.ts`). Espace pro : position exacte, adresse, héros en intervention (position = lieu de l'intervention, aucun suivi GPS). Carte publique : incidents validés seulement, position arrondie à ~1 km, ni adresse ni héros |
-| Assainissement HTML     | [lib/sanitize.ts](../src/lib/sanitize.ts)                                   | Articles de blog (éditeur Tiptap) : à passer avant tout affichage public                                                                                                                                                                                                                                                                                           |
-| Newsletter              | cookie `newsletter_subscribed`                                              | Mémorise l'inscription côté navigateur                                                                                                                                                                                                                                                                                                                             |
-| Pages légales           | `app/mentions-legales`, `app/confidentialite`, `components/legal/LegalPage` | `LegalPage` reçoit un titre, la date ISO de mise à jour (`updatedAt`) et des sections (`id`, `title`, `content`) : il génère le sommaire et les ancres. Mettre `updatedAt` à jour à chaque modification du texte                                                                                                                                                   |
-| Formulaire de contact   | `app/contact`, `actions/contact.ts`, `lib/validation/contact.ts`            | Public (sans session). `sendContactMessage` est encore mocké : le message n'est envoyé nulle part                                                                                                                                                                                                                                                                  |
+### Thème clair / sombre
+
+**Où :** [lib/theme.ts](../src/lib/theme.ts), `ThemeToggle`.
+
+Sombre par défaut. Le choix est gardé en `localStorage` et appliqué par un script dans `<head>`
+(anti-flash).
+
+### Design tokens
+
+**Où :** bloc `@theme` de [globals.css](../src/app/globals.css). Voir
+[ui.md](./ui.md#design-tokens).
+
+### Adresses : autocomplétion et géocodage
+
+**Où :** `app/api/adresses/route.ts`, `lib/geocoding.ts` (`geocodeLocation`).
+
+- **Autocomplétion** : relais vers la Base Adresse Nationale (Géoplateforme IGN), cache de 10 min,
+  l'IP des visiteurs n'est pas transmise.
+- **Géocodage d'un incident** : à la déclaration et quand la modération change le lieu, adresse +
+  ville → `location.coordinates` (BAN). En cas d'échec, l'incident n'a pas de position, mais la
+  déclaration est acceptée quand même.
+
+### Carte des incidents
+
+**Où :** `app/carte` (publique), `app/heros/carte`, `components/map/`, `lib/map.ts`.
+
+- Leaflet est chargé côté navigateur uniquement.
+- Fond de carte : `MAP_TILE_URL` (OpenStreetMap par défaut, voir la politique d'usage dans
+  `lib/map.ts`).
+- **Espace pro** : position exacte, adresse, héros en intervention (position = lieu de
+  l'intervention, aucun suivi GPS).
+- **Carte publique** : incidents validés seulement, position arrondie à ~1 km, ni adresse ni héros.
+
+### Assainissement HTML
+
+**Où :** [lib/sanitize.ts](../src/lib/sanitize.ts).
+
+Les articles de blog (éditeur Tiptap) passent par cette fonction avant tout affichage public.
+
+### Newsletter
+
+**Où :** cookie `newsletter_subscribed`, qui mémorise l'inscription côté navigateur.
+
+### Pages légales
+
+**Où :** `app/mentions-legales`, `app/confidentialite`, `components/legal/LegalPage`.
+
+`LegalPage` reçoit un titre, la date ISO de mise à jour (`updatedAt`) et des sections (`id`,
+`title`, `content`) : il génère le sommaire et les ancres. Mettre `updatedAt` à jour à chaque
+modification du texte.
+
+### Formulaire de contact
+
+**Où :** `app/contact`, `actions/contact.ts`, `lib/validation/contact.ts`.
+
+Public (sans session). `sendContactMessage` est encore mocké : le message n'est envoyé nulle part.
 
 ## Checklists
 
-**Ajouter une page protégée**
+### Ajouter une page protégée
 
 1. Créer `src/app/<espace>/<page>/page.tsx` avec `metadata` et un contenu sous `<Suspense>`.
 2. Ajouter la route dans `routes.ts` (et dans la sous-navigation du rôle).
 3. Dans le composant de contenu, appeler `requireRole(...)` avant de lire des données.
 
-**Ajouter un formulaire**
+### Ajouter un formulaire
 
 1. Types et limites dans `lib/validation/<domaine>.ts` (`Field`, `readValues`, `validate`).
 2. Fonction d'accès dans `lib/api/<domaine>.ts` (avec le commentaire de l'endpoint futur).
 3. Server Action dans `app/actions/<domaine>.ts` (voir le schéma ci-dessus).
 4. Composant client avec les champs de [ui.md](./ui.md), `SubmitButton` et `FormMessage`.
 
-**Brancher une fonction à l'API Go**
+### Brancher une fonction à l'API Go
 
 1. Garder la signature ; appeler `apiFetch()` si `isApiEnabled`, le mock sinon.
 2. Mapper les `ApiError` vers le `{ ok: false, error }` existant.

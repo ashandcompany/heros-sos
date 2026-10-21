@@ -11,7 +11,8 @@
 # recopiées (1,4 Go) dans ce volume à chaque création du conteneur : de quoi remplir le disque de Docker.
 # Le site lit aussi backend/STACK.md, MVP.md, TABLES.md et openapi/openapi.yaml : le service `docs-sync`
 # les recopie dans un volume monté en lecture seule (/app/backend). Jamais copiés dans l'image, et jamais
-# avec le reste de backend/ (le .env n'a rien à faire dans ce conteneur).
+# avec le reste de backend/ (le .env n'a rien à faire dans ce conteneur). Même chose pour frontend/README.md
+# et frontend/docs/*.md, montés dans /app/frontend.
 #
 # Même version de Node que le front (frontend/Dockerfile).
 

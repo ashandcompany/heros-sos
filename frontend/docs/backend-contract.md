@@ -7,12 +7,12 @@ branchement. À mettre à jour à chaque fonction branchée.
 
 > [!NOTE]
 > État au 21/10/2026 : **identité (inscription, activation, connexion, session, mot de passe),
-> demandes de super-héros, fiches publiques des super-héros, modération des comptes, types
-> d'incident, incidents et interventions (hors écrans publics), vidéothèque et avis sont branchés**
-> sur l'API dès que `API_URL` est renseignée (tableau ci-dessous). Le compte (profil, photo,
-> changement d'e-mail), le blog, le contact et la newsletter ont maintenant leurs routes dans le
-> contrat mais ne sont **pas encore branchés**. Le reste fonctionne encore sur des mocks, y compris
-> avec l'API.
+> demandes de super-héros, fiches publiques des super-héros, modération des comptes, compte
+> (profil, photo, changement d'e-mail, newsletter), types d'incident, incidents et interventions
+> (hors écrans publics), vidéothèque et avis sont branchés** sur l'API dès que `API_URL` est
+> renseignée (tableau ci-dessous). Le blog, le contact et la newsletter publique ont maintenant
+> leurs routes dans le contrat mais ne sont **pas encore branchés**. Le reste fonctionne encore sur
+> des mocks, y compris avec l'API.
 
 ## 1. Couverture : ce qui est dans le contrat, et le reste
 
@@ -32,6 +32,7 @@ tableaux de bord, fiches complètes du back-office) n'ont pas encore de contrat.
 | Mot de passe oublié (demande, jeton)  | `auth.ts`                                | `/auth/password-reset`, `/auth/password-reset/confirm`                                                                  |
 | Demande de statut super-héros         | `hero-requests.ts`                       | `/heroes/requests`, `/heroes/requests/me`, `/admin/hero-requests/*`                                                     |
 | Comptes (désactivation, vérification) | `user-moderation.ts`                     | `/admin/users`, `/admin/users/{id}/deactivate`, `…/reactivate`, `…/verify`                                              |
+| Profil, photo, changements d'email    | `account.ts`, `super-heroes.ts` (§ 3)    | `/me`, `/me/avatar`, `/avatars/{name}`, `/me/email-change-requests`, `/me/newsletter`, `/admin/email-change-requests/*` |
 | Incidents, interventions, équipes     | `incidents.ts`, `interventions.ts` (§ 3) | `/incidents/*`, `/interventions/*`, `/admin/interventions/{id}/decision`                                                |
 | Types d'incident                      | `incident-types.ts`                      | `/intervention-types`, `/admin/intervention-types`                                                                      |
 | Notes et avis                         | `reviews.ts` (§ 3)                       | `/me/interventions`, `/interventions/{id}/reviews`, `/hero/reviews*`, `/heroes/{heroId}/reviews`, `/admin/hero-review*` |
@@ -46,6 +47,10 @@ Fonctions de chaque fichier :
 - `hero-requests.ts` : `requestHeroStatus`, `getMyHeroRequest`, `getHeroApplications`,
   `reviewHeroApplication`.
 - `user-moderation.ts` : `getAccounts`, `moderateAccount`.
+- `account.ts` : `getMyAccount`, `updateMyContact`, `updateMyAvatar`, `requestEmailChange`,
+  `updateNewsletterPreference`, `getEmailChangeRequests`, `reviewEmailChange` ;
+  `super-heroes.ts` (espace héros) : `getMyHeroProfile`, `updateMyHeroContact`,
+  `updateMyHeroAvatar`, `requestHeroEmailChange`.
 - `incident-types.ts` : `getIncidentTypes`, `getAllIncidentTypes`, `createIncidentType`.
 - `reviews.ts` : `getMyInterventions`, `rateIntervention`, `getMyReputation`, `replyToReview`,
   `getHeroPublicReviews`, `getReviewsForModeration`, `moderateReview`, `getRepliesForModeration`,
@@ -57,17 +62,16 @@ Fonctions de chaque fichier :
 
 ### ⏳ Encore sur les mocks (ou à faire)
 
-| Domaine frontend                   | Fonctions `lib/api/`                                                                                                                                                                                                                                                                  | Contrat OpenAPI                                                                                                                                                                                              | État    |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- |
-| Incidents publics (accueil, carte) | `incidents.ts` : `getLatestResolvedIncidents`, `getOngoingIncidents`, `getPublicIncidentMap`, `getResolvedIncidentsByHero`, `getIncidentsByVillain`                                                                                                                                   | ❌ aucun (routes réservées aux comptes connectés)                                                                                                                                                            | mock    |
-| Fiches complètes super-héros       | `super-heroes.ts` : `getSuperHeroProfiles` (back-office)                                                                                                                                                                                                                              | ❌ aucun                                                                                                                                                                                                     | mock    |
-| Profil, photo, changements d'email | `account.ts` : `getMyAccount`, `updateMyContact`, `updateMyAvatar`, `requestEmailChange`, `updateNewsletterPreference`, `getEmailChangeRequests`, `reviewEmailChange` ; `super-heroes.ts` : `getMyHeroProfile`, `updateMyHeroContact`, `updateMyHeroAvatar`, `requestHeroEmailChange` | `GET /me`, `PATCH /me`, `PUT /me/avatar`, `GET /avatars/{name}`, `POST /me/email-change-requests`, `PUT /me/newsletter`, `/admin/email-change-requests/*` (un héros utilise les mêmes routes que le citoyen) | à faire |
-| Tableau de bord héros, modération  | `hero-dashboard.ts`, `moderation.ts`                                                                                                                                                                                                                                                  | ❌ aucun (statistiques)                                                                                                                                                                                      | mock    |
-| Blog                               | `blog.ts` : `getPublishedArticles`, `getPublishedArticle`, `getAllArticles`, `getArticle`, `createArticle`, `updateArticle`, `deleteArticle`                                                                                                                                          | `GET /articles`, `GET /articles/{slug}`, `/admin/articles`, `/admin/articles/{id}`                                                                                                                           | à faire |
-| Newsletter                         | `newsletter.ts` : `subscribeToNewsletter`                                                                                                                                                                                                                                             | `POST /newsletter/subscriptions`, `POST /newsletter/subscriptions/confirm`                                                                                                                                   | à faire |
-| Formulaire de contact              | `contact.ts` : `sendContactMessage`                                                                                                                                                                                                                                                   | `POST /contact/messages`                                                                                                                                                                                     | à faire |
-| Déconnexion de tous les appareils  | aucune (pas d'écran)                                                                                                                                                                                                                                                                  | `POST /auth/logout-all`                                                                                                                                                                                      | à faire |
-| Films des super-vilains            | aucune (pas d'écran)                                                                                                                                                                                                                                                                  | `GET /villains/{villainId}/films`, `POST /admin/villain-films`, `DELETE /admin/villains/{villainId}/films/{filmId}`                                                                                          | à faire |
+| Domaine frontend                   | Fonctions `lib/api/`                                                                                                                                | Contrat OpenAPI                                                                                                     | État    |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------- |
+| Incidents publics (accueil, carte) | `incidents.ts` : `getLatestResolvedIncidents`, `getOngoingIncidents`, `getPublicIncidentMap`, `getResolvedIncidentsByHero`, `getIncidentsByVillain` | ❌ aucun (routes réservées aux comptes connectés)                                                                   | mock    |
+| Fiches complètes super-héros       | `super-heroes.ts` : `getSuperHeroProfiles` (back-office)                                                                                            | ❌ aucun                                                                                                            | mock    |
+| Tableau de bord héros, modération  | `hero-dashboard.ts`, `moderation.ts`                                                                                                                | ❌ aucun (statistiques)                                                                                             | mock    |
+| Blog                               | `blog.ts` : `getPublishedArticles`, `getPublishedArticle`, `getAllArticles`, `getArticle`, `createArticle`, `updateArticle`, `deleteArticle`        | `GET /articles`, `GET /articles/{slug}`, `/admin/articles`, `/admin/articles/{id}`                                  | à faire |
+| Newsletter                         | `newsletter.ts` : `subscribeToNewsletter`                                                                                                           | `POST /newsletter/subscriptions`, `POST /newsletter/subscriptions/confirm`                                          | à faire |
+| Formulaire de contact              | `contact.ts` : `sendContactMessage`                                                                                                                 | `POST /contact/messages`                                                                                            | à faire |
+| Déconnexion de tous les appareils  | aucune (pas d'écran)                                                                                                                                | `POST /auth/logout-all`                                                                                             | à faire |
+| Films des super-vilains            | aucune (pas d'écran)                                                                                                                                | `GET /villains/{villainId}/films`, `POST /admin/villain-films`, `DELETE /admin/villains/{villainId}/films/{filmId}` | à faire |
 
 > [!WARNING]
 > Les « Future implémentation » écrites dans les commentaires de `lib/api/` pour les domaines non
@@ -138,10 +142,9 @@ vrai identifiant, n'y retrouve rien de lui. Aucun compte réel n'emprunte l'iden
 mock, donc personne ne voit les données d'un autre.
 
 > [!WARNING]
-> Conséquence, tant que ces domaines ne sont pas branchés : listes vides (tableau de bord héros…),
-> et **erreur 404** sur les écrans qui exigent un profil mock : modification du compte citoyen
-> (contact, photo, email), « Mon profil » et ses formulaires côté héros (`findMyAccount`,
-> `findMyProfile`). La photo de la barre de navigation retombe sur les initiales.
+> Conséquence, tant que ces domaines ne sont pas branchés : listes vides (tableau de bord héros…).
+> Le compte (« Mon compte », « Mon profil », photo de la barre de navigation) est branché et
+> n'est plus concerné.
 
 ### Rôles : deux vocabulaires
 
@@ -228,9 +231,8 @@ qu'un seul `GET /auth/me`.
 - **Comptes** : le contrat ne connaît pas « à contrôler / validé / rejeté », mais un état
   (`pending_activation | active | deactivated` → `AccountStatus`) et une vérification à part
   (`verifiedAt`, sans route pour l'annuler). Le tableau de bord ne compte donc plus les « comptes à
-  contrôler » avec l'API (tuile masquée). Les **changements d'email** ont leurs routes
-  (`/admin/email-change-requests/*`) mais ne sont pas encore branchés : la section est masquée
-  avec l'API (`getEmailChangeRequests` renvoie `null`).
+  contrôler » avec l'API (tuile masquée). Les **changements d'email** sont branchés : voir
+  « Compte : choix du branchement ».
 - **Types d'incident** : plus aucune liste en dur. Un incident embarque son type (`{ code, label }`,
   `typeCode` et `typeLabel` de l'API) ; les formulaires reçoivent la liste du référentiel et envoient
   son `id` (`typeId`). Le référentiel est **vide** dans une base neuve : tant qu'un modérateur n'a
@@ -252,9 +254,49 @@ qu'un seul `GET /auth/me`.
   `updateIncidentAction`) prend ses héros dans `getIncidentHeroes` (mocks), pas dans
   `getSuperHeroes` : les incidents mockés référencent les identifiants mock. À supprimer en
   branchant les incidents.
-- **Pas encore branché** : espace héros (`getMyHeroProfile`, coordonnées, photo, changement
-  d'email), dont les routes existent (`/me`, `/me/avatar`, `/me/email-change-requests`), et
-  fiches complètes du back-office (`getSuperHeroProfiles`), faute de route.
+- **Pas encore branché** : fiches complètes du back-office (`getSuperHeroProfiles`), faute de
+  route. L'espace héros (« Mon profil ») est branché : voir « Compte : choix du branchement ».
+
+### Compte : choix du branchement
+
+- **Un compte, quel que soit le rôle** : citoyen et super-héros lisent leur profil avec `GET /me`
+  et le modifient par les mêmes routes. Les fonctions de l'espace héros (`super-heroes.ts`)
+  délèguent à celles de `account.ts` (`putAvatar`, `postEmailChangeRequest`, `updateMyContact`).
+  Pour un héros, `hero.alias` et `hero.bio` (→ `power`) viennent du même appel ; le pseudo et la
+  description ne se modifient pas depuis l'espace héros (aucune route).
+- **Un seul `GET /me` par rendu** : `getApiAccount` est mémorisé (`cache` de React), la page de
+  profil et la photo de la barre de navigation (`getMyAvatar`) le partagent.
+- **Conversion** : `createdAt` → `registeredAt` ; `pendingEmail`, `avatarUrl` et
+  `address.complement` absents → `null`. Côté héros, une adresse vide (compte créé hors
+  inscription) donne `address: null`.
+- **Complément d'adresse** (`PATCH /me`) : `null` conserve le complément actuel, `""` l'efface.
+  Le formulaire citoyen envoie toujours la valeur saisie (champ vidé = complément effacé) ; celui
+  du héros, qui n'a pas ce champ, envoie `null`.
+- **Photo** : `PUT /me/avatar` reçoit **l'image brute** (option `rawBody` d'`apiFetch`, avec son
+  `Content-Type`), déjà recadrée en 256 px dans le navigateur (`cropAvatar`). L'API la ré-encode
+  en JPEG et renvoie une nouvelle adresse à chaque envoi.
+- **Adresse des photos** : `avatarUrl` est un chemin de l'API (`/api/v1/avatars/…`). Derrière le
+  proxy, c'est la même origine que le site ; sans proxy (`npm run dev` sur le port 3000), un
+  rewrite de `next.config.ts` les relaie vers `API_URL`. `Avatar` désactive l'optimisation de
+  `next/image` (`unoptimized`) : le serveur Next ne sert pas `/api/v1` en production.
+- **Changement d'email** : une nouvelle demande remplace la précédente ; « Mon compte » et « Mon
+  profil » affichent `pendingEmail`. La modération (`/admin/comptes#emails`) lit toutes les pages
+  de `GET /admin/email-change-requests?status=pending` et décide sur l'**identifiant de la
+  demande** (`EmailChangeRequest.id`), pas sur celui du compte. Le tableau de bord compte les
+  demandes en attente (`total`).
+- **Erreurs** :
+
+  | Code API (statut)                      | Message affiché                                       |
+  | -------------------------------------- | ----------------------------------------------------- |
+  | `validation_failed` (422), `PATCH /me` | Message par champ (`mobilePhone`, `address.city`…)    |
+  | `validation_failed` (422), `avatar`    | `invalid` : image illisible ; `too_large` : > 1024 px |
+  | `payload_too_large` (413), photo       | L'image ne doit pas dépasser 2 Mo                     |
+  | `email_unchanged` (409)                | C'est déjà votre adresse email actuelle               |
+  | `email_already_used` (409), demande    | Adresse déjà utilisée par un autre compte             |
+  | `email_already_used` (409), validation | Adresse prise entre-temps : refuser la demande        |
+  | `email_change_not_pending` (409)       | Demande déjà traitée                                  |
+  | `email_change_not_found` (404)         | Demande introuvable (remplacée par son titulaire)     |
+  | autre                                  | `apiFailureMessage(toApiFailure(…))`                  |
 
 ### Vidéothèque : choix du branchement
 

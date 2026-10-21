@@ -98,6 +98,24 @@ export interface SuperHeroProfile extends SuperHero {
   lastInterventionAt: string | null;
 }
 
+/** « Mon profil » d'un super-héros : son compte (`GET /me`) et son profil public. */
+export type MyHeroProfile = Pick<
+  SuperHeroProfile,
+  | "id"
+  | "alias"
+  | "avatarUrl"
+  | "power"
+  | "firstName"
+  | "lastName"
+  | "civility"
+  | "birthDate"
+  | "email"
+  | "pendingEmail"
+  | "mobilePhone"
+  | "address"
+  | "registeredAt"
+>;
+
 /** Tableau de bord professionnel d'un super-héros. */
 export interface HeroDashboard {
   /** Statistiques de toute la plateforme. */

@@ -4,7 +4,6 @@ import { getMyAccount } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { requireCitizenSession } from "@/lib/server-session";
 import { civilityOptions } from "@/lib/validation/signup";
-import type { CitizenAccount } from "@/types";
 import { AvatarForm, ContactForm, EmailChangeForm, NewsletterSettingsForm } from "./AccountForms";
 
 export function Panel({
@@ -35,45 +34,7 @@ export function Panel({
 /** Contenu de « Mon compte ». Lit la session : à rendre sous <Suspense>. */
 export async function AccountDetails() {
   const token = await requireCitizenSession();
-  const { firstName, email, profile } = await getMyAccount(token);
-
-  return profile ? (
-    <FullAccountDetails account={profile} />
-  ) : (
-    <PartialAccountDetails firstName={firstName} email={email} />
-  );
-}
-
-/**
- * Avec l'API : seuls le prénom et l'email sont disponibles (`GET /auth/me`). Le reste du profil et
- * les formulaires de modification sont masqués plutôt que remplis avec les données d'un autre compte.
- */
-function PartialAccountDetails({ firstName, email }: { firstName: string; email: string }) {
-  return (
-    <div className="grid gap-6 lg:grid-cols-[20rem_1fr] lg:items-start">
-      <Panel id="photo-title" title="Profil">
-        <div className="flex items-center gap-4">
-          <Avatar name={firstName} src={null} size={80} />
-          <p className="font-display text-lg font-semibold">{firstName}</p>
-        </div>
-      </Panel>
-
-      <div className="space-y-6">
-        <Panel id="email-title" title="Adresse email">
-          <p className="text-sm text-muted">Adresse actuelle</p>
-          <p className="font-medium break-all">{email}</p>
-        </Panel>
-
-        <p className="border-2 border-dashed border-border px-5 py-4 text-sm text-muted">
-          Vos informations personnelles, vos coordonnées, votre photo et vos préférences de
-          newsletter seront bientôt consultables et modifiables ici.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function FullAccountDetails({ account }: { account: CitizenAccount }) {
+  const account = await getMyAccount(token);
   const civility = civilityOptions.find(({ value }) => value === account.civility)?.label;
   const fullName = `${account.firstName} ${account.lastName}`;
 

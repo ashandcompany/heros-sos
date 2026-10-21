@@ -22,9 +22,9 @@ async function countPending(path: string, token: string): Promise<number> {
 /**
  * Compteurs du tableau de bord : éléments en attente dans chaque section du back-office.
  * Avec l'API, les demandes de super-héros (`GET /admin/hero-requests`), les films
- * (`GET /admin/hero-films`) et les réponses des héros à vérifier
- * (`GET /admin/hero-review-replies`) sont comptés par le `total` de leur liste ; les comptes à
- * contrôler et les changements d'email n'ont pas d'équivalent (`null` : tuile masquée) ; les
+ * (`GET /admin/hero-films`), les réponses des héros à vérifier (`GET /admin/hero-review-replies`)
+ * et les changements d'email (`GET /admin/email-change-requests`) sont comptés par le `total` de
+ * leur liste ; les comptes à contrôler n'ont pas d'équivalent (`null` : tuile masquée) ; les
  * autres compteurs restent mockés.
  * Future implémentation : `GET ${API_URL}/admin/moderation/summary`
  */
@@ -39,10 +39,11 @@ export async function getModerationSummary(token: string): Promise<ModerationSum
   };
 
   if (isApiEnabled) {
-    const [applications, videos, comments] = await Promise.all([
+    const [applications, videos, comments, emailChanges] = await Promise.all([
       getHeroApplications(token, { status: "en-attente", limit: 1 }),
       countPending("/admin/hero-films", token),
       countPending("/admin/hero-review-replies", token),
+      countPending("/admin/email-change-requests", token),
     ]);
     return {
       ...mocked,
@@ -50,7 +51,7 @@ export async function getModerationSummary(token: string): Promise<ModerationSum
       videos,
       comments,
       accounts: null,
-      emailChanges: null,
+      emailChanges,
     };
   }
 

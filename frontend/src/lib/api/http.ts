@@ -40,6 +40,11 @@ interface ApiRequest {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   /** Corps envoyé en JSON. */
   body?: unknown;
+  /**
+   * Corps envoyé tel quel (une image pour `PUT /me/avatar`), à la place de `body`. Son type se
+   * donne dans `headers` (`Content-Type`).
+   */
+  rawBody?: Blob;
   /** Jeton de session : transmis dans le cookie que l'API attend, jamais dans `Authorization`. */
   sessionToken?: string;
   /**
@@ -78,7 +83,7 @@ export async function apiFetch(path: string, request: ApiRequest = {}): Promise<
   const response = await fetch(`${API_URL}${path}`, {
     method,
     headers,
-    body: request.body === undefined ? undefined : JSON.stringify(request.body),
+    body: request.body === undefined ? request.rawBody : JSON.stringify(request.body),
     cache: "no-store",
     signal: AbortSignal.timeout(API_TIMEOUT_MS),
   });

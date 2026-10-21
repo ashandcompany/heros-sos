@@ -57,6 +57,7 @@ import { OUTCOME_NOTES_MAX_LENGTH, validateRejectionReason } from "@/lib/validat
 import type {
   AccountModerationAction,
   AccountModerationResult,
+  EmailChangeReviewResult,
   HeroReviewResult,
   ModerationStatus,
   MutationResult,
@@ -346,11 +347,29 @@ export async function reviewEmailChangeAction(
 
   const approve = request.decision === "valide";
   const result = await reviewEmailChange(token, request.id, approve);
+  if (!result.ok) {
+    return { status: "error", message: emailChangeReviewErrorMessage(result), fieldErrors: {} };
+  }
   return settle(
     result,
     [routes.adminAccounts],
     approve ? "Nouvelle adresse email activée." : "Changement d'adresse email refusé.",
   );
+}
+
+function emailChangeReviewErrorMessage(
+  result: Extract<EmailChangeReviewResult, { ok: false }>,
+): string {
+  switch (result.error) {
+    case "not-found":
+      return "Cette demande n'existe plus : son titulaire l'a peut-être remplacée. Rechargez la page.";
+    case "already-reviewed":
+      return "Cette demande a déjà été traitée.";
+    case "email-already-used":
+      return "Cette adresse est désormais utilisée par un autre compte : refusez la demande.";
+    default:
+      return apiFailureMessage(result);
+  }
 }
 
 /* ---------- Super-héros ---------- */

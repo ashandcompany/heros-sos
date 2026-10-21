@@ -23,6 +23,7 @@ func registerRoutes(router *Router, c *components) {
 	registerFilmRoutes(router, c)
 	registerAccountRoutes(router, c)
 	registerPublicMailRoutes(router, c)
+	registerBlogRoutes(router, c)
 }
 
 // protected exige une session valide (et le jeton CSRF sur les écritures) ; avec des rôles, il

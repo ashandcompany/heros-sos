@@ -407,6 +407,31 @@ func TestProductionRulesStillApplyToSecretsFromFiles(t *testing.T) {
 		t.Fatalf("la validation de production doit s'appliquer à une valeur lue depuis un fichier : %v", err)
 	}
 }
+func TestLinkPathsAndTTLsOfTheAccountFlows(t *testing.T) {
+	cfg, err := Load(fakeEnv(validEnv()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Security.Tokens.EmailChangeConfirmTTL != defaultEmailChangeConfirmTTL {
+		t.Errorf("durée du lien de confirmation d'adresse = %v", cfg.Security.Tokens.EmailChangeConfirmTTL)
+	}
+	if got, want := cfg.App.EmailChangeConfirmLink("a b"), "http://localhost:3000/changement-email/confirmation?token=a+b"; got != want {
+		t.Errorf("EmailChangeConfirmLink = %q, attendu %q", got, want)
+	}
+	if got, want := cfg.App.NewsletterUnsubscribeLink("x/y"), "http://localhost:3000/newsletter/desinscription?token=x%2Fy"; got != want {
+		t.Errorf("NewsletterUnsubscribeLink = %q, attendu %q", got, want)
+	}
+
+	env := validEnv()
+	env[envEmailChangeConfirmPath] = "/confirmer"
+	env[envNewsletterUnsubscribePath] = "/stop"
+	env[envEmailChangeConfirmTTL] = "1h"
+	cfg, err = Load(fakeEnv(env))
+	if err != nil || cfg.App.EmailChangeConfirmPath != "/confirmer" || cfg.App.NewsletterUnsubscribePath != "/stop" ||
+		cfg.Security.Tokens.EmailChangeConfirmTTL != time.Hour {
+		t.Errorf("surcharges : %+v %v", cfg.App, err)
+	}
+}
 
 // Les paramètres d'argon2 sont convertis vers des types plus étroits (uint32, uint8) : une valeur hors limites
 // doit être refusée, jamais tronquée en silence (300 threads deviendraient 44).

@@ -93,6 +93,20 @@ func (h *Handler) Confirm(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteNoContent(w)
 }
 
+// Unsubscribe traite POST /newsletter/subscriptions/unsubscribe : le lien de désinscription d'une newsletter.
+func (h *Handler) Unsubscribe(w http.ResponseWriter, r *http.Request) {
+	var body confirmRequest
+	if err := httpx.DecodeJSON(w, r, h.HTTP.MaxBodyBytes, &body); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if err := h.Service.Unsubscribe(r.Context(), body.Token); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.WriteNoContent(w)
+}
+
 func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, ErrLinkInvalid) {
 		err = httpx.NewError(http.StatusBadRequest, auth.CodeInvalidToken, "Ce lien est invalide, expiré ou déjà utilisé.")

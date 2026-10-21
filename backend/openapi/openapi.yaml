@@ -63,7 +63,7 @@ info:
     | Code | Statut | Quand |
     |---|---|---|
     | `bad_request` | 400 | JSON invalide, champ inconnu, corps vide |
-    | `invalid_token` | 400 | lien d'activation ou de réinitialisation invalide, expiré ou déjà utilisé |
+    | `invalid_token` | 400 | lien (activation, réinitialisation, confirmation ou désinscription de la newsletter, confirmation d'adresse) invalide, expiré ou déjà utilisé |
     | `unauthenticated` | 401 | session absente ou expirée |
     | `invalid_credentials` | 401 | identifiant ou mot de passe incorrect |
     | `origin_not_allowed` | 403 | `Origin` absente de la liste du serveur (écritures) |
@@ -2560,6 +2560,37 @@ paths:
                   token: collez-ici-le-jeton-du-lien-recu-par-mail
       responses:
         "204": { description: Abonnement confirmé. }
+        "400": { $ref: "#/components/responses/BadRequestOrInvalidToken" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /newsletter/subscriptions/unsubscribe:
+    post:
+      tags: [Contact et newsletter]
+      summary: Se désabonner de la newsletter
+      description: |
+        Route publique : chaque newsletter porte un lien de désinscription, qui s'ouvre sans connexion.
+        Il désigne l'abonnement (jamais l'adresse) et n'expire pas : le lien d'une ancienne newsletter
+        reste utilisable. Cliquer deux fois sur le lien réussit les deux fois. Un lien falsifié, ou fabriqué
+        pour une autre action (confirmation), répond `invalid_token`.
+
+        La désinscription garde la ligne de l'abonné : se réabonner depuis le pied de page redemande un
+        consentement (`POST /newsletter/subscriptions`, puis confirmation par lien).
+      operationId: unsubscribeFromNewsletter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TokenRequest" }
+            examples:
+              lien-recu:
+                summary: Le jeton du lien de désinscription d'une newsletter (à remplacer)
+                value:
+                  token: collez-ici-le-jeton-du-lien-recu-par-mail
+      responses:
+        "204": { description: Abonné retiré de la newsletter. }
         "400": { $ref: "#/components/responses/BadRequestOrInvalidToken" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "413": { $ref: "#/components/responses/PayloadTooLarge" }

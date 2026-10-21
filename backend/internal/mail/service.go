@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"embed"
+	"errors"
 	"fmt"
 	htmltemplate "html/template"
 	"strconv"
+	"strings"
 	texttemplate "text/template"
 	"time"
 
@@ -29,6 +31,7 @@ const (
 	templateReviewRequest      = "hero_review_request"
 	templateContactMessage     = "contact_message"
 	templateNewsletterConfirm  = "newsletter_confirmation"
+	templateNewsletter         = "newsletter"
 	templateEmailChangeConfirm = "email_change_confirmation"
 	templateEmailChangeApprove = "email_change_approved"
 	templateEmailChangeNotice  = "email_change_notice"
@@ -69,6 +72,8 @@ type templateData struct {
 	Body           string
 	// NewEmail est la nouvelle adresse d'un compte, citée dans l'avertissement envoyé à l'ancienne.
 	NewEmail string
+	// UnsubscribeLink est le lien de désinscription que porte chaque newsletter.
+	UnsubscribeLink string
 }
 
 // Service compose les mails de l'application à partir des modèles et les confie à un Mailer.
@@ -196,6 +201,21 @@ func (s *Service) SendEmailChangeNotice(ctx context.Context, to, firstName, newE
 // SendEmailChangeRejected prévient, à l'adresse actuelle, que la modération a refusé le changement.
 func (s *Service) SendEmailChangeRejected(ctx context.Context, to, firstName string) error {
 	return s.send(ctx, to, subjectEmailChangeReject, templateEmailChangeReject, templateData{FirstName: firstName})
+}
+
+// ErrMissingUnsubscribeLink indique une newsletter sans lien de désinscription : elle n'est jamais envoyée.
+var ErrMissingUnsubscribeLink = errors.New("mail : une newsletter doit porter son lien de désinscription")
+
+// SendNewsletter envoie un numéro de la newsletter à un abonné. C'est la seule façon d'en envoyer une :
+// le gabarit ajoute le lien de désinscription au corps et en-tête List-Unsubscribe, et un envoi sans ce
+// lien est refusé. body est du texte brut (échappé dans la version HTML).
+func (s *Service) SendNewsletter(ctx context.Context, to, subject, body, unsubscribeLink string) error {
+	if strings.TrimSpace(unsubscribeLink) == "" {
+		return ErrMissingUnsubscribeLink
+	}
+	return s.deliver(ctx, Message{To: to, Subject: subject, ListUnsubscribe: unsubscribeLink}, templateNewsletter, templateData{
+		Body: body, UnsubscribeLink: unsubscribeLink,
+	})
 }
 
 func (s *Service) send(ctx context.Context, to, subject, name string, data templateData) error {

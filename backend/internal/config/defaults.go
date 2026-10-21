@@ -78,8 +78,9 @@ const (
 	defaultActivationPath    = "/activation"
 	defaultPasswordResetPath = "/reinitialisation-mot-de-passe"
 
-	defaultNewsletterConfirmPath  = "/newsletter/confirmation"
-	defaultEmailChangeConfirmPath = "/changement-email/confirmation"
+	defaultNewsletterConfirmPath     = "/newsletter/confirmation"
+	defaultNewsletterUnsubscribePath = "/newsletter/desinscription"
+	defaultEmailChangeConfirmPath    = "/changement-email/confirmation"
 
 	defaultCleanupInterval  = 15 * time.Minute
 	defaultSessionRetention = 7 * 24 * time.Hour

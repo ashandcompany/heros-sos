@@ -100,8 +100,9 @@ const (
 	envActivationPath    = "HEROS_ACTIVATION_PATH"
 	envPasswordResetPath = "HEROS_PASSWORD_RESET_PATH"
 
-	envNewsletterConfirmPath  = "HEROS_NEWSLETTER_CONFIRM_PATH"
-	envEmailChangeConfirmPath = "HEROS_EMAIL_CHANGE_CONFIRM_PATH"
+	envNewsletterConfirmPath     = "HEROS_NEWSLETTER_CONFIRM_PATH"
+	envNewsletterUnsubscribePath = "HEROS_NEWSLETTER_UNSUBSCRIBE_PATH"
+	envEmailChangeConfirmPath    = "HEROS_EMAIL_CHANGE_CONFIRM_PATH"
 
 	envCleanupInterval  = "HEROS_CLEANUP_INTERVAL"
 	envSessionRetention = "HEROS_SESSION_RETENTION"
@@ -137,7 +138,7 @@ func EnvVarNames() []string {
 		envOMDbAPIKey, envOMDbBaseURL, envOMDbTimeout,
 		envContactRecipient, envAvatarDir, envAvatarMaxBytes, envAvatarMaxDimension,
 		envPublicBaseURL, envActivationPath, envPasswordResetPath, envNewsletterConfirmPath,
-		envEmailChangeConfirmPath,
+		envNewsletterUnsubscribePath, envEmailChangeConfirmPath,
 		envCleanupInterval, envSessionRetention, envTokenRetention,
 	}
 }

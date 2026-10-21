@@ -786,3 +786,48 @@ func TestServiceRendersEmailChangeMails(t *testing.T) {
 		}
 	}
 }
+
+func TestSendNewsletterAlwaysCarriesTheUnsubscribeLink(t *testing.T) {
+	recorder := NewRecorder()
+	service, _ := NewService(recorder, "Heros-SOS", config.Tokens{})
+	ctx := context.Background()
+
+	if err := service.SendNewsletter(ctx, "eve@example.org", "Octobre", "Bonjour <b>tout le monde</b>", ""); !errors.Is(err, ErrMissingUnsubscribeLink) {
+		t.Fatalf("sans lien de désinscription : %v", err)
+	}
+	if len(recorder.Messages()) != 0 {
+		t.Fatal("une newsletter sans lien de désinscription ne doit jamais partir")
+	}
+
+	const link = "https://heros-sos.example/newsletter/desinscription?token=abc"
+	if err := service.SendNewsletter(ctx, "eve@example.org", "Octobre", "Bonjour <b>tout le monde</b>", link); err != nil {
+		t.Fatal(err)
+	}
+	message, _ := recorder.Last()
+	if message.ListUnsubscribe != link {
+		t.Errorf("ListUnsubscribe = %q", message.ListUnsubscribe)
+	}
+	for name, content := range map[string]string{"texte": message.Text, "HTML": message.HTML} {
+		if !strings.Contains(content, link) {
+			t.Errorf("%s : le lien de désinscription manque :\n%s", name, content)
+		}
+	}
+	if strings.Contains(message.HTML, "<b>tout") || !strings.Contains(message.HTML, "&lt;b&gt;tout le monde&lt;/b&gt;") {
+		t.Errorf("le corps doit être échappé dans le HTML :\n%s", message.HTML)
+	}
+
+	// L'en-tête List-Unsubscribe part dans le message MIME, et rien d'autre ne peut s'y glisser.
+	raw, err := build(Sender{Address: "no-reply@heros-sos.example", Name: "Heros-SOS"}, message, time.Date(2026, 10, 22, 8, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "List-Unsubscribe: <"+link+">\r\n") {
+		t.Errorf("en-tête List-Unsubscribe absent :\n%s", raw)
+	}
+	for _, bad := range []string{"ftp://x.example/u", "https://x.example/u>\r\nBcc: spy@example.org", "javascript:alert(1)", "not a url", "https://x.example/ u"} {
+		message.ListUnsubscribe = bad
+		if _, err := build(Sender{Address: "no-reply@heros-sos.example"}, message, time.Now()); !errors.Is(err, ErrInvalidMessage) {
+			t.Errorf("%q doit être refusée : %v", bad, err)
+		}
+	}
+}

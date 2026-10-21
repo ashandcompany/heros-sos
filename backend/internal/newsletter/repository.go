@@ -26,6 +26,11 @@ type Repository interface {
 	// ErrLinkInvalid pour une demande retirée ou inexistante.
 	Confirm(ctx context.Context, id uuid.UUID, now time.Time) error
 
+	// Unsubscribe retire un abonné désigné par son identifiant (lien de désinscription). C'est idempotent
+	// pour un abonnement déjà retiré ; ErrLinkInvalid pour un identifiant inconnu. La ligne est gardée :
+	// elle empêche de le réinscrire sans nouveau consentement.
+	Unsubscribe(ctx context.Context, id uuid.UUID, now time.Time) error
+
 	// IsSubscribed indique si le titulaire d'un compte reçoit la newsletter, que son abonnement soit
 	// rattaché à son compte ou seulement à son adresse (abonné depuis le pied de page).
 	IsSubscribed(ctx context.Context, userID uuid.UUID, email string) (bool, error)
@@ -103,6 +108,34 @@ func (r *gormRepository) Confirm(ctx context.Context, id uuid.UUID, now time.Tim
 		return nil
 	}
 	return ErrLinkInvalid
+}
+
+const unsubscribeSQL = `
+UPDATE newsletter_subscriptions
+SET status = 'unsubscribed', unsubscribed_at = ?
+WHERE id = ? AND status <> 'unsubscribed'
+RETURNING id`
+
+func (r *gormRepository) Unsubscribe(ctx context.Context, id uuid.UUID, now time.Time) error {
+	var result struct{ ID uuid.UUID }
+	query := r.conn(ctx).Raw(unsubscribeSQL, now, id).Scan(&result)
+	if query.Error != nil {
+		return fmt.Errorf("newsletter : désinscription : %w", query.Error)
+	}
+	if query.RowsAffected > 0 {
+		return nil
+	}
+
+	// Aucune ligne modifiée : l'abonnement est déjà retiré (un second clic reste un succès), ou n'existe pas.
+	var exists bool
+	err := r.conn(ctx).Raw(`SELECT EXISTS (SELECT 1 FROM newsletter_subscriptions WHERE id = ?)`, id).Scan(&exists).Error
+	switch {
+	case err != nil:
+		return fmt.Errorf("newsletter : lecture de l'abonnement : %w", err)
+	case !exists:
+		return ErrLinkInvalid
+	}
+	return nil
 }
 
 func (r *gormRepository) IsSubscribed(ctx context.Context, userID uuid.UUID, email string) (bool, error) {

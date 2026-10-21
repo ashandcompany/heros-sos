@@ -9,4 +9,5 @@ func registerPublicMailRoutes(router *Router, c *components) {
 	router.HandleFunc(http.MethodPost, "/contact/messages", c.contactHandler.Send)
 	router.HandleFunc(http.MethodPost, "/newsletter/subscriptions", c.newsletterHandler.Subscribe)
 	router.HandleFunc(http.MethodPost, "/newsletter/subscriptions/confirm", c.newsletterHandler.Confirm)
+	router.HandleFunc(http.MethodPost, "/newsletter/subscriptions/unsubscribe", c.newsletterHandler.Unsubscribe)
 }

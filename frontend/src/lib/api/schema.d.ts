@@ -1502,6 +1502,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/newsletter/subscriptions/unsubscribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Se désabonner de la newsletter
+         * @description Route publique : chaque newsletter porte un lien de désinscription, qui s'ouvre sans connexion.
+         *     Il désigne l'abonnement (jamais l'adresse) et n'expire pas : le lien d'une ancienne newsletter
+         *     reste utilisable. Cliquer deux fois sur le lien réussit les deux fois. Un lien falsifié, ou fabriqué
+         *     pour une autre action (confirmation), répond `invalid_token`.
+         *
+         *     La désinscription garde la ligne de l'abonné : se réabonner depuis le pied de page redemande un
+         *     consentement (`POST /newsletter/subscriptions`, puis confirmation par lien).
+         */
+        post: operations["unsubscribeFromNewsletter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -5198,6 +5224,33 @@ export interface operations {
         };
         responses: {
             /** @description Abonnement confirmé. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequestOrInvalidToken"];
+            403: components["responses"]["Forbidden"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    unsubscribeFromNewsletter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Abonné retiré de la newsletter. */
             204: {
                 headers: {
                     [name: string]: unknown;

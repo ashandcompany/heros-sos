@@ -251,6 +251,8 @@ type App struct {
 	PasswordResetPath string
 	// NewsletterConfirmPath est la page du frontend qui confirme un abonnement (`?token=…`).
 	NewsletterConfirmPath string
+	// NewsletterUnsubscribePath est la page du frontend qui désabonne de la newsletter (`?token=…`).
+	NewsletterUnsubscribePath string
 	// EmailChangeConfirmPath est la page du frontend qui confirme la nouvelle adresse d'un compte
 	// (`?token=…`).
 	EmailChangeConfirmPath string
@@ -269,6 +271,11 @@ func (a App) PasswordResetLink(token string) string {
 // NewsletterConfirmLink construit le lien de confirmation d'un abonnement à la newsletter.
 func (a App) NewsletterConfirmLink(token string) string {
 	return a.link(a.NewsletterConfirmPath, token)
+}
+
+// NewsletterUnsubscribeLink construit le lien de désinscription que porte chaque newsletter.
+func (a App) NewsletterUnsubscribeLink(token string) string {
+	return a.link(a.NewsletterUnsubscribePath, token)
 }
 
 // EmailChangeConfirmLink construit le lien qui confirme la nouvelle adresse d'un compte.
@@ -476,7 +483,8 @@ func (l *loader) app() App {
 		ActivationPath:    l.text(envActivationPath, defaultActivationPath),
 		PasswordResetPath: l.text(envPasswordResetPath, defaultPasswordResetPath),
 
-		NewsletterConfirmPath:  l.text(envNewsletterConfirmPath, defaultNewsletterConfirmPath),
-		EmailChangeConfirmPath: l.text(envEmailChangeConfirmPath, defaultEmailChangeConfirmPath),
+		NewsletterConfirmPath:     l.text(envNewsletterConfirmPath, defaultNewsletterConfirmPath),
+		NewsletterUnsubscribePath: l.text(envNewsletterUnsubscribePath, defaultNewsletterUnsubscribePath),
+		EmailChangeConfirmPath:    l.text(envEmailChangeConfirmPath, defaultEmailChangeConfirmPath),
 	}
 }

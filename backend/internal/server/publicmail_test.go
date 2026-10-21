@@ -501,6 +501,9 @@ func TestAccountAndMailExamplesOfTheContractAreAcceptedByTheAPI(t *testing.T) {
 	if got := visitor.post("/newsletter/subscriptions/confirm", example("confirmNewsletterSubscription")); got.status != http.StatusBadRequest || got.code() != "invalid_token" {
 		t.Errorf("confirmNewsletterSubscription : %d %s", got.status, got.body)
 	}
+	if got := visitor.post("/newsletter/subscriptions/unsubscribe", example("unsubscribeFromNewsletter")); got.status != http.StatusBadRequest || got.code() != "invalid_token" {
+		t.Errorf("unsubscribeFromNewsletter : %d %s", got.status, got.body)
+	}
 
 	citizen := e.signUpAndLogin("steve@avengers.example")
 	if got := citizen.patch("/me", example("updateMyContact")); got.status != http.StatusOK {

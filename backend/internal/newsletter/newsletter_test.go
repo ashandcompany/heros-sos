@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -12,9 +14,12 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
+	"github.com/ashandcompany/heros-sos/backend/internal/clock"
+	"github.com/ashandcompany/heros-sos/backend/internal/config"
 	"github.com/ashandcompany/heros-sos/backend/internal/crypto"
 	"github.com/ashandcompany/heros-sos/backend/internal/ids"
 	"github.com/ashandcompany/heros-sos/backend/internal/newsletter"
+	"github.com/ashandcompany/heros-sos/backend/internal/signedlink"
 	"github.com/ashandcompany/heros-sos/backend/internal/testutil"
 	"github.com/ashandcompany/heros-sos/backend/internal/user"
 )
@@ -322,5 +327,108 @@ func TestDatabaseRefusesASubscriberWithoutConsentProof(t *testing.T) {
 	err = f.db.Exec(`INSERT INTO newsletter_subscriptions (id, email, status, source) VALUES (?, 'y@example.org', 'pending', 'robot')`, uuid.New()).Error
 	if err == nil {
 		t.Error("une source inconnue doit être refusée par la base")
+	}
+}
+
+func TestUnsubscribeIsIdempotentAndRefusesUnknownSubscriptions(t *testing.T) {
+	f := newFixture(t)
+	owner := f.newUser(t, "natasha@example.org")
+	if err := f.repo.SetAccountPreference(ctx, ids.New(), owner, "natasha@example.org", true, startAt); err != nil {
+		t.Fatal(err)
+	}
+	id := f.row(t, "natasha@example.org").ID
+
+	later := startAt.Add(time.Hour)
+	if err := f.repo.Unsubscribe(ctx, id, later); err != nil {
+		t.Fatal(err)
+	}
+	got := f.row(t, "natasha@example.org")
+	if got.Status != "unsubscribed" || got.UnsubscribedAt == nil || !got.UnsubscribedAt.Equal(later) || got.ConfirmedAt == nil {
+		t.Fatalf("après la désinscription : %+v", got)
+	}
+
+	// Un second clic réussit sans réécrire la date du retrait.
+	if err := f.repo.Unsubscribe(ctx, id, later.Add(time.Hour)); err != nil {
+		t.Fatalf("second clic : %v", err)
+	}
+	if again := f.row(t, "natasha@example.org"); !again.UnsubscribedAt.Equal(later) {
+		t.Errorf("la date du retrait doit rester la première : %+v", again)
+	}
+	if err := f.repo.Unsubscribe(ctx, uuid.New(), later); !errors.Is(err, newsletter.ErrLinkInvalid) {
+		t.Errorf("abonnement inconnu : %v", err)
+	}
+}
+
+func newService(t *testing.T, f fixture, clk *clock.Fake) (*newsletter.Service, *signedlink.Signer) {
+	t.Helper()
+	signer, err := signedlink.NewSigner(map[uint16][]byte{1: bytes.Repeat([]byte{0x24}, signedlinkKeyLength)}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base, _ := url.Parse("https://heros-sos.example")
+	return newsletter.NewService(newsletter.ServiceDeps{
+		Repo: f.repo, Links: signer, Clock: clk, ConfirmTTL: 48 * time.Hour,
+		App: config.App{
+			PublicBaseURL: base, NewsletterConfirmPath: "/newsletter/confirmation", NewsletterUnsubscribePath: "/newsletter/desinscription",
+		},
+	}), signer
+}
+
+// signedlinkKeyLength est la taille d'une clé maîtresse (voir internal/crypto).
+const signedlinkKeyLength = crypto.MasterKeyLength
+
+// Le lien de désinscription que porte chaque newsletter ne désigne que l'abonnement, n'expire jamais et ne
+// sert qu'à se désabonner : un lien de confirmation ne désabonne pas, et inversement.
+func TestUnsubscribeLinkNeverExpiresAndIsNotInterchangeableWithTheConfirmationLink(t *testing.T) {
+	f := newFixture(t)
+	clk := clock.NewFake(startAt)
+	service, signer := newService(t, f, clk)
+	owner := f.newUser(t, "natasha@example.org")
+	if err := f.repo.SetAccountPreference(ctx, ids.New(), owner, "natasha@example.org", true, startAt); err != nil {
+		t.Fatal(err)
+	}
+	id := f.row(t, "natasha@example.org").ID
+
+	link := service.UnsubscribeLink(id)
+	parsed, err := url.Parse(link)
+	if err != nil || parsed.Scheme != "https" || parsed.Host != "heros-sos.example" || parsed.Path != "/newsletter/desinscription" {
+		t.Fatalf("lien = %q (%v)", link, err)
+	}
+	if strings.Contains(link, "natasha") || strings.Contains(link, "@") {
+		t.Errorf("le lien ne doit porter aucune adresse : %q", link)
+	}
+	token := parsed.Query().Get("token")
+	if token == "" {
+		t.Fatalf("pas de jeton dans %q", link)
+	}
+
+	// Un lien de confirmation (autre intention) ne désabonne pas.
+	confirmation := signer.Sign(signedlink.PurposeNewsletterConfirm, id, startAt.Add(time.Hour))
+	if err := service.Unsubscribe(ctx, confirmation); !errors.Is(err, newsletter.ErrLinkInvalid) {
+		t.Errorf("jeton de confirmation : %v", err)
+	}
+	if err := service.Unsubscribe(ctx, "pas-un-lien"); !errors.Is(err, newsletter.ErrLinkInvalid) {
+		t.Errorf("jeton arbitraire : %v", err)
+	}
+	if got := f.row(t, "natasha@example.org"); got.Status != "subscribed" {
+		t.Fatalf("aucun lien invalide ne doit désabonner : %+v", got)
+	}
+	// Et le lien de désinscription ne confirme rien.
+	if err := service.Confirm(ctx, token); !errors.Is(err, newsletter.ErrLinkInvalid) {
+		t.Errorf("confirmation avec un lien de désinscription : %v", err)
+	}
+
+	// Cinq ans plus tard, le lien d'une ancienne newsletter fonctionne toujours, et deux fois de suite.
+	clk.Advance(5 * 365 * 24 * time.Hour)
+	for i := range 2 {
+		if err := service.Unsubscribe(ctx, token); err != nil {
+			t.Fatalf("désinscription %d : %v", i+1, err)
+		}
+	}
+	if got := f.row(t, "natasha@example.org"); got.Status != "unsubscribed" {
+		t.Errorf("après la désinscription : %+v", got)
+	}
+	if err := service.Unsubscribe(ctx, signer.Sign(signedlink.PurposeNewsletterUnsubscribe, uuid.New(), time.Time{})); !errors.Is(err, newsletter.ErrLinkInvalid) {
+		t.Errorf("lien signé d'un abonnement inconnu : %v", err)
 	}
 }

@@ -96,7 +96,12 @@ func TestBlogDraftsAreModeratorOnlyAndPublishedArePublic(t *testing.T) {
 }
 
 func TestBlogPublishingLifecycle(t *testing.T) {
-	e := newE2E(t, nil)
+	// L'horloge avance de 48 h : la session du modérateur (15 min d'inactivité, 8 h au total par
+	// défaut) doit survivre, sinon le test vérifierait l'expiration et non la publication.
+	e := newE2E(t, map[string]string{
+		"HEROS_SESSION_MODERATOR_IDLE": "72h",
+		"HEROS_SESSION_MODERATOR_MAX":  "72h",
+	})
 	moderator := e.newModerator("moderator@shield.example")
 	anonymous := e.newActor()
 

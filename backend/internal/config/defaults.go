@@ -50,6 +50,8 @@ const (
 	defaultPasswordResetTokenTTL = time.Hour
 
 	defaultNewsletterConfirmTTL = 48 * time.Hour
+	// Le lien de confirmation de la nouvelle adresse d'un compte : même durée que celui de la newsletter.
+	defaultEmailChangeConfirmTTL = 48 * time.Hour
 
 	defaultMailFromAddress = "no-reply@heros-sos.local"
 	defaultMailFromName    = "Heros-SOS"
@@ -76,7 +78,8 @@ const (
 	defaultActivationPath    = "/activation"
 	defaultPasswordResetPath = "/reinitialisation-mot-de-passe"
 
-	defaultNewsletterConfirmPath = "/newsletter/confirmation"
+	defaultNewsletterConfirmPath  = "/newsletter/confirmation"
+	defaultEmailChangeConfirmPath = "/changement-email/confirmation"
 
 	defaultCleanupInterval  = 15 * time.Minute
 	defaultSessionRetention = 7 * 24 * time.Hour

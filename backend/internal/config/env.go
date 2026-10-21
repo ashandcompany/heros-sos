@@ -64,7 +64,8 @@ const (
 	envActivationTokenTTL    = "HEROS_ACTIVATION_TOKEN_TTL"
 	envPasswordResetTokenTTL = "HEROS_PASSWORD_RESET_TOKEN_TTL"
 
-	envNewsletterConfirmTTL = "HEROS_NEWSLETTER_CONFIRM_TTL"
+	envNewsletterConfirmTTL  = "HEROS_NEWSLETTER_CONFIRM_TTL"
+	envEmailChangeConfirmTTL = "HEROS_EMAIL_CHANGE_CONFIRM_TTL"
 
 	envCSRFSecret    = "HEROS_CSRF_SECRET"
 	envCryptoKeys    = "HEROS_CRYPTO_KEYS"
@@ -99,7 +100,8 @@ const (
 	envActivationPath    = "HEROS_ACTIVATION_PATH"
 	envPasswordResetPath = "HEROS_PASSWORD_RESET_PATH"
 
-	envNewsletterConfirmPath = "HEROS_NEWSLETTER_CONFIRM_PATH"
+	envNewsletterConfirmPath  = "HEROS_NEWSLETTER_CONFIRM_PATH"
+	envEmailChangeConfirmPath = "HEROS_EMAIL_CHANGE_CONFIRM_PATH"
 
 	envCleanupInterval  = "HEROS_CLEANUP_INTERVAL"
 	envSessionRetention = "HEROS_SESSION_RETENTION"
@@ -127,7 +129,7 @@ func EnvVarNames() []string {
 		envRatePasswordResetPerIP, envRatePasswordResetPerKey, envRateIncidentCreatePerUser, envMaxTrackedRateKeys,
 		envRateContactPerIP, envRateNewsletterPerIP, envRateNewsletterPerEmail, envRateEmailChangePerUser,
 		envRateAvatarPerUser,
-		envActivationTokenTTL, envPasswordResetTokenTTL, envNewsletterConfirmTTL,
+		envActivationTokenTTL, envPasswordResetTokenTTL, envNewsletterConfirmTTL, envEmailChangeConfirmTTL,
 		envCSRFSecret, envCryptoKeys, envCryptoActiveK,
 		envMailDriver, envMailFromAddress, envMailFromName, envSMTPHost, envSMTPPort,
 		envSMTPUsername, envSMTPPassword, envSMTPTLSMode, envSMTPTimeout, envMailWorkers,
@@ -135,6 +137,7 @@ func EnvVarNames() []string {
 		envOMDbAPIKey, envOMDbBaseURL, envOMDbTimeout,
 		envContactRecipient, envAvatarDir, envAvatarMaxBytes, envAvatarMaxDimension,
 		envPublicBaseURL, envActivationPath, envPasswordResetPath, envNewsletterConfirmPath,
+		envEmailChangeConfirmPath,
 		envCleanupInterval, envSessionRetention, envTokenRetention,
 	}
 }

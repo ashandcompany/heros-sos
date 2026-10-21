@@ -6,15 +6,18 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/ashandcompany/heros-sos/backend/internal/audit"
 	"github.com/ashandcompany/heros-sos/backend/internal/avatar"
 	"github.com/ashandcompany/heros-sos/backend/internal/clock"
+	"github.com/ashandcompany/heros-sos/backend/internal/config"
 	"github.com/ashandcompany/heros-sos/backend/internal/database"
 	"github.com/ashandcompany/heros-sos/backend/internal/hero"
 	"github.com/ashandcompany/heros-sos/backend/internal/ids"
+	"github.com/ashandcompany/heros-sos/backend/internal/signedlink"
 	"github.com/ashandcompany/heros-sos/backend/internal/user"
 	"github.com/ashandcompany/heros-sos/backend/internal/validation"
 )
@@ -34,6 +37,21 @@ type Newsletter interface {
 	FollowEmailChange(ctx context.Context, userID uuid.UUID, newEmail string) error
 }
 
+// Mailer envoie les mails d'un changement d'adresse (implémenté par mail.Service).
+type Mailer interface {
+	SendEmailChangeConfirmation(ctx context.Context, to, firstName, link string) error
+	SendEmailChangeApproved(ctx context.Context, to, firstName string) error
+	SendEmailChangeNotice(ctx context.Context, to, firstName, newEmail string) error
+	SendEmailChangeRejected(ctx context.Context, to, firstName string) error
+}
+
+// LinkSigner signe et vérifie le lien de confirmation de la nouvelle adresse (implémenté par
+// signedlink.Signer).
+type LinkSigner interface {
+	Sign(purpose signedlink.Purpose, subject uuid.UUID, expiresAt time.Time) string
+	Verify(token string, purpose signedlink.Purpose, now time.Time) (uuid.UUID, error)
+}
+
 // AvatarStore conserve les photos de profil (implémenté par avatar.DiskStore).
 type AvatarStore interface {
 	Save(data []byte) (name string, err error)
@@ -47,9 +65,14 @@ type ServiceDeps struct {
 	Changes    EmailChangeRepository
 	Newsletter Newsletter
 	Avatars    AvatarStore
-	Audit      audit.Recorder
-	Tx         database.Transactor
-	Clock      clock.Clock
+	Mailer     Mailer
+	Links      LinkSigner
+	App        config.App
+	// EmailChangeConfirmTTL est la validité du lien de confirmation de la nouvelle adresse.
+	EmailChangeConfirmTTL time.Duration
+	Audit                 audit.Recorder
+	Tx                    database.Transactor
+	Clock                 clock.Clock
 	// AvatarMaxDimension est le côté maximal, en pixels, d'une photo acceptée.
 	AvatarMaxDimension int
 	Logger             *slog.Logger
@@ -74,7 +97,7 @@ func (s *Service) Get(ctx context.Context, userID uuid.UUID) (*Account, error) {
 	pending, err := s.Changes.FindPending(ctx, userID)
 	switch {
 	case err == nil:
-		account.PendingEmail = pending.NewEmail
+		account.PendingEmail, account.PendingEmailConfirmed = pending.NewEmail, pending.ConfirmedAt != nil
 	case !errors.Is(err, ErrChangeNotFound):
 		return nil, err
 	}
@@ -178,8 +201,11 @@ func (s *Service) discard(ctx context.Context, name string) {
 	}
 }
 
-// RequestEmailChange dépose la demande de changement d'adresse d'un compte : elle ne prend effet qu'une
-// fois validée par un modérateur, et remplace la demande précédente si elle n'était pas traitée.
+// RequestEmailChange dépose la demande de changement d'adresse d'un compte. Elle remplace la demande
+// précédente si elle n'était pas traitée, et ne prend effet qu'en deux temps : le titulaire de la nouvelle
+// adresse la confirme par le lien qui lui est envoyé, puis un modérateur l'accepte. Le mail est confié à
+// la file d'envoi une fois la demande enregistrée ; un échec est journalisé sans l'annuler (la personne
+// peut renouveler sa demande).
 func (s *Service) RequestEmailChange(ctx context.Context, userID uuid.UUID, rawEmail string, ip netip.Addr) (*EmailChange, error) {
 	email, code := validation.Email(rawEmail)
 	if code != "" {
@@ -197,6 +223,10 @@ func (s *Service) RequestEmailChange(ctx context.Context, userID uuid.UUID, rawE
 	case !errors.Is(err, user.ErrNotFound):
 		return nil, err
 	}
+	owner, err := s.Users.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
 
 	change := &EmailChange{ID: ids.New(), UserID: userID, NewEmail: email, Status: ChangePending, CreatedAt: s.Clock.Now()}
 	err = s.Tx.WithinTx(ctx, func(ctx context.Context) error {
@@ -211,7 +241,45 @@ func (s *Service) RequestEmailChange(ctx context.Context, userID uuid.UUID, rawE
 	if err != nil {
 		return nil, err
 	}
+
+	// Le lien désigne la demande : remplacée, elle change d'identifiant et l'ancien lien cesse de valoir.
+	token := s.Links.Sign(signedlink.PurposeEmailChangeConfirm, change.ID, change.CreatedAt.Add(s.EmailChangeConfirmTTL))
+	if err := s.Mailer.SendEmailChangeConfirmation(ctx, email, owner.FirstName, s.App.EmailChangeConfirmLink(token)); err != nil {
+		s.Logger.ErrorContext(ctx, "envoi du mail de confirmation de la nouvelle adresse impossible", "request_id", change.ID, "error", err)
+	}
 	return change, nil
+}
+
+// ConfirmEmailChange confirme la nouvelle adresse désignée par un lien reçu par mail : son titulaire a
+// bien accès à la boîte. Cliquer deux fois sur le lien reste un succès ; un lien falsifié, expiré, ou
+// devenu sans objet (demande remplacée ou refusée) retourne ErrLinkInvalid. La confirmation ne change pas
+// l'adresse du compte : elle rend la demande acceptable par un modérateur.
+func (s *Service) ConfirmEmailChange(ctx context.Context, token string, ip netip.Addr) error {
+	now := s.Clock.Now()
+	requestID, err := s.Links.Verify(token, signedlink.PurposeEmailChangeConfirm, now)
+	if errors.Is(err, signedlink.ErrInvalid) {
+		return ErrLinkInvalid
+	}
+	if err != nil {
+		return err
+	}
+
+	return s.Tx.WithinTx(ctx, func(ctx context.Context) error {
+		change, newlyConfirmed, err := s.Changes.Confirm(ctx, requestID, now)
+		if errors.Is(err, ErrChangeNotFound) || errors.Is(err, ErrChangeNotPending) {
+			return ErrLinkInvalid
+		}
+		if err != nil || !newlyConfirmed {
+			return err
+		}
+		return s.record(ctx, change.UserID, change, audit.ActionEmailChangeConfirmed, ip)
+	})
+}
+
+// PurgeStaleEmailChanges supprime les demandes jamais confirmées depuis plus de retention : leur lien a
+// expiré, elles encombreraient la file des modérateurs sans pouvoir aboutir.
+func (s *Service) PurgeStaleEmailChanges(ctx context.Context, retention time.Duration) (int64, error) {
+	return s.Changes.DeleteStaleUnconfirmed(ctx, s.Clock.Now().Add(-retention))
 }
 
 // ListEmailChanges retourne les demandes d'un statut (toutes si vide), les plus anciennes d'abord, avec
@@ -242,15 +310,25 @@ func (s *Service) ListEmailChanges(ctx context.Context, status ChangeStatus, lim
 	return views, total, nil
 }
 
-// ApproveEmailChange valide une demande : l'adresse de connexion du compte devient la nouvelle. Le
-// changement de statut, celui de l'adresse, celui de l'abonnement à la newsletter et la trace d'audit
-// forment une seule transaction. Si l'adresse a été prise entre-temps, rien n'est modifié et
-// user.ErrEmailTaken est retourné : la demande reste en attente, à refuser.
+// ApproveEmailChange valide une demande : l'adresse de connexion du compte devient la nouvelle. Seule une
+// demande dont l'adresse est confirmée peut l'être (ErrChangeNotConfirmed sinon). Le changement de statut,
+// celui de l'adresse, celui de l'abonnement à la newsletter et la trace d'audit forment une seule
+// transaction. Si l'adresse a été prise entre-temps, rien n'est modifié et user.ErrEmailTaken est
+// retourné : la demande reste en attente, à refuser.
+//
+// Une fois la décision enregistrée, la nouvelle adresse est prévenue, et l'ancienne aussi : si le
+// changement n'est pas voulu, c'est elle qui peut le plus vite donner l'alerte.
 func (s *Service) ApproveEmailChange(ctx context.Context, moderatorID, requestID uuid.UUID, ip netip.Addr) error {
-	return s.Tx.WithinTx(ctx, func(ctx context.Context) error {
+	var owner *user.User
+	var change *EmailChange
+	err := s.Tx.WithinTx(ctx, func(ctx context.Context) error {
 		now := s.Clock.Now()
-		change, err := s.Changes.Review(ctx, requestID, moderatorID, ChangeApproved, now)
-		if err != nil {
+		var err error
+		if change, err = s.Changes.Review(ctx, requestID, moderatorID, ChangeApproved, now); err != nil {
+			return err
+		}
+		// Lu avant le changement : on y garde l'ancienne adresse, qu'il faut prévenir.
+		if owner, err = s.Users.FindByID(ctx, change.UserID); err != nil {
 			return err
 		}
 		if err := s.Users.ChangeEmail(ctx, change.UserID, change.NewEmail, now); err != nil {
@@ -261,17 +339,42 @@ func (s *Service) ApproveEmailChange(ctx context.Context, moderatorID, requestID
 		}
 		return s.record(ctx, moderatorID, change, audit.ActionEmailChangeApproved, ip)
 	})
+	if err != nil {
+		return err
+	}
+
+	if err := s.Mailer.SendEmailChangeApproved(ctx, change.NewEmail, owner.FirstName); err != nil {
+		s.Logger.ErrorContext(ctx, "envoi du mail d'acceptation impossible", "request_id", change.ID, "error", err)
+	}
+	if err := s.Mailer.SendEmailChangeNotice(ctx, owner.Email, owner.FirstName, change.NewEmail); err != nil {
+		s.Logger.ErrorContext(ctx, "envoi de l'avertissement à l'ancienne adresse impossible", "request_id", change.ID, "error", err)
+	}
+	return nil
 }
 
-// RejectEmailChange refuse une demande : l'adresse du compte ne change pas.
+// RejectEmailChange refuse une demande : l'adresse du compte ne change pas, et son titulaire en est
+// prévenu à son adresse actuelle.
 func (s *Service) RejectEmailChange(ctx context.Context, moderatorID, requestID uuid.UUID, ip netip.Addr) error {
-	return s.Tx.WithinTx(ctx, func(ctx context.Context) error {
-		change, err := s.Changes.Review(ctx, requestID, moderatorID, ChangeRejected, s.Clock.Now())
-		if err != nil {
+	var owner *user.User
+	var change *EmailChange
+	err := s.Tx.WithinTx(ctx, func(ctx context.Context) error {
+		var err error
+		if change, err = s.Changes.Review(ctx, requestID, moderatorID, ChangeRejected, s.Clock.Now()); err != nil {
+			return err
+		}
+		if owner, err = s.Users.FindByID(ctx, change.UserID); err != nil {
 			return err
 		}
 		return s.record(ctx, moderatorID, change, audit.ActionEmailChangeRejected, ip)
 	})
+	if err != nil {
+		return err
+	}
+
+	if err := s.Mailer.SendEmailChangeRejected(ctx, owner.Email, owner.FirstName); err != nil {
+		s.Logger.ErrorContext(ctx, "envoi du mail de refus impossible", "request_id", change.ID, "error", err)
+	}
+	return nil
 }
 
 // SetNewsletter abonne ou désabonne un titulaire de compte, sans mail de confirmation : son adresse a

@@ -29,6 +29,10 @@ const (
 	templateReviewRequest      = "hero_review_request"
 	templateContactMessage     = "contact_message"
 	templateNewsletterConfirm  = "newsletter_confirmation"
+	templateEmailChangeConfirm = "email_change_confirmation"
+	templateEmailChangeApprove = "email_change_approved"
+	templateEmailChangeNotice  = "email_change_notice"
+	templateEmailChangeReject  = "email_change_rejected"
 )
 
 const (
@@ -43,6 +47,11 @@ const (
 	// texte, saisis par le visiteur, ne figurent que dans le corps.
 	subjectContactMessage    = "[%s] Message de contact : %s"
 	subjectNewsletterConfirm = "Confirmez votre abonnement à la newsletter %s"
+
+	subjectEmailChangeConfirm = "Confirmez votre nouvelle adresse email %s"
+	subjectEmailChangeApprove = "Votre nouvelle adresse email est active sur %s"
+	subjectEmailChangeNotice  = "L'adresse email de votre compte %s a été remplacée"
+	subjectEmailChangeReject  = "Votre demande de changement d'adresse email a été refusée"
 )
 
 // templateData est ce que voient les modèles.
@@ -58,6 +67,8 @@ type templateData struct {
 	SenderEmail    string
 	ContactSubject string
 	Body           string
+	// NewEmail est la nouvelle adresse d'un compte, citée dans l'avertissement envoyé à l'ancienne.
+	NewEmail string
 }
 
 // Service compose les mails de l'application à partir des modèles et les confie à un Mailer.
@@ -157,6 +168,34 @@ func (s *Service) SendNewsletterConfirmation(ctx context.Context, to, link strin
 	return s.send(ctx, to, fmt.Sprintf(subjectNewsletterConfirm, s.appName), templateNewsletterConfirm, templateData{
 		Link: link, ExpiresIn: formatDuration(s.tokens.NewsletterConfirmTTL),
 	})
+}
+
+// SendEmailChangeConfirmation envoie, à la NOUVELLE adresse, le lien qui prouve qu'elle appartient bien
+// au titulaire du compte.
+func (s *Service) SendEmailChangeConfirmation(ctx context.Context, to, firstName, link string) error {
+	return s.send(ctx, to, fmt.Sprintf(subjectEmailChangeConfirm, s.appName), templateEmailChangeConfirm, templateData{
+		FirstName: firstName, Link: link, ExpiresIn: formatDuration(s.tokens.EmailChangeConfirmTTL),
+	})
+}
+
+// SendEmailChangeApproved prévient, à la nouvelle adresse, que la modération a accepté le changement.
+func (s *Service) SendEmailChangeApproved(ctx context.Context, to, firstName string) error {
+	return s.send(ctx, to, fmt.Sprintf(subjectEmailChangeApprove, s.appName), templateEmailChangeApprove, templateData{
+		FirstName: firstName,
+	})
+}
+
+// SendEmailChangeNotice prévient l'ANCIENNE adresse qu'elle a été remplacée : si ce n'est pas voulu, son
+// titulaire est le premier à pouvoir réagir.
+func (s *Service) SendEmailChangeNotice(ctx context.Context, to, firstName, newEmail string) error {
+	return s.send(ctx, to, fmt.Sprintf(subjectEmailChangeNotice, s.appName), templateEmailChangeNotice, templateData{
+		FirstName: firstName, NewEmail: newEmail,
+	})
+}
+
+// SendEmailChangeRejected prévient, à l'adresse actuelle, que la modération a refusé le changement.
+func (s *Service) SendEmailChangeRejected(ctx context.Context, to, firstName string) error {
+	return s.send(ctx, to, subjectEmailChangeReject, templateEmailChangeReject, templateData{FirstName: firstName})
 }
 
 func (s *Service) send(ctx context.Context, to, subject, name string, data templateData) error {

@@ -26,6 +26,7 @@ const (
 	CodeEmailUnchanged     = "email_unchanged"
 	CodeChangeNotFound     = "email_change_not_found"
 	CodeChangeNotPending   = "email_change_not_pending"
+	CodeChangeNotConfirmed = "email_change_not_confirmed"
 	messageValidationError = "Certains paramètres sont invalides."
 )
 
@@ -77,7 +78,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, h.newAccountResponse(account))
+	httpx.WriteJSON(w, http.StatusOK, h.newResponse(account))
 }
 
 // UpdateContact traite PATCH /me.
@@ -101,7 +102,7 @@ func (h *Handler) UpdateContact(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, h.newAccountResponse(account))
+	httpx.WriteJSON(w, http.StatusOK, h.newResponse(account))
 }
 
 // UpdateAvatar traite PUT /me/avatar : le corps est l'image elle-même.
@@ -178,6 +179,22 @@ func (h *Handler) SetNewsletter(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteNoContent(w)
 }
 
+// ConfirmEmailChange traite POST /email-change-requests/confirm : le titulaire de la nouvelle adresse a
+// cliqué sur le lien reçu. La route est publique, comme le lien : il s'ouvre souvent sur un autre appareil
+// que celui où la demande a été faite, et il porte sa propre preuve (signature).
+func (h *Handler) ConfirmEmailChange(w http.ResponseWriter, r *http.Request) {
+	var body confirmRequest
+	if err := httpx.DecodeJSON(w, r, h.HTTP.MaxBodyBytes, &body); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if err := h.Service.ConfirmEmailChange(r.Context(), body.Token, httpx.ClientIPFrom(r.Context())); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.WriteNoContent(w)
+}
+
 // ListEmailChanges traite GET /admin/email-change-requests (modérateur).
 func (h *Handler) ListEmailChanges(w http.ResponseWriter, r *http.Request) {
 	status := ChangeStatus(r.URL.Query().Get("status"))
@@ -204,7 +221,7 @@ func (h *Handler) ListEmailChanges(w http.ResponseWriter, r *http.Request) {
 		items[i] = EmailChangeResponse{
 			ID: view.ID, UserID: view.UserID, FirstName: view.FirstName, LastName: view.LastName,
 			CurrentEmail: view.CurrentEmail, NewEmail: view.NewEmail, Status: string(view.Status),
-			CreatedAt: view.CreatedAt, ReviewedAt: view.ReviewedAt,
+			CreatedAt: view.CreatedAt, ConfirmedAt: view.ConfirmedAt, ReviewedAt: view.ReviewedAt,
 		}
 	}
 	httpx.WriteJSON(w, http.StatusOK, httpx.NewPageResponse(items, total, page))
@@ -252,6 +269,10 @@ func toHTTPError(err error) error {
 		return httpx.NewError(http.StatusNotFound, CodeChangeNotFound, "Demande de changement d'adresse introuvable.")
 	case errors.Is(err, ErrChangeNotPending):
 		return httpx.Conflict(CodeChangeNotPending, "Cette demande a déjà été traitée.")
+	case errors.Is(err, ErrChangeNotConfirmed):
+		return httpx.Conflict(CodeChangeNotConfirmed, "Le titulaire de la nouvelle adresse ne l'a pas encore confirmée.")
+	case errors.Is(err, ErrLinkInvalid):
+		return httpx.NewError(http.StatusBadRequest, auth.CodeInvalidToken, "Ce lien est invalide, expiré ou déjà utilisé.")
 	}
 	return err
 }

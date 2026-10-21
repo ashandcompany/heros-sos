@@ -195,6 +195,9 @@ type Tokens struct {
 	// NewsletterConfirmTTL est la validité du lien de confirmation d'un abonnement (signé, sans
 	// jeton en base).
 	NewsletterConfirmTTL time.Duration
+	// EmailChangeConfirmTTL est la validité du lien envoyé à la nouvelle adresse d'un compte pour la
+	// confirmer (signé, sans jeton en base).
+	EmailChangeConfirmTTL time.Duration
 }
 
 // Security regroupe les réglages de sécurité.
@@ -248,6 +251,9 @@ type App struct {
 	PasswordResetPath string
 	// NewsletterConfirmPath est la page du frontend qui confirme un abonnement (`?token=…`).
 	NewsletterConfirmPath string
+	// EmailChangeConfirmPath est la page du frontend qui confirme la nouvelle adresse d'un compte
+	// (`?token=…`).
+	EmailChangeConfirmPath string
 }
 
 // ActivationLink construit le lien d'activation de compte envoyé par mail.
@@ -263,6 +269,11 @@ func (a App) PasswordResetLink(token string) string {
 // NewsletterConfirmLink construit le lien de confirmation d'un abonnement à la newsletter.
 func (a App) NewsletterConfirmLink(token string) string {
 	return a.link(a.NewsletterConfirmPath, token)
+}
+
+// EmailChangeConfirmLink construit le lien qui confirme la nouvelle adresse d'un compte.
+func (a App) EmailChangeConfirmLink(token string) string {
+	return a.link(a.EmailChangeConfirmPath, token)
 }
 
 // HeroReviewLink construit le lien de notation d'un héros après une intervention.
@@ -382,7 +393,8 @@ func Load(getenv func(string) string) (Config, error) {
 				ActivationTTL:    l.duration(envActivationTokenTTL, defaultActivationTokenTTL),
 				PasswordResetTTL: l.duration(envPasswordResetTokenTTL, defaultPasswordResetTokenTTL),
 
-				NewsletterConfirmTTL: l.duration(envNewsletterConfirmTTL, defaultNewsletterConfirmTTL),
+				NewsletterConfirmTTL:  l.duration(envNewsletterConfirmTTL, defaultNewsletterConfirmTTL),
+				EmailChangeConfirmTTL: l.duration(envEmailChangeConfirmTTL, defaultEmailChangeConfirmTTL),
 			},
 			CSRFSecret: l.base64Secret(envCSRFSecret),
 		},
@@ -464,6 +476,7 @@ func (l *loader) app() App {
 		ActivationPath:    l.text(envActivationPath, defaultActivationPath),
 		PasswordResetPath: l.text(envPasswordResetPath, defaultPasswordResetPath),
 
-		NewsletterConfirmPath: l.text(envNewsletterConfirmPath, defaultNewsletterConfirmPath),
+		NewsletterConfirmPath:  l.text(envNewsletterConfirmPath, defaultNewsletterConfirmPath),
+		EmailChangeConfirmPath: l.text(envEmailChangeConfirmPath, defaultEmailChangeConfirmPath),
 	}
 }

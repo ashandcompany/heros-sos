@@ -1297,15 +1297,42 @@ export interface paths {
         put?: never;
         /**
          * Demander un changement d'adresse email
-         * @description Dépose une demande qu'un modérateur doit valider : l'adresse de connexion ne change qu'à ce
-         *     moment-là, et d'ici là `GET /me` la montre dans `pendingEmail`. Une nouvelle demande remplace la
-         *     précédente tant qu'elle n'est pas traitée.
+         * @description Dépose une demande qui aboutit en deux temps : **le titulaire de la nouvelle adresse la
+         *     confirme** par le lien qui lui est envoyé (`POST /email-change-requests/confirm`), puis **un
+         *     modérateur l'accepte**. L'adresse de connexion ne change qu'à ce moment-là ; d'ici là `GET /me`
+         *     la montre dans `pendingEmail` (`pendingEmailConfirmed` dit si le lien a été utilisé). Une nouvelle
+         *     demande remplace la précédente tant qu'elle n'est pas traitée, ce qui invalide l'ancien lien et
+         *     renvoie un mail.
          *
          *     Réservé aux citoyens et aux super-héros : le compte d'un modérateur se gère hors ligne.
          *     L'adresse est vérifiée une seconde fois à la validation : si quelqu'un l'a prise entre-temps, le
          *     modérateur reçoit `email_already_used` et doit refuser la demande.
          */
         post: operations["requestMyEmailChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/email-change-requests/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirmer une nouvelle adresse email
+         * @description Route publique : le lien reçu à la nouvelle adresse s'ouvre souvent sur un autre appareil que
+         *     celui de la demande, et il se prouve par sa signature. Elle confirme que le titulaire de
+         *     l'adresse y a accès ; elle **ne change pas** l'adresse du compte, qui reste décidée par un
+         *     modérateur. Cliquer deux fois sur le lien réussit les deux fois. Un lien falsifié, expiré, ou
+         *     devenu sans objet (demande remplacée par son titulaire, ou refusée) répond `invalid_token`.
+         */
+        post: operations["confirmEmailChange"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1367,8 +1394,10 @@ export interface paths {
         /**
          * Accepter un changement d'adresse
          * @description Réservé aux modérateurs. L'adresse de connexion du compte devient la nouvelle adresse, et son
-         *     abonnement à la newsletter la suit. Si l'adresse a été prise entre-temps, rien n'est modifié :
-         *     `email_already_used`, et la demande reste à refuser. Une demande remplacée par son titulaire
+         *     abonnement à la newsletter la suit. **Seule une demande dont l'adresse est confirmée** (`confirmedAt`)
+         *     peut être acceptée : sinon `email_change_not_confirmed`, et il ne reste qu'à la refuser ou à
+         *     attendre. La nouvelle adresse et l'ancienne en sont ensuite prévenues par mail. Si l'adresse a été
+         *     prise entre-temps, rien n'est modifié : `email_already_used`, et la demande reste à refuser. Une demande remplacée par son titulaire
          *     change d'identifiant : l'ancien identifiant répond `email_change_not_found`, pour qu'un
          *     modérateur ne valide jamais une adresse qu'il n'a pas vue.
          */
@@ -1390,7 +1419,7 @@ export interface paths {
         put?: never;
         /**
          * Refuser un changement d'adresse
-         * @description Réservé aux modérateurs. L'adresse du compte ne change pas ; le titulaire peut déposer une nouvelle demande.
+         * @description Réservé aux modérateurs. L'adresse du compte ne change pas, son titulaire en est prévenu par mail et peut déposer une nouvelle demande. Une demande dont l'adresse n'est pas confirmée peut être refusée.
          */
         post: operations["rejectEmailChangeRequest"];
         delete?: never;
@@ -2212,6 +2241,8 @@ export interface components {
              * @description Nouvelle adresse demandée, en attente de validation par un modérateur. Absente sinon.
              */
             pendingEmail?: string;
+            /** @description Présent (vrai) quand le titulaire de `pendingEmail` l'a confirmée par le lien reçu. Absent tant que ce n'est pas fait, et sans demande en attente. */
+            pendingEmailConfirmed?: boolean;
             /** @description Numéro de portable, sans séparateurs. Vide pour un compte créé hors inscription. */
             mobilePhone: string;
             address: components["schemas"]["AccountAddress"];
@@ -2333,6 +2364,11 @@ export interface components {
              * @description Date de dépôt de la demande.
              */
             createdAt: string;
+            /**
+             * Format: date-time
+             * @description Date à laquelle le titulaire de la nouvelle adresse l'a confirmée par le lien reçu. Absente tant qu'elle ne l'est pas : un modérateur ne peut alors que refuser la demande.
+             */
+            confirmedAt?: string;
             /**
              * Format: date-time
              * @description Date de la décision, absente tant que la demande est en attente.
@@ -4919,6 +4955,33 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
+    confirmEmailChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Nouvelle adresse confirmée. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequestOrInvalidToken"];
+            403: components["responses"]["Forbidden"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            500: components["responses"]["InternalError"];
+        };
+    };
     setMyNewsletterPreference: {
         parameters: {
             query?: never;
@@ -5005,7 +5068,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["EmailChangeNotFound"];
-            /** @description La demande a déjà été traitée (`email_change_not_pending`), ou l'adresse est maintenant prise (`email_already_used`). */
+            /** @description La demande a déjà été traitée (`email_change_not_pending`), son adresse n'est pas confirmée (`email_change_not_confirmed`), ou l'adresse est maintenant prise (`email_already_used`). */
             409: {
                 headers: {
                     [name: string]: unknown;

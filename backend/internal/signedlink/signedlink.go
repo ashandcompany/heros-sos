@@ -58,6 +58,9 @@ type Purpose byte
 const (
 	// PurposeNewsletterConfirm confirme un abonnement à la newsletter (double opt-in).
 	PurposeNewsletterConfirm Purpose = 1
+	// PurposeEmailChangeConfirm confirme la nouvelle adresse d'un compte : l'objet est la demande de
+	// changement, dont l'identifiant change quand son titulaire la remplace.
+	PurposeEmailChangeConfirm Purpose = 2
 )
 
 // Signer signe et vérifie des liens. Il est immuable après sa création : il peut être partagé par

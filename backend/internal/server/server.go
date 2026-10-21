@@ -61,6 +61,7 @@ type components struct {
 	villainHandler      *villain.Handler
 	typeHandler         *interventiontype.Handler
 
+	accountService    *account.Service
 	accountHandler    *account.Handler
 	avatarHandler     *avatar.Handler
 	contactHandler    *contact.Handler
@@ -208,13 +209,16 @@ func NewWithDB(cfg config.Config, logger *slog.Logger, db *gorm.DB, opts ...Opti
 	c.newsletterHandler = newsletter.NewHandler(newsletter.HandlerDeps{
 		Service: c.newsletterService, Logger: logger, HTTP: cfg.HTTP, Limits: cfg.Security.RateLimits, Clock: c.clock,
 	})
+	c.accountService = account.NewService(account.ServiceDeps{
+		Users: c.users, Heroes: heroProfiles, Changes: account.NewEmailChangeRepository(db),
+		Newsletter: c.newsletterService, Avatars: avatars, Mailer: mailService, Links: links, App: cfg.App,
+		EmailChangeConfirmTTL: cfg.Security.Tokens.EmailChangeConfirmTTL,
+		Audit:                 c.audit, Tx: c.tx, Clock: c.clock,
+		AvatarMaxDimension: cfg.Avatar.MaxDimension, Logger: logger,
+	})
 	c.accountHandler = account.NewHandler(account.HandlerDeps{
-		Service: account.NewService(account.ServiceDeps{
-			Users: c.users, Heroes: heroProfiles, Changes: account.NewEmailChangeRepository(db),
-			Newsletter: c.newsletterService, Avatars: avatars, Audit: c.audit, Tx: c.tx, Clock: c.clock,
-			AvatarMaxDimension: cfg.Avatar.MaxDimension, Logger: logger,
-		}),
-		Logger: logger, HTTP: cfg.HTTP, Limits: cfg.Security.RateLimits, Clock: c.clock,
+		Service: c.accountService,
+		Logger:  logger, HTTP: cfg.HTTP, Limits: cfg.Security.RateLimits, Clock: c.clock,
 		Avatar: cfg.Avatar, AvatarURLPrefix: APIPrefix + avatarRoutePrefix,
 	})
 	c.avatarHandler = avatar.NewHandler(avatars, logger)
@@ -349,6 +353,12 @@ func (s *Server) cleanup(ctx context.Context) {
 		s.logger.ErrorContext(ctx, "purge des abonnements non confirmés en échec", "error", err)
 	} else if purged > 0 {
 		s.logger.InfoContext(ctx, "abonnements non confirmés purgés", "abonnements_supprimes", purged)
+	}
+	// Une demande de changement d'adresse jamais confirmée ne peut plus aboutir une fois son lien expiré.
+	if purged, err := c.accountService.PurgeStaleEmailChanges(ctx, s.cfg.Jobs.TokenRetention); err != nil {
+		s.logger.ErrorContext(ctx, "purge des changements d'adresse non confirmés en échec", "error", err)
+	} else if purged > 0 {
+		s.logger.InfoContext(ctx, "changements d'adresse non confirmés purgés", "demandes_supprimees", purged)
 	}
 	sessions, tokens, err := c.authService.Cleanup(ctx, s.cfg.Jobs.SessionRetention, s.cfg.Jobs.TokenRetention)
 	if err != nil {

@@ -48,6 +48,8 @@ const (
 	ActionEmailChangeRequested = "user.email_change_request"
 	ActionEmailChangeApproved  = "user.email_change_approve"
 	ActionEmailChangeRejected  = "user.email_change_reject"
+	// ActionEmailChangeConfirmed : le titulaire de la nouvelle adresse a cliqué sur le lien reçu.
+	ActionEmailChangeConfirmed = "user.email_change_confirm"
 )
 
 // Entry décrit une action à journaliser.

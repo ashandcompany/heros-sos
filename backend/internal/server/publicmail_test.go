@@ -509,6 +509,9 @@ func TestAccountAndMailExamplesOfTheContractAreAcceptedByTheAPI(t *testing.T) {
 	if got := citizen.post("/me/email-change-requests", example("requestMyEmailChange")); got.status != http.StatusCreated {
 		t.Errorf("requestMyEmailChange : %d %s", got.status, got.body)
 	}
+	if got := visitor.post("/email-change-requests/confirm", example("confirmEmailChange")); got.status != http.StatusBadRequest || got.code() != "invalid_token" {
+		t.Errorf("confirmEmailChange : %d %s", got.status, got.body)
+	}
 	if got := citizen.put("/me/newsletter", example("setMyNewsletterPreference")); got.status != http.StatusNoContent {
 		t.Errorf("setMyNewsletterPreference : %d %s", got.status, got.body)
 	}

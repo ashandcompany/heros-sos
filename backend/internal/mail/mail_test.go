@@ -738,3 +738,51 @@ func TestLogMailerRejectsInvalidMessages(t *testing.T) {
 		t.Fatalf("erreur = %v", err)
 	}
 }
+
+func TestServiceRendersEmailChangeMails(t *testing.T) {
+	recorder := NewRecorder()
+	service, _ := NewService(recorder, "Heros-SOS", config.Tokens{EmailChangeConfirmTTL: 48 * time.Hour})
+	ctx := context.Background()
+
+	const link = "https://heros-sos.example/changement-email/confirmation?token=abc"
+	if err := service.SendEmailChangeConfirmation(ctx, "nouvelle@example.org", "Steve", link); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SendEmailChangeApproved(ctx, "nouvelle@example.org", "Steve"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SendEmailChangeNotice(ctx, "ancienne@example.org", "Steve", "nouvelle@example.org"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SendEmailChangeRejected(ctx, "ancienne@example.org", "Steve"); err != nil {
+		t.Fatal(err)
+	}
+
+	sent := recorder.Messages()
+	if len(sent) != 4 {
+		t.Fatalf("%d mails, attendu 4", len(sent))
+	}
+	tests := []struct {
+		to       string
+		subject  string
+		contains []string
+	}{
+		{"nouvelle@example.org", "Confirmez votre nouvelle adresse email Heros-SOS", []string{link, "48 heures", "Steve"}},
+		{"nouvelle@example.org", "Votre nouvelle adresse email est active sur Heros-SOS", []string{"Steve", "adresse de connexion"}},
+		{"ancienne@example.org", "L'adresse email de votre compte Heros-SOS a été remplacée", []string{"nouvelle@example.org", "contactez-nous"}},
+		{"ancienne@example.org", "Votre demande de changement d'adresse email a été refusée", []string{"Steve", "ne change pas"}},
+	}
+	for i, want := range tests {
+		message := sent[i]
+		if message.To != want.to || message.Subject != want.subject {
+			t.Errorf("mail %d : %s / %q, attendu %s / %q", i, message.To, message.Subject, want.to, want.subject)
+		}
+		for name, content := range map[string]string{"texte": message.Text, "HTML": message.HTML} {
+			for _, expected := range want.contains {
+				if !strings.Contains(content, expected) {
+					t.Errorf("mail %d (%s) : %q manque :\n%s", i, name, expected, content)
+				}
+			}
+		}
+	}
+}

@@ -18,6 +18,8 @@ func registerAccountRoutes(router *Router, c *components) {
 	router.Handle(http.MethodPut, "/me/avatar", c.protected(h.UpdateAvatar))
 	router.Handle(http.MethodPost, "/me/email-change-requests", c.protected(h.RequestEmailChange, user.RoleCitizen, user.RoleHero))
 	router.Handle(http.MethodPut, "/me/newsletter", c.protected(h.SetNewsletter))
+	// Publique : le lien de confirmation s'ouvre souvent sur un autre appareil, et se prouve par sa signature.
+	router.HandleFunc(http.MethodPost, "/email-change-requests/confirm", h.ConfirmEmailChange)
 
 	// Publique, comme les photos des héros dans l'encyclopédie (voir avatar.Handler).
 	router.HandleFunc(http.MethodGet, avatarRoutePrefix+"{name}", c.avatarHandler.Serve)

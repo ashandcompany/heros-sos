@@ -9,15 +9,18 @@ branchement. À mettre à jour à chaque fonction branchée.
 > État au 21/10/2026 : **identité (inscription, activation, connexion, session, mot de passe),
 > demandes de super-héros, fiches publiques des super-héros, modération des comptes, types
 > d'incident, incidents et interventions (hors écrans publics), vidéothèque et avis sont branchés**
-> sur l'API dès que `API_URL` est renseignée (tableau ci-dessous). Le reste fonctionne encore sur
-> des mocks, y compris avec l'API.
+> sur l'API dès que `API_URL` est renseignée (tableau ci-dessous). Le compte (profil, photo,
+> changement d'e-mail), le blog, le contact et la newsletter ont maintenant leurs routes dans le
+> contrat mais ne sont **pas encore branchés**. Le reste fonctionne encore sur des mocks, y compris
+> avec l'API.
 
 ## 1. Couverture : ce qui est dans le contrat, et le reste
 
-Le contrat décrit aujourd'hui **60 opérations** (plus `/health` et `/ready`) : identité et
-modération des comptes, incidents, interventions, types d'incident, super-vilains, avis sur les
-interventions et vidéothèque (films). Les autres domaines du frontend n'ont pas encore de
-contrat.
+Le contrat décrit aujourd'hui **82 opérations** (plus `/health` et `/ready`) : identité et
+modération des comptes, profil du compte (`/me`, photo, changements d'e-mail), incidents,
+interventions, types d'incident, super-vilains, avis sur les interventions, vidéothèque (films),
+blog (articles), contact et newsletter. Les autres domaines du frontend (incidents publics,
+tableaux de bord, fiches complètes du back-office) n'ont pas encore de contrat.
 
 ### ✅ Branché sur l'API
 
@@ -54,15 +57,17 @@ Fonctions de chaque fichier :
 
 ### ⏳ Encore sur les mocks (ou à faire)
 
-| Domaine frontend                   | Fonctions `lib/api/`                                                                                                                                | Contrat OpenAPI                                                                       | État    |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------- |
-| Incidents publics (accueil, carte) | `incidents.ts` : `getLatestResolvedIncidents`, `getOngoingIncidents`, `getPublicIncidentMap`, `getResolvedIncidentsByHero`, `getIncidentsByVillain` | ❌ aucun (routes réservées aux comptes connectés)                                     | mock    |
-| Fiches complètes super-héros       | `super-heroes.ts` : `getSuperHeroProfiles`, `getMyHeroProfile`, `updateMyHero…`, `requestHeroEmailChange`                                           | ❌ aucun                                                                              | mock    |
-| Profil, changements d'email        | `account.ts`, `super-heroes.ts` (`updateMy…`)                                                                                                       | partiel : `GET /auth/me` (prénom, email)                                              | partiel |
-| Tableau de bord héros, modération  | `hero-dashboard.ts`, `moderation.ts`                                                                                                                | ❌ aucun (statistiques)                                                               | mock    |
-| Blog, newsletter                   | `blog.ts`, `newsletter.ts`                                                                                                                          | ❌ aucun                                                                              | mock    |
-| Formulaire de contact              | `contact.ts` : `sendContactMessage`                                                                                                                 | ❌ aucun                                                                              | mock    |
-| Films des super-vilains            | aucune (pas d'écran)                                                                                                                                | `/villains/{id}/films`, `/admin/villain-films`, `/admin/villains/{id}/films/{filmId}` | à faire |
+| Domaine frontend                   | Fonctions `lib/api/`                                                                                                                                                                                                                                                                  | Contrat OpenAPI                                                                                                                                                                                              | État    |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- |
+| Incidents publics (accueil, carte) | `incidents.ts` : `getLatestResolvedIncidents`, `getOngoingIncidents`, `getPublicIncidentMap`, `getResolvedIncidentsByHero`, `getIncidentsByVillain`                                                                                                                                   | ❌ aucun (routes réservées aux comptes connectés)                                                                                                                                                            | mock    |
+| Fiches complètes super-héros       | `super-heroes.ts` : `getSuperHeroProfiles` (back-office)                                                                                                                                                                                                                              | ❌ aucun                                                                                                                                                                                                     | mock    |
+| Profil, photo, changements d'email | `account.ts` : `getMyAccount`, `updateMyContact`, `updateMyAvatar`, `requestEmailChange`, `updateNewsletterPreference`, `getEmailChangeRequests`, `reviewEmailChange` ; `super-heroes.ts` : `getMyHeroProfile`, `updateMyHeroContact`, `updateMyHeroAvatar`, `requestHeroEmailChange` | `GET /me`, `PATCH /me`, `PUT /me/avatar`, `GET /avatars/{name}`, `POST /me/email-change-requests`, `PUT /me/newsletter`, `/admin/email-change-requests/*` (un héros utilise les mêmes routes que le citoyen) | à faire |
+| Tableau de bord héros, modération  | `hero-dashboard.ts`, `moderation.ts`                                                                                                                                                                                                                                                  | ❌ aucun (statistiques)                                                                                                                                                                                      | mock    |
+| Blog                               | `blog.ts` : `getPublishedArticles`, `getPublishedArticle`, `getAllArticles`, `getArticle`, `createArticle`, `updateArticle`, `deleteArticle`                                                                                                                                          | `GET /articles`, `GET /articles/{slug}`, `/admin/articles`, `/admin/articles/{id}`                                                                                                                           | à faire |
+| Newsletter                         | `newsletter.ts` : `subscribeToNewsletter`                                                                                                                                                                                                                                             | `POST /newsletter/subscriptions`, `POST /newsletter/subscriptions/confirm`                                                                                                                                   | à faire |
+| Formulaire de contact              | `contact.ts` : `sendContactMessage`                                                                                                                                                                                                                                                   | `POST /contact/messages`                                                                                                                                                                                     | à faire |
+| Déconnexion de tous les appareils  | aucune (pas d'écran)                                                                                                                                                                                                                                                                  | `POST /auth/logout-all`                                                                                                                                                                                      | à faire |
+| Films des super-vilains            | aucune (pas d'écran)                                                                                                                                                                                                                                                                  | `GET /villains/{villainId}/films`, `POST /admin/villain-films`, `DELETE /admin/villains/{villainId}/films/{filmId}`                                                                                          | à faire |
 
 > [!WARNING]
 > Les « Future implémentation » écrites dans les commentaires de `lib/api/` pour les domaines non
@@ -223,8 +228,9 @@ qu'un seul `GET /auth/me`.
 - **Comptes** : le contrat ne connaît pas « à contrôler / validé / rejeté », mais un état
   (`pending_activation | active | deactivated` → `AccountStatus`) et une vérification à part
   (`verifiedAt`, sans route pour l'annuler). Le tableau de bord ne compte donc plus les « comptes à
-  contrôler » avec l'API (tuile masquée). Les **changements d'email** n'ont pas de route : la section
-  est masquée avec l'API (`getEmailChangeRequests` renvoie `null`).
+  contrôler » avec l'API (tuile masquée). Les **changements d'email** ont leurs routes
+  (`/admin/email-change-requests/*`) mais ne sont pas encore branchés : la section est masquée
+  avec l'API (`getEmailChangeRequests` renvoie `null`).
 - **Types d'incident** : plus aucune liste en dur. Un incident embarque son type (`{ code, label }`,
   `typeCode` et `typeLabel` de l'API) ; les formulaires reçoivent la liste du référentiel et envoient
   son `id` (`typeId`). Le référentiel est **vide** dans une base neuve : tant qu'un modérateur n'a
@@ -246,8 +252,9 @@ qu'un seul `GET /auth/me`.
   `updateIncidentAction`) prend ses héros dans `getIncidentHeroes` (mocks), pas dans
   `getSuperHeroes` : les incidents mockés référencent les identifiants mock. À supprimer en
   branchant les incidents.
-- **Pas encore branché** : fiches complètes (back-office `getSuperHeroProfiles`, espace héros
-  `getMyHeroProfile`, coordonnées, photo, changement d'email), faute de routes.
+- **Pas encore branché** : espace héros (`getMyHeroProfile`, coordonnées, photo, changement
+  d'email), dont les routes existent (`/me`, `/me/avatar`, `/me/email-change-requests`), et
+  fiches complètes du back-office (`getSuperHeroProfiles`), faute de route.
 
 ### Vidéothèque : choix du branchement
 

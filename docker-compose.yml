@@ -4,7 +4,11 @@
 #   docker-compose.dev.yml    développement : ports liés à 127.0.0.1, Mailpit, front rechargé à chaud
 #   docker-compose.prod.yml   production    : TLS automatique, secrets en fichiers, ressources bornées
 #
-# Se lance avec `make up-dev` ou `make up-prod` (voir le Makefile et le README).
+# Ces fichiers sont à la racine du dépôt : un seul endroit pour lancer le back ET le front. Les chemins
+# relatifs ci-dessous partent donc de la racine (backend/ pour l'API, frontend/ pour le front). Les
+# fichiers d'environnement et les secrets restent dans backend/ (.env, .env.production, secrets/).
+#
+# Se lance avec `make up` (développement) ou `make up-prod`, depuis la racine (voir le Makefile).
 #
 # Réseaux : `backend` (base de données, file de messages) n'a aucun accès extérieur ; `edge` relie le
 # reverse proxy, l'API et le front. L'API est sur les deux : elle parle à la base et envoie des mails.
@@ -31,7 +35,7 @@ services:
   api:
     <<: *hardening
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     image: heros-sos/api:${APP_VERSION:-dev}
     depends_on:
@@ -104,7 +108,7 @@ services:
       # Valeur factice en HTTP seul (aucun certificat n'est demandé) ; obligatoire en production.
       ACME_EMAIL: ${ACME_EMAIL:-contact@heros-sos.invalid}
     volumes:
-      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./backend/docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     networks:

@@ -312,11 +312,11 @@ toutes les pages avec `limit: MAX_PAGE_SIZE` et renvoie un tableau (`getIncident
 `API_URL` (lue par le serveur au démarrage, jamais exposée au navigateur) doit pointer vers la
 base **avec** le préfixe du contrat (champ `servers` de l'OpenAPI) :
 
-| Contexte                                    | `API_URL`                                                           |
-| ------------------------------------------- | ------------------------------------------------------------------- |
-| Pile Docker (`make up-dev`, `make up-prod`) | `http://api:8080/api/v1` (fixé dans `backend/docker-compose.*.yml`) |
-| `npm run dev` + API de `make up-dev`        | `http://localhost:8081/api/v1`                                      |
-| `npm run dev` + API lancée avec `go run`    | `http://localhost:8080/api/v1`                                      |
+| Contexte                                 | `API_URL`                                                                |
+| ---------------------------------------- | ------------------------------------------------------------------------ |
+| Pile Docker (`make up`, `make up-prod`)  | `http://api:8080/api/v1` (fixé dans `docker-compose.*.yml`, à la racine) |
+| `npm run dev` + API de `make up-dev`     | `http://localhost:8081/api/v1`                                           |
+| `npm run dev` + API lancée avec `go run` | `http://localhost:8080/api/v1`                                           |
 
 Voir le [README](../README.md#variables-denvironnement).
 

@@ -93,8 +93,12 @@ tidy: ## Nettoie go.mod et go.sum
 
 # Deux projets Compose distincts : conteneurs, réseaux et volumes séparés. Un `up-prod` ne peut jamais
 # toucher aux données de développement, ni l'inverse, même lancés sur la même machine.
-COMPOSE_DEV  = docker compose -p heros-sos-dev -f docker-compose.yml -f docker-compose.dev.yml
-COMPOSE_PROD = docker compose -p heros-sos-prod --env-file .env.production -f docker-compose.yml -f docker-compose.prod.yml
+#
+# Les fichiers Compose sont à la racine du dépôt (back et front se lancent ensemble) : Compose prend
+# alors la racine comme dossier du projet. Son `.env` automatique serait donc celui de la racine, d'où
+# --env-file explicite. Depuis la racine, `make up`, `make up-prod`… appellent ces cibles.
+COMPOSE_DEV  = docker compose -p heros-sos-dev --env-file .env -f ../docker-compose.yml -f ../docker-compose.dev.yml
+COMPOSE_PROD = docker compose -p heros-sos-prod --env-file .env.production -f ../docker-compose.yml -f ../docker-compose.prod.yml
 
 .PHONY: up-dev
 up-dev: ## Démarre la pile de développement (proxy, API, base, Mailpit, RabbitMQ, front)

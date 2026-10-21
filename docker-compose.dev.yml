@@ -1,10 +1,13 @@
 # Développement : tout est joignable depuis la machine, et seulement depuis elle (les ports sont liés à
 # 127.0.0.1). Les mots de passe sont ceux, publics, de .env.example : ne jamais les réutiliser ailleurs.
 #
-#   make up-dev        démarre la pile        http://localhost:8088  (front + API derrière le proxy)
-#   make down-dev      l'arrête               http://localhost:8025  (Mailpit : les mails envoyés)
+#   make up            démarre la pile        http://localhost:8088  (front + API derrière le proxy)
+#   make down          l'arrête               http://localhost:8025  (Mailpit : les mails envoyés)
 #
-# Outils facultatifs : `docker compose --profile tools …` ajoute Adminer (http://localhost:8082).
+# Outils facultatifs : `make adminer` ajoute Adminer (http://localhost:8082).
+#
+# Lancé depuis la racine du dépôt : les chemins sont relatifs à la racine, et l'environnement de l'API
+# est lu dans backend/.env (le Makefile le passe aussi à Compose pour les ${…} de ce fichier).
 
 # Même rotation que docker-compose.yml (api, db et proxy la reçoivent de là) pour les services ajoutés ici.
 x-logging: &logging
@@ -16,7 +19,7 @@ x-logging: &logging
 services:
   api:
     env_file:
-      - .env
+      - backend/.env
     environment:
       HEROS_ENV: development
       HEROS_DATABASE_URL: postgres://${POSTGRES_USER:-heros}:${POSTGRES_PASSWORD:-heros}@db:5432/${POSTGRES_DB:-herossos}?sslmode=disable
@@ -48,7 +51,7 @@ services:
     # Étape `dev` de frontend/Dockerfile : les dépendances sont dans l'image (installées une fois,
     # mises en cache), le serveur de développement Next.js démarre aussitôt.
     build:
-      context: ../frontend
+      context: ./frontend
       dockerfile: Dockerfile
       target: dev
     image: heros-sos/web:dev
@@ -59,10 +62,10 @@ services:
       # Prioritaire sur un API_URL de frontend/.env.local (Next ne remplace pas une variable déjà définie).
       API_URL: http://api:8080/api/v1
     volumes:
-      # Le code de ../frontend est monté et rechargé à chaud…
-      - ../frontend:/app
+      # Le code de ./frontend est monté et rechargé à chaud…
+      - ./frontend:/app
       # …mais les dépendances viennent de l'image, pas de l'hôte (binaires natifs d'un autre système) :
-      # ces volumes anonymes masquent les dossiers de l'hôte. `make up-dev` et `make down-dev`
+      # ces volumes anonymes masquent les dossiers de l'hôte. `make up` et `make down`
       # les suppriment avec le conteneur (rm -v) : ils suivent ainsi les changements de dépendances.
       - /app/node_modules
       - /app/.next

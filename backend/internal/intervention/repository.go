@@ -57,6 +57,19 @@ type participantRow struct {
 	Alias  *string
 }
 
+type joinedInterventionRecord struct {
+	ID             uuid.UUID
+	IncidentID     uuid.UUID
+	Status         string
+	ProposedStatus *string
+	ProposedBy     *uuid.UUID
+	DecidedBy      *uuid.UUID
+	Notes          *string
+	StartedAt      *time.Time
+	EndedAt        *time.Time
+	ReporterID     *uuid.UUID
+}
+
 // Repository est le stockage et les transitions atomiques d'une intervention.
 type Repository interface {
 	Start(ctx context.Context, incidentID, leadID uuid.UUID, now time.Time) (*Intervention, error)
@@ -120,12 +133,21 @@ func (r *gormRepository) Start(ctx context.Context, incidentID, leadID uuid.UUID
 }
 
 func (r *gormRepository) Find(ctx context.Context, id uuid.UUID) (*Intervention, error) {
-	var rec interventionRecord
-	if err := r.conn(ctx).Where("id = ?", id).Take(&rec).Error; err != nil {
+	var joined joinedInterventionRecord
+	if err := r.conn(ctx).Table(tableInterventions).
+		Select("interventions.*, incidents.reporter_id").
+		Joins("JOIN incidents ON incidents.id = interventions.incident_id").
+		Where("interventions.id = ?", id).Take(&joined).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("intervention : lecture : %w", err)
+	}
+	rec := interventionRecord{
+		ID: joined.ID, IncidentID: joined.IncidentID, Status: joined.Status,
+		ProposedStatus: joined.ProposedStatus, ProposedBy: joined.ProposedBy,
+		DecidedBy: joined.DecidedBy, Notes: joined.Notes,
+		StartedAt: joined.StartedAt, EndedAt: joined.EndedAt,
 	}
 	var rows []participantRow
 	if err := r.conn(ctx).Table(tableInterventionHeroes).
@@ -137,7 +159,8 @@ func (r *gormRepository) Find(ctx context.Context, id uuid.UUID) (*Intervention,
 		return nil, fmt.Errorf("intervention : lecture des héros : %w", err)
 	}
 	result := &Intervention{
-		ID: rec.ID, IncidentID: rec.IncidentID, Status: Status(rec.Status), ProposedBy: rec.ProposedBy,
+		ID: rec.ID, IncidentID: rec.IncidentID, ReporterID: joined.ReporterID,
+		Status: Status(rec.Status), ProposedBy: rec.ProposedBy,
 		DecidedBy: rec.DecidedBy, StartedAt: timeValue(rec.StartedAt), EndedAt: rec.EndedAt,
 	}
 	if rec.ProposedStatus != nil {

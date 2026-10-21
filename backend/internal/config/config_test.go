@@ -33,6 +33,7 @@ func productionEnv() map[string]string {
 	env[envAllowedOrigins] = "https://heros-sos.example"
 	env[envPublicBaseURL] = "https://heros-sos.example"
 	env[envSMTPHost] = "smtp.example"
+	env[envOMDbAPIKey] = "test-key"
 	return env
 }
 
@@ -250,6 +251,9 @@ func TestAppLinks(t *testing.T) {
 	}
 	if got, want := cfg.App.PasswordResetLink("xyz"), "http://localhost:3000/reinitialisation-mot-de-passe?token=xyz"; got != want {
 		t.Errorf("PasswordResetLink = %q, attendu %q", got, want)
+	}
+	if got, want := cfg.App.HeroReviewLink("intervention id", "hero/id"), "http://localhost:3000/profil/interventions?heroId=hero%2Fid&interventionId=intervention+id"; got != want {
+		t.Errorf("HeroReviewLink = %q, attendu %q", got, want)
 	}
 }
 

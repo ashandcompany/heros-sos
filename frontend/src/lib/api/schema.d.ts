@@ -1173,6 +1173,278 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Mon profil
+         * @description Retourne le profil complet de l'utilisateur connecté, quel que soit son rôle : identité,
+         *     coordonnées, photo, abonnement à la newsletter et, pour un super-héros, son pseudo public et sa
+         *     description (`hero`). Un super-héros n'a pas de profil à part : c'est le même compte, avec
+         *     `role: hero`.
+         *
+         *     `pendingEmail` n'est présent que pendant l'examen d'une demande de changement d'adresse. Un
+         *     compte créé hors inscription (un modérateur) peut avoir un téléphone et une adresse vides.
+         */
+        get: operations["getMyAccount"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Modifier mes coordonnées
+         * @description Remplace le téléphone et/ou l'adresse postale, selon les règles de l'inscription. Un champ
+         *     absent n'est pas modifié. `address` est remplacée en bloc, sauf `complement` : absent ou
+         *     `null`, le complément actuel est conservé ; chaîne vide, il est effacé. Le formulaire du profil
+         *     d'un super-héros, qui n'a pas de complément, ne l'efface donc pas.
+         *
+         *     Retourne le profil à jour. Le nom, la date de naissance et l'adresse email ne se modifient pas
+         *     ici (l'adresse email passe par `POST /me/email-change-requests`).
+         */
+        patch: operations["updateMyContact"];
+        trace?: never;
+    };
+    "/me/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Changer ma photo de profil
+         * @description Le corps de la requête est **l'image elle-même** (ni JSON, ni multipart), avec son type dans
+         *     `Content-Type` : `image/jpeg`, `image/png` ou `image/webp`. Limites : 2 Mio (`413`) et
+         *     1024 × 1024 pixels (`422`, champ `avatar` : `too_large`).
+         *
+         *     L'image est décodée puis ré-encodée en JPEG : un fichier qui n'est pas une vraie image est
+         *     refusé (`422`, `avatar` : `invalid`), et les métadonnées (EXIF, position GPS) sont effacées.
+         *     L'adresse de la photo (`avatarUrl`) change à chaque envoi : un navigateur peut la garder
+         *     indéfiniment en cache. La photo d'un super-héros est publique (encyclopédie).
+         */
+        put: operations["updateMyAvatar"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/avatars/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Photo de profil
+         * @description Sert une photo de profil. La route est publique : les photos des super-héros sont visibles de
+         *     tous. L'adresse d'une photo (`avatarUrl`) contient un identifiant aléatoire et change à chaque
+         *     envoi ; le contenu d'une adresse ne change jamais, d'où le cache d'un an (`immutable`).
+         */
+        get: operations["getAvatar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/email-change-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Demander un changement d'adresse email
+         * @description Dépose une demande qu'un modérateur doit valider : l'adresse de connexion ne change qu'à ce
+         *     moment-là, et d'ici là `GET /me` la montre dans `pendingEmail`. Une nouvelle demande remplace la
+         *     précédente tant qu'elle n'est pas traitée.
+         *
+         *     Réservé aux citoyens et aux super-héros : le compte d'un modérateur se gère hors ligne.
+         *     L'adresse est vérifiée une seconde fois à la validation : si quelqu'un l'a prise entre-temps, le
+         *     modérateur reçoit `email_already_used` et doit refuser la demande.
+         */
+        post: operations["requestMyEmailChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/newsletter": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Recevoir ou non la newsletter
+         * @description Abonne ou désabonne le titulaire du compte. Il n'y a pas de mail de confirmation : l'adresse du
+         *     compte a déjà été vérifiée à l'activation (contrairement à `POST /newsletter/subscriptions`).
+         *     L'opération est idempotente. `newsletterSubscribed` de `GET /me` donne l'état courant.
+         */
+        put: operations["setMyNewsletterPreference"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/email-change-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Demandes de changement d'adresse email
+         * @description Réservé aux modérateurs. Les demandes les plus anciennes viennent d'abord. Chaque demande porte
+         *     l'identité du demandeur et son adresse actuelle, pour décider sans autre appel.
+         */
+        get: operations["listEmailChangeRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/email-change-requests/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accepter un changement d'adresse
+         * @description Réservé aux modérateurs. L'adresse de connexion du compte devient la nouvelle adresse, et son
+         *     abonnement à la newsletter la suit. Si l'adresse a été prise entre-temps, rien n'est modifié :
+         *     `email_already_used`, et la demande reste à refuser. Une demande remplacée par son titulaire
+         *     change d'identifiant : l'ancien identifiant répond `email_change_not_found`, pour qu'un
+         *     modérateur ne valide jamais une adresse qu'il n'a pas vue.
+         */
+        post: operations["approveEmailChangeRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/email-change-requests/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refuser un changement d'adresse
+         * @description Réservé aux modérateurs. L'adresse du compte ne change pas ; le titulaire peut déposer une nouvelle demande.
+         */
+        post: operations["rejectEmailChangeRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/contact/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Écrire à l'équipe
+         * @description Formulaire de contact, ouvert à tous. Le message est transmis par mail à l'équipe (adresse
+         *     `HEROS_CONTACT_RECIPIENT`), avec l'adresse du visiteur en réponse : le visiteur ne reçoit
+         *     jamais de mail de cette route. Rien n'est conservé en base.
+         *
+         *     Limité par adresse IP. `503` (`contact_delivery_unavailable`) si le message n'a pas pu être
+         *     confié au service d'envoi : il n'est alors pas parti, et le visiteur peut réessayer.
+         */
+        post: operations["sendContactMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/newsletter/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * S'abonner à la newsletter
+         * @description Abonnement d'un visiteur, en deux temps (double opt-in) : cette route enregistre la demande et
+         *     envoie un lien de confirmation à l'adresse ; aucune newsletter n'est envoyée avant le clic
+         *     (`POST /newsletter/subscriptions/confirm`). Le lien est signé et valable 48 h par défaut.
+         *
+         *     La réponse est la même pour toute adresse valide, inconnue, en attente ou déjà abonnée : elle ne
+         *     révèle rien (une adresse déjà abonnée ne reçoit pas de mail de plus). Une adresse qui s'était
+         *     désabonnée doit confirmer de nouveau. Limité par IP et par adresse, pour que le formulaire ne
+         *     serve pas à inonder la boîte de quelqu'un d'autre.
+         */
+        post: operations["subscribeToNewsletter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/newsletter/subscriptions/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirmer l'abonnement à la newsletter
+         * @description Valide l'abonnement avec le jeton du lien reçu par mail ; la date de confirmation est la preuve de
+         *     consentement. Cliquer deux fois sur le lien réussit les deux fois. Un lien falsifié, expiré, ou
+         *     devenu sans objet (l'abonné s'est retiré entre-temps) répond `invalid_token`.
+         */
+        post: operations["confirmNewsletterSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1190,7 +1462,7 @@ export interface components {
                 code: string;
                 /** @description Message destiné à l'affichage. */
                 message: string;
-                /** @description Pour les erreurs de validation, champ → code (`required`, `invalid`, `too_short`, `too_long`, `weak`). */
+                /** @description Pour les erreurs de validation, champ → code (`required`, `invalid`, `too_short`, `too_long`, `weak`, et `too_large` pour une photo). */
                 fields?: {
                     [key: string]: string;
                 };
@@ -1814,6 +2086,200 @@ export interface components {
         InterventionOutcomeValidationPayload: {
             approved: boolean;
         };
+        Account: {
+            /**
+             * Format: uuid
+             * @description Identifiant du compte.
+             */
+            id: string;
+            /**
+             * @description Rôle du compte.
+             * @enum {string}
+             */
+            role: "citizen" | "hero" | "moderator";
+            /**
+             * @description Civilité.
+             * @enum {string}
+             */
+            civility: "madame" | "monsieur" | "non-precise";
+            /** @description Prénom. */
+            firstName: string;
+            /** @description Nom de famille. */
+            lastName: string;
+            /**
+             * Format: date
+             * @description Date de naissance (AAAA-MM-JJ).
+             */
+            birthDate: string;
+            /**
+             * Format: email
+             * @description Adresse de connexion.
+             */
+            email: string;
+            /**
+             * Format: email
+             * @description Nouvelle adresse demandée, en attente de validation par un modérateur. Absente sinon.
+             */
+            pendingEmail?: string;
+            /** @description Numéro de portable, sans séparateurs. Vide pour un compte créé hors inscription. */
+            mobilePhone: string;
+            address: components["schemas"]["AccountAddress"];
+            /**
+             * @description Adresse de la photo de profil, chemin absolu sur la même origine que l'API
+             *     (`GET /avatars/{name}`). Absente tant qu'aucune photo n'a été envoyée.
+             */
+            avatarUrl?: string;
+            /** @description Vrai si l'adresse du compte reçoit la newsletter. */
+            newsletterSubscribed: boolean;
+            /**
+             * Format: date-time
+             * @description Date de création du compte.
+             */
+            createdAt: string;
+            hero?: components["schemas"]["AccountHero"];
+        };
+        AccountAddress: {
+            /** @description Numéro et nom de la voie. */
+            street: string;
+            /** @description Complément d'adresse, absent s'il n'y en a pas. */
+            complement?: string;
+            /** @description Code postal. */
+            postalCode: string;
+            /** @description Commune. */
+            city: string;
+            /**
+             * @description Code pays ISO 3166-1 alpha-2.
+             * @example FR
+             */
+            country: string;
+        };
+        /** @description Profil public d'un super-héros. Présent seulement quand `role` vaut `hero`. */
+        AccountHero: {
+            /** @description Pseudo public. */
+            alias: string;
+            /** @description Description publique. */
+            bio: string;
+        };
+        ContactUpdateRequest: {
+            /** @description Portable français (06 ou 07) ou international (+33…) ; espaces, points et tirets sont ignorés. */
+            mobilePhone?: string;
+            address?: components["schemas"]["AddressUpdate"];
+        };
+        AddressUpdate: {
+            /** @description Numéro et nom de la voie. */
+            street: string;
+            /** @description Complément d'adresse. Absent ou `null` : le complément actuel est conservé. Chaîne vide : il est effacé. */
+            complement?: string | null;
+            /** @description Code postal (cinq chiffres pour la France). */
+            postalCode: string;
+            /** @description Commune. */
+            city: string;
+            /**
+             * @description Code pays ISO 3166-1 alpha-2, en majuscules.
+             * @example FR
+             */
+            country: string;
+        };
+        AvatarResponse: {
+            /** @description Adresse de la nouvelle photo (chemin absolu sur la même origine que l'API). */
+            avatarUrl: string;
+        };
+        EmailChangeRequestPayload: {
+            /**
+             * Format: email
+             * @description Nouvelle adresse souhaitée.
+             */
+            email: string;
+        };
+        EmailChangeRequestStatus: {
+            /**
+             * Format: email
+             * @description La nouvelle adresse, normalisée en minuscules.
+             */
+            newEmail: string;
+            /**
+             * @description État de la demande.
+             * @enum {string}
+             */
+            status: "pending" | "approved" | "rejected";
+        };
+        NewsletterPreferencePayload: {
+            /** @description Vrai pour recevoir la newsletter, faux pour s'en retirer. */
+            subscribed: boolean;
+        };
+        EmailChangeRequestItem: {
+            /**
+             * Format: uuid
+             * @description Identifiant de la demande (paramètre `id` des routes de décision). Il change quand le titulaire remplace sa demande.
+             */
+            id: string;
+            /**
+             * Format: uuid
+             * @description Identifiant du compte concerné.
+             */
+            userId: string;
+            /** @description Prénom du demandeur. */
+            firstName: string;
+            /** @description Nom du demandeur. */
+            lastName: string;
+            /**
+             * Format: email
+             * @description Adresse actuelle du compte.
+             */
+            currentEmail: string;
+            /**
+             * Format: email
+             * @description Adresse demandée.
+             */
+            newEmail: string;
+            /**
+             * @description État de la demande.
+             * @enum {string}
+             */
+            status: "pending" | "approved" | "rejected";
+            /**
+             * Format: date-time
+             * @description Date de dépôt de la demande.
+             */
+            createdAt: string;
+            /**
+             * Format: date-time
+             * @description Date de la décision, absente tant que la demande est en attente.
+             */
+            reviewedAt?: string;
+        };
+        EmailChangeRequestPage: {
+            items: components["schemas"]["EmailChangeRequestItem"][];
+            /** @description Nombre total de demandes correspondant au filtre, toutes pages confondues. */
+            total: number;
+            /** @description Taille de page appliquée. */
+            limit: number;
+            /** @description Nombre d'éléments sautés. */
+            offset: number;
+        };
+        ContactMessageRequest: {
+            /** @description Nom du visiteur. */
+            name: string;
+            /**
+             * Format: email
+             * @description Adresse où l'équipe répondra.
+             */
+            email: string;
+            /**
+             * @description Objet de la demande : question sur le service, problème de compte, données personnelles, presse ou partenariat, autre.
+             * @enum {string}
+             */
+            subject: "question" | "compte" | "donnees" | "partenariat" | "autre";
+            /** @description Le message. Les retours à la ligne sont conservés. */
+            message: string;
+        };
+        NewsletterSubscriptionRequest: {
+            /**
+             * Format: email
+             * @description Adresse à abonner.
+             */
+            email: string;
+        };
     };
     responses: {
         /** @description Requête mal formée (`bad_request`) : JSON invalide, champ inconnu, corps vide. */
@@ -1857,6 +2323,15 @@ export interface components {
         };
         /** @description Ressource introuvable (`not_found`). */
         NotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Aucune demande de changement d'adresse ne porte cet identifiant (`email_change_not_found`). */
+        EmailChangeNotFound: {
             headers: {
                 [name: string]: unknown;
             };
@@ -1929,6 +2404,11 @@ export interface components {
          * @example 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
          */
         Id: string;
+        /**
+         * @description Identifiant de la demande de changement d'adresse (champ `id` de la liste des demandes).
+         * @example 5c1d7e92-3a40-4b86-9f0e-6d8a2b4c1e75
+         */
+        EmailChangeRequestId: string;
         /** @description Nombre d'éléments par page (1 à 100, 20 par défaut). */
         Limit: number;
         /** @description Nombre d'éléments à sauter. */
@@ -4136,6 +4616,415 @@ export interface operations {
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getMyAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Le profil de l'utilisateur connecté. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Account"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateMyContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContactUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Coordonnées modifiées ; le profil à jour. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Account"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateMyAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "image/jpeg": string;
+                "image/png": string;
+                "image/webp": string;
+            };
+        };
+        responses: {
+            /** @description Photo remplacée. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AvatarResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            413: components["responses"]["PayloadTooLarge"];
+            /** @description Le `Content-Type` n'est ni `image/jpeg`, ni `image/png`, ni `image/webp` (`unsupported_media_type`). */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Image refusée (`validation_failed`) : `avatar` vaut `required` (corps vide), `invalid` (ce
+             *     n'est pas une image JPEG, PNG ou WebP lisible) ou `too_large` (plus de 1024 pixels de côté).
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Nom du fichier, tel que donné par `avatarUrl`.
+                 * @example 3f2a8c1e-5b7d-4e90-8a16-2c4d9e7f0b53.jpg
+                 */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description La photo, en JPEG. */
+            200: {
+                headers: {
+                    /** @description Mise en cache d'un an, sans revalidation. */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                };
+            };
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    requestMyEmailChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailChangeRequestPayload"];
+            };
+        };
+        responses: {
+            /** @description Demande déposée, en attente de validation. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailChangeRequestStatus"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description L'adresse est déjà prise par un autre compte (`email_already_used`) ou c'est déjà celle de ce compte (`email_unchanged`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    setMyNewsletterPreference: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewsletterPreferencePayload"];
+            };
+        };
+        responses: {
+            /** @description Préférence enregistrée. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listEmailChangeRequests: {
+        parameters: {
+            query?: {
+                /** @description Ne garde que les demandes dans cet état. Sans valeur, toutes les demandes sont listées. */
+                status?: "pending" | "approved" | "rejected";
+                /** @description Nombre d'éléments par page (1 à 100, 20 par défaut). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Nombre d'éléments à sauter. */
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Une page de demandes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailChangeRequestPage"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    approveEmailChangeRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identifiant de la demande de changement d'adresse (champ `id` de la liste des demandes).
+                 * @example 5c1d7e92-3a40-4b86-9f0e-6d8a2b4c1e75
+                 */
+                id: components["parameters"]["EmailChangeRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Demande acceptée, adresse changée. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["EmailChangeNotFound"];
+            /** @description La demande a déjà été traitée (`email_change_not_pending`), ou l'adresse est maintenant prise (`email_already_used`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    rejectEmailChangeRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identifiant de la demande de changement d'adresse (champ `id` de la liste des demandes).
+                 * @example 5c1d7e92-3a40-4b86-9f0e-6d8a2b4c1e75
+                 */
+                id: components["parameters"]["EmailChangeRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Demande refusée. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["EmailChangeNotFound"];
+            /** @description La demande a déjà été traitée (`email_change_not_pending`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    sendContactMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContactMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description Message accepté pour envoi. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            /** @description Le message n'a pas pu être envoyé (`contact_delivery_unavailable`). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    subscribeToNewsletter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewsletterSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description Demande prise en compte ; un lien de confirmation est envoyé si l'adresse n'était pas déjà abonnée. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    confirmNewsletterSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Abonnement confirmé. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequestOrInvalidToken"];
+            403: components["responses"]["Forbidden"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
             500: components["responses"]["InternalError"];
         };
     };

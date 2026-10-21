@@ -30,11 +30,13 @@ type ApiReplyStatus = ApiSchema<"HeroReviewReply">["status"];
 
 const reviewStatusFromApi: Record<ApiReviewStatus, ReviewStatus> = {
   published: "valide",
+  pending: "en-attente",
   hidden: "rejete",
 };
 
 const reviewStatusToApi: Record<ReviewStatus, ApiReviewStatus> = {
   valide: "published",
+  "en-attente": "pending",
   rejete: "hidden",
 };
 
@@ -47,6 +49,14 @@ const replyStatusFromApi: Record<ApiReplyStatus, ModerationStatus> = {
 const replyStatusToApi: Record<ModerationStatus, ApiReplyStatus> = {
   valide: "published",
   "en-attente": "pending",
+  rejete: "hidden",
+};
+
+const moderationDecisionToApi: Record<
+  Exclude<ModerationStatus, "en-attente">,
+  ApiSchema<"HeroReviewStatusPayload">["status"]
+> = {
+  valide: "published",
   rejete: "hidden",
 };
 
@@ -365,7 +375,9 @@ export async function moderateReview(
     await apiFetch(`/admin/hero-reviews/${encodeURIComponent(reviewId)}`, {
       method: "PATCH",
       sessionToken: token,
-      body: { status: reviewStatusToApi[decision] } satisfies ApiSchema<"HeroReviewStatusPayload">,
+      body: {
+        status: moderationDecisionToApi[decision],
+      } satisfies ApiSchema<"HeroReviewStatusPayload">,
     });
     return { ok: true };
   } catch (error) {
@@ -438,7 +450,9 @@ export async function moderateReply(
     await apiFetch(`/admin/hero-review-replies/${encodeURIComponent(reviewId)}`, {
       method: "PATCH",
       sessionToken: token,
-      body: { status: reviewStatusToApi[decision] } satisfies ApiSchema<"HeroReviewStatusPayload">,
+      body: {
+        status: moderationDecisionToApi[decision],
+      } satisfies ApiSchema<"HeroReviewStatusPayload">,
     });
     return { ok: true };
   } catch (error) {

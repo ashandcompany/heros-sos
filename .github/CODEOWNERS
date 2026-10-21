@@ -1,0 +1,44 @@
+# Relecteurs demandés automatiquement sur une PR selon les fichiers touchés. En cas de plusieurs règles
+# applicables, la dernière gagne : les règles précises sont donc placées après les règles larges.
+#
+# Dev A (@le-veilleur) : identité et sécurité du backend. Dev B (@Jersey276) : incidents, interventions,
+# vilains et socle d'infrastructure. Emma (@ashandcompany) : frontend.
+
+# Par défaut : la propriétaire du dépôt.
+*                               @ashandcompany
+
+/frontend/                      @ashandcompany
+
+# Backend : les deux développeurs relisent tout ; chacun est seul demandé sur son périmètre.
+/backend/                       @le-veilleur @Jersey276
+/backend/internal/auth/         @le-veilleur
+/backend/internal/account/      @le-veilleur
+/backend/internal/audit/        @le-veilleur
+/backend/internal/bootstrap/    @le-veilleur
+/backend/internal/crypto/       @le-veilleur
+/backend/internal/mail/         @le-veilleur
+/backend/internal/signedlink/   @le-veilleur
+/backend/internal/totp/         @le-veilleur
+/backend/internal/user/         @le-veilleur
+/backend/cmd/                   @le-veilleur
+/backend/internal/incident/     @Jersey276
+/backend/internal/intervention/ @Jersey276
+/backend/internal/villain/      @Jersey276
+
+# Le contrat d'API et le schéma SQL engagent les deux côtés, et le frontend.
+/backend/openapi/               @le-veilleur @Jersey276 @ashandcompany
+/backend/migrations/            @le-veilleur @Jersey276
+
+# Intégration continue, Docker et déploiement.
+/.github/                       @le-veilleur @Jersey276
+/docker-compose*.yml            @Jersey276
+/Makefile                       @Jersey276
+/backend/Dockerfile             @Jersey276
+
+# Documentation : le site et les documents qu'il publie (MVP, choix techniques, schéma de la base).
+/docs-site/                     @le-veilleur
+/backend/MVP.md                 @le-veilleur
+/backend/STACK.md               @le-veilleur
+/backend/TABLES.md              @le-veilleur
+/backend/stack/                 @le-veilleur
+/backend/tables/                @le-veilleur

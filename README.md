@@ -8,37 +8,56 @@ Plateforme web qui rapproche les citoyens et les super-héros pour signaler et t
 |---|---|
 | `frontend/` | Application Next.js 16 (App Router, React 19, TypeScript strict) avec Tailwind CSS v4 |
 | `backend/` | API REST en Go (GORM) avec PostgreSQL 18, contrat OpenAPI dans `backend/openapi/` |
-| `.github/workflows/` | CI du frontend et du backend |
+| `docs-site/` | Site de documentation Docusaurus (son propre `package.json`, tourne dans Docker) : architecture, MVP, stack et tables du backend, contrat d'API généré depuis l'OpenAPI |
+| `docker-compose*.yml`, `Makefile` | Piles Docker de développement et de production (back, front, documentation) et leurs raccourcis (`make help`) |
+| `.github/workflows/` | CI du frontend, du backend et de la documentation |
 
 ## Prérequis
 
-- **Node.js** ≥ 22 (version utilisée par la CI) et **npm** ≥ 10
-- **Go** : version fixée par `backend/go.mod` (1.26)
-- **Docker** : pour PostgreSQL et la pile de développement complète
-- **openssl** : pour générer les secrets du backend (`make env`)
+- **Docker** : pour la pile de développement complète (`make up`). Prévoir de la place pour sa machine virtuelle : **16 Go de disque recommandés** (Docker Desktop, Settings → Resources), car la pile, ses images et le cache de build dépassent 8 Go. Avec un disque plein, les builds échouent et PostgreSQL ne peut plus écrire.
+- **openssl** : pour générer les secrets du backend (`make env`, lancé par `make up`)
+- **Node.js** ≥ 22 (version utilisée par la CI) et **npm** ≥ 10 : seulement pour travailler sur le frontend hors Docker. `make up` n'en a pas besoin, la documentation non plus.
+- **Go** : version fixée par `backend/go.mod` (1.26), seulement pour lancer l'API hors Docker
 
 ## Installation et lancement
 
 ### Tout dans Docker (recommandé)
 
 ```bash
-cd backend
-make env      # crée .env avec des secrets aléatoires
-make up-dev   # proxy, front, API, PostgreSQL, Mailpit, RabbitMQ
+make up   # proxy, front, API, PostgreSQL, Mailpit, RabbitMQ, documentation (crée backend/.env au premier lancement)
 ```
+
+Les fichiers `docker-compose*.yml` sont à la racine : un seul endroit pour lancer le back, le front et la documentation. Les commandes ci-dessous délèguent à `backend/Makefile`, qui reste utilisable directement (`cd backend && make up-dev`). L'environnement (`.env`, `.env.production`) et les secrets restent dans `backend/`.
+
+| Commande | Effet |
+|---|---|
+| `make up` | Démarre tout en développement : proxy, front, API, PostgreSQL, Mailpit, RabbitMQ, documentation. Crée `backend/.env` au premier lancement et vérifie d'abord l'espace libre de Docker (1,5 Go minimum, `FORCE=1` pour passer outre). |
+| `make down` | Arrête la pile ; les données sont conservées. |
+| `make logs`, `make ps` | Suit les journaux de tous les conteneurs ; liste les conteneurs, leur état et leurs ports. |
+| `make docs` | Démarre seulement la documentation (sans le reste de la pile). |
+| `make adminer` | Ajoute Adminer, un client SQL. |
+| `make moderator EMAIL=… FIRST=… LAST=… BIRTH=AAAA-MM-JJ` | Crée un modérateur (mot de passe demandé, jamais passé en argument). |
+| `make reset` | Arrête la pile **et supprime ses données** (base, photos, RabbitMQ), après confirmation. |
+| `make secrets`, `make up-prod`, `make down-prod`, `make logs-prod` | Production : voir [le README du backend](backend/README.md#environnements-docker). |
+| `make check` | Valide la syntaxe des fichiers Compose (développement et production). |
+
+Tous les ports sont liés à `127.0.0.1` (rien n'est exposé sur le réseau) et se changent dans `backend/.env` (`PROXY_PORT`, `API_PORT`, `MAILPIT_PORT`, `ADMINER_PORT`, `POSTGRES_PORT`, `RABBITMQ_PORT`, `RABBITMQ_UI_PORT`, `DOCS_PORT`).
 
 | Service | Adresse |
 |---|---|
 | Front + API (via le proxy) | <http://localhost:8088> |
 | Documentation de l'API (Swagger) | <http://localhost:8088/api/v1/docs> |
 | API en direct | <http://localhost:8081/api/v1> |
+| Documentation technique (Docusaurus) | <http://localhost:3001/heros-sos/> |
 | Mails reçus (Mailpit) | <http://localhost:8025> |
-| Adminer | <http://localhost:8082> |
+| Adminer (après `make adminer`) | <http://localhost:8082> |
+| RabbitMQ (interface de gestion) | <http://localhost:15672> |
+| PostgreSQL | `localhost:5432` |
 
-Le code du front est monté dans le conteneur et rechargé à chaud. Pour créer le premier modérateur :
+Le code du front et celui de la documentation sont montés dans leurs conteneurs et rechargés à chaud. En production, seul le proxy publie des ports (80 et 443). Pour créer le premier modérateur :
 
 ```bash
-make moderator-dev EMAIL=modo@example.org FIRST=Nick LAST=Fury BIRTH=1950-12-04
+make moderator EMAIL=modo@example.org FIRST=Nick LAST=Fury BIRTH=1950-12-04
 ```
 
 > **Sauvegardez `HEROS_CRYPTO_KEYS`** (dans `backend/.env`) : sans cette clé, les données personnelles chiffrées en base sont définitivement illisibles.
@@ -64,7 +83,17 @@ make migrate
 make run        # API sur http://localhost:8080/api/v1
 ```
 
-Les commandes, les tests et la configuration sont détaillés dans [le README du backend](backend/README.md) (`make help` liste toutes les cibles).
+Les commandes, les tests et la configuration sont détaillés dans [le README du backend](backend/README.md) (`make help` liste toutes les cibles). Les documents de conception du backend sont `backend/MVP.md` (périmètre), `backend/STACK.md` (choix techniques) et `backend/TABLES.md` (schéma de la base).
+
+## Documentation technique
+
+Le site `docs-site/` (Docusaurus) rassemble la documentation technique : l'architecture en schémas, le MVP, les choix techniques, le schéma de la base de données et le contrat d'API (une page par route, générée depuis `backend/openapi/openapi.yaml`). Il tourne dans Docker : <http://localhost:3001/heros-sos/>, démarré par `make up` (ou seul, par `make docs`) et rechargé à chaud.
+
+Rien n'est copié : les documents de `backend/` sont lus tels quels, donc le site ne dérive pas de ce qui est livré. Il n'est pas encore publié en ligne. Détails, dont l'ajout d'une page : [docs-site/README.md](docs-site/README.md).
+
+## Journaux
+
+`make logs` suit tous les conteneurs (`make logs-prod` en production). L'API écrit en texte en développement et en JSON en production, au niveau `HEROS_LOG_LEVEL` (`debug`, `info`, `warn` ou `error`). Chaque conteneur garde au plus `LOG_MAX_FILE` fichiers de `LOG_MAX_SIZE` (3 × 10 Mo par défaut), réglables dans `backend/.env` : sans cette limite, Docker les garderait indéfiniment.
 
 ## État du branchement front ↔ API
 
@@ -76,7 +105,7 @@ Copier `frontend/.env.example` vers `frontend/.env.local` (ignoré par Git), pui
 
 | Variable | Rôle |
 |---|---|
-| `API_URL` | URL de base de l'API REST, préfixe compris : `http://localhost:8081/api/v1` avec `make up-dev`, `http://localhost:8080/api/v1` avec `make run`. Lue par le serveur Next uniquement. Vide : tout le frontend tourne sur les mocks. |
+| `API_URL` | URL de base de l'API REST, préfixe compris : `http://localhost:8081/api/v1` avec `make up`, `http://localhost:8080/api/v1` avec `make run`. Lue par le serveur Next uniquement. Vide : tout le frontend tourne sur les mocks. |
 | `MAP_TILE_URL` | Fond de la carte des incidents. Vide : tuiles publiques OpenStreetMap, réservées au développement. |
 | `MAP_TILE_ATTRIBUTION` | Mention de la source des tuiles, affichée sur la carte. |
 | `MAP_TILE_MAX_ZOOM` | Zoom maximal des tuiles. |
@@ -114,9 +143,13 @@ Documentation détaillée dans `frontend/docs/` : [architecture](frontend/docs/a
 
 - **Frontend** (`frontend-ci.yml`) : installation, audit des dépendances, vérification Prettier, build.
 - **Backend** (`backend-ci.yml`) : vérification de `go.mod`/`go.sum`, recherche de vulnérabilités (`govulncheck`), tests avec PostgreSQL, build.
+- **Documentation** (`docs-ci.yml`) : build du site `docs-site/` ; un lien cassé ou un OpenAPI illisible fait échouer le job. Rien n'est publié.
+
+La CI ne construit pas encore les images Docker et ne vérifie pas les fichiers Compose : lancer `make check` (syntaxe Compose) avant de pousser une modification de `docker-compose*.yml`.
 
 ## Liens utiles
 
 - **Maquettes Figma** : à compléter
 - **Contrat de l'API** : [backend/openapi/openapi.yaml](backend/openapi/openapi.yaml)
+- **Documentation technique** : <http://localhost:3001/heros-sos/> (après `make up` ou `make docs`), voir [docs-site/README.md](docs-site/README.md)
 - **Environnement de recette** : à compléter

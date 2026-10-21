@@ -20,7 +20,8 @@ COPY . .
 # Les migrations SQL et les modèles de mails sont embarqués : le binaire est autonome.
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api && \
-    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/createmoderator ./cmd/createmoderator
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/createmoderator ./cmd/createmoderator && \
+    mkdir /out/avatars
 
 # ---- Image finale -----------------------------------------------------------------------------
 FROM scratch
@@ -35,9 +36,13 @@ LABEL org.opencontainers.image.title="heros-sos-api" \
       org.opencontainers.image.description="API REST de la plateforme Heros-SOS" \
       org.opencontainers.image.source="https://github.com/ashandcompany/heros-sos"
 
+# Dossier des photos de profil : le seul endroit où l'API écrit. Il appartient à l'utilisateur non
+# privilégié, et un volume monté dessus reprend ces droits à sa création (voir docker-compose.yml).
+# Le reste du système de fichiers peut rester en lecture seule (read_only: true).
+COPY --from=builder --chown=65532:65532 /out/avatars /var/lib/heros-sos/avatars
+ENV HEROS_AVATAR_DIR=/var/lib/heros-sos/avatars
+
 # Utilisateur non privilégié, par identifiants numériques : `scratch` n'a pas de /etc/passwd.
-# L'API n'écrit rien sur le disque : l'image peut aussi tourner avec un système de fichiers en
-# lecture seule (read_only: true).
 USER 65532:65532
 
 EXPOSE 8080

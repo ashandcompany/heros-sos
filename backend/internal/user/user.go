@@ -52,6 +52,22 @@ type Address struct {
 	Country    string
 }
 
+// ContactUpdate liste les coordonnées à remplacer. Un champ nil est conservé tel quel.
+type ContactUpdate struct {
+	Phone   *string
+	Address *AddressUpdate
+}
+
+// AddressUpdate remplace l'adresse postale d'un compte.
+type AddressUpdate struct {
+	Street     string
+	PostalCode string
+	City       string
+	Country    string
+	// Complement nil conserve le complément actuel ; une chaîne vide l'efface.
+	Complement *string
+}
+
 // User est un compte, avec ses données personnelles en clair (le chiffrement n'existe que
 // dans la couche de stockage).
 type User struct {

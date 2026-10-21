@@ -49,6 +49,8 @@ const (
 	defaultActivationTokenTTL    = 24 * time.Hour
 	defaultPasswordResetTokenTTL = time.Hour
 
+	defaultNewsletterConfirmTTL = 48 * time.Hour
+
 	defaultMailFromAddress = "no-reply@heros-sos.local"
 	defaultMailFromName    = "Heros-SOS"
 	defaultSMTPHost        = "localhost"
@@ -62,9 +64,19 @@ const (
 	defaultOMDbBaseURL     = "https://www.omdbapi.com/"
 	defaultOMDbTimeout     = 5 * time.Second
 
+	// Le « Bureau » : destinataire des messages du formulaire de contact.
+	defaultContactRecipient = "contact@heros-sos.local"
+
+	// Photos de profil : le frontend les recadre en 256 px et refuse au-delà de 2 Mio.
+	defaultAvatarDir          = "data/avatars"
+	defaultAvatarMaxBytes     = 2 << 20 // 2 Mio
+	defaultAvatarMaxDimension = 1024
+
 	defaultPublicBaseURL     = "http://localhost:3000"
 	defaultActivationPath    = "/activation"
 	defaultPasswordResetPath = "/reinitialisation-mot-de-passe"
+
+	defaultNewsletterConfirmPath = "/newsletter/confirmation"
 
 	defaultCleanupInterval  = 15 * time.Minute
 	defaultSessionRetention = 7 * 24 * time.Hour
@@ -79,6 +91,12 @@ var (
 	defaultRatePasswordResetPerIP    = RateRule{Max: 10, Window: time.Hour}
 	defaultRatePasswordResetPerKey   = RateRule{Max: 3, Window: time.Hour}
 	defaultRateIncidentCreatePerUser = RateRule{Max: 10, Window: time.Hour}
+
+	defaultRateContactPerIP       = RateRule{Max: 5, Window: time.Hour}
+	defaultRateNewsletterPerIP    = RateRule{Max: 10, Window: time.Hour}
+	defaultRateNewsletterPerEmail = RateRule{Max: 3, Window: time.Hour}
+	defaultRateEmailChangePerUser = RateRule{Max: 5, Window: time.Hour}
+	defaultRateAvatarPerUser      = RateRule{Max: 20, Window: time.Hour}
 )
 
 // Plancher de sécurité imposé en production pour le hachage des mots de passe

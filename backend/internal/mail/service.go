@@ -26,6 +26,8 @@ const (
 	templateOutcomeValidation  = "outcome_validation"
 	templateOutcomeDisputed    = "outcome_disputed"
 	templateReviewRequest      = "hero_review_request"
+	templateContactMessage     = "contact_message"
+	templateNewsletterConfirm  = "newsletter_confirmation"
 )
 
 const (
@@ -36,6 +38,10 @@ const (
 	subjectOutcomeValidation  = "Validation du résultat d'une intervention sur %s"
 	subjectOutcomeDisputed    = "Désaccord sur une intervention sur %s"
 	subjectReviewRequest      = "Évaluez l'intervention de %s"
+	// Le sujet du message de contact ne porte que l'objet choisi dans une liste fixe : le nom et le
+	// texte, saisis par le visiteur, ne figurent que dans le corps.
+	subjectContactMessage    = "[%s] Message de contact : %s"
+	subjectNewsletterConfirm = "Confirmez votre abonnement à la newsletter %s"
 )
 
 // templateData est ce que voient les modèles.
@@ -47,6 +53,10 @@ type templateData struct {
 	IncidentTitle  string
 	IncidentType   string
 	InterventionID string
+	SenderName     string
+	SenderEmail    string
+	ContactSubject string
+	Body           string
 }
 
 // Service compose les mails de l'application à partir des modèles et les confie à un Mailer.
@@ -120,7 +130,40 @@ func (s *Service) SendReviewRequest(ctx context.Context, to, link string) error 
 	return s.send(ctx, to, fmt.Sprintf(subjectReviewRequest, s.appName), templateReviewRequest, templateData{Link: link})
 }
 
+// ContactMessage est un message du formulaire de contact, destiné à l'équipe.
+type ContactMessage struct {
+	SenderName  string
+	SenderEmail string
+	// Subject est le libellé de l'objet choisi par le visiteur (liste fixe).
+	Subject string
+	Body    string
+}
+
+// SendContactMessage transmet un message du formulaire de contact à l'équipe. L'adresse du visiteur
+// sert d'adresse de réponse : répondre au mail répond au visiteur. Le mail n'est jamais envoyé au
+// visiteur lui-même, pour que le formulaire ne serve pas à écrire à des tiers.
+func (s *Service) SendContactMessage(ctx context.Context, to string, message ContactMessage) error {
+	return s.deliver(ctx, Message{
+		To: to, ReplyTo: message.SenderEmail, Subject: fmt.Sprintf(subjectContactMessage, s.appName, message.Subject),
+	}, templateContactMessage, templateData{
+		SenderName: message.SenderName, SenderEmail: message.SenderEmail,
+		ContactSubject: message.Subject, Body: message.Body,
+	})
+}
+
+// SendNewsletterConfirmation envoie le lien qui confirme un abonnement à la newsletter.
+func (s *Service) SendNewsletterConfirmation(ctx context.Context, to, link string) error {
+	return s.send(ctx, to, fmt.Sprintf(subjectNewsletterConfirm, s.appName), templateNewsletterConfirm, templateData{
+		Link: link, ExpiresIn: formatDuration(s.tokens.NewsletterConfirmTTL),
+	})
+}
+
 func (s *Service) send(ctx context.Context, to, subject, name string, data templateData) error {
+	return s.deliver(ctx, Message{To: to, Subject: subject}, name, data)
+}
+
+// deliver compose le corps du message à partir du modèle, puis le confie au Mailer.
+func (s *Service) deliver(ctx context.Context, message Message, name string, data templateData) error {
 	data.AppName = s.appName
 
 	var text, html bytes.Buffer
@@ -130,7 +173,8 @@ func (s *Service) send(ctx context.Context, to, subject, name string, data templ
 	if err := s.html.ExecuteTemplate(&html, name+".html.tmpl", data); err != nil {
 		return fmt.Errorf("mail : modèle HTML %s : %w", name, err)
 	}
-	return s.mailer.Send(ctx, Message{To: to, Subject: subject, Text: text.String(), HTML: html.String()})
+	message.Text, message.HTML = text.String(), html.String()
+	return s.mailer.Send(ctx, message)
 }
 
 // formatDuration écrit une durée de validité en français : « 24 heures », « 30 minutes ».

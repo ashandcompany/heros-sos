@@ -64,6 +64,16 @@ type Repository interface {
 	MarkVerified(ctx context.Context, id, verifiedBy uuid.UUID, now time.Time) (bool, error)
 	SetRole(ctx context.Context, id uuid.UUID, role Role, now time.Time) error
 
+	// UpdateContact remplace les coordonnées indiquées (téléphone, adresse) ; ErrNotFound si le
+	// compte n'existe pas.
+	UpdateContact(ctx context.Context, id uuid.UUID, update ContactUpdate, now time.Time) error
+	// ChangeEmail remplace l'adresse de connexion. Il retourne ErrEmailTaken si une autre adresse
+	// identique existe : l'unicité est garantie par la base, pas par une vérification préalable.
+	ChangeEmail(ctx context.Context, id uuid.UUID, email string, now time.Time) error
+	// SetAvatarPath remplace la photo de profil et retourne le chemin de la précédente (vide s'il n'y
+	// en avait pas), pour que l'appelant puisse la supprimer.
+	SetAvatarPath(ctx context.Context, id uuid.UUID, path string, now time.Time) (previous string, err error)
+
 	List(ctx context.Context, filter Filter) (users []User, total int64, err error)
 	// ActiveEmailsByRole retourne les adresses des comptes actifs ayant l'un des rôles.
 	ActiveEmailsByRole(ctx context.Context, roles ...Role) ([]string, error)
@@ -235,6 +245,93 @@ func (r *gormRepository) SetRole(ctx context.Context, id uuid.UUID, role Role, n
 		return ErrNotFound
 	}
 	return nil
+}
+
+func (r *gormRepository) UpdateContact(ctx context.Context, id uuid.UUID, update ContactUpdate, now time.Time) error {
+	c := codec{sealer: r.sealer, id: id}
+	values := map[string]any{"updated_at": now}
+
+	set := func(column, value string) error {
+		sealed, err := c.sealOptional(column, value)
+		if err != nil {
+			return err
+		}
+		if sealed == nil {
+			values[column] = nil // une valeur vide s'enregistre NULL, comme à la création
+		} else {
+			values[column] = sealed
+		}
+		return nil
+	}
+	if update.Phone != nil {
+		if err := set(columnPhone, *update.Phone); err != nil {
+			return err
+		}
+	}
+	if address := update.Address; address != nil {
+		for column, value := range map[string]string{
+			columnStreet: address.Street, columnPostalCode: address.PostalCode,
+			columnCity: address.City, columnCountry: address.Country,
+		} {
+			if err := set(column, value); err != nil {
+				return err
+			}
+		}
+		if address.Complement != nil {
+			if err := set(columnAddressComplement, *address.Complement); err != nil {
+				return err
+			}
+		}
+	}
+
+	changed, err := r.conditionalUpdate(ctx, "id = ?", []any{id}, values)
+	if err != nil {
+		return err
+	}
+	if !changed {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *gormRepository) ChangeEmail(ctx context.Context, id uuid.UUID, email string, now time.Time) error {
+	result := r.conn(ctx).Table(tableUsers).Where("id = ?", id).
+		Updates(map[string]any{"email": email, "updated_at": now})
+	if result.Error != nil {
+		if database.IsUniqueViolation(result.Error, emailUniqueConstraint) {
+			return ErrEmailTaken
+		}
+		return fmt.Errorf("user : changement d'adresse email : %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// setAvatarPathSQL remplace la photo et retourne l'ancienne dans une seule instruction : la ligne est
+// verrouillée entre la lecture et l'écriture, donc deux remplacements simultanés ne peuvent pas
+// retourner le même « ancien » chemin (et laisser un fichier orphelin).
+const setAvatarPathSQL = `
+WITH previous AS (SELECT avatar_path FROM users WHERE id = ? FOR UPDATE)
+UPDATE users SET avatar_path = ?, updated_at = ?
+FROM previous
+WHERE users.id = ?
+RETURNING previous.avatar_path`
+
+func (r *gormRepository) SetAvatarPath(ctx context.Context, id uuid.UUID, path string, now time.Time) (string, error) {
+	var result struct{ AvatarPath *string }
+	query := r.conn(ctx).Raw(setAvatarPathSQL, id, path, now, id).Scan(&result)
+	if query.Error != nil {
+		return "", fmt.Errorf("user : remplacement de la photo : %w", query.Error)
+	}
+	if query.RowsAffected == 0 {
+		return "", ErrNotFound
+	}
+	if result.AvatarPath == nil {
+		return "", nil
+	}
+	return *result.AvatarPath, nil
 }
 
 func (r *gormRepository) conditionalUpdate(ctx context.Context, condition string, args []any, values map[string]any) (bool, error) {

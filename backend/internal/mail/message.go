@@ -24,7 +24,9 @@ const fallbackMessageIDDomain = "localhost"
 
 // Message est un mail à envoyer, avec une version texte et une version HTML.
 type Message struct {
-	To      string
+	To string
+	// ReplyTo, facultatif, est l'adresse qui reçoit la réponse du destinataire (formulaire de contact).
+	ReplyTo string
 	Subject string
 	Text    string
 	HTML    string
@@ -49,14 +51,19 @@ func (s Sender) header() string {
 }
 
 // validate refuse un message qui permettrait une injection d'en-têtes : saut de ligne dans le
-// destinataire ou le sujet, adresse qui n'est pas une adresse simple.
+// destinataire, l'adresse de réponse ou le sujet, adresse qui n'est pas une adresse simple.
 func (m Message) validate() (recipient *mail.Address, err error) {
-	if strings.ContainsAny(m.To, "\r\n") || strings.ContainsAny(m.Subject, "\r\n") {
+	if strings.ContainsAny(m.To, "\r\n") || strings.ContainsAny(m.ReplyTo, "\r\n") || strings.ContainsAny(m.Subject, "\r\n") {
 		return nil, fmt.Errorf("%w : saut de ligne dans un en-tête", ErrInvalidMessage)
 	}
 	recipient, err = mail.ParseAddress(m.To)
 	if err != nil || recipient.Name != "" {
 		return nil, fmt.Errorf("%w : destinataire", ErrInvalidMessage)
+	}
+	if m.ReplyTo != "" {
+		if replyTo, err := mail.ParseAddress(m.ReplyTo); err != nil || replyTo.Name != "" {
+			return nil, fmt.Errorf("%w : adresse de réponse", ErrInvalidMessage)
+		}
 	}
 	if strings.TrimSpace(m.Subject) == "" || (m.Text == "" && m.HTML == "") {
 		return nil, fmt.Errorf("%w : sujet ou contenu vide", ErrInvalidMessage)
@@ -83,6 +90,9 @@ func build(sender Sender, message Message, now time.Time) ([]byte, error) {
 		{"Message-ID", fmt.Sprintf("<%s@%s>", ids.New(), domainOf(sender.Address))},
 		{"MIME-Version", "1.0"},
 		{"Content-Type", fmt.Sprintf("multipart/alternative; boundary=%q", parts.Boundary())},
+	}
+	if message.ReplyTo != "" {
+		headers = append(headers, struct{ name, value string }{"Reply-To", (&mail.Address{Address: message.ReplyTo}).String()})
 	}
 	var output bytes.Buffer
 	for _, header := range headers {

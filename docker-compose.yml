@@ -4,29 +4,39 @@
 #   docker-compose.dev.yml    développement : ports liés à 127.0.0.1, Mailpit, front rechargé à chaud
 #   docker-compose.prod.yml   production    : TLS automatique, secrets en fichiers, ressources bornées
 #
-# Se lance avec `make up-dev` ou `make up-prod` (voir le Makefile et le README).
+# Ces fichiers sont à la racine du dépôt : un seul endroit pour lancer le back ET le front. Les chemins
+# relatifs ci-dessous partent donc de la racine (backend/ pour l'API, frontend/ pour le front). Les
+# fichiers d'environnement et les secrets restent dans backend/ (.env, .env.production, secrets/).
+#
+# Se lance avec `make up` (développement) ou `make up-prod`, depuis la racine (voir le Makefile).
 #
 # Réseaux : `backend` (base de données, file de messages) n'a aucun accès extérieur ; `edge` relie le
 # reverse proxy, l'API et le front. L'API est sur les deux : elle parle à la base et envoie des mails.
 
 name: heros-sos
 
+# Journaux des conteneurs (stdout/stderr, lus par `make logs-dev` ou `make logs-prod`). Sans rotation,
+# Docker les garde sans limite : un conteneur bavard finit par remplir le disque. Chaque conteneur garde
+# au plus LOG_MAX_FILE fichiers de LOG_MAX_SIZE. Les fichiers dev et prod en déclarent autant pour
+# leurs propres services (une ancre YAML ne traverse pas les fichiers) : même réglage, même variables.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: ${LOG_MAX_SIZE:-10m}
+    max-file: ${LOG_MAX_FILE:-3}
+
 x-hardening: &hardening
   restart: unless-stopped
   security_opt:
     - no-new-privileges:true
-  logging:
-    driver: json-file
-    options:
-      max-size: "10m"
-      max-file: "3"
+  logging: *logging
 
 services:
   api:
     <<: *hardening
     build:
-      context: .
-      dockerfile: DOCKERFILE
+      context: ./backend
+      dockerfile: Dockerfile
     image: heros-sos/api:${APP_VERSION:-dev}
     depends_on:
       db:
@@ -42,7 +52,11 @@ services:
     networks:
       - backend
       - edge
-    # L'API n'écrit rien sur le disque, ne garde aucune capacité Linux et ne peut pas en gagner.
+    volumes:
+      # Photos de profil : à sauvegarder avec la base (voir HEROS_AVATAR_DIR dans l'image).
+      - avatars:/var/lib/heros-sos/avatars
+    # Hors du volume des photos, l'API n'écrit rien sur le disque, ne garde aucune capacité Linux et ne
+    # peut pas en gagner.
     read_only: true
     cap_drop:
       - ALL
@@ -94,7 +108,7 @@ services:
       # Valeur factice en HTTP seul (aucun certificat n'est demandé) ; obligatoire en production.
       ACME_EMAIL: ${ACME_EMAIL:-contact@heros-sos.invalid}
     volumes:
-      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./backend/docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     networks:
@@ -131,5 +145,6 @@ networks:
 
 volumes:
   pgdata:
+  avatars:
   caddy_data:
   caddy_config:

@@ -55,8 +55,16 @@ const (
 	envRateIncidentCreatePerUser = "HEROS_RATE_INCIDENT_CREATE_PER_USER"
 	envMaxTrackedRateKeys        = "HEROS_RATE_MAX_TRACKED_KEYS"
 
+	envRateContactPerIP       = "HEROS_RATE_CONTACT_PER_IP"
+	envRateNewsletterPerIP    = "HEROS_RATE_NEWSLETTER_PER_IP"
+	envRateNewsletterPerEmail = "HEROS_RATE_NEWSLETTER_PER_EMAIL"
+	envRateEmailChangePerUser = "HEROS_RATE_EMAIL_CHANGE_PER_USER"
+	envRateAvatarPerUser      = "HEROS_RATE_AVATAR_PER_USER"
+
 	envActivationTokenTTL    = "HEROS_ACTIVATION_TOKEN_TTL"
 	envPasswordResetTokenTTL = "HEROS_PASSWORD_RESET_TOKEN_TTL"
+
+	envNewsletterConfirmTTL = "HEROS_NEWSLETTER_CONFIRM_TTL"
 
 	envCSRFSecret    = "HEROS_CSRF_SECRET"
 	envCryptoKeys    = "HEROS_CRYPTO_KEYS"
@@ -81,9 +89,17 @@ const (
 	envOMDbBaseURL = "HEROS_OMDB_BASE_URL"
 	envOMDbTimeout = "HEROS_OMDB_TIMEOUT"
 
+	envContactRecipient = "HEROS_CONTACT_RECIPIENT"
+
+	envAvatarDir          = "HEROS_AVATAR_DIR"
+	envAvatarMaxBytes     = "HEROS_AVATAR_MAX_BYTES"
+	envAvatarMaxDimension = "HEROS_AVATAR_MAX_DIMENSION"
+
 	envPublicBaseURL     = "HEROS_PUBLIC_BASE_URL"
 	envActivationPath    = "HEROS_ACTIVATION_PATH"
 	envPasswordResetPath = "HEROS_PASSWORD_RESET_PATH"
+
+	envNewsletterConfirmPath = "HEROS_NEWSLETTER_CONFIRM_PATH"
 
 	envCleanupInterval  = "HEROS_CLEANUP_INTERVAL"
 	envSessionRetention = "HEROS_SESSION_RETENTION"
@@ -109,13 +125,16 @@ func EnvVarNames() []string {
 		envLockoutMaxFailures, envLockoutBaseDelay, envLockoutMaxDelay,
 		envRateLoginPerIP, envRateLoginPerIdentifier, envRateRegisterPerIP,
 		envRatePasswordResetPerIP, envRatePasswordResetPerKey, envRateIncidentCreatePerUser, envMaxTrackedRateKeys,
-		envActivationTokenTTL, envPasswordResetTokenTTL,
+		envRateContactPerIP, envRateNewsletterPerIP, envRateNewsletterPerEmail, envRateEmailChangePerUser,
+		envRateAvatarPerUser,
+		envActivationTokenTTL, envPasswordResetTokenTTL, envNewsletterConfirmTTL,
 		envCSRFSecret, envCryptoKeys, envCryptoActiveK,
 		envMailDriver, envMailFromAddress, envMailFromName, envSMTPHost, envSMTPPort,
 		envSMTPUsername, envSMTPPassword, envSMTPTLSMode, envSMTPTimeout, envMailWorkers,
 		envMailQueueSize, envMailMaxAttempts, envMailRetryDelay, envMailSendTimeout,
 		envOMDbAPIKey, envOMDbBaseURL, envOMDbTimeout,
-		envPublicBaseURL, envActivationPath, envPasswordResetPath,
+		envContactRecipient, envAvatarDir, envAvatarMaxBytes, envAvatarMaxDimension,
+		envPublicBaseURL, envActivationPath, envPasswordResetPath, envNewsletterConfirmPath,
 		envCleanupInterval, envSessionRetention, envTokenRetention,
 	}
 }

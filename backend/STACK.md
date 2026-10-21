@@ -1,27 +1,46 @@
 # Stack du backend
 
-Complément au cahier des charges (go / pg) : le backend est en **Go**, avec pg conservé.
+Complément au cahier des charges, qui prévoit PHP 8.4 et MySQL (§2.4) : le backend est en **Go** avec **PostgreSQL**. Le frontend est en **Next.js** (dossier `frontend/`) et parle à l'API Go en REST. Le schéma des tables est dans [TABLES.md](TABLES.md).
+
+## Base de données
+
+PostgreSQL remplace MySQL, accédé avec **GORM** (`gorm.io/gorm` et `gorm.io/driver/postgres`, basé sur `pgx`).
+
+- **Migrations :** fichiers SQL versionnés avec `golang-migrate`. `AutoMigrate` de GORM n'est utilisé qu'en développement, jamais en production (il ne supprime rien et ne se relit pas).
+- **Connexion :** TLS, utilisateur applicatif à droits minimaux (pas de superutilisateur).
+- **Identifiants :** UUID générés côté Go (v7), pour que l'identifiant de la ligne soit connu avant l'insertion et serve de donnée associée (AAD) au chiffrement des champs.
+- **Modèles :** les structs GORM ne sont jamais renvoyées par l'API. Les types générés par OpenAPI (DTO) sont séparés des entités, pour ne pas exposer le hash du mot de passe ou des champs chiffrés.
+- **Suppression RGPD :** pas de `gorm.DeletedAt` (suppression logique) sur les données personnelles, car la ligne resterait en base. Suppression réelle (`Unscoped().Delete`) ou anonymisation, pour le droit à l'effacement.
+- **Chiffrement des champs :** fait dans le repository ou dans les hooks `BeforeSave` et `AfterFind`, avec `internal/crypto`. Un type `Valuer/Scanner` seul ne connaît pas l'identifiant de la ligne, donc il ne convient pas pour l'AAD.
+- **Injection SQL :** GORM paramètre ses requêtes. Le risque vient de `Raw`, `Exec` et `Where` avec une chaîne concaténée : toujours des `?` avec des arguments.
+- **Mails (repli outbox, sans RabbitMQ) :** `clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}`.
+- **Les sessions, les mails à envoyer et les champs chiffrés** (voir plus bas) vivent dans cette même base.
+
+Compromis par rapport à `sqlc` : GORM va plus vite à écrire, mais le SQL n'est pas vérifié à la compilation, et `Preload` peut provoquer des requêtes en trop. Rien de bloquant à cette échelle.
 
 ## OpenAPI / Swagger
 
-Deux approches possibles :
+Deux approches étaient possibles. **Décision : spec d'abord** (`openapi.yaml` et `oapi-codegen`), et le front peut générer son client TypeScript depuis le même fichier.
 
 | Approche                       | Outil                                                                                              | Avantage                                                                                             | Compromis                                                     |
 | ------------------------------ | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | **Spec d'abord** (recommandée) | Fichier `openapi.yaml` (OpenAPI 3) et `oapi-codegen` pour générer les types et l'interface serveur | Le contrat est la référence, le front peut générer son client, le code ne peut pas dériver de la doc | Il faut écrire le YAML d'abord                                |
 | **Code d'abord**               | `swaggo/swag` (annotations en commentaires)                                                        | Rapide à démarrer                                                                                    | Génère surtout du Swagger 2.0, et la doc peut dériver du code |
 
-Dans les deux cas, Swagger UI est servi sur `/docs`, uniquement hors production.
+Dans les deux cas, Swagger UI est servi sur `/docs`, uniquement hors production. Les routes sont préfixées par `/api/v1`, valeur déjà prévue par le README du frontend. Les noms de rôles de l'API (`citizen`, `hero`, `moderator`) devront être alignés avec ceux du frontend (`citoyen`, `super-heros`).
 
 ## Docker
 
 Un `docker-compose.yml` avec ces services :
 
 - `api` : image Go en multi-stage, avec une image finale minimale.
+- `worker` : worker Go qui lit la file `mail.send` et envoie les mails.
+- `proxy` : Caddy ou Traefik. Il termine le TLS et route `/api/*` vers `api` et le reste vers Next.js, pour que le navigateur ne parle qu'à une seule origine (voir « Sessions »).
+- `web` : Next.js, si le frontend est aussi conteneurisé (à confirmer avec Emma).
 - `db` : PostgreSQL, avec un volume.
-- `rabbitmq` : si retenu, avec l'interface de management.
+- `rabbitmq` : retenu pour les mails, avec l'interface de management (à condition que l'hébergeur supporte Docker).
 - `mailpit` : faux serveur SMTP pour voir les mails en développement.
-- `adminer` ou pgAdmin dans un profil `dev` uniquement, car le cahier §2.4 l'interdit en production.
+- `adminer` ou pgAdmin dans un profil `dev` uniquement : le cahier §2.4 autorise phpMyAdmin seulement en développement et interdit tout outil équivalent en production (RGPD).
 
 Les secrets passent par `.env`, avec un `.env.example` commité et jamais le vrai fichier.
 
@@ -37,9 +56,11 @@ Proposition :
 Deux points à connaître :
 
 - **Hébergement :** le cahier §2.1 dit que chaque groupe héberge chez son hébergeur. Un hébergement mutualisé ne fera pas tourner RabbitMQ. Vérifier que l'hébergeur supporte Docker.
-- **Alternative sans RabbitMQ :** une table `mail_outbox` en PostgreSQL lue par un worker. Il n'y a rien de plus à héberger et c'est suffisant à cette échelle. RabbitMQ est un peu surdimensionné ici, mais il se justifie pour la démonstration technique ou si d'autres événements sont prévus.
+- **Alternative sans RabbitMQ :** une table `mail_outbox` en PostgreSQL lue par un worker (`SELECT … FOR UPDATE SKIP LOCKED` évite que deux workers prennent le même mail). Il n'y a rien de plus à héberger et c'est suffisant à cette échelle. RabbitMQ est un peu surdimensionné ici, mais il se justifie pour la démonstration technique ou si d'autres événements sont prévus.
 
 Avec RabbitMQ, le message est publié après le commit en base, avec confirmation de publication. Sinon un crash entre les deux ferait perdre un mail.
+
+**Décision :** RabbitMQ est retenu pour les mails, tant que l'hébergeur supporte Docker. Sinon, repli sur la table `mail_outbox` (voir [TABLES.md](TABLES.md)).
 
 ## OMDb pour les films
 
@@ -63,13 +84,13 @@ OMDb ne remplace pas l'encyclopédie Marvel du §6.1.4, qui reste à trancher.
 
 Le RGPD n'impose pas d'algorithme précis (article 32 : mesures appropriées, état de l'art). Le chiffrement symétrique est déjà résistant au quantique : AES-256 garde environ 128 bits de sécurité face à Grover. Le post-quantique ne compte que là où l'on utilise de la clé publique.
 
-| Mesure                                                                                         | Pertinence                                                                                                                         | Où dans le projet                                                                                                                                                                                                                                                   |
-| ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Cascade AES-256-GCM puis XChaCha20-Poly1305** (clé de 512 bits) sur les données personnelles | Oui, retenu : 512 bits de clé réelle avec des algorithmes standards                                                                | Champs sensibles en base : identité civile des héros (nom, prénom, §5.5 et §5.7), puis téléphone, adresse postale et date de naissance (§5.4). Un paquet `internal/crypto` avec un format versionné pour pouvoir changer d'algorithme plus tard. Détail ci-dessous. |
-| **TLS avec échange hybride ML-KEM** (`X25519MLKEM768`)                                         | Oui, gratuit avec une version récente de Go et un navigateur à jour. Protège contre « récolter maintenant, déchiffrer plus tard ». | Navigateur vers Next.js, Next.js vers l'API Go, API vers la base et vers le SMTP. Le composant qui termine le TLS (proxy Docker ou Go) doit être assez récent : à vérifier.                                                                                         |
-| **Partage de secret de Shamir** pour la clé maîtresse                                          | Oui, simple et utile                                                                                                               | Opérations, pas le code applicatif : la clé maîtresse qui protège les clés de données et les sauvegardes est répartie entre _n_ personnes de l'équipe, _k_ suffisent pour la reconstituer.                                                                          |
-| **Ed25519** pour des liens signés                                                              | Oui, car ils sont de courte durée et le risque quantique est négligeable                                                           | Lien de désabonnement de la newsletter (§4.2), lien de notation d'un héros dans le mail de fin d'intervention (§4.3.3 et §6.1.3). Aussi les clés SSH de déploiement. Un identifiant `kid` permet de renouveler la clé.                                              |
-| ML-DSA, FHE, MPC, QKD, Threefish                                                               | Non, hors de proportion pour ce projet                                                                                             | Non utilisés. Threefish pourra s'ajouter plus tard comme autre id d'algorithme du format versionné.                                                                                                                                                                 |
+| Mesure | Pertinence | Où dans le projet |
+|---|---|---|
+| **Cascade AES-256-GCM puis XChaCha20-Poly1305** (clé de 512 bits) sur les données personnelles | Oui, retenu : 512 bits de clé réelle avec des algorithmes standards | Champs sensibles en base, pour tous les utilisateurs : nom, prénom, date de naissance, téléphone et adresse postale (§5.4 et §5.7). Un paquet `internal/crypto` avec un format versionné pour pouvoir changer d'algorithme plus tard. Détail ci-dessous. |
+| **TLS avec échange hybride ML-KEM** (`X25519MLKEM768`) | Oui, gratuit avec une version récente de Go et un navigateur à jour. Protège contre « récolter maintenant, déchiffrer plus tard ». | Navigateur vers Next.js, Next.js vers l'API Go, API vers la base et vers le SMTP. Le composant qui termine le TLS (proxy Docker ou Go) doit être assez récent : à vérifier. |
+| **Partage de secret de Shamir** pour la clé maîtresse | Oui, simple et utile | Opérations, pas le code applicatif : la clé maîtresse qui protège les clés de données et les sauvegardes est répartie entre *n* personnes de l'équipe, *k* suffisent pour la reconstituer. |
+| **Ed25519** pour des liens signés | Oui, car ils sont de courte durée et le risque quantique est négligeable | Lien de désabonnement de la newsletter (§4.2), lien de notation d'un héros dans le mail de fin d'intervention (§4.3.3 et §6.1.3). Aussi les clés SSH de déploiement. Un identifiant `kid` permet de renouveler la clé. |
+| ML-DSA, FHE, MPC, QKD, Threefish | Non, hors de proportion pour ce projet | Non utilisés. Threefish pourra s'ajouter plus tard comme autre id d'algorithme du format versionné. |
 
 ### Chiffrement des données : cascade à clé de 512 bits
 
@@ -109,12 +130,37 @@ Le cahier §2.2 impose une gestion des sessions via le formulaire de connexion :
 
 - 32 octets tirés de `crypto/rand`, encodés en base64url. C'est un identifiant opaque, sans donnée.
 - En base, seul le hash SHA-256 du jeton est stocké. Le jeton brut n'existe que dans le cookie : une fuite de la base ne donne aucune session utilisable.
-- Table `sessions` : `token_hash`, `user_id`, `created_at`, `last_seen_at`, `expires_at`, `mfa_verified_at`, `revoked_at`, IP et user-agent (données personnelles, durée de conservation limitée).
+- Table `sessions` : `token_hash`, `user_id`, `created_at`, `last_seen_at`, `expires_at`, `mfa_verified_at`, `revoked_at`, IP et résumé de l'appareil `device_label` (« Chrome · macOS », calculé à partir du User-Agent dont la chaîne brute n'est pas conservée ; données personnelles, durée de conservation limitée).
 - Stockage dans la base principale, pas dans Redis : un service de moins à héberger (§2.1), révocation immédiate, une lecture par requête négligeable à cette échelle.
 
 **Cookie** : `__Host-session`, `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`, sans attribut `Domain`.
 
 **Next.js et API Go en même origine** : un reverse proxy (Caddy ou Traefik, dans Docker) route `/api/*` vers Go et le reste vers Next.js. Pas de CORS, et le cookie fonctionne sans configuration spéciale. Le middleware de Next ne sert qu'à rediriger : l'autorisation se vérifie toujours dans l'API Go. Un endpoint `/api/me` renvoie le rôle, utilisé pour le §5.3 (redirection d'un citoyen vers son profil, d'un héros vers son espace pro).
+
+**Du cookie au navigateur (option A : Next relaie le cookie de Go)**
+
+La session vit dans le backend Go : il la crée, la stocke, la valide et la révoque. Le front ne fait que porter le cookie, et ne décide jamais d'un droit (il redirige pour l'ergonomie, chaque endpoint Go revérifie).
+
+- Go crée la session et renvoie `Set-Cookie: __Host-session=…` avec l'expiration. Les attributs du cookie sont définis ici, une seule fois.
+- Les Server Actions de Next (connexion, inscription, validation du code 2FA) appellent Go côté serveur, lisent le `Set-Cookie` de la réponse (`getSetCookie()`) et le réappliquent au navigateur avec `cookies().set(...)`.
+- Pour les appels suivants, Next relaie l'en-tête `Cookie` reçu à Go. Go lit uniquement le cookie, jamais un en-tête `Authorization`.
+- Le jeton n'est jamais lisible en JavaScript (`HttpOnly`).
+
+Endpoints d'authentification (préfixe `/api/v1`, noms définitifs dans `openapi.yaml`) :
+
+| Endpoint | Rôle |
+|---|---|
+| `POST /auth/register` | Inscription, envoie l'email d'activation |
+| `POST /auth/activate` | Active le compte avec le token du lien |
+| `POST /auth/login` | Connexion par email, ou par alias pour un héros. Répond `ok` ou `mfa_required`. |
+| `POST /auth/mfa/verify` | Valide le code TOTP et ouvre la session complète |
+| `POST /auth/logout`, `POST /auth/logout-all` | Déconnexion de l'appareil, ou de tous les appareils |
+| `GET /auth/me` | Utilisateur et rôle de la session (redirections du §5.3) |
+| `POST /auth/password-reset`, `POST /auth/password-reset/confirm` | Demande, puis changement avec le token reçu |
+| `GET /auth/sessions`, `DELETE /auth/sessions/{id}` | Liste des appareils connectés et révocation |
+| `POST /heroes/requests` | Demande du statut de super-héros (formulaire « Devenir super-héros ») |
+
+À adapter dans le front d'Emma : nom du cookie `__Host-session` en production, expiration reçue de l'API au lieu des 7 jours fixes, relais de l'en-tête `Cookie` à la place du `Bearer`, état « code 2FA requis » dans le résultat de la connexion, et remplacement des jetons `mock-token-<id>` (prévisibles) par le vrai jeton aléatoire.
 
 **Durées** (à ajuster)
 
@@ -130,20 +176,31 @@ Le cahier §2.2 impose une gestion des sessions via le formulaire de connexion :
 - Compte désactivé par un modérateur : ses sessions sont supprimées immédiatement.
 - Compte non activé (§4.3.1) : pas de session. Héros non vérifié : rôle citoyen limité jusqu'à validation.
 - CSRF : vérification de l'en-tête `Origin` et jeton CSRF sur toutes les requêtes qui modifient des données.
-- 2FA : après le mot de passe, la session est « en attente de 2FA » et ne donne accès à rien. `mfa_verified_at` est renseigné une fois le code validé. Les actions sensibles (valider un héros, envoyer la newsletter, supprimer un incident) exigent une 2FA récente.
+- 2FA (TOTP) : après le mot de passe, la session est « en attente de 2FA » et ne donne accès à rien. `mfa_verified_at` est renseigné une fois le code validé. Les actions sensibles (valider un héros, envoyer la newsletter, supprimer un incident) exigent une 2FA récente.
 - Connexion : limitation de débit, délai croissant après échecs, message d'erreur identique que le compte existe ou non.
 - « Mon compte » liste les appareils connectés avec un bouton de révocation et « se déconnecter partout ».
 - Une tâche supprime les sessions expirées.
 
+## Décisions prises
+
+- **OpenAPI :** spec d'abord (`oapi-codegen`).
+- **Cookie de session :** option A, Next relaie le `Set-Cookie` de Go.
+- **Devenir héros :** formulaire dédié « Devenir super-héros » dans « Mon compte », validé par un modérateur.
+- **2FA :** TOTP.
+- **Newsletter :** double opt-in pour les visiteurs anonymes.
+- **Appareil de la session :** résumé (`device_label`), pas de User-Agent brut.
+- **Chiffrement :** nom, prénom, date de naissance, téléphone et adresse de tous les utilisateurs.
+- **« Citoyen vérifié » :** information de confiance, sans droit supplémentaire.
+- **RabbitMQ** pour les mails, si l'hébergeur supporte Docker.
+
 ## Décisions en attente
 
-1. Spec d'abord (`oapi-codegen`) ou code d'abord (`swaggo`).
-2. RabbitMQ pour les mails, ou table outbox.
-3. 2FA des modérateurs et des héros : TOTP (simple) ou passkeys (plus résistants au phishing, plus de travail).
+1. **Proximité des héros :** à décider avec le client. Si elle est retenue : la position actuelle du héros (là où il se trouve, pas son domicile), partagée volontairement et visible des modérateurs, en clair, sans historique. Voir `hero_locations` dans [TABLES.md](TABLES.md).
+2. **Encyclopédie Marvel** (§6.1.4) : source à vérifier, l'API Marvel semble fermée.
 
 ## Prochaines étapes
 
-- Mettre à jour la section Stack du `README.md` (Go, PostgreSQL, Docker, OpenAPI, OMDb, plus RabbitMQ si retenu).
+- Mettre à jour la section Stack du `README.md` (Go, PostgreSQL, Docker, OpenAPI, OMDb, plus RabbitMQ).
 - Initialiser `backend/` : `go mod init`, structure, `Dockerfile`, `docker-compose.yml` et `openapi.yaml`, avec `/health` comme premier endpoint.
 
 AES et RSA ne sont pas des protocoles en eux-mêmes : ce sont des **algorithmes**. Voici leurs variantes, leurs modes d'utilisation et les protocoles qui les emploient.

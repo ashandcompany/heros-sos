@@ -40,5 +40,16 @@ vaut en faire plusieurs, par domaine.
 ## Intégration continue et déploiement
 
 Le workflow `.github/workflows/docs-ci.yml` construit le site à chaque pull request qui touche
-`docs-site/`, les documents du backend ou l'OpenAPI. Il ne publie rien : l'hébergement du site n'est pas
-encore décidé (GitHub Pages est préparé dans `docusaurus.config.ts` : `url`, `baseUrl`).
+`docs-site/`, les documents du backend ou l'OpenAPI. Il ne publie rien.
+
+Le site se publie sur **GitHub Pages** (<https://ashandcompany.github.io/heros-sos/>, réglé par `url` et `baseUrl`
+dans `docusaurus.config.ts`) avec `.github/workflows/docs-deploy.yml` : mêmes chemins et mêmes étapes que la CI,
+à chaque push sur `develop` (ou à la demande, *Run workflow*). Le workflow ne publie rien tant que le dépôt n'est
+pas réglé, une fois pour toutes :
+
+1. *Settings → Pages → Source* : **GitHub Actions**.
+2. *Settings → Environments → github-pages → Deployment branches* : autoriser `develop` (par défaut, seule la
+   branche principale peut déployer).
+
+Le dépôt est public : le site l'est aussi. Les revues de code sont demandées par `.github/CODEOWNERS`, qui
+y inscrit `docs-site/`.

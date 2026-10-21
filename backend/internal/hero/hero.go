@@ -12,6 +12,7 @@ import (
 // VerificationStatus est l'état d'une demande.
 type VerificationStatus string
 
+// États d'une demande : en attente de décision, acceptée, refusée.
 const (
 	StatusPending  VerificationStatus = "pending"
 	StatusApproved VerificationStatus = "approved"
@@ -21,6 +22,7 @@ const (
 // PublicSort est l'ordre de tri des profils publics de super-héros.
 type PublicSort string
 
+// Ordres de tri acceptés par la liste publique (valeur du paramètre `sort`).
 const (
 	PublicSortAlias         PublicSort = "alias"          // alias, croissant
 	PublicSortAverageRating PublicSort = "-averageRating" // note moyenne, décroissante

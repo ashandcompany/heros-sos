@@ -156,7 +156,7 @@ func TestApproveGrantsTheRoleAtomicallyAndOnlyOnce(t *testing.T) {
 	f := newFixture(t)
 	moderator := f.newUser(t, "mod@example.org", user.RoleModerator, user.StatusActive)
 	account := f.newUser(t, "candidat@example.org", user.RoleCitizen, user.StatusActive)
-	f.service.Request(ctx, account.ID, hero.RequestInput{Alias: "Black Widow"}, someIP)
+	_ = f.service.Request(ctx, account.ID, hero.RequestInput{Alias: "Black Widow"}, someIP)
 
 	if err := f.service.Approve(ctx, moderator.ID, account.ID, someIP); err != nil {
 		t.Fatal(err)
@@ -188,7 +188,7 @@ func TestApproveRollsBackWhenTheRoleCannotBeChanged(t *testing.T) {
 	f := newFixture(t)
 	moderator := f.newUser(t, "mod@example.org", user.RoleModerator, user.StatusActive)
 	account := f.newUser(t, "candidat@example.org", user.RoleCitizen, user.StatusActive)
-	f.service.Request(ctx, account.ID, hero.RequestInput{Alias: "Black Widow"}, someIP)
+	_ = f.service.Request(ctx, account.ID, hero.RequestInput{Alias: "Black Widow"}, someIP)
 
 	// Le compte disparaît entre la demande et la validation : la demande disparaît avec lui
 	// (suppression en cascade) et rien ne doit rester à moitié fait.
@@ -206,7 +206,7 @@ func TestApproveRollsBackWhenTheRoleCannotBeChanged(t *testing.T) {
 func TestConcurrentModeratorsCannotBothDecide(t *testing.T) {
 	f := newFixture(t)
 	account := f.newUser(t, "candidat@example.org", user.RoleCitizen, user.StatusActive)
-	f.service.Request(ctx, account.ID, hero.RequestInput{Alias: "Black Widow"}, someIP)
+	_ = f.service.Request(ctx, account.ID, hero.RequestInput{Alias: "Black Widow"}, someIP)
 
 	const moderators = 10
 	var wg sync.WaitGroup

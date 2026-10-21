@@ -6,6 +6,7 @@ import (
 	"embed"
 	"fmt"
 	htmltemplate "html/template"
+	"strconv"
 	texttemplate "text/template"
 	"time"
 
@@ -187,7 +188,7 @@ func formatDuration(d time.Duration) string {
 
 func plural(count int, unit string) string {
 	if count == 1 {
-		return fmt.Sprintf("1 %s", unit)
+		return "1 " + unit
 	}
-	return fmt.Sprintf("%d %ss", count, unit)
+	return strconv.Itoa(count) + " " + unit + "s"
 }

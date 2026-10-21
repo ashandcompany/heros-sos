@@ -14,6 +14,7 @@ import "errors"
 // Status est l'état d'un abonnement.
 type Status string
 
+// États d'un abonnement : adresse à confirmer, abonné, désabonné.
 const (
 	StatusPending      Status = "pending"
 	StatusSubscribed   Status = "subscribed"

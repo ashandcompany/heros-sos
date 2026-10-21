@@ -272,7 +272,7 @@ func TestFollowEmailMovesTheSubscriptionToTheNewAddress(t *testing.T) {
 func TestFollowEmailNeverFailsOnAnAddressAlreadyInTheList(t *testing.T) {
 	f := newFixture(t)
 	owner := f.newUser(t, "ancienne@example.org")
-	f.repo.SetAccountPreference(ctx, ids.New(), owner, "ancienne@example.org", true, startAt)
+	_ = f.repo.SetAccountPreference(ctx, ids.New(), owner, "ancienne@example.org", true, startAt)
 	taken, _, _ := f.repo.Request(ctx, ids.New(), "prise@example.org", startAt)
 
 	if err := f.repo.FollowEmail(ctx, owner, "PRISE@example.org"); err != nil {
@@ -290,12 +290,12 @@ func TestDeleteStalePendingKeepsEverythingElse(t *testing.T) {
 	f := newFixture(t)
 	owner := f.newUser(t, "natasha@example.org")
 
-	f.repo.Request(ctx, ids.New(), "vieille@example.org", startAt.Add(-10*24*time.Hour))
-	f.repo.Request(ctx, ids.New(), "recente@example.org", startAt.Add(-time.Hour))
+	_, _, _ = f.repo.Request(ctx, ids.New(), "vieille@example.org", startAt.Add(-10*24*time.Hour))
+	_, _, _ = f.repo.Request(ctx, ids.New(), "recente@example.org", startAt.Add(-time.Hour))
 	oldConfirmed, _, _ := f.repo.Request(ctx, ids.New(), "confirmee@example.org", startAt.Add(-30*24*time.Hour))
-	f.repo.Confirm(ctx, oldConfirmed, startAt.Add(-29*24*time.Hour))
-	f.repo.SetAccountPreference(ctx, ids.New(), owner, "natasha@example.org", true, startAt.Add(-30*24*time.Hour))
-	f.repo.SetAccountPreference(ctx, ids.New(), owner, "natasha@example.org", false, startAt.Add(-20*24*time.Hour))
+	_ = f.repo.Confirm(ctx, oldConfirmed, startAt.Add(-29*24*time.Hour))
+	_ = f.repo.SetAccountPreference(ctx, ids.New(), owner, "natasha@example.org", true, startAt.Add(-30*24*time.Hour))
+	_ = f.repo.SetAccountPreference(ctx, ids.New(), owner, "natasha@example.org", false, startAt.Add(-20*24*time.Hour))
 
 	deleted, err := f.repo.DeleteStalePending(ctx, startAt.Add(-7*24*time.Hour))
 	if err != nil || deleted != 1 {

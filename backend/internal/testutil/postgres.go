@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"io"
 	"log/slog"
 	"net/url"
 	"os"
@@ -107,7 +106,7 @@ func open(t testing.TB, databaseURL string) *gorm.DB {
 		ConnMaxIdleTime:    time.Minute,
 		PingTimeout:        pingTimeout,
 		SlowQueryThreshold: slowQuery,
-	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	}, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("connexion à la base de test : %v", err)
 	}

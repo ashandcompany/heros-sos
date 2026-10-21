@@ -2,7 +2,6 @@ package auth_test
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"net/netip"
 	"regexp"
@@ -54,7 +53,7 @@ func newHarness(t *testing.T, overrides map[string]string) *harness {
 	t.Helper()
 	cfg := testutil.Config(t, overrides)
 	db := testutil.NewDB(t)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	clk := clock.NewFake(startTime)
 
 	sealer, err := crypto.NewSealer(cfg.Crypto.Keys, cfg.Crypto.ActiveKeyID)

@@ -15,6 +15,7 @@ import (
 // en production.
 type Environment string
 
+// Environnements connus ; la production active des contrôles de démarrage plus stricts.
 const (
 	EnvironmentDevelopment Environment = "development"
 	EnvironmentProduction  Environment = "production"
@@ -24,6 +25,7 @@ const (
 // MailDriver choisit comment les mails sont envoyés.
 type MailDriver string
 
+// Pilotes d'envoi de mails.
 const (
 	MailDriverLog  MailDriver = "log"  // écrit les mails dans les logs (développement uniquement)
 	MailDriverSMTP MailDriver = "smtp" // envoie via un serveur SMTP
@@ -32,6 +34,7 @@ const (
 // TLSMode décrit le chiffrement de la connexion SMTP.
 type TLSMode string
 
+// Modes de chiffrement de la connexion SMTP.
 const (
 	TLSModeNone     TLSMode = "none"     // aucun chiffrement (Mailpit en développement)
 	TLSModeStartTLS TLSMode = "starttls" // connexion en clair puis passage en TLS

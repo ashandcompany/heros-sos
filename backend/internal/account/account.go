@@ -26,6 +26,7 @@ var (
 // ChangeStatus est l'état d'une demande de changement d'adresse.
 type ChangeStatus string
 
+// États d'une demande : en attente de décision, acceptée, refusée.
 const (
 	ChangePending  ChangeStatus = "pending"
 	ChangeApproved ChangeStatus = "approved"

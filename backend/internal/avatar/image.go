@@ -64,7 +64,7 @@ func IsAcceptedContentType(contentType string) bool {
 func Normalize(data []byte, maxDimension int) ([]byte, error) {
 	config, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
-		return nil, fmt.Errorf("%w : %v", ErrInvalidImage, err)
+		return nil, fmt.Errorf("%w : %w", ErrInvalidImage, err)
 	}
 	switch format {
 	case "jpeg", "png", "webp":
@@ -80,7 +80,7 @@ func Normalize(data []byte, maxDimension int) ([]byte, error) {
 
 	decoded, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
-		return nil, fmt.Errorf("%w : %v", ErrInvalidImage, err)
+		return nil, fmt.Errorf("%w : %w", ErrInvalidImage, err)
 	}
 
 	// Le JPEG n'a pas de transparence : une image PNG ou WebP transparente est posée sur du blanc

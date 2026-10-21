@@ -42,7 +42,7 @@ func testMessage() Message {
 	}
 }
 
-func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
+func discardLogger() *slog.Logger { return slog.New(slog.DiscardHandler) }
 
 // ---- Construction du message ----------------------------------------------------------------
 

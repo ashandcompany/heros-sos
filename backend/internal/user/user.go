@@ -12,6 +12,7 @@ import (
 // Role détermine les droits d'un compte.
 type Role string
 
+// Rôles d'un compte.
 const (
 	RoleCitizen   Role = "citizen"
 	RoleHero      Role = "hero"
@@ -30,6 +31,7 @@ func (r Role) Valid() bool {
 // Status décrit le cycle de vie d'un compte.
 type Status string
 
+// États d'un compte : à activer par mail, actif, désactivé par un modérateur.
 const (
 	StatusPendingActivation Status = "pending_activation"
 	StatusActive            Status = "active"

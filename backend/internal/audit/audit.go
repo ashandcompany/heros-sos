@@ -44,6 +44,10 @@ const (
 	ActionHeroFilmDeleted         = "hero_film.delete"
 	ActionVillainFilmLinked       = "villain_film.link"
 	ActionVillainFilmDeleted      = "villain_film.delete"
+
+	ActionEmailChangeRequested = "user.email_change_request"
+	ActionEmailChangeApproved  = "user.email_change_approve"
+	ActionEmailChangeRejected  = "user.email_change_reject"
 )
 
 // Entry décrit une action à journaliser.

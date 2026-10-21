@@ -26,7 +26,7 @@ Sans configuration, toute l'application tourne sur les mocks (comptes de test da
 ### Avec l'API Go
 
 Identité (inscription, activation, connexion, session, mot de passe), demandes de super-héros,
-modération des comptes, types d'incident et vidéothèque passent par l'API dès que `API_URL` est
+modération des comptes, types d'incident, vidéothèque et avis passent par l'API dès que `API_URL` est
 renseignée ; le reste reste mocké (voir [docs/backend-contract.md](docs/backend-contract.md)).
 La recherche de films IMDb exige une clé OMDb côté API (`HEROS_OMDB_API_KEY` dans
 `backend/.env`). Après une mise à jour du backend, relancer `make up-dev` pour reconstruire

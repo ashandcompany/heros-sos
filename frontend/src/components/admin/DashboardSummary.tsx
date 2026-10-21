@@ -50,9 +50,9 @@ export async function DashboardSummary() {
       cta: "Visionner",
     },
     {
-      label: "Commentaires à modérer",
+      label: "Réponses de héros à vérifier",
       count: summary.comments,
-      href: routes.adminComments,
+      href: `${routes.adminComments}?type=reponses`,
       cta: "Modérer",
     },
     {

@@ -5,7 +5,7 @@ import {
   addMyVideo,
   deleteMyVideo,
   finishIntervention,
-  replyToRating,
+  replyToReview,
   requestHeroEmailChange,
   setIncidentPriority,
   takeChargeOfIncident,
@@ -214,12 +214,13 @@ export async function deleteMyVideoAction(
 
 /* ---------- Réputation ---------- */
 
-export async function replyToRatingAction(
+export async function replyToReviewAction(
   _previousState: FormState<"reply">,
   formData: FormData,
 ): Promise<FormState<"reply">> {
   const { token } = await requireHeroSession();
-  const incidentId = String(formData.get("incidentId") ?? "");
+  const reviewId = String(formData.get("reviewId") ?? "");
+  if (!reviewId) return { status: "error", message: "Requête invalide.", fieldErrors: {} };
   const reply = String(formData.get("reply") ?? "").trim();
 
   const error = !reply
@@ -229,7 +230,7 @@ export async function replyToRatingAction(
       : undefined;
   if (error) return { status: "error", fieldErrors: { reply: error }, values: { reply } };
 
-  const result = await replyToRating(token, incidentId, reply);
+  const result = await replyToReview(token, reviewId, reply);
   if (!result.ok) {
     return { status: "error", message: result.error, fieldErrors: {}, values: { reply } };
   }

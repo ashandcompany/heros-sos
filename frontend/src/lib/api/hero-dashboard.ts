@@ -1,13 +1,13 @@
 import { incidentsMock } from "@/mocks/incidents";
 import { interventionsMock } from "@/mocks/interventions";
-import { ratingsMock } from "@/mocks/ratings";
+import { reviewsMock } from "@/mocks/reviews";
 import { superHeroesMock, superHeroProfilesMock } from "@/mocks/super-heroes";
 import { videosMock } from "@/mocks/videos";
 import { villainsMock } from "@/mocks/villains";
 import type { HeroDashboard, VillainSummary } from "@/types";
 import { mockResponse } from "./config";
 import { getIncidentTypes } from "./incident-types";
-import { summarizeRatings } from "./ratings";
+import { summarizeRatings } from "./reviews";
 import { userFromToken } from "./session-user";
 
 const MAIN_ENEMIES_LIMIT = 3;
@@ -58,7 +58,7 @@ export async function getHeroDashboard(token: string): Promise<HeroDashboard> {
       interventions: profile?.interventionsCount ?? myInterventions.length,
       successfulInterventions: myInterventions.filter(({ outcome }) => outcome === "reussi").length,
       failedInterventions: myInterventions.filter(({ outcome }) => outcome === "echoue").length,
-      ...summarizeRatings(ratingsMock.filter(({ heroId }) => heroId === user.id)),
+      ...summarizeRatings(reviewsMock.filter(({ hero }) => hero.id === user.id)),
       videos: myVideos.length,
       publishedVideos: myVideos.filter(({ moderation }) => moderation === "valide").length,
       mainEnemies: [...encounters.values()]

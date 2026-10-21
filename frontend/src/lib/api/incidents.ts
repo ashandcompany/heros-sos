@@ -2,7 +2,7 @@ import { formatLocation } from "@/lib/format";
 import { geocodeLocation } from "@/lib/geocoding";
 import { incidentsMock } from "@/mocks/incidents";
 import { interventionsMock } from "@/mocks/interventions";
-import { ratingsMock } from "@/mocks/ratings";
+import { reviewsMock } from "@/mocks/reviews";
 import { superHeroesMock, superHeroProfilesMock } from "@/mocks/super-heroes";
 import { villainsMock } from "@/mocks/villains";
 import type {
@@ -561,6 +561,6 @@ export async function getCitizenIncident(
     interventions: interventionsMock
       .filter(({ incidentId }) => incidentId === id)
       .sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt)),
-    rating: isMine ? (ratingsMock.find(({ incidentId }) => incidentId === id) ?? null) : null,
+    review: isMine ? (reviewsMock.find(({ incidentId }) => incidentId === id) ?? null) : null,
   });
 }

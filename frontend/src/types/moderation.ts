@@ -13,6 +13,7 @@ export interface ModerationSummary {
   emailChanges: number | null;
   heroApplications: number;
   videos: number;
+  /** Réponses de super-héros en attente de vérification (les avis sont publiés d'office). */
   comments: number;
   draftArticles: number;
 }

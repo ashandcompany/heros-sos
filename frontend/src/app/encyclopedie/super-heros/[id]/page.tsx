@@ -131,13 +131,13 @@ async function HeroSheet({ params }: { params: Promise<{ id: string }> }) {
               <ul className="space-y-4">
                 {reviews.map((review) => (
                   <li
-                    key={review.incidentId}
+                    key={review.id}
                     className="border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-5"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <RatingStars rating={review.rating} />
-                      <time dateTime={review.ratedAt} className="font-mono text-xs text-muted">
-                        {formatDate(review.ratedAt)}
+                      <time dateTime={review.createdAt} className="font-mono text-xs text-muted">
+                        {formatDate(review.createdAt)}
                       </time>
                     </div>
                     <blockquote className="mt-3 border-l-2 border-border pl-3 text-pretty">

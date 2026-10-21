@@ -1,6 +1,6 @@
 import type { ApiFailure } from "./api";
 import type { Civility, PostalAddress } from "./auth";
-import type { Incident, IncidentType, InterventionRating } from "./incident";
+import type { Incident, IncidentType } from "./incident";
 import type { ModerationStatus } from "./moderation";
 import type { VillainSummary } from "./villain";
 
@@ -124,19 +124,4 @@ export interface HeroDashboard {
   myOngoingIncidents: Incident[];
   /** Derniers incidents signalés et non résolus, tous héros confondus. */
   recentIncidents: Incident[];
-}
-
-/**
- * Évaluation reçue par le héros. `comment` vaut `null` tant que la modération ne l'a pas publié
- * (ou s'il a été masqué) : `commentModeration` permet d'afficher la raison.
- */
-export interface ReceivedRating extends InterventionRating {
-  incident: Pick<Incident, "id" | "title">;
-}
-
-export interface HeroReputation {
-  /** Note globale sur 5. */
-  averageRating: number;
-  ratingsCount: number;
-  ratings: ReceivedRating[];
 }

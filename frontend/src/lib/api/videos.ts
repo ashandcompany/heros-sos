@@ -240,7 +240,7 @@ export async function deleteMyVideo(token: string, id: string): Promise<Mutation
 
 /**
  * Films publiés par la modération, des plus récents aux plus anciens, éventuellement ceux
- * d'un seul super-héros.
+ * d'un seul super-héros (aucun s'il est inconnu de l'API).
  * API : `GET /films` ou `GET /heroes/{heroId}/films`, page après page.
  */
 export async function getPublishedVideos(heroId?: string): Promise<HeroVideo[]> {
@@ -254,7 +254,15 @@ export async function getPublishedVideos(heroId?: string): Promise<HeroVideo[]> 
   }
 
   const path = heroId ? `/heroes/${encodeURIComponent(heroId)}/films` : "/films";
-  return (await fetchAllFilms(path)).sort(byMostRecent);
+  try {
+    return (await fetchAllFilms(path)).sort(byMostRecent);
+  } catch (error) {
+    // Héros inconnu de l'API (404, ou identifiant mock refusé en 422) : aucun film.
+    if (heroId && error instanceof ApiError && (error.status === 404 || error.status === 422)) {
+      return [];
+    }
+    throw error;
+  }
 }
 
 /* ---------- Mocks ---------- */

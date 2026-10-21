@@ -1,5 +1,6 @@
 import type { ApiFailure } from "./api";
 import type { ModerationStatus } from "./moderation";
+import type { HeroReview } from "./review";
 import type { SuperHeroSummary } from "./super-hero";
 import type { VillainSummary } from "./villain";
 
@@ -114,32 +115,6 @@ export interface IncidentDeclaration {
   villainId: string | null;
 }
 
-/** Évaluation d'une intervention par le citoyen impliqué. */
-export interface InterventionRating {
-  incidentId: string;
-  heroId: string;
-  /** Note entière de 1 à 5. */
-  rating: number;
-  comment: string | null;
-  /** Modération du commentaire : un commentaire rejeté est masqué (la note reste comptée). */
-  commentModeration: ModerationStatus;
-  ratedAt: string;
-  /** Réponse du super-héros au commentaire. */
-  reply?: HeroReply | null;
-}
-
-export interface HeroReply {
-  content: string;
-  /** Date ISO 8601. */
-  repliedAt: string;
-}
-
-/** Évaluation affichée dans le back-office, avec l'incident et le héros concernés. */
-export interface RatingForModeration extends InterventionRating {
-  incident: Pick<Incident, "id" | "title">;
-  hero: SuperHeroSummary;
-}
-
 /** Modifications d'un incident par la modération. */
 export interface IncidentUpdate {
   title: string;
@@ -151,12 +126,6 @@ export interface IncidentUpdate {
   villainId: string | null;
   /** Obligatoire dès que l'incident est pris en charge. */
   heroId: string | null;
-}
-
-/** Intervention terminée sur un incident du citoyen, avec sa note s'il l'a déjà donnée. */
-export interface RateableIntervention {
-  incident: ResolvedIncident;
-  rating: InterventionRating | null;
 }
 
 /**
@@ -181,18 +150,6 @@ export interface HeroIncident extends Incident {
   interventions: HeroIntervention[];
 }
 
-/**
- * Avis affiché sur la fiche publique d'un super-héros : uniquement les commentaires publiés
- * par la modération, sans aucune information sur le citoyen qui l'a écrit.
- */
-export interface PublicReview {
-  incidentId: string;
-  rating: number;
-  comment: string;
-  ratedAt: string;
-  reply: HeroReply | null;
-}
-
 /** Détail d'un incident consulté depuis l'espace citoyen. */
 export interface CitizenIncidentDetail {
   /** Sans `reporterId` quand l'incident a été déclaré par quelqu'un d'autre. */
@@ -201,8 +158,8 @@ export interface CitizenIncidentDetail {
   isMine: boolean;
   /** Interventions des super-héros, des plus anciennes aux plus récentes (en cours comprise). */
   interventions: HeroIntervention[];
-  /** Note déjà donnée par le citoyen (uniquement pour ses propres incidents). */
-  rating: InterventionRating | null;
+  /** Avis déjà donné par le citoyen (uniquement pour ses propres incidents). */
+  review: HeroReview | null;
 }
 
 /** Incident placé sur la carte des super-héros : uniquement ce qu'il faut pour l'afficher. */

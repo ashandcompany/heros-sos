@@ -64,14 +64,16 @@ export {
 export { getModerationSummary } from "./moderation";
 export { subscribeToNewsletter } from "./newsletter";
 export {
-  getMyInterventions,
   getHeroPublicReviews,
+  getMyInterventions,
   getMyReputation,
-  getRatingsForModeration,
-  moderateComment,
+  getRepliesForModeration,
+  getReviewsForModeration,
+  moderateReply,
+  moderateReview,
   rateIntervention,
-  replyToRating,
-} from "./ratings";
+  replyToReview,
+} from "./reviews";
 export {
   getFeaturedSuperHeroes,
   getMyHeroProfile,

@@ -136,7 +136,7 @@ export async function IncidentDetail({ params }: { params: Promise<{ id: string 
   const detail = await getCitizenIncident(token, id);
   if (!detail) notFound();
 
-  const { incident, isMine, rating } = detail;
+  const { incident, isMine, review } = detail;
   const place = [incident.location.address, incident.location.district, incident.location.city]
     .filter(Boolean)
     .join(", ");
@@ -257,18 +257,18 @@ export async function IncidentDetail({ params }: { params: Promise<{ id: string 
               <h2 id="rating-title" className="mb-3 font-display text-xl font-semibold">
                 Votre avis
               </h2>
-              {rating ? (
+              {review ? (
                 <>
-                  <RatingStars rating={rating.rating} />
-                  {rating.comment && (
+                  <RatingStars rating={review.rating} />
+                  {review.comment && (
                     <blockquote className="mt-3 border-l-2 border-border pl-3 text-sm text-pretty">
-                      {rating.comment}
+                      {review.comment}
                     </blockquote>
                   )}
-                  {rating.reply && (
+                  {review.reply?.status === "valide" && (
                     <div className="mt-4 border-2 border-border bg-background p-3">
                       <p className="text-sm font-semibold">Réponse de {incident.hero.alias}</p>
-                      <p className="mt-1 text-sm text-pretty">{rating.reply.content}</p>
+                      <p className="mt-1 text-sm text-pretty">{review.reply.content}</p>
                     </div>
                   )}
                 </>
@@ -278,7 +278,7 @@ export async function IncidentDetail({ params }: { params: Promise<{ id: string 
                     Comment s&apos;est passée l&apos;intervention de {incident.hero.alias}&nbsp;?
                   </p>
                   <Link
-                    href={`${routes.profileInterventions}#intervention-${incident.id}`}
+                    href={routes.profileInterventions}
                     className="font-semibold text-accent hover:underline"
                   >
                     Noter l&apos;intervention<span aria-hidden="true">&nbsp;→</span>

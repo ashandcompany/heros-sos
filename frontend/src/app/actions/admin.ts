@@ -11,7 +11,8 @@ import {
   getSuperHeroes,
   getVillains,
   moderateAccount,
-  moderateComment,
+  moderateReply,
+  moderateReview,
   moderateIncident,
   moderateVideo,
   parseHeroVideoKey,
@@ -336,7 +337,7 @@ export async function deleteVideoAction(
 
 /* ---------- Commentaires ---------- */
 
-export async function moderateCommentAction(
+export async function moderateReviewAction(
   _previousState: FormState,
   formData: FormData,
 ): Promise<FormState> {
@@ -344,14 +345,34 @@ export async function moderateCommentAction(
   const request = readDecision(formData);
   if (!request) return invalidRequest;
 
-  const result = await moderateComment(token, request.id, request.decision);
+  const result = await moderateReview(token, request.id, request.decision);
   return settle(
     result,
     [routes.adminComments],
     {
-      "en-attente": "Commentaire remis en attente.",
-      valide: "Commentaire publié.",
-      rejete: "Commentaire masqué (la note reste prise en compte).",
+      "en-attente": "Avis remis en attente.",
+      valide: "Avis publié : il compte de nouveau dans la note du super-héros.",
+      rejete: "Avis masqué : il ne compte plus dans la note du super-héros.",
+    }[request.decision],
+  );
+}
+
+export async function moderateReplyAction(
+  _previousState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const token = await requireAdminSession();
+  const request = readDecision(formData);
+  if (!request) return invalidRequest;
+
+  const result = await moderateReply(token, request.id, request.decision);
+  return settle(
+    result,
+    [routes.adminComments],
+    {
+      "en-attente": "Réponse remise en attente.",
+      valide: "Réponse publiée.",
+      rejete: "Réponse masquée.",
     }[request.decision],
   );
 }

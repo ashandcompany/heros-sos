@@ -11,7 +11,7 @@ export default function AdminCommentsPage({ searchParams }: PageProps<"/admin/co
     <>
       <AdminPageHeader
         title="Commentaires"
-        description="Commentaires laissés par les citoyens en notant un super-héros. Masquez les propos injurieux ou les données personnelles : la note, elle, reste prise en compte."
+        description="Avis laissés par les citoyens sur les super-héros, et réponses des super-héros à ces avis."
       />
       <Suspense fallback={<AdminListSkeleton />}>
         <CommentsModeration searchParams={searchParams} />

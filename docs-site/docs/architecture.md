@@ -95,5 +95,5 @@ sequenceDiagram
 
 Les écritures authentifiées envoient en plus le jeton CSRF reçu de `GET /auth/me` dans l'en-tête
 `X-CSRF-Token`. Le détail (durées de session, codes d'erreur, noms du cookie) est dans le
-[contrat avec le backend](https://github.com/ashandcompany/heros-sos/blob/develop/frontend/docs/backend-contract.md)
+[contrat avec le backend](/frontend/docs/backend-contract)
 et les choix de sécurité dans [Stack](/backend/STACK).

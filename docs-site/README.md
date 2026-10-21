@@ -8,6 +8,7 @@ Site de documentation technique, construit avec [Docusaurus](https://docusaurus.
 | Accueil      | `docs-site/docs/intro.mdx`                                                            |
 | Architecture | `docs-site/docs/architecture.md` (schémas Mermaid)                                    |
 | Backend      | `backend/MVP.md`, `backend/STACK.md`, `backend/TABLES.md` (lus sur place, non copiés) |
+| Frontend     | `frontend/README.md`, `frontend/docs/*.md` (lus sur place, non copiés)                |
 | API          | `backend/openapi/openapi.yaml` (pages générées, non versionnées)                      |
 
 ## Commandes
@@ -16,8 +17,13 @@ Le site tourne **dans Docker** (service `docs`, image `docs-site/Dockerfile`) : 
 machine. `make up` le démarre avec le reste de la pile ; `make docs` ne démarre que lui. Le code de `docs-site/` est
 monté dans le conteneur et rechargé à chaud : http://localhost:3001/heros-sos/ (3001 : le 3000 est celui du front).
 
-Le conteneur ne lit de `backend/` que `STACK.md`, `MVP.md`, `TABLES.md` et `openapi/openapi.yaml`, recopiés par un
-petit service `docs-sync` : jamais `backend/` en entier, qui contient le `.env`.
+Le conteneur ne lit de `backend/` que `STACK.md`, `MVP.md`, `TABLES.md` et `openapi/openapi.yaml`, et de
+`frontend/` que `README.md` et `docs/*.md`, recopiés par un petit service `docs-sync` : jamais `backend/` ni
+`frontend/` en entier, qui contiennent les `.env`.
+
+Les documents du frontend restent écrits pour GitHub. Deux plugins remark (`src/remark/`) les adaptent au
+site : `github-alerts` rend les alertes `> [!NOTE]`, `> [!WARNING]`… en encadrés Docusaurus, et `repo-links`
+remplace les liens vers le code (`../src/lib/…`, `../next.config.ts`) par le fichier sur GitHub.
 
 Sans Docker, le site se lance aussi avec Node (22 ou plus), par exemple pour le CI :
 

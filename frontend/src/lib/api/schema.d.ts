@@ -35,9 +35,29 @@ export interface paths {
         put?: never;
         /**
          * Noter un héros de l'intervention
-         * @description Seul le déclarant connecté (citoyen ou héros) peut noter chaque participant confirmé d'une intervention clôturée, une fois par héros; un héros déclarant ne peut pas se noter lui-même.
+         * @description Seul le déclarant connecté (citoyen ou héros) peut noter chaque participant confirmé d'une intervention clôturée, une fois par héros; un héros déclarant ne peut pas se noter lui-même. Une note seule est publiée immédiatement; un avis avec commentaire attend la modération.
          */
         post: operations["createHeroReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/reviews/{reviewId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Modifier son avis
+         * @description Seul l'auteur connecté peut modifier la note et le commentaire de son avis. Un avis avec commentaire est remis en attente de modération; une note seule est publiée immédiatement.
+         */
+        put: operations["updateMyHeroReview"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2427,6 +2447,10 @@ export interface components {
             rating: number;
             comment?: string;
         };
+        HeroReviewEditPayload: {
+            rating: number;
+            comment?: string;
+        };
         HeroReview: {
             /** Format: uuid */
             id: string;
@@ -2438,7 +2462,7 @@ export interface components {
             rating: number;
             comment?: string | null;
             /** @enum {string} */
-            status: "published" | "hidden";
+            status: "published" | "pending" | "hidden";
             /** Format: date-time */
             moderatedAt?: string;
             /** Format: date-time */
@@ -2494,7 +2518,7 @@ export interface components {
             rating: number;
             comment?: string | null;
             /** @enum {string} */
-            reviewStatus: "published" | "hidden";
+            reviewStatus: "published" | "pending" | "hidden";
         };
         HeroReviewReplyModerationPage: {
             items: components["schemas"]["HeroReviewReplyModerationItem"][];
@@ -2941,7 +2965,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Avis créé et publié. */
+            /** @description Avis créé; une note seule est publiée immédiatement et un avis commenté est placé en attente de modération. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -2961,6 +2985,38 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateMyHeroReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reviewId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeroReviewEditPayload"];
+            };
+        };
+        responses: {
+            /** @description Avis modifié. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
@@ -3070,7 +3126,7 @@ export interface operations {
     listHeroReviewsForModeration: {
         parameters: {
             query?: {
-                status?: "published" | "hidden";
+                status?: "published" | "pending" | "hidden";
                 /** @description Nombre d'éléments par page (1 à 100, 20 par défaut). */
                 limit?: components["parameters"]["Limit"];
                 /** @description Nombre d'éléments à sauter. */

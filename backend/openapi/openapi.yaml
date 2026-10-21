@@ -159,7 +159,7 @@ paths:
     post:
       tags: [Réputation]
       summary: Noter un héros de l'intervention
-      description: Seul le déclarant connecté (citoyen ou héros) peut noter chaque participant confirmé d'une intervention clôturée, une fois par héros; un héros déclarant ne peut pas se noter lui-même.
+      description: Seul le déclarant connecté (citoyen ou héros) peut noter chaque participant confirmé d'une intervention clôturée, une fois par héros; un héros déclarant ne peut pas se noter lui-même. Une note seule est publiée immédiatement; un avis avec commentaire attend la modération.
       operationId: createHeroReview
       security: [{ sessionCookie: [], csrfToken: [] }]
       parameters:
@@ -173,7 +173,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/HeroReviewPayload" }
       responses:
-        "204": { description: Avis créé et publié. }
+        "204": { description: Avis créé; une note seule est publiée immédiatement et un avis commenté est placé en attente de modération. }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
@@ -183,6 +183,34 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /me/reviews/{reviewId}:
+    put:
+      tags: [Réputation]
+      summary: Modifier son avis
+      description: Seul l'auteur connecté peut modifier la note et le commentaire de son avis. Un avis avec commentaire est remis en attente de modération; une note seule est publiée immédiatement.
+      operationId: updateMyHeroReview
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - name: reviewId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HeroReviewEditPayload" }
+      responses:
+        "204": { description: Avis modifié. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
@@ -274,7 +302,7 @@ paths:
       parameters:
         - name: status
           in: query
-          schema: { type: string, enum: [published, hidden] }
+          schema: { type: string, enum: [published, pending, hidden] }
         - { $ref: "#/components/parameters/Limit" }
         - { $ref: "#/components/parameters/Offset" }
       responses:
@@ -4312,6 +4340,14 @@ components:
         rating: { type: integer, minimum: 1, maximum: 5 }
         comment: { type: string, maxLength: 500 }
 
+    HeroReviewEditPayload:
+      type: object
+      required: [rating]
+      additionalProperties: false
+      properties:
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: string, maxLength: 500 }
+
     HeroReview:
       type: object
       required: [id, interventionId, heroId, rating, status, createdAt]
@@ -4322,7 +4358,7 @@ components:
         heroAlias: { type: string }
         rating: { type: integer, minimum: 1, maximum: 5 }
         comment: { type: string, nullable: true }
-        status: { type: string, enum: [published, hidden] }
+        status: { type: string, enum: [published, pending, hidden] }
         moderatedAt: { type: string, format: date-time }
         createdAt: { type: string, format: date-time }
         reply: { $ref: "#/components/schemas/HeroReviewReply" }
@@ -4400,7 +4436,7 @@ components:
         heroAlias: { type: string }
         rating: { type: integer, minimum: 1, maximum: 5 }
         comment: { type: string, nullable: true }
-        reviewStatus: { type: string, enum: [published, hidden] }
+        reviewStatus: { type: string, enum: [published, pending, hidden] }
 
     HeroReviewReplyModerationPage:
       type: object

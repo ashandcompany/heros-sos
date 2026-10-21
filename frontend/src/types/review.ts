@@ -11,7 +11,7 @@ import type { SuperHeroSummary } from "./super-hero";
  * Statut d'un avis : publié dès son envoi (`valide`). Masqué par la modération (`rejete`), il
  * disparaît des pages publiques et ne compte plus dans la note moyenne du héros.
  */
-export type ReviewStatus = Exclude<ModerationStatus, "en-attente">;
+export type ReviewStatus = ModerationStatus;
 
 /**
  * Réponse du super-héros à un avis : publiée à sa création (`valide`), remise `en-attente` de

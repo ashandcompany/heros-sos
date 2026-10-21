@@ -34,6 +34,11 @@ type ratePayload struct {
 	Comment string    `json:"comment"`
 }
 
+type updateReviewPayload struct {
+	Rating  int16  `json:"rating"`
+	Comment string `json:"comment"`
+}
+
 type replyPayload struct {
 	Content string `json:"content"`
 }
@@ -69,6 +74,25 @@ func (h *Handler) Rate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.service.Rate(r.Context(), principal.UserID, interventionID, payload.HeroID,
+		payload.Rating, payload.Comment, httpx.ClientIPFrom(r.Context())); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.WriteNoContent(w)
+}
+
+func (h *Handler) UpdateReview(w http.ResponseWriter, r *http.Request) {
+	principal, _ := auth.PrincipalFrom(r.Context())
+	reviewID, ok := h.pathID(w, r, "reviewId")
+	if !ok {
+		return
+	}
+	var payload updateReviewPayload
+	if err := httpx.DecodeJSON(w, r, h.http.MaxBodyBytes, &payload); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if err := h.service.UpdateReview(r.Context(), principal.UserID, reviewID,
 		payload.Rating, payload.Comment, httpx.ClientIPFrom(r.Context())); err != nil {
 		h.fail(w, r, err)
 		return
@@ -209,7 +233,7 @@ func toHTTPError(err error) error {
 	case errors.Is(err, ErrNotFound):
 		return httpx.NotFound("Avis ou profil héros introuvable.")
 	case errors.Is(err, ErrNotEligible):
-		return httpx.NewError(http.StatusForbidden, CodeNotEligible, "Vous ne pouvez pas noter ce héros ou répondre à cet avis.")
+		return httpx.NewError(http.StatusForbidden, CodeNotEligible, "Vous ne pouvez pas noter ce héros, modifier cet avis ou répondre à cet avis.")
 	case errors.Is(err, ErrAlreadyReviewed):
 		return httpx.Conflict(CodeAlreadyReviewed, "Ce héros a déjà été noté pour cette intervention.")
 	case errors.Is(err, ErrReplyUnavailable):

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { EmptyState } from "@/components/admin/ModerationFilter";
 import { VillainCard } from "@/components/encyclopedia/VillainCard";
 import { SuperHeroCard } from "@/components/home/SuperHeroCard";
 import { Container } from "@/components/ui/Container";
@@ -28,6 +29,9 @@ async function HeroesGrid() {
 
 async function VillainsGrid() {
   const villains = await getVillains();
+  if (villains.length === 0) {
+    return <EmptyState>Aucun super-vilain répertorié pour l&apos;instant.</EmptyState>;
+  }
   return (
     <ul className="grid gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
       {villains.map((villain) => (

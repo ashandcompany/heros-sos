@@ -81,7 +81,7 @@ ses erreurs, et on peut l'essayer (« Try it out »).
 
 Le même contrat est aussi rendu dans le site de documentation du projet, sans bouton d'essai : une page
 par route, à http://localhost:3001/heros-sos/api/heros-sos-api (voir [docs-site/README.md](../docs-site/README.md)).
-Les documents de conception (`MVP.md`, `STACK.md`, `TABLES.md`) y sont lus sur place.
+Les documents de conception (`MVP.md`, `STACK.md` et `stack/`, `TABLES.md` et `tables/`) y sont lus sur place.
 
 - **Une écriture authentifiée** demande une session et le jeton CSRF : appeler `POST /auth/login`
   (le cookie est posé par le navigateur), copier le `csrfToken` de la réponse dans « Authorize »

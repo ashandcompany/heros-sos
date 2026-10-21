@@ -84,7 +84,7 @@ make migrate
 make run        # API sur http://localhost:8080/api/v1
 ```
 
-Les commandes, les tests et la configuration sont détaillés dans [le README du backend](backend/README.md) (`make help` liste toutes les cibles). Les documents de conception du backend sont `backend/MVP.md` (périmètre), `backend/STACK.md` (choix techniques) et `backend/TABLES.md` (schéma de la base).
+Les commandes, les tests et la configuration sont détaillés dans [le README du backend](backend/README.md) (`make help` liste toutes les cibles). Les documents de conception du backend sont `backend/MVP.md` (périmètre), `backend/STACK.md` (choix techniques, une page par sujet dans `backend/stack/`) et `backend/TABLES.md` (schéma de la base, une page par domaine dans `backend/tables/`).
 
 ## Documentation technique
 

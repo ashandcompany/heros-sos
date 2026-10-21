@@ -28,10 +28,10 @@ const config: Config = {
   onBrokenLinks: 'throw',
 
   markdown: {
-    // STACK.md, MVP.md et TABLES.md vivent dans backend/ et se lisent aussi sur GitHub : ce sont des
+    // STACK.md, MVP.md, TABLES.md, stack/ et tables/ vivent dans backend/ et se lisent aussi sur GitHub : ce sont des
     // fichiers Markdown purs. `detect` ne traite en MDX que les .mdx, sans accolades à échapper ailleurs.
     format: 'detect',
-    // Les blocs ```mermaid (schéma des tables dans TABLES.md, schémas d'architecture) sont rendus en
+    // Les blocs ```mermaid (schémas des tables dans backend/tables/, schémas d'architecture) sont rendus en
     // diagrammes. GitHub les rend aussi : la source reste lisible aux deux endroits.
     mermaid: true,
     hooks: {
@@ -73,7 +73,7 @@ const config: Config = {
         id: 'backend',
         path: '../backend',
         routeBasePath: 'backend',
-        include: ['STACK.md', 'MVP.md', 'TABLES.md'],
+        include: ['STACK.md', 'MVP.md', 'TABLES.md', 'stack/*.md', 'tables/*.md'],
         sidebarPath: './sidebarsBackend.ts',
         editUrl: `${REPO}/tree/develop/backend/`,
       },

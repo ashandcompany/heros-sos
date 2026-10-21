@@ -1,5 +1,6 @@
 -- Libre-service du compte : changement d'adresse email soumis à un modérateur, et abonnements à la
--- newsletter (voir backend/TABLES.md, §« email_change_requests » et §« newsletter_subscriptions »).
+-- newsletter (voir backend/tables/comptes.md, §« email_change_requests », et
+-- backend/tables/contenu.md, §« newsletter_subscriptions »).
 
 CREATE TABLE email_change_requests (
     id          uuid PRIMARY KEY,

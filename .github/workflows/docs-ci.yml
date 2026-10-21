@@ -1,7 +1,7 @@
 name: Docs CI
 
 # Vérifie que le site de documentation (docs-site/) se construit. Il ne publie rien : l'hébergement
-# n'est pas encore décidé. Le build lit aussi backend/STACK.md, MVP.md, TABLES.md et l'OpenAPI, d'où
+# n'est pas encore décidé. Le build lit aussi backend/STACK.md, MVP.md, TABLES.md, stack/, tables/ et l'OpenAPI, d'où
 # ces chemins : un lien cassé ou un OpenAPI que le générateur ne sait pas lire fait échouer le job.
 on:
   pull_request:
@@ -9,8 +9,10 @@ on:
     paths:
       - "docs-site/**"
       - "backend/STACK.md"
+      - "backend/stack/**"
       - "backend/MVP.md"
       - "backend/TABLES.md"
+      - "backend/tables/**"
       - "backend/openapi/openapi.yaml"
       - ".github/workflows/docs-ci.yml"
 

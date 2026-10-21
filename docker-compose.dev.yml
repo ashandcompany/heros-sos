@@ -140,9 +140,11 @@ services:
       - sh
       - -c
       - |
-        mkdir -p /dst/openapi
+        mkdir -p /dst/openapi /dst/tables /dst/stack
+        cd /src  # pour que les motifs stack/*.md et tables/*.md ci-dessous se développent dans backend/
         while true; do
-          for f in STACK.md MVP.md TABLES.md openapi/openapi.yaml; do
+          # Les pages avant les index qui les citent : un lien vers une page absente fait échouer la compilation.
+          for f in stack/*.md tables/*.md STACK.md MVP.md TABLES.md openapi/openapi.yaml; do
             [ -f "/src/$$f" ] || continue
             cmp -s "/src/$$f" "/dst/$$f" || cp "/src/$$f" "/dst/$$f"
           done

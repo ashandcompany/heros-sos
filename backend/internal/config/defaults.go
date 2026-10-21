@@ -88,6 +88,7 @@ const (
 	defaultMFARecoveryCodes = 10
 
 	defaultCleanupInterval  = 15 * time.Minute
+	defaultCleanupTimeout   = 2 * time.Minute
 	defaultSessionRetention = 7 * 24 * time.Hour
 	defaultTokenRetention   = 7 * 24 * time.Hour
 )

@@ -314,7 +314,10 @@ func (a App) link(path, token string) string {
 
 // Jobs regroupe les réglages des tâches de fond.
 type Jobs struct {
-	CleanupInterval  time.Duration
+	CleanupInterval time.Duration
+	// CleanupTimeout borne un passage du nettoyage : une requête bloquée ne doit pas immobiliser la tâche, ni
+	// garder une connexion du pool indéfiniment.
+	CleanupTimeout   time.Duration
 	SessionRetention time.Duration
 	TokenRetention   time.Duration
 }
@@ -443,6 +446,7 @@ func Load(getenv func(string) string) (Config, error) {
 		App: l.app(),
 		Jobs: Jobs{
 			CleanupInterval:  l.duration(envCleanupInterval, defaultCleanupInterval),
+			CleanupTimeout:   l.duration(envCleanupTimeout, defaultCleanupTimeout),
 			SessionRetention: l.duration(envSessionRetention, defaultSessionRetention),
 			TokenRetention:   l.duration(envTokenRetention, defaultTokenRetention),
 		},

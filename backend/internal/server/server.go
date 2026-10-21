@@ -346,31 +346,64 @@ func (s *Server) runJanitor(ctx context.Context) {
 	}
 }
 
+// purgeTask est une purge périodique : ce qu'elle supprime, et les messages de son journal.
+type purgeTask struct {
+	run            func(ctx context.Context) (int64, error)
+	failureMessage string
+	successMessage string
+	countAttribute string
+}
+
+// cleanup fait un passage de nettoyage, borné par HEROS_CLEANUP_TIMEOUT : une requête bloquée ne doit pas
+// immobiliser la tâche. Un échec n'empêche pas les purges suivantes.
 func (s *Server) cleanup(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, s.cfg.Jobs.CleanupTimeout)
+	defer cancel()
+
 	c := s.components
 	c.authHandler.SweepLimiters()
 	c.incidentHandler.SweepLimiters()
 	c.accountHandler.SweepLimiters()
 	c.newsletterHandler.SweepLimiters()
 	c.contactHandler.SweepLimiters()
-	// Une adresse jamais confirmée n'est pas conservée plus longtemps qu'un jeton périmé.
-	if purged, err := c.newsletterService.PurgeStale(ctx, s.cfg.Jobs.TokenRetention); err != nil {
-		s.logger.ErrorContext(ctx, "purge des abonnements non confirmés en échec", "error", err)
-	} else if purged > 0 {
-		s.logger.InfoContext(ctx, "abonnements non confirmés purgés", "abonnements_supprimes", purged)
+
+	tokenRetention := s.cfg.Jobs.TokenRetention
+	for _, task := range []purgeTask{
+		// Une adresse jamais confirmée n'est pas conservée plus longtemps qu'un jeton périmé.
+		{
+			run:            func(ctx context.Context) (int64, error) { return c.newsletterService.PurgeStale(ctx, tokenRetention) },
+			failureMessage: "purge des abonnements non confirmés en échec",
+			successMessage: "abonnements non confirmés purgés", countAttribute: "abonnements_supprimes",
+		},
+		// Une demande de changement d'adresse jamais confirmée ne peut plus aboutir une fois son lien expiré.
+		{
+			run: func(ctx context.Context) (int64, error) {
+				return c.accountService.PurgeStaleEmailChanges(ctx, tokenRetention)
+			},
+			failureMessage: "purge des changements d'adresse non confirmés en échec",
+			successMessage: "changements d'adresse non confirmés purgés", countAttribute: "demandes_supprimees",
+		},
+	} {
+		s.purge(ctx, task)
 	}
-	// Une demande de changement d'adresse jamais confirmée ne peut plus aboutir une fois son lien expiré.
-	if purged, err := c.accountService.PurgeStaleEmailChanges(ctx, s.cfg.Jobs.TokenRetention); err != nil {
-		s.logger.ErrorContext(ctx, "purge des changements d'adresse non confirmés en échec", "error", err)
-	} else if purged > 0 {
-		s.logger.InfoContext(ctx, "changements d'adresse non confirmés purgés", "demandes_supprimees", purged)
-	}
-	sessions, tokens, err := c.authService.Cleanup(ctx, s.cfg.Jobs.SessionRetention, s.cfg.Jobs.TokenRetention)
+
+	sessions, tokens, err := c.authService.Cleanup(ctx, s.cfg.Jobs.SessionRetention, tokenRetention)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "nettoyage périodique en échec", "error", err)
 		return
 	}
 	if sessions > 0 || tokens > 0 {
 		s.logger.InfoContext(ctx, "nettoyage périodique", "sessions_supprimees", sessions, "jetons_supprimes", tokens)
+	}
+}
+
+func (s *Server) purge(ctx context.Context, task purgeTask) {
+	purged, err := task.run(ctx)
+	if err != nil {
+		s.logger.ErrorContext(ctx, task.failureMessage, "error", err)
+		return
+	}
+	if purged > 0 {
+		s.logger.InfoContext(ctx, task.successMessage, task.countAttribute, purged)
 	}
 }

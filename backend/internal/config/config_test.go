@@ -501,3 +501,15 @@ func TestArgon2SettingsAreBoundedToTheirType(t *testing.T) {
 		t.Errorf("255 threads (la borne) doivent passer : %d, %v", cfg.Security.Argon2.Threads, err)
 	}
 }
+
+func TestCleanupTimeoutHasADefaultAndMustBePositive(t *testing.T) {
+	cfg, err := Load(fakeEnv(validEnv()))
+	if err != nil || cfg.Jobs.CleanupTimeout != defaultCleanupTimeout {
+		t.Errorf("durée par défaut = %v, %v", cfg.Jobs.CleanupTimeout, err)
+	}
+	env := validEnv()
+	env[envCleanupTimeout] = "0s"
+	if _, err := Load(fakeEnv(env)); err == nil || !strings.Contains(err.Error(), envCleanupTimeout) {
+		t.Errorf("un délai nul doit être refusé : %v", err)
+	}
+}

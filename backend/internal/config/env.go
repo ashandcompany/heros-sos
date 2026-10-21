@@ -109,6 +109,7 @@ const (
 	envEmailChangeConfirmPath    = "HEROS_EMAIL_CHANGE_CONFIRM_PATH"
 
 	envCleanupInterval  = "HEROS_CLEANUP_INTERVAL"
+	envCleanupTimeout   = "HEROS_CLEANUP_TIMEOUT"
 	envSessionRetention = "HEROS_SESSION_RETENTION"
 	envTokenRetention   = "HEROS_TOKEN_RETENTION"
 )
@@ -144,6 +145,6 @@ func EnvVarNames() []string {
 		envContactRecipient, envAvatarDir, envAvatarMaxBytes, envAvatarMaxDimension,
 		envPublicBaseURL, envActivationPath, envPasswordResetPath, envNewsletterConfirmPath,
 		envNewsletterUnsubscribePath, envEmailChangeConfirmPath,
-		envCleanupInterval, envSessionRetention, envTokenRetention,
+		envCleanupInterval, envCleanupTimeout, envSessionRetention, envTokenRetention,
 	}
 }

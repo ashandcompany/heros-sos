@@ -56,6 +56,7 @@ import { validateRejectionReason } from "@/lib/validation/hero";
 import type {
   AccountModerationAction,
   AccountModerationResult,
+  EmailChangeReviewResult,
   HeroReviewResult,
   ModerationStatus,
   MutationResult,
@@ -313,11 +314,33 @@ export async function reviewEmailChangeAction(
 
   const approve = request.decision === "valide";
   const result = await reviewEmailChange(token, request.id, approve);
-  return settle(
-    result,
-    [routes.adminAccounts],
-    approve ? "Nouvelle adresse email activée." : "Changement d'adresse email refusé.",
-  );
+  if (!result.ok) {
+    return { status: "error", message: emailChangeReviewErrorMessage(result), fieldErrors: {} };
+  }
+
+  for (const path of [routes.admin, routes.adminAccounts]) revalidatePath(path);
+  return {
+    status: "success",
+    message: approve ? "Nouvelle adresse email activée." : "Changement d'adresse email refusé.",
+    fieldErrors: {},
+  };
+}
+
+function emailChangeReviewErrorMessage(
+  result: Extract<EmailChangeReviewResult, { ok: false }>,
+): string {
+  switch (result.error) {
+    case "not-found":
+      return "Cette demande n'existe plus : son titulaire l'a peut-être remplacée par une nouvelle.";
+    case "already-reviewed":
+      return "Cette demande a déjà été traitée.";
+    case "not-confirmed":
+      return "Le titulaire de la nouvelle adresse ne l'a pas encore confirmée : vous pouvez seulement refuser la demande.";
+    case "email-already-used":
+      return "Cette adresse est maintenant utilisée par un autre compte : refusez la demande.";
+    default:
+      return apiFailureMessage(result);
+  }
 }
 
 /* ---------- Super-héros ---------- */

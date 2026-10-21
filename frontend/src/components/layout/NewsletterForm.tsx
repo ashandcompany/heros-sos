@@ -7,7 +7,7 @@ import { cn } from "@/components/ui/cn";
 const initialState: NewsletterFormState = { status: "idle" };
 
 interface NewsletterFormProps {
-  /** `true` si le cookie d'inscription est déjà présent : le formulaire n'est pas affiché. */
+  /** `true` si le cookie posé à la confirmation est présent : le formulaire n'est pas affiché. */
   alreadySubscribed: boolean;
 }
 
@@ -19,17 +19,15 @@ export function NewsletterForm({ alreadySubscribed }: NewsletterFormProps) {
   if (state.status === "success") {
     return (
       <p role="status" className="border-2 border-dashed border-background p-4 text-sm">
-        <span className="font-semibold">Demande enregistrée.</span> Le bulletin officiel vous sera
-        adressé dans les meilleurs délais.
+        <span className="font-semibold">Demande enregistrée.</span> Un mail de confirmation vient de
+        vous être envoyé : cliquez sur son lien pour valider votre abonnement.
       </p>
     );
   }
 
   if (alreadySubscribed) {
     return (
-      <p className="text-sm text-ink/85">
-        Une demande d&apos;abonnement est déjà enregistrée à votre nom. Merci.
-      </p>
+      <p className="text-sm text-ink/85">Votre abonnement à la newsletter est confirmé. Merci.</p>
     );
   }
 

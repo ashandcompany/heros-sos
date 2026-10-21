@@ -8,6 +8,9 @@ const gradients = [
   "from-rating/80 to-primary/60",
 ];
 
+/** Préfixe des routes de l'API sur l'origine du site (voir le Caddyfile du reverse proxy). */
+const API_PATH_PREFIX = "/api/v1/";
+
 function hashString(value: string): number {
   let hash = 0;
   for (const char of value) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
@@ -48,9 +51,11 @@ export function Avatar({ name, src, size = 80, className, square = false }: Avat
         alt=""
         width={size}
         height={size}
-        // Photo envoyée par l'utilisateur (data URL dans les mocks), déjà recadrée et compressée
-        // à l'envoi (voir cropAvatar) : pas d'optimisation possible ni nécessaire.
-        unoptimized={src.startsWith("data:")}
+        // Photo envoyée par l'utilisateur, déjà recadrée à l'envoi (voir cropAvatar) et ré-encodée
+        // par l'API : pas d'optimisation nécessaire. Elle n'est pas possible pour une data URL
+        // (mocks), ni pour une photo de l'API (`/api/v1/avatars/…`) : l'optimiseur de Next la
+        // chercherait sur son propre serveur, alors que le reverse proxy l'envoie à l'API.
+        unoptimized={src.startsWith("data:") || src.startsWith(API_PATH_PREFIX)}
         className={cn(classes, "object-cover")}
       />
     );

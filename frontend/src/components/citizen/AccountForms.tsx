@@ -239,7 +239,7 @@ export function EmailChangeForm({
     <form action={formAction} noValidate className="space-y-4">
       <TextField
         label="Nouvelle adresse email"
-        hint="Elle remplacera l'adresse actuelle après validation par la modération."
+        hint="Un lien de confirmation y sera envoyé. Elle remplacera l'adresse actuelle une fois confirmée, puis validée par la modération."
         name="email"
         type="email"
         inputMode="email"

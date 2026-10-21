@@ -2,6 +2,7 @@
 
 import { sendContactMessage } from "@/lib/api";
 import {
+  contactMessageFailureState,
   HONEYPOT_FIELD,
   readContactValues,
   toContactMessage,
@@ -27,14 +28,7 @@ export async function sendContactMessageAction(
   if (hasFieldErrors(fieldErrors)) return { status: "error", fieldErrors, values };
 
   const result = await sendContactMessage(toContactMessage(values));
-  if (!result.ok) {
-    return {
-      status: "error",
-      message: "Le message n'a pas pu être envoyé. Veuillez réessayer plus tard.",
-      fieldErrors: {},
-      values,
-    };
-  }
+  if (!result.ok) return contactMessageFailureState(result, values);
 
   return { status: "success", message: SUCCESS_MESSAGE, fieldErrors: {} };
 }

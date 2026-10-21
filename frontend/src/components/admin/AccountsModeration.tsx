@@ -16,7 +16,7 @@ import {
 } from "@/lib/format";
 import { routes } from "@/lib/routes";
 import { requireAdminSession } from "@/lib/server-session";
-import type { AccountStatus, AccountSummary, CitizenAccount } from "@/types";
+import type { AccountStatus, AccountSummary, EmailChangeRequest } from "@/types";
 import { EmptyState } from "./ModerationFilter";
 import { ModerationForm, type Decision } from "./ModerationForm";
 import { Pagination } from "./Pagination";
@@ -165,41 +165,53 @@ function AccountsFilters({ status, email }: { status?: AccountStatus; email?: st
   );
 }
 
-function EmailChanges({ requests }: { requests: CitizenAccount[] }) {
+function EmailChanges({ requests }: { requests: EmailChangeRequest[] }) {
   return (
     <section aria-labelledby="emails" className="scroll-mt-32">
       <h2 id="emails" className="mb-1 font-display text-xl font-semibold">
         Changements d&apos;adresse email
       </h2>
       <p className="mb-4 text-sm text-muted">
-        La nouvelle adresse ne remplace l&apos;ancienne qu&apos;après votre validation.
+        La nouvelle adresse ne remplace l&apos;ancienne qu&apos;après sa confirmation par son
+        titulaire (lien reçu par mail), puis votre validation. Le titulaire en est prévenu.
       </p>
       {requests.length === 0 ? (
         <EmptyState>Aucune demande en attente.</EmptyState>
       ) : (
         <ul className="space-y-3">
-          {requests.map((account) => {
-            const fullName = formatFullName(account.lastName, account.firstName) ?? "";
+          {requests.map((request) => {
+            const fullName = formatFullName(request.lastName, request.firstName) ?? "";
             return (
               <li
-                key={account.id}
+                key={request.id}
                 className="grid gap-4 border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
               >
                 <div className="min-w-0">
                   <p className="font-display font-semibold">{fullName}</p>
                   <dl className="mt-2 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
                     <dt className="text-muted">Adresse actuelle</dt>
-                    <dd className="break-all">{account.email}</dd>
+                    <dd className="break-all">{request.currentEmail}</dd>
                     <dt className="text-muted">Nouvelle adresse</dt>
-                    <dd className="font-medium break-all text-accent">{account.pendingEmail}</dd>
+                    <dd className="font-medium break-all text-accent">{request.newEmail}</dd>
+                    <dt className="text-muted">Confirmation</dt>
+                    <dd>
+                      {request.confirmed ? (
+                        <Badge tone="success">Adresse confirmée par son titulaire</Badge>
+                      ) : (
+                        <Badge tone="warning">En attente de confirmation par son titulaire</Badge>
+                      )}
+                    </dd>
                   </dl>
                 </div>
                 <ModerationForm
                   action={reviewEmailChangeAction}
-                  id={account.id}
+                  id={request.id}
                   subject={`changement d'email de ${fullName}`}
                   decisions={[
-                    { value: "valide", label: "Accepter", variant: "primary" },
+                    // Tant que l'adresse n'est pas confirmée, elle ne peut qu'être refusée (l'API le refuse aussi).
+                    ...(request.confirmed
+                      ? [{ value: "valide", label: "Accepter", variant: "primary" } as const]
+                      : []),
                     { value: "rejete", label: "Refuser", variant: "danger" },
                   ]}
                 />
@@ -228,7 +240,7 @@ export async function AccountsModeration({ searchParams }: { searchParams: Accou
 
   return (
     <div className="space-y-12">
-      {emailChanges && <EmailChanges requests={emailChanges} />}
+      <EmailChanges requests={emailChanges} />
 
       <section aria-labelledby="accounts-title">
         <h2 id="accounts-title" className="mb-1 font-display text-xl font-semibold">

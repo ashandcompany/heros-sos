@@ -1,4 +1,5 @@
 export {
+  confirmEmailChange,
   getEmailChangeRequests,
   getMyAccount,
   requestEmailChange,
@@ -62,7 +63,11 @@ export {
   updateIncident,
 } from "./incidents";
 export { getModerationSummary } from "./moderation";
-export { subscribeToNewsletter } from "./newsletter";
+export {
+  confirmNewsletterSubscription,
+  subscribeToNewsletter,
+  unsubscribeFromNewsletter,
+} from "./newsletter";
 export {
   getHeroPublicReviews,
   getMyInterventions,

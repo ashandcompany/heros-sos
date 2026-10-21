@@ -15,15 +15,14 @@ export interface AvatarData {
  * initiales et couleur du placeholder différeraient entre les deux.
  * `null` sans profil (administrateur) ou en cas d'échec : une photo introuvable ne doit pas
  * empêcher d'afficher la navigation.
- * Future implémentation : un champ `avatarUrl` dans la réponse de `GET ${API_URL}/auth/me`, pour
- * éviter cet appel supplémentaire.
+ * API : `GET /me`, mémorisé le temps d'un rendu : la page de profil le relit sans nouvel appel.
  */
 export async function getMyAvatar(token: string): Promise<AvatarData | null> {
   try {
     const user = await getSessionUser(token);
     if (user?.role === "citoyen") {
       const account = await getMyAccount(token);
-      return { name: account.firstName, src: account.profile?.avatarUrl ?? null };
+      return { name: account.firstName, src: account.avatarUrl };
     }
     if (user?.role === "super-heros") {
       const profile = await getMyHeroProfile(token);

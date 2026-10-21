@@ -11,6 +11,9 @@ import {
 } from "@/lib/api";
 import { requireCitizenSession } from "@/lib/server-session";
 import {
+  avatarErrorMessage,
+  contactFailureState,
+  emailChangeFailureState,
   readContactValues,
   validateAvatar,
   validateContact,
@@ -46,7 +49,7 @@ export async function updateContactAction(
     },
   });
 
-  if (!result.ok) return { status: "error", message: result.error, fieldErrors: {}, values };
+  if (!result.ok) return contactFailureState(result, values);
 
   revalidatePath(routes.profile);
   return { status: "success", message: "Vos coordonnées ont été mises à jour.", fieldErrors: {} };
@@ -64,7 +67,7 @@ export async function updateAvatarAction(
   if (error || !avatar) return { status: "error", fieldErrors: { avatar: error } };
 
   const result = await updateMyAvatar(token, avatar);
-  if (!result.ok) return { status: "error", message: result.error, fieldErrors: {} };
+  if (!result.ok) return { status: "error", message: avatarErrorMessage(result), fieldErrors: {} };
 
   revalidatePath(routes.profile);
   return {
@@ -85,15 +88,13 @@ export async function requestEmailChangeAction(
   if (error) return { status: "error", fieldErrors: { email: error }, values: { email } };
 
   const result = await requestEmailChange(token, email);
-  if (!result.ok) {
-    return { status: "error", fieldErrors: { email: result.error }, values: { email } };
-  }
+  if (!result.ok) return emailChangeFailureState(result, email);
 
   revalidatePath(routes.profile);
   return {
     status: "success",
     message:
-      "Demande envoyée : la nouvelle adresse sera active après validation par la modération.",
+      "Demande envoyée : un mail de confirmation vient d'être envoyé à la nouvelle adresse. Elle sera active une fois confirmée, puis validée par la modération.",
     fieldErrors: {},
   };
 }
@@ -106,7 +107,7 @@ export async function updateNewsletterAction(
   const subscribed = formData.get("newsletter") === "on";
 
   const result = await updateNewsletterPreference(token, subscribed);
-  if (!result.ok) return { status: "error", message: result.error, fieldErrors: {} };
+  if (!result.ok) return { status: "error", message: apiFailureMessage(result), fieldErrors: {} };
 
   revalidatePath(routes.profile);
   return {

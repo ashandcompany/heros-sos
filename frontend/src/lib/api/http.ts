@@ -1,3 +1,4 @@
+import { headers as requestHeaders } from "next/headers";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { cache } from "react";
 import { SESSION_COOKIE } from "@/lib/cookies";
@@ -40,6 +41,8 @@ interface ApiRequest {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   /** Corps envoyé en JSON. */
   body?: unknown;
+  /** Corps binaire envoyé tel quel (photo de profil, ni JSON ni multipart) : son type fait le `Content-Type`. */
+  file?: Blob;
   /** Jeton de session : transmis dans le cookie que l'API attend, jamais dans `Authorization`. */
   sessionToken?: string;
   /**
@@ -72,13 +75,14 @@ export async function apiFetch(path: string, request: ApiRequest = {}): Promise<
   const headers = new Headers(request.headers);
   headers.set("Accept", "application/json");
   if (request.body !== undefined) headers.set("Content-Type", "application/json");
+  if (request.file) headers.set("Content-Type", request.file.type);
   if (sessionToken) headers.set("Cookie", `${SESSION_COOKIE}=${sessionToken}`);
   if (csrfToken) headers.set("X-CSRF-Token", csrfToken);
 
   const response = await fetch(`${API_URL}${path}`, {
     method,
     headers,
-    body: request.body === undefined ? undefined : JSON.stringify(request.body),
+    body: request.file ?? (request.body === undefined ? undefined : JSON.stringify(request.body)),
     cache: "no-store",
     signal: AbortSignal.timeout(API_TIMEOUT_MS),
   });
@@ -88,6 +92,22 @@ export async function apiFetch(path: string, request: ApiRequest = {}): Promise<
   }
   if (!response.ok) throw await toApiError(response);
   return response;
+}
+
+/**
+ * Les routes publiques sont limitées par adresse IP, et l'API enregistre l'appareil de chaque
+ * session : on lui transmet l'adresse du visiteur (posée par le reverse proxy) et son navigateur,
+ * sinon elle ne verrait que le serveur Next. À passer dans `headers` des appels faits pour un
+ * visiteur (connexion, inscription, contact, newsletter…).
+ */
+export async function visitorHeaders(): Promise<Headers> {
+  const incoming = await requestHeaders();
+  const forwarded = new Headers();
+  const forwardedFor = incoming.get("x-forwarded-for");
+  const userAgent = incoming.get("user-agent");
+  if (forwardedFor) forwarded.set("X-Forwarded-For", forwardedFor);
+  if (userAgent) forwarded.set("User-Agent", userAgent);
+  return forwarded;
 }
 
 async function toApiError(response: Response): Promise<ApiError> {

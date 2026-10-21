@@ -19,6 +19,7 @@ export const superHeroProfilesMock: SuperHeroProfile[] = [
     address: { street: "8 quai Saint-Antoine", postalCode: "69002", city: "Lyon", country: "FR" },
     registeredAt: "2024-02-03T10:12:00+01:00",
     lastInterventionAt: "2026-10-17T14:41:00+02:00",
+    accountStatus: "actif",
   },
   {
     id: "hero-2",
@@ -37,6 +38,7 @@ export const superHeroProfilesMock: SuperHeroProfile[] = [
     address: { street: "21 rue Oberkampf", postalCode: "75011", city: "Paris", country: "FR" },
     registeredAt: "2024-01-15T09:00:00+01:00",
     lastInterventionAt: "2026-10-16T09:20:00+02:00",
+    accountStatus: "actif",
   },
   {
     id: "hero-3",
@@ -55,6 +57,7 @@ export const superHeroProfilesMock: SuperHeroProfile[] = [
     address: null,
     registeredAt: "2023-09-28T18:45:00+02:00",
     lastInterventionAt: "2026-10-14T20:05:00+02:00",
+    accountStatus: "actif",
   },
   {
     id: "hero-4",
@@ -78,6 +81,7 @@ export const superHeroProfilesMock: SuperHeroProfile[] = [
     },
     registeredAt: "2025-04-11T14:30:00+02:00",
     lastInterventionAt: "2026-10-11T17:05:00+02:00",
+    accountStatus: "actif",
   },
   {
     id: "hero-5",
@@ -96,6 +100,7 @@ export const superHeroProfilesMock: SuperHeroProfile[] = [
     address: null,
     registeredAt: "2024-08-19T11:05:00+02:00",
     lastInterventionAt: "2026-10-13T12:00:00+02:00",
+    accountStatus: "actif",
   },
   {
     id: "hero-6",
@@ -114,6 +119,7 @@ export const superHeroProfilesMock: SuperHeroProfile[] = [
     address: { street: "15 rue du Panier", postalCode: "13002", city: "Marseille", country: "FR" },
     registeredAt: "2024-05-06T08:20:00+02:00",
     lastInterventionAt: "2026-10-16T00:15:00+02:00",
+    accountStatus: "actif",
   },
   {
     id: "hero-7",
@@ -132,6 +138,7 @@ export const superHeroProfilesMock: SuperHeroProfile[] = [
     address: { street: "4 rue du Rhône", postalCode: "1204", city: "Genève", country: "CH" },
     registeredAt: "2025-11-02T16:00:00+01:00",
     lastInterventionAt: null,
+    accountStatus: "actif",
   },
   {
     id: "hero-8",
@@ -155,6 +162,7 @@ export const superHeroProfilesMock: SuperHeroProfile[] = [
     },
     registeredAt: "2023-12-01T12:00:00+01:00",
     lastInterventionAt: "2026-10-12T18:10:00+02:00",
+    accountStatus: "actif",
   },
 ];
 

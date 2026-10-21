@@ -18,7 +18,8 @@ const protectedAreas: Array<{ prefix: string; role: UserRole }> = [
  *   redirigé vers son espace.
  */
 export async function proxy(request: NextRequest) {
-  const user = await getUserFromToken(request.cookies.get(SESSION_COOKIE)?.value);
+  const sessionToken = request.cookies.get(SESSION_COOKIE)?.value;
+  const user = await getUserFromToken(sessionToken);
   const redirectTo = (path: string) => NextResponse.redirect(new URL(path, request.url));
 
   const { pathname } = request.nextUrl;

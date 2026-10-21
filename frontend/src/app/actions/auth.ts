@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { login, logout } from "@/lib/api";
 import { SESSION_COOKIE, sessionCookieAttributes } from "@/lib/cookies";
 import { formatRetryDelay } from "@/lib/format";
+import { setSessionCookie } from "@/lib/server-session";
 import { accountHomeByRole, routes } from "@/lib/routes";
 import type { LoginResult } from "@/types";
 
@@ -52,10 +53,7 @@ export async function loginAction(
   }
 
   // Le cookie de l'API est recopié vers le navigateur avec la même durée de vie que la session.
-  (await cookies()).set(SESSION_COOKIE, result.token, {
-    ...sessionCookieAttributes,
-    expires: new Date(result.expiresAt),
-  });
+  await setSessionCookie(result.token, result.expiresAt);
 
   redirect(accountHomeByRole[result.user.role]);
 }

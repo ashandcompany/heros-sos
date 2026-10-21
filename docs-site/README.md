@@ -50,8 +50,9 @@ Le workflow `.github/workflows/docs-ci.yml` construit le site à chaque pull req
 
 Le site se publie sur **GitHub Pages** (<https://ashandcompany.github.io/heros-sos/>, réglé par `url` et `baseUrl`
 dans `docusaurus.config.ts`) avec `.github/workflows/docs-deploy.yml` : mêmes chemins et mêmes étapes que la CI,
-à chaque push sur `develop` (ou à la demande, *Run workflow*). Le workflow ne publie rien tant que le dépôt n'est
-pas réglé, une fois pour toutes :
+à chaque push sur `develop` (ou à la demande, *Run workflow*). Tant que le dépôt n'est pas réglé, le workflow
+construit et vérifie le site, saute la publication (une annotation l'explique) et reste vert ; une fois réglé, il
+publie tout seul. À faire une fois pour toutes :
 
 1. *Settings → Pages → Source* : **GitHub Actions**.
 2. *Settings → Environments → github-pages → Deployment branches* : autoriser `develop` (par défaut, seule la

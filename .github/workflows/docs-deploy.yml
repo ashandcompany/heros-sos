@@ -4,10 +4,12 @@ name: Docs deploy
 # (url et baseUrl sont dans docs-site/docusaurus.config.ts). Mêmes chemins et mêmes étapes que docs-ci.yml :
 # ce que la CI vérifie sur une PR est exactement ce qui est publié après la fusion dans develop.
 #
-# Prérequis, à faire une fois dans les réglages du dépôt (rien n'est publié avant) :
+# Prérequis, à faire une fois dans les réglages du dépôt :
 #   1. Settings → Pages → Source : « GitHub Actions ».
 #   2. Settings → Environments → github-pages → Deployment branches : autoriser `develop` (par défaut, seule la
 #      branche principale `main` peut déployer, et elle ne contient pas encore le site).
+# Tant que Pages n'est pas activé, le workflow construit et vérifie le site, saute la publication avec une
+# annotation et reste vert : il publie tout seul dès que le dépôt est réglé.
 on:
   push:
     branches: [develop]
@@ -35,6 +37,9 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Vrai quand Pages est activé : seul ce cas déclenche la publication.
+    outputs:
+      pages: ${{ steps.pages.outcome == 'success' }}
     defaults:
       run:
         working-directory: docs-site
@@ -58,14 +63,25 @@ jobs:
       - name: Type-check
         run: npm run typecheck
 
-      - uses: actions/configure-pages@v6
+      # Échoue (404) si Pages n'est pas activé sur le dépôt : ce n'est pas une erreur de ce workflow.
+      - id: pages
+        uses: actions/configure-pages@v6
+        continue-on-error: true
 
-      - uses: actions/upload-pages-artifact@v5
+      - name: Pages non activé
+        if: steps.pages.outcome != 'success'
+        run: >-
+          echo "::notice title=GitHub Pages non activé::Le site est construit et vérifié, mais pas publié.
+          Activez Pages (Settings > Pages > Source : GitHub Actions) puis relancez ce workflow."
+
+      - if: steps.pages.outcome == 'success'
+        uses: actions/upload-pages-artifact@v5
         with:
           path: docs-site/build
 
   deploy:
     needs: build
+    if: needs.build.outputs.pages == 'true'
     runs-on: ubuntu-latest
     permissions:
       pages: write

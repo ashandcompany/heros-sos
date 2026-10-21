@@ -44,8 +44,8 @@ func validIncident(typeID int16) map[string]any {
 		"location": map[string]any{
 			"address": "12 rue des Lilas", "postalCode": "69001", "city": "Lyon", "country": "FR",
 		},
-		"occurredAt":  nil,
-		"villainIds":  []string{},
+		"occurredAt": nil,
+		"villainIds": []string{},
 	}
 }
 
@@ -243,11 +243,36 @@ func TestIncidentDeclaration(t *testing.T) {
 	if e.count("audit_logs", "action = 'incident.declare'") != 1 {
 		t.Error("la déclaration doit être journalisée")
 	}
+	anonymous := e.newActor()
+	var publicIncidents struct {
+		Items []struct{ ID string }
+		Total int
+	}
+	if got := anonymous.get("/incidents"); got.status != http.StatusOK {
+		t.Errorf("liste publique anonyme : %d %s", got.status, got.body)
+	} else {
+		got.decode(t, &publicIncidents)
+		if publicIncidents.Total != 1 || len(publicIncidents.Items) != 1 || publicIncidents.Items[0].ID != incident.ID {
+			t.Errorf("incidents visibles sans session : %+v", publicIncidents)
+		}
+	}
+	var publicIncident struct {
+		ID          string
+		Description string
+	}
+	if got := anonymous.get("/incidents/" + incident.ID); got.status != http.StatusOK {
+		t.Errorf("détail public anonyme : %d %s", got.status, got.body)
+	} else {
+		got.decode(t, &publicIncident)
+		if publicIncident.ID != incident.ID || publicIncident.Description != body["description"] {
+			t.Errorf("détail visible sans session : %+v", publicIncident)
+		}
+	}
 	var ownIncidents struct {
 		Items []struct{ ID string }
 		Total int
 	}
-	citizen.get("/incidents?reporterId=" + citizen.userID()).decode(t, &ownIncidents)
+	citizen.get("/incidents?reporterId="+citizen.userID()).decode(t, &ownIncidents)
 	if ownIncidents.Total != 1 || ownIncidents.Items[0].ID != incident.ID {
 		t.Errorf("liste personnelle filtrée : %+v", ownIncidents)
 	}

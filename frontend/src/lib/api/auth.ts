@@ -1,10 +1,10 @@
-import { headers } from "next/headers";
 import { cache } from "react";
 import { MOCK_REMEMBERED_SESSION_MAX_AGE, MOCK_SESSION_MAX_AGE } from "@/lib/cookies";
 import { citizensMock } from "@/mocks/citizens";
 import { accountsMock } from "@/mocks/users";
 import type {
   ActivationResult,
+  ApiFailure,
   AuthUser,
   LoginCredentials,
   LoginError,
@@ -23,6 +23,8 @@ import {
   fromApiUser,
   getApiSession,
   readSessionCookie,
+  toApiFailure,
+  visitorHeaders,
 } from "./http";
 
 /*
@@ -54,21 +56,6 @@ const loginErrorByCode = new Map<string, LoginError>([
  */
 export async function login(credentials: LoginCredentials): Promise<LoginResult> {
   return isApiEnabled ? loginWithApi(credentials) : loginWithMocks(credentials);
-}
-
-/**
- * L'API limite les demandes par adresse IP et enregistre l'appareil de chaque session : on lui
- * transmet l'adresse du visiteur (posée par le reverse proxy) et son navigateur, sinon elle ne
- * verrait que le serveur Next.
- */
-async function visitorHeaders(): Promise<Headers> {
-  const incoming = await headers();
-  const forwarded = new Headers();
-  const forwardedFor = incoming.get("x-forwarded-for");
-  const userAgent = incoming.get("user-agent");
-  if (forwardedFor) forwarded.set("X-Forwarded-For", forwardedFor);
-  if (userAgent) forwarded.set("User-Agent", userAgent);
-  return forwarded;
 }
 
 async function loginWithApi({
@@ -181,6 +168,27 @@ export async function logout(token: string): Promise<void> {
     });
   } catch (error) {
     console.error("Déconnexion : révocation de la session par l'API en échec", error);
+  }
+}
+
+/**
+ * Ferme toutes les sessions de l'utilisateur, sur tous ses appareils, celle-ci comprise. Une
+ * session déjà fermée (401) compte comme un succès : l'action efface le cookie ensuite.
+ * API : `POST /auth/logout-all` (jeton CSRF ajouté par `apiFetch`). Mock : rien à révoquer.
+ */
+export async function logoutEverywhere(token: string): Promise<{ ok: true } | ApiFailure> {
+  if (!isApiEnabled) return mockResponse({ ok: true });
+
+  try {
+    await apiFetch("/auth/logout-all", {
+      method: "POST",
+      sessionToken: token,
+      redirectOnUnauthorized: false,
+    });
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) return { ok: true };
+    return toApiFailure(error, "Déconnexion de tous les appareils");
   }
 }
 

@@ -20,6 +20,9 @@ import { isIncidentPriority } from "@/lib/format";
 import { heroIncidentRoute, routes } from "@/lib/routes";
 import { requireHeroSession } from "@/lib/server-session";
 import {
+  avatarErrorMessage,
+  contactErrorState,
+  emailChangeErrorMessage,
   readContactValues,
   validateAvatar,
   validateContact,
@@ -221,7 +224,7 @@ export async function updateHeroContactAction(
       country: values.country,
     },
   });
-  if (!result.ok) return { status: "error", message: result.error, fieldErrors: {}, values };
+  if (!result.ok) return contactErrorState(result, values);
 
   revalidatePath(routes.heroProfile);
   revalidatePath(routes.adminHeroes);
@@ -240,7 +243,7 @@ export async function updateHeroAvatarAction(
   if (error || !avatar) return { status: "error", fieldErrors: { avatar: error } };
 
   const result = await updateMyHeroAvatar(token, avatar);
-  if (!result.ok) return { status: "error", message: result.error, fieldErrors: {} };
+  if (!result.ok) return { status: "error", fieldErrors: { avatar: avatarErrorMessage(result) } };
 
   for (const path of [routes.heroProfile, routes.home, routes.encyclopedia]) revalidatePath(path);
   return { status: "success", message: "Votre photo a été mise à jour.", fieldErrors: {} };
@@ -258,7 +261,11 @@ export async function requestHeroEmailChangeAction(
 
   const result = await requestHeroEmailChange(token, email);
   if (!result.ok) {
-    return { status: "error", fieldErrors: { email: result.error }, values: { email } };
+    return {
+      status: "error",
+      fieldErrors: { email: emailChangeErrorMessage(result) },
+      values: { email },
+    };
   }
 
   revalidatePath(routes.heroProfile);

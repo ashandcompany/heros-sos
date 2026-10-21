@@ -48,9 +48,10 @@ export function Avatar({ name, src, size = 80, className, square = false }: Avat
         alt=""
         width={size}
         height={size}
-        // Photo envoyée par l'utilisateur (data URL dans les mocks), déjà recadrée et compressée
-        // à l'envoi (voir cropAvatar) : pas d'optimisation possible ni nécessaire.
-        unoptimized={src.startsWith("data:")}
+        // Photo envoyée par l'utilisateur, déjà recadrée et compressée à l'envoi (voir cropAvatar) :
+        // pas d'optimisation nécessaire. Ni possible : data URL dans les mocks, et avec l'API
+        // `/api/v1/avatars/…`, servi par l'API derrière le proxy, que le serveur Next ne sert pas.
+        unoptimized
         className={cn(classes, "object-cover")}
       />
     );

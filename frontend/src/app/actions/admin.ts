@@ -4,12 +4,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
   addHeroVideo,
+  addVillainFilm,
   arbitrateIntervention,
   createArticle,
   deleteArticle,
   createIncidentType,
   createVillain,
   deleteVideo,
+  deleteVillainFilm,
   getIncidentHeroes,
   getIncidentTypes,
   getVillains,
@@ -57,6 +59,7 @@ import { OUTCOME_NOTES_MAX_LENGTH, validateRejectionReason } from "@/lib/validat
 import type {
   AccountModerationAction,
   AccountModerationResult,
+  EmailChangeReviewResult,
   HeroReviewResult,
   ModerationStatus,
   MutationResult,
@@ -346,11 +349,29 @@ export async function reviewEmailChangeAction(
 
   const approve = request.decision === "valide";
   const result = await reviewEmailChange(token, request.id, approve);
+  if (!result.ok) {
+    return { status: "error", message: emailChangeReviewErrorMessage(result), fieldErrors: {} };
+  }
   return settle(
     result,
     [routes.adminAccounts],
     approve ? "Nouvelle adresse email activée." : "Changement d'adresse email refusé.",
   );
+}
+
+function emailChangeReviewErrorMessage(
+  result: Extract<EmailChangeReviewResult, { ok: false }>,
+): string {
+  switch (result.error) {
+    case "not-found":
+      return "Cette demande n'existe plus : son titulaire l'a peut-être remplacée. Rechargez la page.";
+    case "already-reviewed":
+      return "Cette demande a déjà été traitée.";
+    case "email-already-used":
+      return "Cette adresse est désormais utilisée par un autre compte : refusez la demande.";
+    default:
+      return apiFailureMessage(result);
+  }
 }
 
 /* ---------- Super-héros ---------- */
@@ -465,6 +486,42 @@ export async function deleteVideoAction(
 
   const result = await deleteVideo(token, film.heroId, film.filmId);
   return settle(result, [routes.adminVideos], "Film supprimé.");
+}
+
+/* ---------- Films des super-vilains ---------- */
+
+export async function addVillainFilmAction(
+  _previousState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const token = await requireAdminSession();
+  const villainId = String(formData.get("villainId") ?? "");
+  const imdbId = String(formData.get("imdbId") ?? "");
+  if (!villainId || !/^tt\d{7,}$/.test(imdbId)) return invalidRequest;
+
+  const result = await addVillainFilm(token, villainId, imdbId);
+  return settle(
+    result,
+    [adminVillainRoute(villainId), villainSheetRoute(villainId)],
+    "Film ajouté à la fiche du super-vilain.",
+  );
+}
+
+/** Le formulaire de suppression envoie la clé `villainId/filmId` dans `id`. */
+export async function deleteVillainFilmAction(
+  _previousState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const token = await requireAdminSession();
+  const [villainId, filmId, ...rest] = String(formData.get("id") ?? "").split("/");
+  if (!villainId || !filmId || rest.length > 0) return invalidRequest;
+
+  const result = await deleteVillainFilm(token, villainId, filmId);
+  return settle(
+    result,
+    [adminVillainRoute(villainId), villainSheetRoute(villainId)],
+    "Film retiré de la fiche.",
+  );
 }
 
 /* ---------- Commentaires ---------- */

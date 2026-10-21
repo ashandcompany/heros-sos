@@ -7,45 +7,53 @@ branchement. À mettre à jour à chaque fonction branchée.
 
 > [!NOTE]
 > État au 21/10/2026 : **identité (inscription, activation, connexion, session, mot de passe),
-> demandes de super-héros, fiches publiques des super-héros, modération des comptes, types
-> d'incident, incidents et interventions (hors écrans publics), vidéothèque et avis sont branchés**
-> sur l'API dès que `API_URL` est renseignée (tableau ci-dessous). Le compte (profil, photo,
-> changement d'e-mail), le blog, le contact et la newsletter ont maintenant leurs routes dans le
-> contrat mais ne sont **pas encore branchés**. Le reste fonctionne encore sur des mocks, y compris
-> avec l'API.
+> demandes de super-héros, fiches publiques des super-héros, modération des comptes, compte
+> (profil, photo, changement d'e-mail, newsletter), types d'incident, incidents et interventions
+> (y compris incidents en cours et carte publique), vidéothèque, avis, blog, contact et newsletter
+> publique sont branchés** sur l'API dès que `API_URL` est renseignée (tableau ci-dessous). Le reste
+> fonctionne encore sur des mocks, y compris avec l'API.
 
 ## 1. Couverture : ce qui est dans le contrat, et le reste
 
 Le contrat décrit aujourd'hui **82 opérations** (plus `/health` et `/ready`) : identité et
 modération des comptes, profil du compte (`/me`, photo, changements d'e-mail), incidents,
 interventions, types d'incident, super-vilains, avis sur les interventions, vidéothèque (films),
-blog (articles), contact et newsletter. Les autres domaines du frontend (incidents publics,
-tableaux de bord, fiches complètes du back-office) n'ont pas encore de contrat.
+blog (articles), contact et newsletter. Les autres domaines du frontend (incidents résolus
+publics, tableaux de bord, fiches complètes du back-office) n'ont pas encore de contrat.
 
 ### ✅ Branché sur l'API
 
 | Domaine frontend                      | Fichier de `lib/api/`                    | Contrat OpenAPI                                                                                                         |
 | ------------------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Connexion, session, déconnexion       | `auth.ts`                                | `/auth/login`, `/auth/me`, `/auth/logout`                                                                               |
+| Connexion, session, déconnexion       | `auth.ts`                                | `/auth/login`, `/auth/me`, `/auth/logout`, `/auth/logout-all`                                                           |
 | Inscription                           | `auth.ts`                                | `/auth/register`                                                                                                        |
 | Activation du compte                  | `auth.ts`                                | `/auth/activate`, `/auth/resend-activation`                                                                             |
 | Mot de passe oublié (demande, jeton)  | `auth.ts`                                | `/auth/password-reset`, `/auth/password-reset/confirm`                                                                  |
 | Demande de statut super-héros         | `hero-requests.ts`                       | `/heroes/requests`, `/heroes/requests/me`, `/admin/hero-requests/*`                                                     |
 | Comptes (désactivation, vérification) | `user-moderation.ts`                     | `/admin/users`, `/admin/users/{id}/deactivate`, `…/reactivate`, `…/verify`                                              |
+| Profil, photo, changements d'email    | `account.ts`, `super-heroes.ts` (§ 3)    | `/me`, `/me/avatar`, `/avatars/{name}`, `/me/email-change-requests`, `/me/newsletter`, `/admin/email-change-requests/*` |
 | Incidents, interventions, équipes     | `incidents.ts`, `interventions.ts` (§ 3) | `/incidents/*`, `/interventions/*`, `/admin/interventions/{id}/decision`                                                |
 | Types d'incident                      | `incident-types.ts`                      | `/intervention-types`, `/admin/intervention-types`                                                                      |
 | Notes et avis                         | `reviews.ts` (§ 3)                       | `/me/interventions`, `/interventions/{id}/reviews`, `/hero/reviews*`, `/heroes/{heroId}/reviews`, `/admin/hero-review*` |
 | Super-vilains                         | `villains.ts`                            | `GET /villains`, `GET /villains/{id}` (publics), `POST /villains`, `PATCH /villains/{id}`                               |
 | Fiches publiques super-héros          | `super-heroes.ts` (§ 3)                  | `GET /heroes`, `GET /heroes/{heroId}` (publics)                                                                         |
 | Vidéothèque (films)                   | `videos.ts`, `imdb.ts` (§ 3)             | `/films`, `/heroes/{heroId}/films`, `/hero/films*`, `/admin/hero-films*`, `/imdb/titles*`                               |
+| Films des super-vilains               | `videos.ts` (§ 3)                        | `GET /villains/{villainId}/films` (public), `POST /admin/villain-films`, `DELETE /admin/villains/{villainId}/films/*`   |
+| Blog                                  | `blog.ts` (§ 3)                          | `GET /articles`, `GET /articles/{slug}` (publics), `/admin/articles`, `/admin/articles/{id}`                            |
+| Newsletter publique                   | `newsletter.ts` (§ 3)                    | `POST /newsletter/subscriptions`, `POST /newsletter/subscriptions/confirm`                                              |
+| Formulaire de contact                 | `contact.ts` (§ 3)                       | `POST /contact/messages`                                                                                                |
 
 Fonctions de chaque fichier :
 
-- `auth.ts` : `login`, `getSessionUser`, `logout`, `register`, `activateAccount`,
-  `resendActivation`, `requestPasswordReset`, `confirmPasswordReset`.
+- `auth.ts` : `login`, `getSessionUser`, `logout`, `logoutEverywhere`, `register`,
+  `activateAccount`, `resendActivation`, `requestPasswordReset`, `confirmPasswordReset`.
 - `hero-requests.ts` : `requestHeroStatus`, `getMyHeroRequest`, `getHeroApplications`,
   `reviewHeroApplication`.
 - `user-moderation.ts` : `getAccounts`, `moderateAccount`.
+- `account.ts` : `getMyAccount`, `updateMyContact`, `updateMyAvatar`, `requestEmailChange`,
+  `updateNewsletterPreference`, `getEmailChangeRequests`, `reviewEmailChange` ;
+  `super-heroes.ts` (espace héros) : `getMyHeroProfile`, `updateMyHeroContact`,
+  `updateMyHeroAvatar`, `requestHeroEmailChange`.
 - `incident-types.ts` : `getIncidentTypes`, `getAllIncidentTypes`, `createIncidentType`.
 - `reviews.ts` : `getMyInterventions`, `rateIntervention`, `getMyReputation`, `replyToReview`,
   `getHeroPublicReviews`, `getReviewsForModeration`, `moderateReview`, `getRepliesForModeration`,
@@ -53,21 +61,20 @@ Fonctions de chaque fichier :
 - `villains.ts` : `getVillains`, `getVillainsPage`, `getVillain`, `createVillain`, `updateVillain`.
 - `super-heroes.ts` (fiches publiques) : `getSuperHeroes`, `getFeaturedSuperHeroes`, `getSuperHero`.
 - `videos.ts` : `getMyVideos`, `addMyVideo`, `deleteMyVideo`, `getHeroVideos`, `moderateVideo`,
-  `deleteVideo`, `getPublishedVideos` ; `imdb.ts` : `searchImdbTitles`, `getImdbTitle`.
+  `deleteVideo`, `getPublishedVideos`, `getVillainFilms`, `addVillainFilm`, `deleteVillainFilm` ;
+  `imdb.ts` : `searchImdbTitles`, `getImdbTitle`.
+- `blog.ts` : `getPublishedArticles`, `getPublishedArticle`, `getAllArticles`, `getArticle`,
+  `countDraftArticles`, `createArticle`, `updateArticle`, `deleteArticle`.
+- `newsletter.ts` : `subscribeToNewsletter`, `confirmNewsletterSubscription` ; `contact.ts` :
+  `sendContactMessage`.
 
 ### ⏳ Encore sur les mocks (ou à faire)
 
-| Domaine frontend                   | Fonctions `lib/api/`                                                                                                                                                                                                                                                                  | Contrat OpenAPI                                                                                                                                                                                              | État    |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- |
-| Incidents publics (accueil, carte) | `incidents.ts` : `getLatestResolvedIncidents`, `getOngoingIncidents`, `getPublicIncidentMap`, `getResolvedIncidentsByHero`, `getIncidentsByVillain`                                                                                                                                   | ❌ aucun (routes réservées aux comptes connectés)                                                                                                                                                            | mock    |
-| Fiches complètes super-héros       | `super-heroes.ts` : `getSuperHeroProfiles` (back-office)                                                                                                                                                                                                                              | ❌ aucun                                                                                                                                                                                                     | mock    |
-| Profil, photo, changements d'email | `account.ts` : `getMyAccount`, `updateMyContact`, `updateMyAvatar`, `requestEmailChange`, `updateNewsletterPreference`, `getEmailChangeRequests`, `reviewEmailChange` ; `super-heroes.ts` : `getMyHeroProfile`, `updateMyHeroContact`, `updateMyHeroAvatar`, `requestHeroEmailChange` | `GET /me`, `PATCH /me`, `PUT /me/avatar`, `GET /avatars/{name}`, `POST /me/email-change-requests`, `PUT /me/newsletter`, `/admin/email-change-requests/*` (un héros utilise les mêmes routes que le citoyen) | à faire |
-| Tableau de bord héros, modération  | `hero-dashboard.ts`, `moderation.ts`                                                                                                                                                                                                                                                  | ❌ aucun (statistiques)                                                                                                                                                                                      | mock    |
-| Blog                               | `blog.ts` : `getPublishedArticles`, `getPublishedArticle`, `getAllArticles`, `getArticle`, `createArticle`, `updateArticle`, `deleteArticle`                                                                                                                                          | `GET /articles`, `GET /articles/{slug}`, `/admin/articles`, `/admin/articles/{id}`                                                                                                                           | à faire |
-| Newsletter                         | `newsletter.ts` : `subscribeToNewsletter`                                                                                                                                                                                                                                             | `POST /newsletter/subscriptions`, `POST /newsletter/subscriptions/confirm`                                                                                                                                   | à faire |
-| Formulaire de contact              | `contact.ts` : `sendContactMessage`                                                                                                                                                                                                                                                   | `POST /contact/messages`                                                                                                                                                                                     | à faire |
-| Déconnexion de tous les appareils  | aucune (pas d'écran)                                                                                                                                                                                                                                                                  | `POST /auth/logout-all`                                                                                                                                                                                      | à faire |
-| Films des super-vilains            | aucune (pas d'écran)                                                                                                                                                                                                                                                                  | `GET /villains/{villainId}/films`, `POST /admin/villain-films`, `DELETE /admin/villains/{villainId}/films/{filmId}`                                                                                          | à faire |
+| Domaine frontend                  | Fonctions `lib/api/`                                                                                 | Contrat OpenAPI                                                                       | État |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ---- |
+| Incidents résolus publics         | `incidents.ts` : `getLatestResolvedIncidents`, `getResolvedIncidentsByHero`, `getIncidentsByVillain` | ❌ aucun (`GET /incidents` public ne renvoie pas les résolus, ni filtre héros/vilain) | mock |
+| Fiches complètes super-héros      | `super-heroes.ts` : `getSuperHeroProfiles` (back-office)                                             | ❌ aucun                                                                              | mock |
+| Tableau de bord héros, modération | `hero-dashboard.ts`, `moderation.ts`                                                                 | ❌ aucun (statistiques)                                                               | mock |
 
 > [!WARNING]
 > Les « Future implémentation » écrites dans les commentaires de `lib/api/` pour les domaines non
@@ -102,15 +109,16 @@ flowchart LR
     next -.->|"cookie recopié"| nav
 ```
 
-|               | Fonctionnement                                                                                                                                 |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Connexion     | `loginAction` → `login()` → `POST /auth/login`. Le jeton du `Set-Cookie` de l'API est recopié dans le cookie du navigateur (même nom)          |
-| Durée         | Celle de la session API : le cookie expire à `expiresAt` (7 j max pour un citoyen ou un héros, 8 h pour un modérateur)                         |
-| Lecture       | `getSessionUser(token)` → `GET /auth/me`, le jeton dans l'en-tête `Cookie`. Mémorisé le temps d'un rendu (`cache` de React)                    |
-| Déconnexion   | `logoutAction` → `logout()` : `GET /auth/me` (jeton CSRF) puis `POST /auth/logout` avec `X-CSRF-Token`. Le cookie est effacé dans tous les cas |
-| Nom du cookie | [cookies.ts](../src/lib/cookies.ts) : `__Host-session` en production, `session` sinon : même règle que l'API (`HEROS_COOKIE_SECURE`)           |
-| API en panne  | `getSessionUser` renvoie `null` (visiteur, espaces protégés fermés) et journalise l'erreur ; `login` renvoie `unavailable`                     |
-| Adresse IP    | `login` transmet `X-Forwarded-For` et `User-Agent` du visiteur : l'API limite les tentatives par IP et enregistre l'appareil de la session     |
+|               | Fonctionnement                                                                                                                                                                                                                                                           |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Connexion     | `loginAction` → `login()` → `POST /auth/login`. Le jeton du `Set-Cookie` de l'API est recopié dans le cookie du navigateur (même nom)                                                                                                                                    |
+| Durée         | Celle de la session API : le cookie expire à `expiresAt` (7 j max pour un citoyen ou un héros, 8 h pour un modérateur)                                                                                                                                                   |
+| Lecture       | `getSessionUser(token)` → `GET /auth/me`, le jeton dans l'en-tête `Cookie`. Mémorisé le temps d'un rendu (`cache` de React)                                                                                                                                              |
+| Déconnexion   | `logoutAction` → `logout()` : `GET /auth/me` (jeton CSRF) puis `POST /auth/logout` avec `X-CSRF-Token`. Le cookie est effacé dans tous les cas                                                                                                                           |
+| Partout       | « Sécurité » de « Mon compte » et « Mon profil » : `logoutEverywhereAction` → `POST /auth/logout-all`, puis cookie effacé et retour à la connexion. En cas d'échec, la session reste ouverte et l'erreur s'affiche ; un 401 (session déjà fermée) compte comme un succès |
+| Nom du cookie | [cookies.ts](../src/lib/cookies.ts) : `__Host-session` en production, `session` sinon : même règle que l'API (`HEROS_COOKIE_SECURE`)                                                                                                                                     |
+| API en panne  | `getSessionUser` renvoie `null` (visiteur, espaces protégés fermés) et journalise l'erreur ; `login` renvoie `unavailable`                                                                                                                                               |
+| Adresse IP    | `login` transmet `X-Forwarded-For` et `User-Agent` du visiteur : l'API limite les tentatives par IP et enregistre l'appareil de la session                                                                                                                               |
 
 À savoir :
 
@@ -138,10 +146,9 @@ vrai identifiant, n'y retrouve rien de lui. Aucun compte réel n'emprunte l'iden
 mock, donc personne ne voit les données d'un autre.
 
 > [!WARNING]
-> Conséquence, tant que ces domaines ne sont pas branchés : listes vides (tableau de bord héros…),
-> et **erreur 404** sur les écrans qui exigent un profil mock : modification du compte citoyen
-> (contact, photo, email), « Mon profil » et ses formulaires côté héros (`findMyAccount`,
-> `findMyProfile`). La photo de la barre de navigation retombe sur les initiales.
+> Conséquence, tant que ces domaines ne sont pas branchés : listes vides (tableau de bord héros…).
+> Le compte (« Mon compte », « Mon profil », photo de la barre de navigation) est branché et
+> n'est plus concerné.
 
 ### Rôles : deux vocabulaires
 
@@ -228,9 +235,8 @@ qu'un seul `GET /auth/me`.
 - **Comptes** : le contrat ne connaît pas « à contrôler / validé / rejeté », mais un état
   (`pending_activation | active | deactivated` → `AccountStatus`) et une vérification à part
   (`verifiedAt`, sans route pour l'annuler). Le tableau de bord ne compte donc plus les « comptes à
-  contrôler » avec l'API (tuile masquée). Les **changements d'email** ont leurs routes
-  (`/admin/email-change-requests/*`) mais ne sont pas encore branchés : la section est masquée
-  avec l'API (`getEmailChangeRequests` renvoie `null`).
+  contrôler » avec l'API (tuile masquée). Les **changements d'email** sont branchés : voir
+  « Compte : choix du branchement ».
 - **Types d'incident** : plus aucune liste en dur. Un incident embarque son type (`{ code, label }`,
   `typeCode` et `typeLabel` de l'API) ; les formulaires reçoivent la liste du référentiel et envoient
   son `id` (`typeId`). Le référentiel est **vide** dans une base neuve : tant qu'un modérateur n'a
@@ -252,9 +258,49 @@ qu'un seul `GET /auth/me`.
   `updateIncidentAction`) prend ses héros dans `getIncidentHeroes` (mocks), pas dans
   `getSuperHeroes` : les incidents mockés référencent les identifiants mock. À supprimer en
   branchant les incidents.
-- **Pas encore branché** : espace héros (`getMyHeroProfile`, coordonnées, photo, changement
-  d'email), dont les routes existent (`/me`, `/me/avatar`, `/me/email-change-requests`), et
-  fiches complètes du back-office (`getSuperHeroProfiles`), faute de route.
+- **Pas encore branché** : fiches complètes du back-office (`getSuperHeroProfiles`), faute de
+  route. L'espace héros (« Mon profil ») est branché : voir « Compte : choix du branchement ».
+
+### Compte : choix du branchement
+
+- **Un compte, quel que soit le rôle** : citoyen et super-héros lisent leur profil avec `GET /me`
+  et le modifient par les mêmes routes. Les fonctions de l'espace héros (`super-heroes.ts`)
+  délèguent à celles de `account.ts` (`putAvatar`, `postEmailChangeRequest`, `updateMyContact`).
+  Pour un héros, `hero.alias` et `hero.bio` (→ `power`) viennent du même appel ; le pseudo et la
+  description ne se modifient pas depuis l'espace héros (aucune route).
+- **Un seul `GET /me` par rendu** : `getApiAccount` est mémorisé (`cache` de React), la page de
+  profil et la photo de la barre de navigation (`getMyAvatar`) le partagent.
+- **Conversion** : `createdAt` → `registeredAt` ; `pendingEmail`, `avatarUrl` et
+  `address.complement` absents → `null`. Côté héros, une adresse vide (compte créé hors
+  inscription) donne `address: null`.
+- **Complément d'adresse** (`PATCH /me`) : `null` conserve le complément actuel, `""` l'efface.
+  Le formulaire citoyen envoie toujours la valeur saisie (champ vidé = complément effacé) ; celui
+  du héros, qui n'a pas ce champ, envoie `null`.
+- **Photo** : `PUT /me/avatar` reçoit **l'image brute** (option `rawBody` d'`apiFetch`, avec son
+  `Content-Type`), déjà recadrée en 256 px dans le navigateur (`cropAvatar`). L'API la ré-encode
+  en JPEG et renvoie une nouvelle adresse à chaque envoi.
+- **Adresse des photos** : `avatarUrl` est un chemin de l'API (`/api/v1/avatars/…`). Derrière le
+  proxy, c'est la même origine que le site ; sans proxy (`npm run dev` sur le port 3000), un
+  rewrite de `next.config.ts` les relaie vers `API_URL`. `Avatar` désactive l'optimisation de
+  `next/image` (`unoptimized`) : le serveur Next ne sert pas `/api/v1` en production.
+- **Changement d'email** : une nouvelle demande remplace la précédente ; « Mon compte » et « Mon
+  profil » affichent `pendingEmail`. La modération (`/admin/comptes#emails`) lit toutes les pages
+  de `GET /admin/email-change-requests?status=pending` et décide sur l'**identifiant de la
+  demande** (`EmailChangeRequest.id`), pas sur celui du compte. Le tableau de bord compte les
+  demandes en attente (`total`).
+- **Erreurs** :
+
+  | Code API (statut)                      | Message affiché                                       |
+  | -------------------------------------- | ----------------------------------------------------- |
+  | `validation_failed` (422), `PATCH /me` | Message par champ (`mobilePhone`, `address.city`…)    |
+  | `validation_failed` (422), `avatar`    | `invalid` : image illisible ; `too_large` : > 1024 px |
+  | `payload_too_large` (413), photo       | L'image ne doit pas dépasser 2 Mo                     |
+  | `email_unchanged` (409)                | C'est déjà votre adresse email actuelle               |
+  | `email_already_used` (409), demande    | Adresse déjà utilisée par un autre compte             |
+  | `email_already_used` (409), validation | Adresse prise entre-temps : refuser la demande        |
+  | `email_change_not_pending` (409)       | Demande déjà traitée                                  |
+  | `email_change_not_found` (404)         | Demande introuvable (remplacée par son titulaire)     |
+  | autre                                  | `apiFailureMessage(toApiFailure(…))`                  |
 
 ### Vidéothèque : choix du branchement
 
@@ -292,8 +338,15 @@ qu'un seul `GET /auth/me`.
   (`addHeroVideo`). Les fiches complètes des super-héros étant mockées, la liste des héros vient des comptes
   (`GET /admin/users?role=hero&status=active`, `getHeroesForVideos`) : seuls leurs identifiants
   sont valides pour l'API.
-- **Pas encore branché** : films des super-vilains (aucun écran), vidéos libres sans IMDb
-  (`title`, `description`, `videoUrl` dans `FilmInput`).
+- **Films des super-vilains** : rattachés par un modérateur depuis la fiche du vilain
+  (`/admin/super-vilains/{id}#films`, recherche IMDb par `?q=`), visibles aussitôt, sans
+  modération, dans la section « Au cinéma » de la fiche publique. Ajout : `POST /admin/villain-films`
+  avec `{ villainId, imdbId }` ; son `409` n'a pas de corps documenté, le frontend se fie au
+  statut (« déjà sur la fiche »). Retrait : la clé `villainId/filmId` du formulaire, puis
+  `DELETE /admin/villains/{villainId}/films/{filmId}`. Un vilain inconnu de l'API (404, ou ancien
+  identifiant mock en 422) n'a aucun film.
+- **Pas encore branché** : vidéos libres sans IMDb (`title`, `description`, `videoUrl` dans
+  `FilmInput`).
 
 ### Avis : choix du branchement
 
@@ -345,13 +398,15 @@ Types dans [src/types/review.ts](../src/types/review.ts) (`HeroReview`, `ReviewR
 Fonctions dans [incidents.ts](../src/lib/api/incidents.ts) (incidents) et
 [interventions.ts](../src/lib/api/interventions.ts) (équipes) ; types dans
 [src/types/incident.ts](../src/types/incident.ts) (`InterventionTeam`, `TeamMember`,
-`InterventionRef`). Toutes les routes demandent une session.
+`InterventionRef`). `GET /incidents` et `GET /incidents/{id}` sont publics ; les autres routes
+demandent une session.
 
 | Écran                                    | Fonction                                                                   | API                                                                                      |
 | ---------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | Déclaration (citoyen, héros, modérateur) | `declareIncident`                                                          | `POST /incidents`, position géocodée par le frontend (`latitude`, `longitude`)           |
 | « Mes incidents », « Mes déclarations »  | `getMyIncidents`                                                           | `GET /incidents?reporterId={moi}`                                                        |
-| Fiche d'un incident (citoyen)            | `getCitizenIncident`                                                       | Cherchée dans `getMyIncidents` : `GET /incidents/{id}` est fermé aux citoyens            |
+| Fiche d'un incident (citoyen)            | `getCitizenIncident`                                                       | `GET /incidents/{id}` ; `isMine` d'après `GET /incidents?reporterId={moi}`               |
+| Incidents en cours, carte publique       | `getOngoingIncidents`, `getPublicIncidentMap`                              | `GET /incidents` **sans session**, toutes les pages ; filtre par ville côté frontend     |
 | Liste, fiche, carte (héros)              | `getHeroIncidents`, `getHeroIncident`, `getIncidentMap`                    | `GET /incidents`, `GET /incidents/{id}`, puis `GET /interventions/{id}` par équipe       |
 | Prise en charge                          | `takeChargeOfIncident`                                                     | `POST /incidents/{incidentId}/interventions` (le héros devient lead)                     |
 | Résultat                                 | `finishIntervention` → `proposeOutcome`                                    | `POST /interventions/{id}/outcome`, puis `GET` pour savoir si elle est close             |
@@ -375,6 +430,11 @@ Fonctions dans [incidents.ts](../src/lib/api/incidents.ts) (incidents) et
 - **Arbitrage** : la réponse de l'API ne dit pas qu'un désaccord a eu lieu (la proposition est
   effacée). Le formulaire d'arbitrage est donc proposé pour toute intervention en cours ; sans
   désaccord, l'API répond `409 intervention_dispute_not_found`, affiché tel quel.
+- **Liste publique sans session** : pour un citoyen connecté, l'API restreint `GET /incidents` à
+  ses propres déclarations (session lue sur toutes les routes). Les écrans publics (incidents en
+  cours, carte) appellent donc l'API **sans jeton**. La liste publique ne contient que les incidents
+  signalés, en cours ou en échec. L'`Incident` de l'API n'a pas de `reporterId` : la fiche du
+  citoyen déduit `isMine` de sa propre liste.
 - **Le citoyen ne voit pas l'équipe** : les interventions lui sont fermées. Sa fiche affiche
   « une équipe intervient » et, une fois l'incident résolu, renvoie vers « Mes interventions »
   pour noter.
@@ -392,12 +452,51 @@ Fonctions dans [incidents.ts](../src/lib/api/incidents.ts) (incidents) et
 | Incidents résolus dans les listes               | `GET /incidents` ne les renvoie qu'à leur déclarant                   | Filtre « Résolus » retiré de l'espace héros |
 | Historique des interventions terminées          | `incident.interventionId` ne désigne que l'intervention en cours      | Section « Interventions précédentes » vide  |
 
-**Absent du contrat, encore sur les mocks avec l'API** (aucune route publique) : derniers
-incidents résolus de l'accueil (`getLatestResolvedIncidents`), incidents en cours de l'espace
-citoyen (`getOngoingIncidents`), carte publique (`getPublicIncidentMap`), interventions d'un héros
-et incidents d'un vilain sur les fiches de l'encyclopédie (`getResolvedIncidentsByHero`,
-`getIncidentsByVillain` : vides pour un vrai héros ou vilain), tableaux de bord
-(`hero-dashboard.ts`, `moderation.ts`).
+**Absent du contrat, encore sur les mocks avec l'API** (la liste publique ne renvoie pas les
+incidents résolus et ne filtre ni par héros ni par vilain) : derniers incidents résolus de
+l'accueil (`getLatestResolvedIncidents`), interventions d'un héros et incidents d'un vilain sur les
+fiches de l'encyclopédie (`getResolvedIncidentsByHero`, `getIncidentsByVillain` : vides pour un
+vrai héros ou vilain), tableaux de bord (`hero-dashboard.ts`, `moderation.ts`).
+
+### Blog : choix du branchement
+
+- **Listes sans contenu** : `GET /articles` et `GET /admin/articles` ne renvoient pas le HTML. Les
+  listes sont typées `BlogArticleSummary` (`BlogArticle` sans `content`), le mock aussi ; seules
+  les fiches (`getPublishedArticle`, `getArticle`) ont le contenu. Les écrans ne paginent pas : les
+  fonctions lisent toutes les pages, dans l'ordre de l'API (publication décroissante en public,
+  dernière modification d'abord dans le back-office).
+- **Slug et HTML** : calculés et assainis par l'API (balises de l'éditeur seulement). Le slug est
+  figé à la première publication ; `publishedAt` est conservé après un retour en brouillon. La
+  page publique assainit de nouveau le contenu (`sanitizeArticleHtml`).
+- **Lecture publique** : sans session ; un brouillon ou un slug inconnu répond 404 (`null`, page
+  introuvable). `getPublishedArticle` est mémorisé le temps d'un rendu (page et métadonnées).
+- **Tableau de bord** : « Articles en brouillon » vient du `total` de
+  `GET /admin/articles?status=brouillon` (`countDraftArticles`).
+- **Erreurs** (les fonctions renvoient un `MutationResult`, message prêt à afficher) :
+
+  | Code API (statut)                 | Message affiché                                                               |
+  | --------------------------------- | ----------------------------------------------------------------------------- |
+  | `article_slug_already_used` (409) | Impossible de générer une adresse unique pour cet article : modifiez le titre |
+  | `not_found` (404)                 | Article introuvable                                                           |
+  | `validation_failed` (422)         | Certaines informations de l'article sont invalides                            |
+  | autre                             | `apiFailureMessage(toApiFailure(…))`                                          |
+
+### Contact et newsletter : choix du branchement
+
+- **Adresse du visiteur** : les deux routes sont limitées par IP (la newsletter aussi par adresse
+  email). Comme `login`, elles transmettent `X-Forwarded-For` et `User-Agent` du visiteur
+  (`visitorHeaders`, [http.ts](../src/lib/api/http.ts)).
+- **Contact** : aucun mail n'est envoyé au visiteur, rien n'est conservé. `422` → erreur sur les
+  champs refusés (règles déjà alignées : nom ≤ 80, message de 20 à 2 000 caractères, objet parmi
+  `question | compte | donnees | partenariat | autre`) ; `503 contact_delivery_unavailable` → « le
+  message n'a pas pu être envoyé », à réessayer ; `429` → délai `Retry-After`.
+- **Newsletter, double opt-in** : `POST /newsletter/subscriptions` répond `202` pour toute adresse
+  valide (déjà abonnée ou non) et envoie un lien de confirmation valable 48 h. Le formulaire
+  l'annonce ; le cookie `newsletter_subscribed` masque ensuite le formulaire, comme avant.
+- **Page de confirmation** : `/newsletter/confirmation?token=…` (`routes.newsletterConfirmation`),
+  qui doit rester égale à `HEROS_NEWSLETTER_CONFIRM_PATH` du backend. Comme l'activation, la
+  confirmation se fait par un **bouton** : une messagerie qui ouvre le lien à l'avance ne donne pas
+  le consentement à la place du visiteur. `400 invalid_token` → « lien invalide ou expiré ».
 
 ### Pagination
 

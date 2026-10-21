@@ -9,7 +9,7 @@ export interface BlogArticle {
   excerpt: string;
   /**
    * Corps de l'article en HTML, produit par l'éditeur du back-office.
-   * À assainir côté API avant tout rendu public.
+   * Assaini par l'API à l'enregistrement, puis de nouveau avant tout rendu public.
    */
   content: string;
   status: ArticleStatus;
@@ -20,6 +20,9 @@ export interface BlogArticle {
   /** `null` tant que l'article n'a jamais été publié. */
   publishedAt: string | null;
 }
+
+/** Article dans une liste : l'API n'y joint pas le contenu. */
+export type BlogArticleSummary = Omit<BlogArticle, "content">;
 
 /** Champs saisis dans l'éditeur d'article. */
 export interface ArticleInput {

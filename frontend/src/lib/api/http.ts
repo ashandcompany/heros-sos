@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { cache } from "react";
 import { SESSION_COOKIE } from "@/lib/cookies";
@@ -40,6 +41,11 @@ interface ApiRequest {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   /** Corps envoyé en JSON. */
   body?: unknown;
+  /**
+   * Corps envoyé tel quel (une image pour `PUT /me/avatar`), à la place de `body`. Son type se
+   * donne dans `headers` (`Content-Type`).
+   */
+  rawBody?: Blob;
   /** Jeton de session : transmis dans le cookie que l'API attend, jamais dans `Authorization`. */
   sessionToken?: string;
   /**
@@ -78,7 +84,7 @@ export async function apiFetch(path: string, request: ApiRequest = {}): Promise<
   const response = await fetch(`${API_URL}${path}`, {
     method,
     headers,
-    body: request.body === undefined ? undefined : JSON.stringify(request.body),
+    body: request.body === undefined ? request.rawBody : JSON.stringify(request.body),
     cache: "no-store",
     signal: AbortSignal.timeout(API_TIMEOUT_MS),
   });
@@ -88,6 +94,21 @@ export async function apiFetch(path: string, request: ApiRequest = {}): Promise<
   }
   if (!response.ok) throw await toApiError(response);
   return response;
+}
+
+/**
+ * L'API limite les demandes par adresse IP (connexion, contact, newsletter…) et enregistre
+ * l'appareil de chaque session : on lui transmet l'adresse du visiteur (posée par le reverse
+ * proxy) et son navigateur, sinon elle ne verrait que le serveur Next.
+ */
+export async function visitorHeaders(): Promise<Headers> {
+  const incoming = await headers();
+  const forwarded = new Headers();
+  const forwardedFor = incoming.get("x-forwarded-for");
+  const userAgent = incoming.get("user-agent");
+  if (forwardedFor) forwarded.set("X-Forwarded-For", forwardedFor);
+  if (userAgent) forwarded.set("User-Agent", userAgent);
+  return forwarded;
 }
 
 async function toApiError(response: Response): Promise<ApiError> {

@@ -8,7 +8,7 @@ import { VillainStatusStamp } from "@/components/encyclopedia/VillainCard";
 import { VillainMugshot } from "@/components/encyclopedia/VillainMugshot";
 import { VillainSpecialties } from "@/components/encyclopedia/VillainSpecialties";
 import { Container } from "@/components/ui/Container";
-import { getIncidentsByVillain, getVillain } from "@/lib/api";
+import { getIncidentsByVillain, getVillain, getVillainFilms } from "@/lib/api";
 import { dossierNumber } from "@/lib/dossier";
 import { formatDate, formatInteger, formatLocation } from "@/lib/format";
 import { heroSheetRoute, routes } from "@/lib/routes";
@@ -28,7 +28,10 @@ async function VillainSheet({ params }: { params: Promise<{ id: string }> }) {
   const villain = await getVillain(id);
   if (!villain) notFound();
 
-  const incidents = await getIncidentsByVillain(villain.id);
+  const [incidents, films] = await Promise.all([
+    getIncidentsByVillain(villain.id),
+    getVillainFilms(villain.id),
+  ]);
   // Super-héros intervenus sur ses derniers méfaits.
   const opponents = [
     ...new Map(incidents.flatMap(({ hero }) => (hero ? [[hero.id, hero] as const] : []))).values(),
@@ -159,6 +162,46 @@ async function VillainSheet({ params }: { params: Promise<{ id: string }> }) {
                   >
                     {hero.alias}
                   </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <h2 id="films-title" className="mt-12 mb-4 font-display text-xl font-semibold">
+            Au cinéma
+          </h2>
+          {films.length === 0 ? (
+            <p className="rounded-2xl border border-dashed border-border p-5 text-sm text-muted">
+              Aucun film répertorié pour l&apos;instant.
+            </p>
+          ) : (
+            <ul aria-labelledby="films-title" className="space-y-3">
+              {films.map((film) => (
+                <li
+                  key={film.id}
+                  className="border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-4"
+                >
+                  <p className="font-display font-semibold">
+                    {film.title}
+                    {film.year && (
+                      <span className="font-mono text-sm font-normal text-muted">
+                        {" "}
+                        ({film.year})
+                      </span>
+                    )}
+                  </p>
+                  {film.videoUrl && (
+                    <a
+                      href={film.videoUrl}
+                      target="_blank"
+                      rel="noopener noreferrer nofollow"
+                      className="mt-1 inline-flex min-h-11 items-center text-sm font-semibold text-accent hover:underline"
+                    >
+                      {film.imdbId ? "Voir sur IMDb" : "Regarder"}
+                      <span className="sr-only"> « {film.title} » (nouvel onglet)</span>
+                      <span aria-hidden="true">&nbsp;↗</span>
+                    </a>
+                  )}
                 </li>
               ))}
             </ul>

@@ -1,7 +1,22 @@
 import { cache } from "react";
 import { superHeroesMock, superHeroProfilesMock } from "@/mocks/super-heroes";
-import { accountsMock } from "@/mocks/users";
-import type { MutationResult, PostalAddress, SuperHero, SuperHeroProfile } from "@/types";
+import type {
+  AvatarUpdateResult,
+  ContactUpdateResult,
+  EmailChangeResult,
+  MyHeroProfile,
+  PostalAddress,
+  SuperHero,
+  SuperHeroProfile,
+} from "@/types";
+import {
+  checkEmailChangeWithMocks,
+  getApiAccount,
+  postEmailChangeRequest,
+  putAvatar,
+  toDataUrl,
+  updateMyContact,
+} from "./account";
 import { isApiEnabled, mockResponse } from "./config";
 import { ApiError, type ApiSchema, apiFetch } from "./http";
 import { MAX_PAGE_SIZE, pageQuery } from "./pagination";
@@ -10,7 +25,7 @@ import { userFromToken } from "./session-user";
 /*
  * Fiches publiques des super-héros (accueil, encyclopédie) : `GET /heroes` et `GET /heroes/{heroId}`,
  * publics. Seuls les héros approuvés au compte actif y figurent ; `power` est la description
- * publique du profil. Les fiches complètes (back-office, espace héros) restent mockées.
+ * publique du profil. Les fiches complètes du back-office restent mockées.
  */
 
 function fromApiHero(hero: ApiSchema<"PublicHero">): SuperHero {
@@ -68,7 +83,10 @@ export async function getSuperHeroes(): Promise<SuperHero[]> {
   }
 }
 
-/* ---------- Espace super-héros (rôle super-heros) ---------- */
+/*
+ * Espace super-héros (rôle super-heros). Un héros est un compte comme un autre (`role: hero`) :
+ * avec l'API, ces fonctions passent par les routes du compte (`/me`, voir `account.ts`).
+ */
 
 async function findMyProfile(token: string): Promise<SuperHeroProfile> {
   const user = await userFromToken(token, "super-heros");
@@ -77,16 +95,45 @@ async function findMyProfile(token: string): Promise<SuperHeroProfile> {
   return profile;
 }
 
-/** Future implémentation : `GET ${API_URL}/hero/me` */
-export async function getMyHeroProfile(token: string): Promise<SuperHeroProfile> {
-  return mockResponse(await findMyProfile(token));
+/**
+ * Profil du héros connecté : son compte et son profil public (`hero.bio` → `power`).
+ * API : `GET /me`. Un compte modérateur peut avoir une adresse vide : `address` vaut alors `null`.
+ */
+export async function getMyHeroProfile(token: string): Promise<MyHeroProfile> {
+  if (!isApiEnabled) return mockResponse(await findMyProfile(token));
+
+  const account = await getApiAccount(token);
+  const { street, postalCode, city, country } = account.address;
+  return {
+    id: account.id,
+    alias: account.hero?.alias ?? account.firstName,
+    power: account.hero?.bio ?? "",
+    avatarUrl: account.avatarUrl ?? null,
+    firstName: account.firstName,
+    lastName: account.lastName,
+    civility: account.civility,
+    birthDate: account.birthDate,
+    email: account.email,
+    pendingEmail: account.pendingEmail ?? null,
+    mobilePhone: account.mobilePhone,
+    address: street ? { street, postalCode, city, country } : null,
+    registeredAt: account.createdAt,
+  };
 }
 
-/** Future implémentation : `PATCH ${API_URL}/hero/me` avec `{ mobilePhone, address }`. */
+/**
+ * Remplace le téléphone et l'adresse. Le profil d'un héros n'a pas de complément d'adresse : celui
+ * du compte est conservé.
+ * API : `PATCH /me` avec `{ mobilePhone, address }`.
+ */
 export async function updateMyHeroContact(
   token: string,
   update: { mobilePhone: string; address: PostalAddress },
-): Promise<MutationResult> {
+): Promise<ContactUpdateResult> {
+  if (isApiEnabled) {
+    return updateMyContact(token, { ...update, address: { ...update.address, complement: null } });
+  }
+
   const profile = await findMyProfile(token);
   profile.mobilePhone = update.mobilePhone;
   profile.address = update.address;
@@ -95,12 +142,13 @@ export async function updateMyHeroContact(
 
 /**
  * Remplace la photo (profil complet et profil public).
- * Future implémentation : `PUT ${API_URL}/hero/me/avatar` en multipart/form-data.
+ * API : `PUT /me/avatar` (voir `putAvatar`).
  */
-export async function updateMyHeroAvatar(token: string, file: File): Promise<MutationResult> {
+export async function updateMyHeroAvatar(token: string, file: File): Promise<AvatarUpdateResult> {
+  if (isApiEnabled) return putAvatar(token, file);
+
   const profile = await findMyProfile(token);
-  const base64 = Buffer.from(await file.arrayBuffer()).toString("base64");
-  const avatarUrl = `data:${file.type};base64,${base64}`;
+  const avatarUrl = await toDataUrl(file);
   profile.avatarUrl = avatarUrl;
   const hero = superHeroesMock.find(({ id }) => id === profile.id);
   if (hero) hero.avatarUrl = avatarUrl;
@@ -109,27 +157,18 @@ export async function updateMyHeroAvatar(token: string, file: File): Promise<Mut
 
 /**
  * Demande de changement d'email, appliquée après validation par la modération.
- * Future implémentation : `POST ${API_URL}/hero/me/email-change-requests` avec `{ email }`.
+ * API : `POST /me/email-change-requests` avec `{ email }`.
  */
 export async function requestHeroEmailChange(
   token: string,
   email: string,
-): Promise<MutationResult> {
+): Promise<EmailChangeResult> {
+  if (isApiEnabled) return postEmailChangeRequest(token, email);
+
   const profile = await findMyProfile(token);
-  const normalized = email.toLowerCase();
-
-  if (normalized === profile.email) {
-    return mockResponse({ ok: false, error: "C'est déjà votre adresse email actuelle." });
-  }
-  if (accountsMock.some((existing) => existing.email === normalized)) {
-    return mockResponse({
-      ok: false,
-      error: "Cette adresse est déjà utilisée par un autre compte.",
-    });
-  }
-
-  profile.pendingEmail = normalized;
-  return mockResponse({ ok: true });
+  const result = checkEmailChangeWithMocks(profile.email, email);
+  if (result.ok) profile.pendingEmail = email.toLowerCase();
+  return mockResponse(result);
 }
 
 /**

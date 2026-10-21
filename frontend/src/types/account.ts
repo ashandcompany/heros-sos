@@ -7,8 +7,8 @@ export interface CitizenAddress extends PostalAddress {
   complement: string | null;
 }
 
-/** Compte d'un citoyen, tel qu'affiché dans « Mon compte ». */
-export interface CitizenAccount {
+/** « Mon compte » : profil du compte connecté (`GET /me`). */
+export interface MyAccount {
   id: string;
   civility: Civility;
   firstName: string;
@@ -25,26 +25,67 @@ export interface CitizenAccount {
   newsletterSubscribed: boolean;
   /** Date ISO 8601 de l'inscription. */
   registeredAt: string;
+}
+
+/** Compte d'un citoyen dans les mocks : son profil et son contrôle par la modération. */
+export interface CitizenAccount extends MyAccount {
   /** Contrôle du compte par la modération : `rejete` = compte suspendu (connexion impossible). */
   moderation: ModerationStatus;
 }
 
-/** « Mon compte » : ce que l'API fournit déjà, et le profil complet quand elle l'exposera. */
-export interface MyAccount {
-  firstName: string;
-  email: string;
-  /**
-   * Profil complet (identité, coordonnées, photo, newsletter). `null` avec l'API : seul
-   * `GET /auth/me` existe, le profil viendra de `GET /me` (pas encore dans le contrat).
-   */
-  profile: CitizenAccount | null;
-}
-
-/** Champs modifiables directement par le citoyen (hors photo, email et newsletter). */
+/** Champs modifiables directement par le titulaire du compte (hors photo, email et newsletter). */
 export interface ContactUpdate {
   mobilePhone: string;
+  /**
+   * `complement` : `null` conserve le complément actuel (formulaire sans ce champ, comme celui
+   * d'un super-héros), une chaîne vide l'efface.
+   */
   address: CitizenAddress;
 }
+
+export type ContactUpdateResult =
+  | { ok: true }
+  /** Refus de l'API (422) : champ (`mobilePhone`, `address.city`…) → code (`invalid`…). */
+  | { ok: false; error: "invalid-fields"; fields: Record<string, string> }
+  | ApiFailure;
+
+export type AvatarUpdateResult =
+  | { ok: true }
+  /** Fichier illisible (`invalid`) ou de plus de 1024 pixels de côté (`too_large`). */
+  | { ok: false; error: "invalid-image" | "image-too-large" }
+  | ApiFailure;
+
+export type EmailChangeResult =
+  | { ok: true }
+  | { ok: false; error: "email-unchanged" | "email-already-used" | "invalid-email" }
+  | ApiFailure;
+
+export type NewsletterPreferenceResult = { ok: true } | ApiFailure;
+
+/** Demande de changement d'adresse email, vue par la modération (`EmailChangeRequestItem`). */
+export interface EmailChangeRequest {
+  /** Identifiant de la demande : il change quand le titulaire la remplace par une nouvelle. */
+  id: string;
+  userId: string;
+  firstName: string;
+  lastName: string;
+  currentEmail: string;
+  newEmail: string;
+  /** Date ISO 8601 de dépôt. */
+  submittedAt: string;
+}
+
+export type EmailChangeReviewResult =
+  | { ok: true }
+  | {
+      ok: false;
+      /**
+       * Demande introuvable (ou remplacée par son titulaire), déjà traitée, ou adresse prise
+       * entre-temps par un autre compte (la demande est alors à refuser).
+       */
+      error: "not-found" | "already-reviewed" | "email-already-used";
+    }
+  | ApiFailure;
 
 export type MutationResult = { ok: true } | { ok: false; error: string };
 

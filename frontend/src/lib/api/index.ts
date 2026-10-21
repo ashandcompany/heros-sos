@@ -13,6 +13,7 @@ export {
   getSessionUser,
   login,
   logout,
+  logoutEverywhere,
   register,
   requestPasswordReset,
   resendActivation,
@@ -70,7 +71,7 @@ export {
   voteOnOutcome,
 } from "./interventions";
 export { getModerationSummary } from "./moderation";
-export { subscribeToNewsletter } from "./newsletter";
+export { confirmNewsletterSubscription, subscribeToNewsletter } from "./newsletter";
 export {
   getHeroPublicReviews,
   getMyInterventions,
@@ -95,12 +96,15 @@ export {
 export {
   addHeroVideo,
   addMyVideo,
+  addVillainFilm,
   deleteMyVideo,
   deleteVideo,
+  deleteVillainFilm,
   getHeroesForVideos,
   getHeroVideos,
   getMyVideos,
   getPublishedVideos,
+  getVillainFilms,
   heroVideoKey,
   moderateVideo,
   parseHeroVideoKey,

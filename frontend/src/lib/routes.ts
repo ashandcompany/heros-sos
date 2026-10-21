@@ -14,6 +14,8 @@ export const routes = {
   passwordReset: "/reinitialisation-mot-de-passe",
   /** Lien du mail d'activation (`?token=…`) : doit rester égal à HEROS_ACTIVATION_PATH du backend. */
   activation: "/activation",
+  /** Lien du mail de confirmation de la newsletter (`?token=…`) : doit rester égal à HEROS_NEWSLETTER_CONFIRM_PATH du backend. */
+  newsletterConfirmation: "/newsletter/confirmation",
   profile: "/profil",
   profileIncidents: "/profil/incidents",
   profileInterventions: "/profil/interventions",

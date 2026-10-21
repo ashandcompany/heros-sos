@@ -47,6 +47,10 @@ type Filter struct {
 type Repository interface {
 	Create(ctx context.Context, u *User) error
 	FindByID(ctx context.Context, id uuid.UUID) (*User, error)
+	// FindByIDs lit plusieurs comptes en une seule requête, indexés par identifiant. Un identifiant sans compte
+	// est absent du résultat. C'est ce qu'il faut pour une liste : FindByID dans une boucle ferait une requête
+	// par ligne.
+	FindByIDs(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]*User, error)
 	FindByEmail(ctx context.Context, email string) (*User, error)
 	FindHeroByAlias(ctx context.Context, alias string) (*User, error)
 
@@ -110,6 +114,30 @@ func (r *gormRepository) Create(ctx context.Context, u *User) error {
 
 func (r *gormRepository) FindByID(ctx context.Context, id uuid.UUID) (*User, error) {
 	return r.find(ctx, "users.id = ?", id)
+}
+
+func (r *gormRepository) FindByIDs(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]*User, error) {
+	found := make(map[uuid.UUID]*User, len(ids))
+	if len(ids) == 0 {
+		return found, nil
+	}
+	var rows []row
+	err := r.conn(ctx).Table(tableUsers).
+		Select(selectWithAlias).
+		Joins(joinHeroProfile).
+		Where("users.id IN ?", ids).
+		Find(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("user : recherche groupée : %w", err)
+	}
+	for i := range rows {
+		account, err := rows[i].toUser(r.sealer)
+		if err != nil {
+			return nil, err
+		}
+		found[account.ID] = account
+	}
+	return found, nil
 }
 
 func (r *gormRepository) FindByEmail(ctx context.Context, email string) (*User, error) {

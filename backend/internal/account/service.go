@@ -215,18 +215,25 @@ func (s *Service) RequestEmailChange(ctx context.Context, userID uuid.UUID, rawE
 }
 
 // ListEmailChanges retourne les demandes d'un statut (toutes si vide), les plus anciennes d'abord, avec
-// l'identité des demandeurs. L'identité est lue demande par demande (déchiffrement) : la page est
-// bornée.
+// l'identité des demandeurs, lue en une seule requête pour toute la page.
 func (s *Service) ListEmailChanges(ctx context.Context, status ChangeStatus, limit, offset int) ([]EmailChangeView, int64, error) {
 	changes, total, err := s.Changes.List(ctx, status, limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}
+	ids := make([]uuid.UUID, len(changes))
+	for i := range changes {
+		ids[i] = changes[i].UserID
+	}
+	accounts, err := s.Users.FindByIDs(ctx, ids)
+	if err != nil {
+		return nil, 0, fmt.Errorf("account : demandeurs : %w", err)
+	}
 	views := make([]EmailChangeView, len(changes))
 	for i, change := range changes {
-		account, err := s.Users.FindByID(ctx, change.UserID)
-		if err != nil {
-			return nil, 0, fmt.Errorf("account : demandeur %s : %w", change.UserID, err)
+		account, ok := accounts[change.UserID]
+		if !ok {
+			return nil, 0, fmt.Errorf("account : demandeur %s : %w", change.UserID, user.ErrNotFound)
 		}
 		views[i] = EmailChangeView{
 			EmailChange: change, CurrentEmail: account.Email, FirstName: account.FirstName, LastName: account.LastName,

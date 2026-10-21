@@ -85,17 +85,25 @@ func (s *Service) Mine(ctx context.Context, userID uuid.UUID) (*Profile, error) 
 }
 
 // List retourne les demandes d'un statut, les plus anciennes d'abord, avec l'identité des
-// demandeurs. L'identité est lue demande par demande (déchiffrement) : la page est bornée.
+// demandeurs, lue en une seule requête pour toute la page.
 func (s *Service) List(ctx context.Context, status VerificationStatus, limit, offset int) ([]Applicant, int64, error) {
 	profiles, total, err := s.repo.List(ctx, status, limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}
+	ids := make([]uuid.UUID, len(profiles))
+	for i := range profiles {
+		ids[i] = profiles[i].UserID
+	}
+	accounts, err := s.users.FindByIDs(ctx, ids)
+	if err != nil {
+		return nil, 0, fmt.Errorf("hero : demandeurs : %w", err)
+	}
 	applicants := make([]Applicant, 0, len(profiles))
 	for _, profile := range profiles {
-		account, err := s.users.FindByID(ctx, profile.UserID)
-		if err != nil {
-			return nil, 0, fmt.Errorf("hero : demandeur %s : %w", profile.UserID, err)
+		account, ok := accounts[profile.UserID]
+		if !ok {
+			return nil, 0, fmt.Errorf("hero : demandeur %s : %w", profile.UserID, user.ErrNotFound)
 		}
 		applicants = append(applicants, Applicant{
 			Profile: profile, Email: account.Email, FirstName: account.FirstName, LastName: account.LastName,

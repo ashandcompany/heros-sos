@@ -49,6 +49,7 @@ SMTP vers Mailpit et se lisent sur http://localhost:8025.
 make db-start   # une fois
 make test       # go test ./... -race -count=1
 make check      # tout ce que vérifie le CI : formatage, vet, tests, vulnérabilités
+make golangci   # analyse plus poussée (conventions Go, erreurs courantes) : voir .golangci.yml
 ```
 
 Les tests d'intégration utilisent un vrai PostgreSQL 18, comme le CI et la production
@@ -66,6 +67,10 @@ Ce qui protège de la régression :
 - **Tests de concurrence** (`-race`) : inscriptions, activations, validations de demandes et
   verrouillages simultanés.
 - `.env.example` est vérifié contre les variables réellement lues par le code.
+- **Coût en requêtes SQL** : un test compte les requêtes d'une liste de modération avec 1 puis 4 lignes et échoue
+  si le nombre change (une lecture par ligne, le « N+1 »), et vérifie qu'authentifier une requête ne coûte
+  qu'une lecture. Une liste lit les comptes de sa page avec `user.Repository.FindByIDs`, jamais `FindByID`
+  dans une boucle.
 
 ## Documentation interactive (Swagger UI)
 
@@ -100,22 +105,26 @@ Les documents de conception (`MVP.md`, `STACK.md`, `TABLES.md`) y sont lus sur p
 ```
 cmd/api                 serveur HTTP (-migrate pour appliquer les migrations)
 cmd/createmoderator     crée un modérateur (mot de passe par HEROS_MODERATOR_PASSWORD)
+cmd/resetmfa            réinitialise la 2FA d'un compte (appareil perdu), jamais par l'API
 migrations/             SQL versionné par horodatage (golang-migrate), embarqué dans le binaire
 openapi/openapi.yaml    contrat de l'API (référence), embarqué par openapi/openapi.go
 internal/
   config/               TOUTE la configuration : variables d'environnement, valeurs par défaut,
                         validation (plus stricte en production)
   server/               assemblage : dépendances, routes, middlewares, tâches de fond, arrêt propre
-  auth/                 mots de passe (argon2id), sessions, CSRF, jetons, endpoints /auth/*
+  auth/                 mots de passe (argon2id), sessions, CSRF, jetons, 2FA (activation, vérification,
+                        codes de secours, sessions limitées), endpoints /auth/*
+  totp/                 mots de passe à usage unique basés sur le temps (RFC 6238)
   user/                 comptes ; chiffrement des données personnelles dans le dépôt
-  hero/                 demande du statut de super-héros
+  hero/                 demande du statut de super-héros, annuaire des héros (public et admin)
   moderation/           actions des modérateurs sur les comptes
   account/              profil de l'utilisateur connecté : coordonnées, photo, changement d'adresse
-                        email validé par un modérateur, préférence de newsletter
+                        email (confirmé par lien, puis validé par un modérateur), préférence de newsletter
   avatar/               photos de profil : contrôle et ré-encodage de l'image, stockage disque, service
-  newsletter/           abonnements (double opt-in par lien signé, préférence d'un compte)
+  newsletter/           abonnements (double opt-in et désinscription par lien signé, préférence d'un compte)
   contact/              formulaire de contact : message transmis à l'équipe par mail
-  signedlink/           liens signés Ed25519 (sans jeton en base), clé dérivée des clés de chiffrement
+  signedlink/           liens signés Ed25519 (sans jeton en base) : confirmation de la newsletter, du
+                        changement d'email, désinscription ; clé dérivée des clés de chiffrement
   crypto/               cascade AES-256-GCM puis XChaCha20-Poly1305 (clé de 512 bits)
   mail/                 construction MIME, SMTP, file d'envoi asynchrone, modèles
   apidocs/              documentation interactive (Swagger UI embarqué), hors production
@@ -141,6 +150,9 @@ jamais renvoyées par l'API (DTO séparés).
   annulation du contexte ; les files sont bornées ; l'horloge est injectable (`clock.Clock`) ; les
   vérifications « puis écriture » sont des instructions SQL atomiques (pas de lecture puis écriture) ;
   `go test -race` est obligatoire.
+- **Ressources** : les listes agrègent après avoir choisi leur page (voir `hero/repository.go`), et une tâche
+  de fond est bornée par un délai (`HEROS_CLEANUP_TIMEOUT`). Un index n'est ajouté qu'après avoir mesuré la
+  requête (`EXPLAIN ANALYZE`) : les deux derniers sont dans `migrations/…_add_lookup_indexes.up.sql`.
 - **Données personnelles** : chiffrées dans le dépôt (`user`), jamais dans les logs ni dans les
   erreurs ; le SQL n'est jamais journalisé.
 
@@ -185,7 +197,18 @@ Envoyer un mail : dépendre de l'interface `mail.Mailer` (la file asynchrone l'i
   envoie un lien de confirmation vers la page `HEROS_NEWSLETTER_CONFIRM_PATH` du frontend (jeton dans
   `?token=`, à poster sur `/newsletter/subscriptions/confirm`) ; `POST /contact/messages` écrit à
   l'équipe (`HEROS_CONTACT_RECIPIENT`), jamais au visiteur.
-- **2FA** : prévue en version 2 ; une session est complète dès la connexion.
+- **2FA (TOTP)** : obligatoire pour les modérateurs quand `HEROS_MFA_MODERATOR_REQUIRED=true` (imposé en
+  production, le serveur refuse de démarrer sinon ; faux par défaut en développement). Une session dont la
+  2FA n'est pas validée est **limitée** : l'API ne lui ouvre que `/auth/mfa/*`, `/auth/me` et la
+  déconnexion, et répond `403 mfa_required` partout ailleurs. `/auth/login` renvoie l'état dans `mfa`
+  (`verified`, `verification_required`, `enrollment_required`, `not_enrolled`). Il n'existe pas de route pour
+  désactiver la 2FA : un appareil perdu se traite par l'exploitation, `make resetmfa EMAIL=…`.
+- **Confirmation de la nouvelle adresse** : l'adresse demandée reçoit un lien (page
+  `HEROS_EMAIL_CHANGE_CONFIRM_PATH` du frontend, jeton dans `?token=`, à poster sur
+  `/email-change-requests/confirm`). Un modérateur ne peut accepter la demande qu'une fois l'adresse
+  confirmée (`email_change_not_confirmed` sinon) ; l'utilisateur est prévenu par mail de sa décision.
+- **Désinscription** : chaque envoi de newsletter porte un lien vers la page
+  `HEROS_NEWSLETTER_UNSUBSCRIBE_PATH` (jeton à poster sur `/newsletter/subscriptions/unsubscribe`).
 
 ## Environnements Docker
 
@@ -268,14 +291,21 @@ la même interface `mail.Mailer`.
   durables sans changer le code appelant : seul `mail.Mailer` est connu des autres paquets).
 - Sauvegarder `HEROS_CRYPTO_KEYS` séparément de la base ; pour une rotation, ajouter une clé puis
   changer `HEROS_CRYPTO_ACTIVE_KEY_ID` (les anciennes valeurs restent lisibles). La clé qui signe les
-  liens de confirmation de la newsletter en est dérivée : les liens déjà envoyés restent valables
-  tant que leur clé est configurée.
+  liens (confirmation de la newsletter, confirmation d'un changement d'email, désinscription) en est
+  dérivée : les liens déjà envoyés restent valables tant que leur clé est configurée.
 - **Photos de profil** : le seul endroit où l'API écrit sur le disque, dans le volume `avatars`
   (`HEROS_AVATAR_DIR`, fixé par l'image). À sauvegarder avec la base : une photo référencée par un
   compte mais absente du volume répond 404. Un envoi interrompu au mauvais moment peut laisser un
   fichier orphelin, sans effet visible.
 - **Formulaire de contact** : le mail est la seule trace du message, et la file d'envoi est interne
   au processus (voir plus haut). Régler `HEROS_CONTACT_RECIPIENT` sur la boîte de l'équipe.
-- **Newsletter** : seul l'abonnement existe, pas encore l'envoi. Avant le premier envoi, il faudra un
-  lien de désabonnement dans chaque message (le consentement, lui, est daté dans
-  `newsletter_subscriptions.confirmed_at`).
+- **Newsletter** : l'abonnement (double opt-in) et la désinscription existent, pas encore l'envoi des
+  numéros. `mail.SendNewsletter` est la seule façon d'en envoyer un et refuse un message sans lien de
+  désinscription. Le consentement est daté dans `newsletter_subscriptions.confirmed_at`.
+- **Double authentification des modérateurs** : `HEROS_MFA_MODERATOR_REQUIRED=true` est imposé (le serveur
+  refuse de démarrer avec `false`). Le premier modérateur créé par `createmoderator` active sa 2FA à sa
+  première connexion et note ses codes de secours. Un modérateur qui perd son appareil et ses codes se
+  débloque par `make resetmfa-prod EMAIL=…`, après vérification de son identité : la commande supprime sa 2FA
+  et ferme ses sessions, et le journal d'audit en garde la trace.
+- **Changement d'adresse email** : régler `HEROS_EMAIL_CHANGE_CONFIRM_PATH` sur la page du frontend
+  (`/changement-email/confirmation`) ; le lien reçu vaut `HEROS_EMAIL_CHANGE_CONFIRM_TTL` (48 h par défaut).

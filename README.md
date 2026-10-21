@@ -37,6 +37,7 @@ Les fichiers `docker-compose*.yml` sont à la racine : un seul endroit pour lanc
 | `make docs` | Démarre seulement la documentation (sans le reste de la pile). |
 | `make adminer` | Ajoute Adminer, un client SQL. |
 | `make moderator EMAIL=… FIRST=… LAST=… BIRTH=AAAA-MM-JJ` | Crée un modérateur (mot de passe demandé, jamais passé en argument). |
+| `make resetmfa EMAIL=…` | Réinitialise la double authentification d'un compte qui a perdu son appareil (vérifier son identité d'abord). |
 | `make reset` | Arrête la pile **et supprime ses données** (base, photos, RabbitMQ), après confirmation. |
 | `make secrets`, `make up-prod`, `make down-prod`, `make logs-prod` | Production : voir [le README du backend](backend/README.md#environnements-docker). |
 | `make check` | Valide la syntaxe des fichiers Compose (développement et production). |

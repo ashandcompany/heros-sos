@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
+	"github.com/ashandcompany/heros-sos/backend/internal/avatar"
 	"github.com/ashandcompany/heros-sos/backend/internal/database"
 )
 
@@ -43,20 +44,24 @@ type publicProfileRow struct {
 	InterventionsCount int64     `gorm:"column:interventions_count"`
 }
 
-func (r publicProfileRow) toPublicProfile() PublicProfile {
-	return PublicProfile{
-		UserID: r.UserID, Alias: r.Alias, AvatarURL: publicAvatarURL(r.AvatarPath), Bio: r.Bio,
-		AverageRating: r.AverageRating, InterventionsCount: r.InterventionsCount,
-	}
-}
+// toPublicProfile est une conversion : si PublicProfile et la ligne lue divergent, la compilation échoue.
+func (r publicProfileRow) toPublicProfile() PublicProfile { return PublicProfile(r) }
 
-func publicAvatarURL(stored *string) *string {
+// resolveAvatarURL transforme la valeur stockée dans users.avatar_path en adresse publique, ou nil si
+// elle n'en est pas une. Deux formes existent : le nom d'une photo envoyée par PUT /me/avatar, servie
+// sous avatarURLPrefix, et une adresse déjà publique (URL http(s) ou chemin absolu sur le site).
+// Tout le reste (chemin de disque, URL piégée) est refusé : le stockage interne ne fuit jamais.
+func resolveAvatarURL(avatarURLPrefix string, stored *string) *string {
 	if stored == nil {
 		return nil
 	}
 	value := strings.TrimSpace(*stored)
 	if value == "" {
 		return nil
+	}
+	if avatar.IsValidName(value) {
+		served := avatarURLPrefix + value
+		return &served
 	}
 	parsed, err := url.Parse(value)
 	if err != nil {

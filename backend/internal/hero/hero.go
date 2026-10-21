@@ -75,9 +75,11 @@ type Profile struct {
 
 // PublicProfile contient les données publiques d'un super-héros approuvé.
 type PublicProfile struct {
-	UserID             uuid.UUID
-	Alias              string
-	AvatarURL          *string
+	UserID uuid.UUID
+	Alias  string
+	// AvatarPath est la valeur stockée dans users.avatar_path, sans interprétation : c'est le
+	// handler qui en fait une adresse publique (voir resolveAvatarURL).
+	AvatarPath         *string
 	Bio                string
 	AverageRating      float64
 	InterventionsCount int64

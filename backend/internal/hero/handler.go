@@ -29,11 +29,14 @@ type Handler struct {
 	service *Service
 	logger  *slog.Logger
 	http    config.HTTP
+	// avatarURLPrefix précède le nom d'une photo de profil dans son adresse publique.
+	avatarURLPrefix string
 }
 
-// NewHandler crée les handlers.
-func NewHandler(service *Service, logger *slog.Logger, httpConfig config.HTTP) *Handler {
-	return &Handler{service: service, logger: logger, http: httpConfig}
+// NewHandler crée les handlers. avatarURLPrefix est le début de l'adresse publique d'une photo, avant son
+// nom de fichier (par exemple « /api/v1/avatars/ »).
+func NewHandler(service *Service, logger *slog.Logger, httpConfig config.HTTP, avatarURLPrefix string) *Handler {
+	return &Handler{service: service, logger: logger, http: httpConfig, avatarURLPrefix: avatarURLPrefix}
 }
 
 type requestPayload struct {
@@ -76,10 +79,10 @@ type PublicProfileResponse struct {
 	InterventionsCount int64     `json:"interventionsCount"`
 }
 
-func newPublicProfileResponse(profile PublicProfile) PublicProfileResponse {
+func (h *Handler) newPublicProfileResponse(profile PublicProfile) PublicProfileResponse {
 	return PublicProfileResponse{
-		ID: profile.UserID, Alias: profile.Alias, AvatarURL: profile.AvatarURL, Power: profile.Bio,
-		AverageRating: profile.AverageRating, InterventionsCount: profile.InterventionsCount,
+		ID: profile.UserID, Alias: profile.Alias, AvatarURL: resolveAvatarURL(h.avatarURLPrefix, profile.AvatarPath),
+		Power: profile.Bio, AverageRating: profile.AverageRating, InterventionsCount: profile.InterventionsCount,
 	}
 }
 
@@ -108,7 +111,7 @@ func (h *Handler) PublicList(w http.ResponseWriter, r *http.Request) {
 	}
 	items := make([]PublicProfileResponse, len(profiles))
 	for i, profile := range profiles {
-		items[i] = newPublicProfileResponse(profile)
+		items[i] = h.newPublicProfileResponse(profile)
 	}
 	httpx.WriteJSON(w, http.StatusOK, httpx.NewPageResponse(items, total, page))
 }
@@ -125,7 +128,7 @@ func (h *Handler) PublicGet(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, newPublicProfileResponse(*profile))
+	httpx.WriteJSON(w, http.StatusOK, h.newPublicProfileResponse(*profile))
 }
 
 // Request traite POST /heroes/requests (citoyen connecté).

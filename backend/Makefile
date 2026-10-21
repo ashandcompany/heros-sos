@@ -81,6 +81,10 @@ lint: ## Vérifie le formatage et lance go vet
 	@test -z "$$(gofmt -l .)" || { echo "Fichiers mal formatés :"; gofmt -l .; exit 1; }
 	go vet ./...
 
+.PHONY: golangci
+golangci: ## Analyse plus poussée (conventions Go, erreurs courantes) : voir .golangci.yml
+	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2 run ./...
+
 .PHONY: vuln
 vuln: ## Cherche les vulnérabilités connues atteignables dans le code
 	go run golang.org/x/vuln/cmd/govulncheck@latest ./...

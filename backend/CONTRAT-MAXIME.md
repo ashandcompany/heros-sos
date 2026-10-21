@@ -9,12 +9,12 @@ Légende : ✅ fait, testé et dans le contrat · 🟡 fait mais à finir ou à 
 
 ## 1. Périmètre
 
-Le contrat compte **90 opérations** (plus `/health` et `/ready`). Elles se répartissent ainsi :
+Le contrat compte **91 opérations** (plus `/health` et `/ready`). Elles se répartissent ainsi :
 
 | Responsable | Domaines (tags OpenAPI) | Opérations |
 | --- | --- | --- |
 | **Maxime (Dev A)** | Authentification (14), Compte (7), Contact et newsletter (4), Super-héros : demandes et liste publique (4), Modération : comptes, demandes de héros, changements d'email, annuaire (11) | **40** |
-| Dev B | Incidents (11), Réputation (9), Films (15), Vilains (4), Types d'intervention (3), Blog (7), arbitrage d'une intervention (1) | 50 |
+| Dev B | Incidents (11), Réputation (10), Films (15), Vilains (4), Types d'intervention (3), Blog (7), arbitrage d'une intervention (1) | 51 |
 | Socle commun | Santé (`/health`, `/ready`) | 2 |
 
 Code de Dev A : `auth`, `totp`, `user`, `account`, `hero`, `moderation`, `newsletter`, `contact`, `signedlink`, `mail`,

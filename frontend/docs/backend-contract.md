@@ -17,7 +17,7 @@ branchement. À mettre à jour à chaque fonction branchée.
 
 ## 1. Couverture : ce qui est dans le contrat, et le reste
 
-Le contrat décrit aujourd'hui **90 opérations** (plus `/health` et `/ready`) : identité (dont la double
+Le contrat décrit aujourd'hui **91 opérations** (plus `/health` et `/ready`) : identité (dont la double
 authentification des modérateurs) et modération des comptes, annuaire des héros, profil du compte (`/me`,
 photo, changements d'e-mail confirmés par lien), incidents, interventions, types d'incident, super-vilains,
 avis sur les interventions, vidéothèque (films), blog (articles), contact et newsletter. Les autres domaines du

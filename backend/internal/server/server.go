@@ -17,6 +17,7 @@ import (
 	"github.com/ashandcompany/heros-sos/backend/internal/audit"
 	"github.com/ashandcompany/heros-sos/backend/internal/auth"
 	"github.com/ashandcompany/heros-sos/backend/internal/avatar"
+	"github.com/ashandcompany/heros-sos/backend/internal/blog"
 	"github.com/ashandcompany/heros-sos/backend/internal/clock"
 	"github.com/ashandcompany/heros-sos/backend/internal/config"
 	"github.com/ashandcompany/heros-sos/backend/internal/contact"
@@ -49,6 +50,7 @@ type components struct {
 	mailer mail.Mailer
 
 	health              healthHandler
+	blogHandler         *blog.Handler
 	filmHandler         *film.Handler
 	authService         *auth.Service
 	authMiddleware      *auth.Middleware
@@ -184,6 +186,8 @@ func NewWithDB(cfg config.Config, logger *slog.Logger, db *gorm.DB, opts ...Opti
 		moderation.NewService(c.users, sessions, c.audit, c.tx, c.clock), logger)
 
 	types := interventiontype.NewRepository(db)
+	c.blogHandler = blog.NewHandler(
+		blog.NewService(blog.NewRepository(db), c.audit, c.tx, c.clock), logger, cfg.HTTP)
 	villains := villain.NewRepository(db)
 	c.filmHandler = film.NewHandler(film.NewService(film.ServiceDeps{
 		Repo: film.NewRepository(db), Catalog: film.NewOMDbClient(cfg.OMDb.BaseURL, cfg.OMDb.APIKey, cfg.OMDb.Timeout),

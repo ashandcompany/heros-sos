@@ -57,6 +57,11 @@ const (
 	ActionEmailChangeRejected  = "user.email_change_reject"
 	// ActionEmailChangeConfirmed : le titulaire de la nouvelle adresse a cliqué sur le lien reçu.
 	ActionEmailChangeConfirmed = "user.email_change_confirm"
+
+	// Blog : création, modification et suppression d'un article par un modérateur.
+	ActionArticleCreated = "article.create"
+	ActionArticleUpdated = "article.update"
+	ActionArticleDeleted = "article.delete"
 )
 
 // Entry décrit une action à journaliser.

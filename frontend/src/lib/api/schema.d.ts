@@ -861,6 +861,97 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/articles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Articles publiés
+         * @description Publique, sans session. Uniquement les articles publiés, du plus récent au plus ancien ;
+         *     le contenu n'est pas inclus (utiliser `GET /articles/{slug}`).
+         */
+        get: operations["listPublishedArticles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/articles/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lire un article publié
+         * @description Publique, sans session. Un brouillon ou un slug inconnu répond 404.
+         */
+        get: operations["getPublishedArticle"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/articles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tous les articles (modérateur)
+         * @description Brouillons compris, les derniers modifiés d'abord. Le filtre `status` restreint la liste
+         *     à un statut. Le contenu n'est pas inclus.
+         */
+        get: operations["listArticles"];
+        put?: never;
+        /**
+         * Créer un article
+         * @description Le slug dérive du titre (suffixe numérique s'il est déjà pris). Publier à la création
+         *     fixe `publishedAt`.
+         */
+        post: operations["createArticle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/articles/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Consulter un article, brouillon compris (modérateur) */
+        get: operations["getArticle"];
+        /**
+         * Modifier un article
+         * @description Remplace titre, chapeau, contenu et statut. `publishedAt` est fixé à la première
+         *     publication et conservé ensuite (même après un retour en brouillon). Le slug ne change
+         *     plus une fois l'article publié.
+         */
+        put: operations["updateArticle"];
+        post?: never;
+        /** Supprimer un article */
+        delete: operations["deleteArticle"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/films": {
         parameters: {
             query?: never;
@@ -2112,6 +2203,47 @@ export interface components {
             code: string;
             label: string;
         };
+        /** @enum {string} */
+        ArticleStatus: "brouillon" | "publie";
+        ArticlePayload: {
+            title: string;
+            /** @description Chapeau affiché dans les listes. */
+            excerpt: string;
+            /**
+             * @description HTML (balises de l'éditeur uniquement, le reste est retiré). Au moins 20 caractères de
+             *     texte visible, 200 000 octets au plus.
+             */
+            content: string;
+            status: components["schemas"]["ArticleStatus"];
+        };
+        ArticleSummary: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            slug: string;
+            excerpt: string;
+            status: components["schemas"]["ArticleStatus"];
+            authorName: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /**
+             * Format: date-time
+             * @description Vide tant que l'article n'a jamais été publié.
+             */
+            publishedAt: string | null;
+        };
+        Article: components["schemas"]["ArticleSummary"] & {
+            /** @description HTML assaini. */
+            content: string;
+        };
+        ArticleSummaryPage: {
+            items: components["schemas"]["ArticleSummary"][];
+            total: number;
+            limit: number;
+            offset: number;
+        };
         VillainPage: {
             items: components["schemas"]["Villain"][];
             total: number;
@@ -2726,6 +2858,10 @@ export interface components {
         HeroId: string;
         /** @description Identifiant du super-vilain. */
         VillainId: string;
+        /** @description Identifiant de l'article. */
+        ArticleId: string;
+        /** @description Identifiant d'URL de l'article. */
+        ArticleSlug: string;
         /** @description Identifiant du film. */
         FilmId: string;
         /**
@@ -4141,6 +4277,224 @@ export interface operations {
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listPublishedArticles: {
+        parameters: {
+            query?: {
+                /** @description Nombre d'éléments par page (1 à 100, 20 par défaut). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Nombre d'éléments à sauter. */
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Une page d'articles publiés. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArticleSummaryPage"];
+                };
+            };
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getPublishedArticle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant d'URL de l'article. */
+                slug: components["parameters"]["ArticleSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description L'article, contenu HTML compris. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Article"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listArticles: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["ArticleStatus"];
+                /** @description Nombre d'éléments par page (1 à 100, 20 par défaut). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Nombre d'éléments à sauter. */
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Une page d'articles. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArticleSummaryPage"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createArticle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArticlePayload"];
+            };
+        };
+        responses: {
+            /** @description Article créé. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Article"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description Aucun slug unique n'a pu être généré (`article_slug_already_used`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getArticle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant de l'article. */
+                id: components["parameters"]["ArticleId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description L'article. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Article"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateArticle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant de l'article. */
+                id: components["parameters"]["ArticleId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArticlePayload"];
+            };
+        };
+        responses: {
+            /** @description Article modifié. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Article"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Aucun slug unique n'a pu être généré (`article_slug_already_used`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteArticle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant de l'article. */
+                id: components["parameters"]["ArticleId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Article supprimé. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
     };

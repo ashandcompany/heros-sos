@@ -12,7 +12,6 @@ import (
 
 	"github.com/ashandcompany/heros-sos/backend/internal/audit"
 	"github.com/ashandcompany/heros-sos/backend/internal/clock"
-	"github.com/ashandcompany/heros-sos/backend/internal/config"
 	"github.com/ashandcompany/heros-sos/backend/internal/database"
 	"github.com/ashandcompany/heros-sos/backend/internal/hero"
 	"github.com/ashandcompany/heros-sos/backend/internal/user"
@@ -43,7 +42,6 @@ type Notifier interface {
 	SendInterventionInvitation(ctx context.Context, to string, interventionID uuid.UUID) error
 	SendOutcomeValidation(ctx context.Context, to string, interventionID uuid.UUID) error
 	SendOutcomeDisputed(ctx context.Context, to string, interventionID uuid.UUID) error
-	SendReviewRequest(ctx context.Context, to, link string) error
 }
 
 // ServiceDeps regroupe les dépendances du service d'intervention.
@@ -54,7 +52,6 @@ type ServiceDeps struct {
 	Audit    audit.Recorder
 	Tx       database.Transactor
 	Clock    clock.Clock
-	App      config.App
 	Notifier Notifier
 	Logger   *slog.Logger
 }
@@ -204,8 +201,6 @@ func (s *Service) ProposeOutcome(ctx context.Context, heroID, interventionID uui
 	}
 	if !closed {
 		s.notifyHeroes(ctx, participants, interventionID, s.Notifier.SendOutcomeValidation)
-	} else {
-		s.notifyReviewers(ctx, interventionID, participants)
 	}
 	return nil
 }
@@ -215,11 +210,10 @@ func (s *Service) ValidateOutcome(ctx context.Context, heroID, interventionID uu
 	if err := s.requireApprovedHero(ctx, heroID); err != nil {
 		return err
 	}
-	closed, disputed := false, false
-	var participants []uuid.UUID
+	disputed := false
 	err := s.Tx.WithinTx(ctx, func(ctx context.Context) error {
 		var err error
-		closed, disputed, participants, err = s.Repo.ValidateOutcome(ctx, interventionID, heroID, approved, s.Clock.Now())
+		_, disputed, _, err = s.Repo.ValidateOutcome(ctx, interventionID, heroID, approved, s.Clock.Now())
 		if err != nil {
 			return err
 		}
@@ -234,8 +228,6 @@ func (s *Service) ValidateOutcome(ctx context.Context, heroID, interventionID uu
 	}
 	if disputed {
 		s.notifyModerators(ctx, interventionID)
-	} else if closed {
-		s.notifyReviewers(ctx, interventionID, participants)
 	}
 	return nil
 }
@@ -252,20 +244,14 @@ func (s *Service) Arbitrate(ctx context.Context, moderatorID, interventionID uui
 	if status != StatusSucceeded && status != StatusFailed {
 		return ErrOutcomeInvalid
 	}
-	var participants []uuid.UUID
 	err = s.Tx.WithinTx(ctx, func(ctx context.Context) error {
-		var err error
-		participants, err = s.Repo.Arbitrate(ctx, interventionID, moderatorID, status, strings.TrimSpace(notes), s.Clock.Now())
+		_, err := s.Repo.Arbitrate(ctx, interventionID, moderatorID, status, strings.TrimSpace(notes), s.Clock.Now())
 		if err != nil {
 			return err
 		}
 		return s.record(ctx, moderatorID, interventionID, ActionOutcomeArbitrated, ip)
 	})
-	if err != nil {
-		return err
-	}
-	s.notifyReviewers(ctx, interventionID, participants)
-	return nil
+	return err
 }
 
 // Get retourne une intervention à ses participants ou aux modérateurs.
@@ -316,32 +302,6 @@ func (s *Service) notifyModerators(ctx context.Context, interventionID uuid.UUID
 	for _, email := range emails {
 		if err := s.Notifier.SendOutcomeDisputed(ctx, email, interventionID); err != nil {
 			s.log(ctx, "notification de désaccord impossible", interventionID, err)
-		}
-	}
-}
-
-func (s *Service) notifyReviewers(ctx context.Context, interventionID uuid.UUID, heroIDs []uuid.UUID) {
-	if s.Notifier == nil {
-		return
-	}
-	intervention, err := s.Repo.Find(ctx, interventionID)
-	if err != nil || intervention.ReporterID == nil {
-		s.log(ctx, "lecture du déclarant pour la notation impossible", interventionID, err)
-		return
-	}
-	reporterID := *intervention.ReporterID
-	reporter, err := s.Users.FindByID(ctx, reporterID)
-	if err != nil {
-		s.log(ctx, "lecture du déclarant pour la notation impossible", interventionID, err)
-		return
-	}
-	for _, heroID := range heroIDs {
-		if heroID == reporterID {
-			continue
-		}
-		link := s.App.HeroReviewLink(interventionID.String(), heroID.String())
-		if err := s.Notifier.SendReviewRequest(ctx, reporter.Email, link); err != nil {
-			s.log(ctx, "envoi du lien de notation impossible", interventionID, err)
 		}
 	}
 }

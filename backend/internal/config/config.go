@@ -61,16 +61,8 @@ type Config struct {
 	Security    Security
 	Crypto      Crypto
 	Mail        Mail
-	OMDb        OMDb
 	App         App
 	Jobs        Jobs
-}
-
-// OMDb regroupe les réglages du catalogue de films.
-type OMDb struct {
-	APIKey  string
-	BaseURL string
-	Timeout time.Duration
 }
 
 // HTTP regroupe les réglages du serveur.
@@ -232,14 +224,6 @@ func (a App) PasswordResetLink(token string) string {
 	return a.link(a.PasswordResetPath, token)
 }
 
-// HeroReviewLink construit le lien de notation d'un héros après une intervention.
-func (a App) HeroReviewLink(interventionID, heroID string) string {
-	target := *a.PublicBaseURL
-	target.Path = "/profil/interventions"
-	target.RawQuery = url.Values{"interventionId": {interventionID}, "heroId": {heroID}}.Encode()
-	return target.String()
-}
-
 func (a App) link(path, token string) string {
 	target := *a.PublicBaseURL
 	target.Path = path
@@ -351,12 +335,7 @@ func Load(getenv func(string) string) (Config, error) {
 			ActiveKeyID: l.activeKeyID(cryptoKeys),
 		},
 		Mail: l.mail(production),
-		OMDb: OMDb{
-			APIKey:  l.text(envOMDbAPIKey, ""),
-			BaseURL: l.text(envOMDbBaseURL, defaultOMDbBaseURL),
-			Timeout: l.duration(envOMDbTimeout, defaultOMDbTimeout),
-		},
-		App: l.app(),
+		App:  l.app(),
 		Jobs: Jobs{
 			CleanupInterval:  l.duration(envCleanupInterval, defaultCleanupInterval),
 			SessionRetention: l.duration(envSessionRetention, defaultSessionRetention),

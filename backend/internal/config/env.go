@@ -77,10 +77,6 @@ const (
 	envMailRetryDelay  = "HEROS_MAIL_RETRY_DELAY"
 	envMailSendTimeout = "HEROS_MAIL_SEND_TIMEOUT"
 
-	envOMDbAPIKey  = "HEROS_OMDB_API_KEY"
-	envOMDbBaseURL = "HEROS_OMDB_BASE_URL"
-	envOMDbTimeout = "HEROS_OMDB_TIMEOUT"
-
 	envPublicBaseURL     = "HEROS_PUBLIC_BASE_URL"
 	envActivationPath    = "HEROS_ACTIVATION_PATH"
 	envPasswordResetPath = "HEROS_PASSWORD_RESET_PATH"
@@ -114,7 +110,6 @@ func EnvVarNames() []string {
 		envMailDriver, envMailFromAddress, envMailFromName, envSMTPHost, envSMTPPort,
 		envSMTPUsername, envSMTPPassword, envSMTPTLSMode, envSMTPTimeout, envMailWorkers,
 		envMailQueueSize, envMailMaxAttempts, envMailRetryDelay, envMailSendTimeout,
-		envOMDbAPIKey, envOMDbBaseURL, envOMDbTimeout,
 		envPublicBaseURL, envActivationPath, envPasswordResetPath,
 		envCleanupInterval, envSessionRetention, envTokenRetention,
 	}

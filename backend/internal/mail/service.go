@@ -25,7 +25,6 @@ const (
 	templateInterventionInvite = "intervention_invitation"
 	templateOutcomeValidation  = "outcome_validation"
 	templateOutcomeDisputed    = "outcome_disputed"
-	templateReviewRequest      = "hero_review_request"
 )
 
 const (
@@ -35,7 +34,6 @@ const (
 	subjectInterventionInvite = "Vous êtes invité à une intervention sur %s"
 	subjectOutcomeValidation  = "Validation du résultat d'une intervention sur %s"
 	subjectOutcomeDisputed    = "Désaccord sur une intervention sur %s"
-	subjectReviewRequest      = "Évaluez l'intervention de %s"
 )
 
 // templateData est ce que voient les modèles.
@@ -113,11 +111,6 @@ func (s *Service) SendOutcomeDisputed(ctx context.Context, to string, interventi
 	return s.send(ctx, to, fmt.Sprintf(subjectOutcomeDisputed, s.appName), templateOutcomeDisputed, templateData{
 		InterventionID: interventionID.String(),
 	})
-}
-
-// SendReviewRequest demande au déclarant de noter un héros après une intervention clôturée.
-func (s *Service) SendReviewRequest(ctx context.Context, to, link string) error {
-	return s.send(ctx, to, fmt.Sprintf(subjectReviewRequest, s.appName), templateReviewRequest, templateData{Link: link})
 }
 
 func (s *Service) send(ctx context.Context, to, subject, name string, data templateData) error {

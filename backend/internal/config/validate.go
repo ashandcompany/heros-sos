@@ -32,14 +32,6 @@ func (c Config) validate() error {
 	c.validateSecrets(fail)
 	c.validateSessions(fail, production)
 	c.validateMail(fail, production)
-	if c.OMDb.BaseURL == "" {
-		fail("%s est obligatoire", envOMDbBaseURL)
-	} else if parsed, err := url.Parse(c.OMDb.BaseURL); err != nil || parsed.Scheme != "https" || parsed.Host == "" {
-		fail("%s : URL HTTPS absolue attendue", envOMDbBaseURL)
-	}
-	if production && strings.TrimSpace(c.OMDb.APIKey) == "" {
-		fail("%s est obligatoire en production", envOMDbAPIKey)
-	}
 
 	if c.Security.Password.MinLength > c.Security.Password.MaxLength {
 		fail("%s ne peut pas dépasser %s", envPasswordMinLength, envPasswordMaxLength)

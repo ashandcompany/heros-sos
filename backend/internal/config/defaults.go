@@ -59,8 +59,6 @@ const (
 	defaultMailMaxAttempts = 3
 	defaultMailRetryDelay  = 2 * time.Second
 	defaultMailSendTimeout = 30 * time.Second
-	defaultOMDbBaseURL     = "https://www.omdbapi.com/"
-	defaultOMDbTimeout     = 5 * time.Second
 
 	defaultPublicBaseURL     = "http://localhost:3000"
 	defaultActivationPath    = "/activation"

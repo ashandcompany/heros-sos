@@ -38,12 +38,6 @@ const (
 	ActionVillainCreated          = "villain.create"
 	ActionVillainUpdated          = "villain.update"
 	ActionIncidentDeclared        = "incident.declare"
-	ActionHeroFilmAdded           = "hero_film.add"
-	ActionHeroFilmApproved        = "hero_film.approve"
-	ActionHeroFilmRejected        = "hero_film.reject"
-	ActionHeroFilmDeleted         = "hero_film.delete"
-	ActionVillainFilmLinked       = "villain_film.link"
-	ActionVillainFilmDeleted      = "villain_film.delete"
 )
 
 // Entry décrit une action à journaliser.

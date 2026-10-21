@@ -573,25 +573,6 @@ func TestServiceRendersActivationAndPasswordResetMails(t *testing.T) {
 	}
 }
 
-func TestServiceRendersHeroReviewRequest(t *testing.T) {
-	recorder := NewRecorder()
-	service, err := NewService(recorder, "Heros-SOS", config.Tokens{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	const link = "https://heros-sos.example/profil/interventions?heroId=hero-1&interventionId=intervention-1"
-	if err := service.SendReviewRequest(context.Background(), "steve@avengers.example", link); err != nil {
-		t.Fatal(err)
-	}
-	message, ok := recorder.Last()
-	if !ok || message.To != "steve@avengers.example" || message.Subject != "Évaluez l'intervention de Heros-SOS" {
-		t.Fatalf("message reçu = %+v, trouvé=%v", message, ok)
-	}
-	if !strings.Contains(message.Text, link) || !strings.Contains(message.HTML, "Donner mon avis") || !strings.Contains(message.HTML, "heroId=hero-1") {
-		t.Errorf("le lien de notation manque du message : %+v", message)
-	}
-}
-
 func TestServiceEscapesUserControlledValuesInHTML(t *testing.T) {
 	recorder := NewRecorder()
 	service, _ := NewService(recorder, "Heros-SOS", config.Tokens{ActivationTTL: time.Hour, PasswordResetTTL: time.Hour})

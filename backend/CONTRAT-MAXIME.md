@@ -83,9 +83,11 @@ Colonne « Front » : l'écran appelle bien la route quand `API_URL` est renseig
 ### 3.1 Pour livrer ce qui est fait
 
 - [x] **`develop` est fusionné dans `feat/account-security`** (PR blog #26, correctifs de tests #28, incidents et
-  arbitrage, pages publiques des héros, documentation du front). Les tests du backend, le build du front et celui du
-  site de documentation passent sur le résultat. L'index sur `intervention_heroes` touche une table de Dev B : à
-  lui signaler.
+  arbitrage, pages publiques des héros, puis la PR #31 d'Emma : blog, films des super-vilains, incidents publics).
+  Emma avait câblé en parallèle le compte, la newsletter, le contact et la déconnexion partout ; en cas de
+  doublon, la version de cette branche a été gardée (elle gère la confirmation d'email, la 2FA et la
+  désinscription). Les tests du backend, le build du front et celui du site de documentation passent sur le
+  résultat. L'index sur `intervention_heroes` touche une table de Dev B : à lui signaler.
 - [ ] Ouvrir la PR et la faire relire (Dev B pour le contrat et la migration, Emma pour le front).
 - [ ] Vérifier les pseudos de `.github/CODEOWNERS` (déduits de l'historique).
 - [ ] Activer GitHub Pages si le site doit être publié (réglages décrits dans `docs-site/README.md`). Le dépôt est
@@ -110,8 +112,9 @@ Colonne « Front » : l'écran appelle bien la route quand `API_URL` est renseig
 
 - [x] Fiches publiques des héros branchées sur `GET /heroes` (Emma) ; `asMockDataUser` est supprimé.
 - [ ] Supprimer le reste des mocks une fois tous les domaines branchés : `userFromToken` et
-  `MOCK_SESSION_MAX_AGE`. Il reste sur mocks : incidents publics (accueil, carte), blog (l'API existe, 7
-  opérations), tableau de bord héros, résumé de modération, et les films des super-vilains (pas d'écran).
+  `MOCK_SESSION_MAX_AGE`. Il reste sur mocks : les incidents résolus publics (accueil, fiches héros et vilains),
+  le tableau de bord héros et le résumé de modération (statistiques, sans contrat). Le blog et les films des
+  super-vilains sont branchés.
 - [ ] Jouer le scénario de démonstration de bout en bout (voir `MVP.md`).
 - [ ] Durcissement puis déploiement (rien n'est déployé ; aucune mise en ligne sans feu vert explicite).
 

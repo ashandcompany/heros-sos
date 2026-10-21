@@ -25,17 +25,20 @@ function AddButton({ title }: { title: string }) {
 
 /**
  * Ajoute un film trouvé sur IMDb à une vidéothèque : celle du héros connecté (publié après
- * modération, par défaut), ou celle de `heroId` avec l'action du back-office (publié aussitôt).
+ * modération, par défaut), ou, avec une action du back-office (publié aussitôt), celle de
+ * `heroId` ou la fiche de `villainId`.
  */
 export function AddVideoForm({
   imdbId,
   title,
   heroId,
+  villainId,
   action = addVideoAction,
 }: {
   imdbId: string;
   title: string;
   heroId?: string;
+  villainId?: string;
   action?: (previousState: FormState, formData: FormData) => Promise<FormState>;
 }) {
   const [state, formAction] = useActionState(action, idleFormState);
@@ -44,6 +47,7 @@ export function AddVideoForm({
     <form action={formAction} className="space-y-2">
       <input type="hidden" name="imdbId" value={imdbId} />
       {heroId && <input type="hidden" name="heroId" value={heroId} />}
+      {villainId && <input type="hidden" name="villainId" value={villainId} />}
       <AddButton title={title} />
       <FormMessage state={state} />
     </form>

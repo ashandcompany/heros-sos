@@ -209,9 +209,15 @@ export async function logoutAll(token: string): Promise<LogoutAllResult> {
   if (!isApiEnabled) return mockResponse({ ok: true });
 
   try {
-    await apiFetch("/auth/logout-all", { method: "POST", sessionToken: token });
+    await apiFetch("/auth/logout-all", {
+      method: "POST",
+      sessionToken: token,
+      redirectOnUnauthorized: false,
+    });
     return { ok: true };
   } catch (error) {
+    // Une session déjà fermée (401) est le résultat voulu : l'action efface le cookie ensuite.
+    if (error instanceof ApiError && error.status === 401) return { ok: true };
     return toApiFailure(error, "Déconnexion de tous les appareils");
   }
 }

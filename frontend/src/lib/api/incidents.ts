@@ -41,11 +41,12 @@ import { getVillain } from "./villains";
 
 /*
  * Incidents et interventions. Branchés sur l'API : déclaration, « mes incidents », espace
- * super-héros (liste, fiche, carte, prise en charge, résultat, équipes : voir `interventions.ts`)
- * et lecture par la modération. Toutes ces routes demandent une session.
+ * super-héros (liste, fiche, carte, prise en charge, résultat, équipes : voir `interventions.ts`),
+ * lecture par la modération, incidents en cours et carte publique (`GET /incidents` sans session)
+ * et fiche d'un incident pour un citoyen.
  *
- * Restent mockés, faute de route : les écrans publics (derniers incidents résolus, incidents en
- * cours, carte publique, historique d'un héros ou d'un vilain), la priorité, la modération des
+ * Restent mockés, faute de route : derniers incidents résolus, historique d'un héros ou d'un
+ * vilain (la liste publique ne renvoie pas les résolus), la priorité, la modération des
  * déclarations (validation, rejet, correction) et l'historique des interventions terminées.
  */
 
@@ -115,9 +116,13 @@ function toApiHeroIncident(incident: ApiIncident, team: InterventionTeam | null)
   return { ...converted, priority: converted.priority ?? "normale", interventions: [], team };
 }
 
-/** Toutes les pages de `GET /incidents` (100 par appel), du plus récent au plus ancien. */
+/**
+ * Toutes les pages de `GET /incidents` (100 par appel), du plus récent au plus ancien. Sans jeton :
+ * liste publique (incidents signalés, en cours ou en échec). Avec la session d'un citoyen, l'API
+ * ne renvoie que ses propres déclarations : les écrans publics appellent donc sans jeton.
+ */
 async function fetchAllIncidents(
-  token: string,
+  token: string | undefined,
   filters: Record<string, string> = {},
 ): Promise<ApiIncident[]> {
   const incidents: ApiIncident[] = [];
@@ -132,7 +137,7 @@ async function fetchAllIncidents(
   }
 }
 
-/** `GET /incidents/{id}` (héros et modérateurs), `null` si l'incident n'existe pas. */
+/** `GET /incidents/{id}` (public), `null` si l'incident n'existe pas. */
 async function fetchIncident(token: string, id: string): Promise<ApiIncident | null> {
   try {
     const response = await apiFetch(`/incidents/${encodeURIComponent(id)}`, {
@@ -211,14 +216,24 @@ export async function getLatestResolvedIncidents(limit = 6): Promise<ResolvedInc
 
 /**
  * Incidents non résolus (signalés ou pris en charge), éventuellement filtrés par ville.
- * Future implémentation : `GET ${API_URL}/incidents?status=signale,en-cours&city=${city}`
+ * API : `GET /incidents` sans session, toutes les pages ; l'API ne filtre pas par ville, le
+ * filtre est appliqué ici.
  */
 export async function getOngoingIncidents(city?: string): Promise<Incident[]> {
   const wanted = city ? normalizeCity(city) : null;
+  const inCity = (incident: Incident) =>
+    !wanted || normalizeCity(incident.location.city) === wanted;
+
+  if (isApiEnabled) {
+    return (await fetchAllIncidents(undefined))
+      .map((incident) => fromApiIncident(incident))
+      .filter(inCity);
+  }
+
   const ongoing = incidentsMock
     .filter(isPublic)
     .filter((incident) => incident.status !== "resolu")
-    .filter((incident) => !wanted || normalizeCity(incident.location.city) === wanted)
+    .filter(inCity)
     .sort(byMostRecent);
 
   return mockResponse(ongoing);
@@ -626,11 +641,20 @@ export async function getIncidentMap(token: string): Promise<IncidentMapData> {
 }
 
 /**
- * Carte publique, visible sans compte : seulement les incidents validés par la modération (un
- * signalement en attente peut être faux), à une position approximative, sans les super-héros.
- * Future implémentation : `GET ${API_URL}/incidents/map`
+ * Carte publique, visible sans compte : incidents non résolus à une position approximative, sans
+ * les super-héros. Mock : seulement ceux validés par la modération (un signalement en attente
+ * peut être faux) ; l'API n'a pas de modération des déclarations.
+ * API : `GET /incidents` sans session, toutes les pages.
  */
 export async function getPublicIncidentMap(): Promise<IncidentMapData> {
+  if (isApiEnabled) {
+    const incidents = await fetchAllIncidents(undefined);
+    return buildIncidentMap(
+      incidents.map((incident) => fromApiIncident(incident)),
+      "public",
+    );
+  }
+
   return mockResponse(
     buildIncidentMap(
       incidentsMock.filter((incident) => incident.moderation === "valide"),
@@ -813,17 +837,23 @@ export async function getIncidentsByVillain(villainId: string, limit = 6): Promi
 /**
  * Un citoyen peut consulter ses propres déclarations (y compris rejetées, pour en être informé)
  * et les incidents diffusés publiquement. Pour ces derniers, l'identité du déclarant est retirée.
- * API : un citoyen ne lit que ses propres déclarations (`GET /incidents/{id}` et les interventions
- * lui sont fermés) : l'incident est cherché dans `GET /incidents?reporterId={moi}`, sans le suivi
- * des interventions. Un autre incident → `null`.
+ * API : `GET /incidents/{id}` (public, 404 → `null`), sans le suivi des interventions (fermées
+ * aux citoyens). L'incident ne dit pas qui l'a déclaré : `isMine` vient de
+ * `GET /incidents?reporterId={moi}`, lu en parallèle.
  */
 export async function getCitizenIncident(
   token: string,
   id: string,
 ): Promise<CitizenIncidentDetail | null> {
   if (isApiEnabled) {
-    const incident = (await getMyIncidents(token)).find((mine) => mine.id === id);
-    return incident ? { incident, isMine: true, interventions: [], review: null } : null;
+    const [incident, mine] = await Promise.all([fetchIncident(token, id), getMyIncidents(token)]);
+    if (!incident) return null;
+    return {
+      incident: fromApiIncident(incident),
+      isMine: mine.some((own) => own.id === id),
+      interventions: [],
+      review: null,
+    };
   }
 
   const user = await userFromToken(token, "citoyen");

@@ -1,7 +1,15 @@
 import { superHeroesMock } from "@/mocks/super-heroes";
 import { videosMock } from "@/mocks/videos";
+import { villainFilmsMock } from "@/mocks/villain-films";
+import { villainsMock } from "@/mocks/villains";
 import { apiFailureMessage } from "@/lib/validation/form-state";
-import type { HeroVideo, ModerationStatus, MutationResult, SuperHeroSummary } from "@/types";
+import type {
+  HeroVideo,
+  ModerationStatus,
+  MutationResult,
+  SuperHeroSummary,
+  VillainFilm,
+} from "@/types";
 import { isApiEnabled, mockResponse } from "./config";
 import { ApiError, type ApiSchema, apiFetch, toApiFailure } from "./http";
 import { getImdbTitle } from "./imdb";
@@ -338,6 +346,139 @@ export async function getPublishedVideos(heroId?: string): Promise<HeroVideo[]> 
       return [];
     }
     throw error;
+  }
+}
+
+/* ---------- Films des super-vilains ---------- */
+
+/*
+ * Un modérateur rattache un film à la fiche d'un vilain : il est visible aussitôt, sans
+ * modération. Comme pour les héros, un rattachement se désigne par le couple (vilain, film).
+ */
+
+function fromApiVillainFilm(film: ApiSchema<"Film">): VillainFilm {
+  if (!film.villain) throw new Error(`Film ${film.id} renvoyé par l'API sans super-vilain`);
+  return {
+    id: film.id,
+    villain: film.villain,
+    title: film.title,
+    description: film.plot,
+    videoUrl: film.videoUrl ?? (film.imdbId ? `https://www.imdb.com/title/${film.imdbId}/` : ""),
+    imdbId: film.imdbId,
+    year: film.releaseYear,
+    addedAt: film.addedAt,
+  };
+}
+
+const byMostRecentLink = (a: VillainFilm, b: VillainFilm) =>
+  Date.parse(b.addedAt) - Date.parse(a.addedAt);
+
+/**
+ * Films rattachés à un super-vilain, des plus récents aux plus anciens (aucun s'il est inconnu
+ * de l'API). Public. API : `GET /villains/{villainId}/films`, page après page.
+ */
+export async function getVillainFilms(villainId: string): Promise<VillainFilm[]> {
+  if (!isApiEnabled) {
+    return mockResponse(
+      villainFilmsMock.filter(({ villain }) => villain.id === villainId).sort(byMostRecentLink),
+    );
+  }
+
+  const films: VillainFilm[] = [];
+  try {
+    for (let offset = 0; ; offset += MAX_PAGE_SIZE) {
+      const response = await apiFetch(
+        `/villains/${encodeURIComponent(villainId)}/films${pageQuery({ limit: MAX_PAGE_SIZE, offset })}`,
+      );
+      const page = (await response.json()) as ApiSchema<"VillainFilmPage">;
+      films.push(...page.items.map(fromApiVillainFilm));
+      if (page.items.length === 0 || films.length >= page.total) break;
+    }
+  } catch (error) {
+    // Vilain inconnu de l'API (404, ou identifiant mock refusé en 422) : aucun film.
+    if (error instanceof ApiError && (error.status === 404 || error.status === 422)) return [];
+    throw error;
+  }
+  return films.sort(byMostRecentLink);
+}
+
+const alreadyInVillainFile = "Ce film est déjà sur la fiche de ce super-vilain.";
+
+/**
+ * Rattache un film du catalogue IMDb à la fiche d'un super-vilain, visible aussitôt.
+ * API : `POST /admin/villain-films` avec `{ villainId, imdbId }`.
+ */
+export async function addVillainFilm(
+  token: string,
+  villainId: string,
+  imdbId: string,
+): Promise<MutationResult> {
+  if (!isApiEnabled) {
+    await userFromToken(token, "admin");
+    const villain = villainsMock.find(({ id }) => id === villainId);
+    const title = await getImdbTitle(token, imdbId);
+    if (!villain || !title) return mockResponse({ ok: false, error: "Film introuvable." });
+    if (villainFilmsMock.some((film) => film.villain.id === villainId && film.imdbId === imdbId)) {
+      return mockResponse({ ok: false, error: alreadyInVillainFile });
+    }
+
+    villainFilmsMock.push({
+      id: `villain-film-${crypto.randomUUID()}`,
+      villain: { id: villain.id, alias: villain.alias },
+      title: title.title,
+      description: title.plot,
+      videoUrl: `https://www.imdb.com/title/${title.id}/`,
+      imdbId: title.id,
+      year: title.year,
+      addedAt: new Date().toISOString(),
+    });
+    return mockResponse({ ok: true });
+  }
+
+  try {
+    await apiFetch("/admin/villain-films", {
+      method: "POST",
+      sessionToken: token,
+      body: { villainId, imdbId } satisfies ApiSchema<"AdminVillainFilmInput">,
+    });
+    return { ok: true };
+  } catch (error) {
+    // Le 409 de cette route n'a pas de corps documenté : on se fie au statut.
+    if (error instanceof ApiError && error.status === 409) {
+      return { ok: false, error: alreadyInVillainFile };
+    }
+    return toFilmMutationFailure(error, "Ajout d'un film à un super-vilain");
+  }
+}
+
+/**
+ * Retire un film de la fiche d'un super-vilain.
+ * API : `DELETE /admin/villains/{villainId}/films/{filmId}`.
+ */
+export async function deleteVillainFilm(
+  token: string,
+  villainId: string,
+  filmId: string,
+): Promise<MutationResult> {
+  if (!isApiEnabled) {
+    await userFromToken(token, "admin");
+    const index = villainFilmsMock.findIndex(
+      ({ id, villain }) => id === filmId && villain.id === villainId,
+    );
+    if (index === -1) return mockResponse({ ok: false, error: "Film introuvable." });
+
+    villainFilmsMock.splice(index, 1);
+    return mockResponse({ ok: true });
+  }
+
+  try {
+    await apiFetch(
+      `/admin/villains/${encodeURIComponent(villainId)}/films/${encodeURIComponent(filmId)}`,
+      { method: "DELETE", sessionToken: token },
+    );
+    return { ok: true };
+  } catch (error) {
+    return toFilmMutationFailure(error, "Retrait d'un film d'un super-vilain");
   }
 }
 

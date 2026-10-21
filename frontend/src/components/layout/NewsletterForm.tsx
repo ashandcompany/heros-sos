@@ -19,8 +19,8 @@ export function NewsletterForm({ alreadySubscribed }: NewsletterFormProps) {
   if (state.status === "success") {
     return (
       <p role="status" className="border-2 border-dashed border-background p-4 text-sm">
-        <span className="font-semibold">Demande enregistrée.</span> Le bulletin officiel vous sera
-        adressé dans les meilleurs délais.
+        <span className="font-semibold">Demande enregistrée.</span> Confirmez votre abonnement avec
+        le lien envoyé à cette adresse (valable 48 heures) : aucun bulletin ne part avant.
       </p>
     );
   }

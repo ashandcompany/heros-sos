@@ -70,7 +70,7 @@ export {
   voteOnOutcome,
 } from "./interventions";
 export { getModerationSummary } from "./moderation";
-export { subscribeToNewsletter } from "./newsletter";
+export { confirmNewsletterSubscription, subscribeToNewsletter } from "./newsletter";
 export {
   getHeroPublicReviews,
   getMyInterventions,

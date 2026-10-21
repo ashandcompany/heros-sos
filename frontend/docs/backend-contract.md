@@ -9,11 +9,9 @@ branchement. À mettre à jour à chaque fonction branchée.
 > État au 21/10/2026 : **identité (inscription, activation, connexion, session, mot de passe),
 > demandes de super-héros, fiches publiques des super-héros, modération des comptes, compte
 > (profil, photo, changement d'e-mail, newsletter), types d'incident, incidents et interventions
-> (y compris incidents en cours et carte publique), vidéothèque et avis sont branchés** sur l'API
-> dès que `API_URL` est
-> renseignée (tableau ci-dessous). Le blog, le contact et la newsletter publique ont maintenant
-> leurs routes dans le contrat mais ne sont **pas encore branchés**. Le reste fonctionne encore sur
-> des mocks, y compris avec l'API.
+> (y compris incidents en cours et carte publique), vidéothèque, avis, blog, contact et newsletter
+> publique sont branchés** sur l'API dès que `API_URL` est renseignée (tableau ci-dessous). Le reste
+> fonctionne encore sur des mocks, y compris avec l'API.
 
 ## 1. Couverture : ce qui est dans le contrat, et le reste
 
@@ -40,6 +38,9 @@ publics, tableaux de bord, fiches complètes du back-office) n'ont pas encore de
 | Super-vilains                         | `villains.ts`                            | `GET /villains`, `GET /villains/{id}` (publics), `POST /villains`, `PATCH /villains/{id}`                               |
 | Fiches publiques super-héros          | `super-heroes.ts` (§ 3)                  | `GET /heroes`, `GET /heroes/{heroId}` (publics)                                                                         |
 | Vidéothèque (films)                   | `videos.ts`, `imdb.ts` (§ 3)             | `/films`, `/heroes/{heroId}/films`, `/hero/films*`, `/admin/hero-films*`, `/imdb/titles*`                               |
+| Blog                                  | `blog.ts` (§ 3)                          | `GET /articles`, `GET /articles/{slug}` (publics), `/admin/articles`, `/admin/articles/{id}`                            |
+| Newsletter publique                   | `newsletter.ts` (§ 3)                    | `POST /newsletter/subscriptions`, `POST /newsletter/subscriptions/confirm`                                              |
+| Formulaire de contact                 | `contact.ts` (§ 3)                       | `POST /contact/messages`                                                                                                |
 
 Fonctions de chaque fichier :
 
@@ -60,19 +61,20 @@ Fonctions de chaque fichier :
 - `super-heroes.ts` (fiches publiques) : `getSuperHeroes`, `getFeaturedSuperHeroes`, `getSuperHero`.
 - `videos.ts` : `getMyVideos`, `addMyVideo`, `deleteMyVideo`, `getHeroVideos`, `moderateVideo`,
   `deleteVideo`, `getPublishedVideos` ; `imdb.ts` : `searchImdbTitles`, `getImdbTitle`.
+- `blog.ts` : `getPublishedArticles`, `getPublishedArticle`, `getAllArticles`, `getArticle`,
+  `countDraftArticles`, `createArticle`, `updateArticle`, `deleteArticle`.
+- `newsletter.ts` : `subscribeToNewsletter`, `confirmNewsletterSubscription` ; `contact.ts` :
+  `sendContactMessage`.
 
 ### ⏳ Encore sur les mocks (ou à faire)
 
-| Domaine frontend                  | Fonctions `lib/api/`                                                                                                                         | Contrat OpenAPI                                                                                                     | État    |
-| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------- |
-| Incidents résolus publics         | `incidents.ts` : `getLatestResolvedIncidents`, `getResolvedIncidentsByHero`, `getIncidentsByVillain`                                         | ❌ aucun (`GET /incidents` public ne renvoie pas les résolus, ni filtre héros/vilain)                               | mock    |
-| Fiches complètes super-héros      | `super-heroes.ts` : `getSuperHeroProfiles` (back-office)                                                                                     | ❌ aucun                                                                                                            | mock    |
-| Tableau de bord héros, modération | `hero-dashboard.ts`, `moderation.ts`                                                                                                         | ❌ aucun (statistiques)                                                                                             | mock    |
-| Blog                              | `blog.ts` : `getPublishedArticles`, `getPublishedArticle`, `getAllArticles`, `getArticle`, `createArticle`, `updateArticle`, `deleteArticle` | `GET /articles`, `GET /articles/{slug}`, `/admin/articles`, `/admin/articles/{id}`                                  | à faire |
-| Newsletter                        | `newsletter.ts` : `subscribeToNewsletter`                                                                                                    | `POST /newsletter/subscriptions`, `POST /newsletter/subscriptions/confirm`                                          | à faire |
-| Formulaire de contact             | `contact.ts` : `sendContactMessage`                                                                                                          | `POST /contact/messages`                                                                                            | à faire |
-| Déconnexion de tous les appareils | aucune (pas d'écran)                                                                                                                         | `POST /auth/logout-all`                                                                                             | à faire |
-| Films des super-vilains           | aucune (pas d'écran)                                                                                                                         | `GET /villains/{villainId}/films`, `POST /admin/villain-films`, `DELETE /admin/villains/{villainId}/films/{filmId}` | à faire |
+| Domaine frontend                  | Fonctions `lib/api/`                                                                                 | Contrat OpenAPI                                                                                                     | État    |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------- |
+| Incidents résolus publics         | `incidents.ts` : `getLatestResolvedIncidents`, `getResolvedIncidentsByHero`, `getIncidentsByVillain` | ❌ aucun (`GET /incidents` public ne renvoie pas les résolus, ni filtre héros/vilain)                               | mock    |
+| Fiches complètes super-héros      | `super-heroes.ts` : `getSuperHeroProfiles` (back-office)                                             | ❌ aucun                                                                                                            | mock    |
+| Tableau de bord héros, modération | `hero-dashboard.ts`, `moderation.ts`                                                                 | ❌ aucun (statistiques)                                                                                             | mock    |
+| Déconnexion de tous les appareils | aucune (pas d'écran)                                                                                 | `POST /auth/logout-all`                                                                                             | à faire |
+| Films des super-vilains           | aucune (pas d'écran)                                                                                 | `GET /villains/{villainId}/films`, `POST /admin/villain-films`, `DELETE /admin/villains/{villainId}/films/{filmId}` | à faire |
 
 > [!WARNING]
 > Les « Future implémentation » écrites dans les commentaires de `lib/api/` pour les domaines non
@@ -447,6 +449,46 @@ incidents résolus et ne filtre ni par héros ni par vilain) : derniers incident
 l'accueil (`getLatestResolvedIncidents`), interventions d'un héros et incidents d'un vilain sur les
 fiches de l'encyclopédie (`getResolvedIncidentsByHero`, `getIncidentsByVillain` : vides pour un
 vrai héros ou vilain), tableaux de bord (`hero-dashboard.ts`, `moderation.ts`).
+
+### Blog : choix du branchement
+
+- **Listes sans contenu** : `GET /articles` et `GET /admin/articles` ne renvoient pas le HTML. Les
+  listes sont typées `BlogArticleSummary` (`BlogArticle` sans `content`), le mock aussi ; seules
+  les fiches (`getPublishedArticle`, `getArticle`) ont le contenu. Les écrans ne paginent pas : les
+  fonctions lisent toutes les pages, dans l'ordre de l'API (publication décroissante en public,
+  dernière modification d'abord dans le back-office).
+- **Slug et HTML** : calculés et assainis par l'API (balises de l'éditeur seulement). Le slug est
+  figé à la première publication ; `publishedAt` est conservé après un retour en brouillon. La
+  page publique assainit de nouveau le contenu (`sanitizeArticleHtml`).
+- **Lecture publique** : sans session ; un brouillon ou un slug inconnu répond 404 (`null`, page
+  introuvable). `getPublishedArticle` est mémorisé le temps d'un rendu (page et métadonnées).
+- **Tableau de bord** : « Articles en brouillon » vient du `total` de
+  `GET /admin/articles?status=brouillon` (`countDraftArticles`).
+- **Erreurs** (les fonctions renvoient un `MutationResult`, message prêt à afficher) :
+
+  | Code API (statut)                 | Message affiché                                                               |
+  | --------------------------------- | ----------------------------------------------------------------------------- |
+  | `article_slug_already_used` (409) | Impossible de générer une adresse unique pour cet article : modifiez le titre |
+  | `not_found` (404)                 | Article introuvable                                                           |
+  | `validation_failed` (422)         | Certaines informations de l'article sont invalides                            |
+  | autre                             | `apiFailureMessage(toApiFailure(…))`                                          |
+
+### Contact et newsletter : choix du branchement
+
+- **Adresse du visiteur** : les deux routes sont limitées par IP (la newsletter aussi par adresse
+  email). Comme `login`, elles transmettent `X-Forwarded-For` et `User-Agent` du visiteur
+  (`visitorHeaders`, [http.ts](../src/lib/api/http.ts)).
+- **Contact** : aucun mail n'est envoyé au visiteur, rien n'est conservé. `422` → erreur sur les
+  champs refusés (règles déjà alignées : nom ≤ 80, message de 20 à 2 000 caractères, objet parmi
+  `question | compte | donnees | partenariat | autre`) ; `503 contact_delivery_unavailable` → « le
+  message n'a pas pu être envoyé », à réessayer ; `429` → délai `Retry-After`.
+- **Newsletter, double opt-in** : `POST /newsletter/subscriptions` répond `202` pour toute adresse
+  valide (déjà abonnée ou non) et envoie un lien de confirmation valable 48 h. Le formulaire
+  l'annonce ; le cookie `newsletter_subscribed` masque ensuite le formulaire, comme avant.
+- **Page de confirmation** : `/newsletter/confirmation?token=…` (`routes.newsletterConfirmation`),
+  qui doit rester égale à `HEROS_NEWSLETTER_CONFIRM_PATH` du backend. Comme l'activation, la
+  confirmation se fait par un **bouton** : une messagerie qui ouvre le lien à l'avance ne donne pas
+  le consentement à la place du visiteur. `400 invalid_token` → « lien invalide ou expiré ».
 
 ### Pagination
 

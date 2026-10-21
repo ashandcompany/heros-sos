@@ -1,4 +1,3 @@
-import { headers } from "next/headers";
 import { cache } from "react";
 import { MOCK_REMEMBERED_SESSION_MAX_AGE, MOCK_SESSION_MAX_AGE } from "@/lib/cookies";
 import { citizensMock } from "@/mocks/citizens";
@@ -23,6 +22,7 @@ import {
   fromApiUser,
   getApiSession,
   readSessionCookie,
+  visitorHeaders,
 } from "./http";
 
 /*
@@ -54,21 +54,6 @@ const loginErrorByCode = new Map<string, LoginError>([
  */
 export async function login(credentials: LoginCredentials): Promise<LoginResult> {
   return isApiEnabled ? loginWithApi(credentials) : loginWithMocks(credentials);
-}
-
-/**
- * L'API limite les demandes par adresse IP et enregistre l'appareil de chaque session : on lui
- * transmet l'adresse du visiteur (posée par le reverse proxy) et son navigateur, sinon elle ne
- * verrait que le serveur Next.
- */
-async function visitorHeaders(): Promise<Headers> {
-  const incoming = await headers();
-  const forwarded = new Headers();
-  const forwardedFor = incoming.get("x-forwarded-for");
-  const userAgent = incoming.get("user-agent");
-  if (forwardedFor) forwarded.set("X-Forwarded-For", forwardedFor);
-  if (userAgent) forwarded.set("User-Agent", userAgent);
-  return forwarded;
 }
 
 async function loginWithApi({

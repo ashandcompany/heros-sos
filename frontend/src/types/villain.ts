@@ -18,6 +18,14 @@ export interface Villain {
   mainSector: string;
   /** Spécialités : identifiants du référentiel des types d'incident. */
   typeIds: number[];
+  /** Les mêmes spécialités, détaillées pour l'affichage, par libellé. */
+  specialties: VillainSpecialty[];
+}
+
+export interface VillainSpecialty {
+  id: number;
+  code: string;
+  label: string;
 }
 
 export type VillainSummary = Pick<Villain, "id" | "alias">;

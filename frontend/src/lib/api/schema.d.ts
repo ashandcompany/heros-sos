@@ -1432,6 +1432,8 @@ export interface components {
             mainSector?: string;
             description?: string;
             typeIds: number[];
+            /** @description Spécialités détaillées (types d'incident de `typeIds`), par libellé. */
+            specialties: components["schemas"]["VillainSpecialty"][];
             /** @enum {string} */
             threatLevel: "faible" | "modere" | "eleve" | "critique";
             /** @enum {string} */
@@ -1439,6 +1441,12 @@ export interface components {
             reportedIncidentsCount: number;
             /** Format: date-time */
             createdAt: string;
+        };
+        VillainSpecialty: {
+            /** Format: int32 */
+            id: number;
+            code: string;
+            label: string;
         };
         VillainPage: {
             items: components["schemas"]["Villain"][];

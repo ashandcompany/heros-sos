@@ -16,7 +16,11 @@ type typeView struct {
 type villainView struct {
 	ID, Alias, ThreatLevel, Status string
 	TypeIDs                        []int16
-	ReportedIncidentsCount       int64
+	Specialties                    []struct {
+		ID          int16
+		Code, Label string
+	}
+	ReportedIncidentsCount int64
 }
 
 func (e *e2e) createType(a *actor, code, label string, endangersLife bool) typeView {
@@ -93,6 +97,11 @@ func TestVillainsAreCreatedByUsers(t *testing.T) {
 		len(villain.TypeIDs) != 2 || villain.TypeIDs[0] != theft.ID || villain.TypeIDs[1] != burglary.ID ||
 		villain.ThreatLevel != "faible" || villain.Status != "en-liberte" {
 		t.Fatalf("création : %d %s", created.status, created.body)
+	}
+	// Spécialités détaillées, par libellé : « Cambriolage » avant « Vol ».
+	if s := villain.Specialties; len(s) != 2 || s[0].ID != burglary.ID || s[0].Label != "Cambriolage" ||
+		s[0].Code != "burglary" || s[1].ID != theft.ID || s[1].Label != "Vol" {
+		t.Errorf("spécialités détaillées : %+v", s)
 	}
 	if got := citizen.request(http.MethodPatch, "/villains/"+villain.ID, map[string]any{
 		"alias": "Le Corbeau Gris", "typeIds": []int16{burglary.ID},

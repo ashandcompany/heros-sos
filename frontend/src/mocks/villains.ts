@@ -1,4 +1,16 @@
 import type { Villain } from "@/types";
+import { incidentTypesMock } from "./incident-types";
+
+/** Spécialités d'un vilain mock, à partir des codes du référentiel mock (par libellé). */
+function mockSpecialties(...codes: string[]): Pick<Villain, "typeIds" | "specialties"> {
+  const types = incidentTypesMock
+    .filter(({ code }) => codes.includes(code))
+    .sort((a, b) => a.label.localeCompare(b.label, "fr"));
+  return {
+    typeIds: types.map(({ id }) => id).sort((a, b) => a - b),
+    specialties: types.map(({ id, code, label }) => ({ id, code, label })),
+  };
+}
 
 export const villainsMock: Villain[] = [
   {
@@ -11,7 +23,7 @@ export const villainsMock: Villain[] = [
     lastName: "",
     firstName: "",
     mainSector: "",
-    typeIds: [],
+    ...mockSpecialties("vol", "cambriolage"),
   },
   {
     id: "villain-2",
@@ -23,7 +35,7 @@ export const villainsMock: Villain[] = [
     lastName: "",
     firstName: "",
     mainSector: "",
-    typeIds: [],
+    ...mockSpecialties("sabotage"),
   },
   {
     id: "villain-3",
@@ -35,7 +47,7 @@ export const villainsMock: Villain[] = [
     lastName: "",
     firstName: "",
     mainSector: "",
-    typeIds: [],
+    ...mockSpecialties("prise-d-otages", "enlevement"),
   },
   {
     id: "villain-4",
@@ -47,7 +59,7 @@ export const villainsMock: Villain[] = [
     lastName: "",
     firstName: "",
     mainSector: "",
-    typeIds: [],
+    ...mockSpecialties("vol"),
   },
   {
     id: "villain-5",
@@ -59,7 +71,7 @@ export const villainsMock: Villain[] = [
     lastName: "",
     firstName: "",
     mainSector: "",
-    typeIds: [],
+    ...mockSpecialties("sabotage", "agression"),
   },
   {
     id: "villain-6",
@@ -71,6 +83,6 @@ export const villainsMock: Villain[] = [
     lastName: "",
     firstName: "",
     mainSector: "",
-    typeIds: [],
+    ...mockSpecialties("prise-d-otages", "enlevement"),
   },
 ];

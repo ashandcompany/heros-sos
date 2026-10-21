@@ -1,3 +1,4 @@
+import type { ApiFailure } from "./api";
 import type { ModerationStatus } from "./moderation";
 import type { SuperHeroSummary } from "./super-hero";
 
@@ -17,11 +18,20 @@ export interface HeroVideo {
   moderation: ModerationStatus;
 }
 
-/** Résultat d'une recherche dans le catalogue IMDb. */
+/** Film du catalogue IMDb. */
 export interface ImdbTitle {
   /** Identifiant IMDb, ex : `tt0000001`. */
   id: string;
   title: string;
-  year: number;
+  year?: number;
+  /** Résumé, vide si le catalogue n'en fournit pas. */
   plot: string;
+  posterUrl?: string;
 }
+
+/** Résultat d'une recherche dans le catalogue IMDb. */
+export type ImdbSearchResult =
+  | { ok: true; titles: ImdbTitle[] }
+  /** Catalogue OMDb injoignable depuis l'API (502). */
+  | { ok: false; error: "catalog-unavailable" }
+  | ApiFailure;

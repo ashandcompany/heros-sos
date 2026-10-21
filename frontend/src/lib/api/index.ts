@@ -89,6 +89,8 @@ export {
   getHeroVideos,
   getMyVideos,
   getPublishedVideos,
+  heroVideoKey,
   moderateVideo,
+  parseHeroVideoKey,
 } from "./videos";
 export { getVillain, getVillains } from "./villains";

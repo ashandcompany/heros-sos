@@ -4,6 +4,174 @@
  */
 
 export interface paths {
+    "/me/interventions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Interventions terminées à noter
+         * @description Liste les héros confirmés des interventions clôturées sur les incidents déclarés par l'utilisateur connecté (citoyen ou héros), avec ses avis déjà déposés. Un héros déclarant ne peut pas se noter lui-même.
+         */
+        get: operations["listMyRateableInterventions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/interventions/{interventionId}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Noter un héros de l'intervention
+         * @description Seul le déclarant connecté (citoyen ou héros) peut noter chaque participant confirmé d'une intervention clôturée, une fois par héros; un héros déclarant ne peut pas se noter lui-même.
+         */
+        post: operations["createHeroReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/hero/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Avis reçus par le héros connecté
+         * @description Le héros voit ses avis et leur statut de modération; un commentaire masqué n'est pas renvoyé.
+         */
+        get: operations["listMyHeroReviews"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/hero/reviews/{reviewId}/reply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Répondre à un avis ou modifier sa réponse
+         * @description Seul le héros évalué peut répondre. La réponse est publiée à sa création; chaque modification la remet en attente de modération.
+         */
+        put: operations["saveHeroReviewReply"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/heroes/{heroId}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Avis publics d'un héros
+         * @description Retourne uniquement les avis publiés et calcule la moyenne sur tous les avis publiés, indépendamment de la pagination.
+         */
+        get: operations["listPublicHeroReviews"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/hero-reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lister les avis à modérer */
+        get: operations["listHeroReviewsForModeration"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/hero-reviews/{reviewId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Publier ou masquer un avis */
+        patch: operations["moderateHeroReview"];
+        trace?: never;
+    };
+    "/admin/hero-review-replies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lister les réponses à modérer */
+        get: operations["listHeroReviewRepliesForModeration"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/hero-review-replies/{reviewId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Publier ou masquer une réponse */
+        patch: operations["moderateHeroReviewReply"];
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -490,6 +658,232 @@ export interface paths {
          */
         post: operations["createVillain"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/films": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Vidéothèque publique
+         * @description Films ayant au moins un rattachement validé à un super-héros.
+         */
+        get: operations["listPublicFilms"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/heroes/{heroId}/films": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Films publiés d'un super-héros */
+        get: operations["listHeroFilms"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/villains/{villainId}/films": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Films associés à un super-vilain */
+        get: operations["listVillainFilms"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/imdb/titles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rechercher un film dans OMDb */
+        get: operations["searchFilmTitles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/imdb/titles/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lire un film dans OMDb par identifiant IMDb */
+        get: operations["getFilmTitle"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/hero/films": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ma vidéothèque de héros */
+        get: operations["listMyFilms"];
+        put?: never;
+        /** Ajouter un film à ma vidéothèque */
+        post: operations["addMyFilm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/hero/films/{filmId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Retirer un film de ma vidéothèque */
+        delete: operations["deleteMyFilm"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/hero-films": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lister les films des héros à modérer */
+        get: operations["listHeroFilmsForModeration"];
+        put?: never;
+        /** Ajouter directement un film approuvé à un héros */
+        post: operations["addFilmToHeroByModerator"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/hero-films/{heroId}/{filmId}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approuver ou republier un film lié à un héros */
+        post: operations["approveHeroFilm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/hero-films/{heroId}/{filmId}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rejeter ou dépublier un film lié à un héros */
+        post: operations["rejectHeroFilm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/hero-films/{heroId}/{filmId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Supprimer le rattachement d'un film à un héros */
+        delete: operations["deleteHeroFilmByModerator"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/villain-films": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Associer un film à un vilain */
+        post: operations["addFilmToVillain"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/villains/{villainId}/films/{filmId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Retirer un film de la fiche d'un vilain */
+        delete: operations["deleteVillainFilm"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1048,6 +1442,82 @@ export interface components {
             limit: number;
             offset: number;
         };
+        FilmTitle: {
+            id: string;
+            title: string;
+            /** Format: int32 */
+            year?: number;
+            plot?: string;
+            /** Format: uri */
+            posterUrl?: string;
+        };
+        /** @description Fournir imdbId pour un film OMDb, ou title, description et videoUrl pour une vidéo libre. */
+        FilmInput: {
+            imdbId?: string;
+            title?: string;
+            description?: string;
+            /** Format: uri */
+            videoUrl?: string;
+        };
+        /** @description Fournir imdbId pour un film OMDb, ou title, description et videoUrl pour une vidéo libre. */
+        AdminHeroFilmInput: {
+            /** Format: uuid */
+            heroId: string;
+            imdbId?: string;
+            title?: string;
+            description?: string;
+            /** Format: uri */
+            videoUrl?: string;
+        };
+        /** @description Fournir filmId pour un film en base, ou imdbId pour le rechercher sur OMDb. */
+        AdminVillainFilmInput: {
+            /** Format: uuid */
+            villainId: string;
+            /** Format: uuid */
+            filmId?: string;
+            imdbId?: string;
+        };
+        Film: {
+            /** Format: uuid */
+            id: string;
+            imdbId?: string;
+            /** Format: uri */
+            videoUrl?: string;
+            title: string;
+            /** Format: int32 */
+            releaseYear?: number;
+            /** Format: uri */
+            posterUrl?: string;
+            plot: string;
+            /** Format: date-time */
+            addedAt: string;
+            /** @enum {string} */
+            moderation?: "pending" | "approved" | "rejected";
+            hero?: components["schemas"]["FilmHero"];
+            villain?: components["schemas"]["FilmVillain"];
+        };
+        FilmHero: {
+            /** Format: uuid */
+            id: string;
+            alias: string;
+        };
+        FilmVillain: {
+            /** Format: uuid */
+            id: string;
+            alias: string;
+        };
+        HeroFilmPage: {
+            items: components["schemas"]["Film"][];
+            total: number;
+            limit: number;
+            offset: number;
+        };
+        VillainFilmPage: {
+            items: components["schemas"]["Film"][];
+            total: number;
+            limit: number;
+            offset: number;
+        };
         IncidentPayload: {
             /** Format: int32 */
             typeId: number;
@@ -1112,6 +1582,107 @@ export interface components {
         };
         IncidentPage: {
             items: components["schemas"]["Incident"][];
+            total: number;
+            limit: number;
+            offset: number;
+        };
+        RateableInterventionPage: {
+            items: components["schemas"]["RateableIntervention"][];
+            total: number;
+            limit: number;
+            offset: number;
+        };
+        RateableIntervention: {
+            /** Format: uuid */
+            interventionId: string;
+            /** Format: uuid */
+            incidentId: string;
+            /** @enum {string} */
+            outcome: "succeeded" | "failed";
+            /** Format: date-time */
+            endedAt: string;
+            /** Format: uuid */
+            heroId: string;
+            heroAlias: string;
+            review: components["schemas"]["HeroReview"] | null;
+        };
+        HeroReviewPayload: {
+            /** Format: uuid */
+            heroId: string;
+            rating: number;
+            comment?: string;
+        };
+        HeroReview: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            interventionId: string;
+            /** Format: uuid */
+            heroId: string;
+            heroAlias?: string;
+            rating: number;
+            comment?: string | null;
+            /** @enum {string} */
+            status: "published" | "hidden";
+            /** Format: date-time */
+            moderatedAt?: string;
+            /** Format: date-time */
+            createdAt: string;
+            reply?: components["schemas"]["HeroReviewReply"];
+        };
+        HeroReviewPage: {
+            items: components["schemas"]["HeroReview"][];
+            total: number;
+            limit: number;
+            offset: number;
+        };
+        HeroReputation: {
+            /** Format: double */
+            averageRating: number;
+            /** @description Nombre d'avis publiés inclus dans la moyenne. */
+            ratingsCount: number;
+            ratings: components["schemas"]["HeroReview"][];
+            /** @description Nombre total d'avis reçus, tous statuts confondus. */
+            total: number;
+            limit: number;
+            offset: number;
+        };
+        HeroReviewReplyPayload: {
+            content: string;
+        };
+        HeroReviewReply: {
+            /** Format: uuid */
+            reviewId: string;
+            content: string;
+            /** @enum {string} */
+            status: "published" | "pending" | "hidden";
+            /** Format: date-time */
+            moderatedAt?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            editedAt?: string;
+        };
+        PublicHeroReputation: {
+            /** Format: double */
+            averageRating: number;
+            ratingsCount: number;
+            reviews: components["schemas"]["HeroReview"][];
+        };
+        HeroReviewStatusPayload: {
+            /** @enum {string} */
+            status: "published" | "hidden";
+        };
+        HeroReviewReplyModerationItem: {
+            reply: components["schemas"]["HeroReviewReply"];
+            heroAlias: string;
+            rating: number;
+            comment?: string | null;
+            /** @enum {string} */
+            reviewStatus: "published" | "hidden";
+        };
+        HeroReviewReplyModerationPage: {
+            items: components["schemas"]["HeroReviewReplyModerationItem"][];
             total: number;
             limit: number;
             offset: number;
@@ -1264,6 +1835,12 @@ export interface components {
         };
     };
     parameters: {
+        /** @description Identifiant du super-héros. */
+        HeroId: string;
+        /** @description Identifiant du super-vilain. */
+        VillainId: string;
+        /** @description Identifiant du film. */
+        FilmId: string;
         /**
          * @description Identifiant de l'utilisateur dont la demande est traitée (champ `userId` de la liste des demandes).
          * @example 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
@@ -1285,6 +1862,300 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listMyRateableInterventions: {
+        parameters: {
+            query?: {
+                /** @description Nombre d'éléments par page (1 à 100, 20 par défaut). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Nombre d'éléments à sauter. */
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Interventions et héros susceptibles d'être notés. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RateableInterventionPage"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createHeroReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                interventionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeroReviewPayload"];
+            };
+        };
+        responses: {
+            /** @description Avis créé et publié. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Ce héros a déjà été noté pour cette intervention. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listMyHeroReviews: {
+        parameters: {
+            query?: {
+                /** @description Nombre d'éléments par page (1 à 100, 20 par défaut). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Nombre d'éléments à sauter. */
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Résumé et page des avis reçus; moyenne et compteur basés sur les avis publiés uniquement. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HeroReputation"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    saveHeroReviewReply: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reviewId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeroReviewReplyPayload"];
+            };
+        };
+        responses: {
+            /** @description Réponse enregistrée ou modifiée. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description L'avis ne contient pas de commentaire publiable. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listPublicHeroReviews: {
+        parameters: {
+            query?: {
+                /** @description Nombre d'éléments par page (1 à 100, 20 par défaut). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Nombre d'éléments à sauter. */
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path: {
+                heroId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Moyenne et page d'avis publics. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicHeroReputation"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listHeroReviewsForModeration: {
+        parameters: {
+            query?: {
+                status?: "published" | "hidden";
+                /** @description Nombre d'éléments par page (1 à 100, 20 par défaut). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Nombre d'éléments à sauter. */
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page d'avis avec leurs réponses éventuelles. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HeroReviewPage"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    moderateHeroReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reviewId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeroReviewStatusPayload"];
+            };
+        };
+        responses: {
+            /** @description Modération enregistrée. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listHeroReviewRepliesForModeration: {
+        parameters: {
+            query?: {
+                status?: "published" | "pending" | "hidden";
+                /** @description Nombre d'éléments par page (1 à 100, 20 par défaut). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Nombre d'éléments à sauter. */
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page de réponses et avis associés. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HeroReviewReplyModerationPage"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    moderateHeroReviewReply: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reviewId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeroReviewStatusPayload"];
+            };
+        };
+        responses: {
+            /** @description Modération enregistrée. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
     health: {
         parameters: {
             query?: never;
@@ -2086,6 +2957,530 @@ export interface operations {
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listPublicFilms: {
+        parameters: {
+            query?: {
+                hero?: string;
+                /** @description Nombre d'éléments par page (1 à 100, 20 par défaut). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Nombre d'éléments à sauter. */
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Une page de films publiés. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HeroFilmPage"];
+                };
+            };
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listHeroFilms: {
+        parameters: {
+            query?: {
+                /** @description Nombre d'éléments par page (1 à 100, 20 par défaut). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Nombre d'éléments à sauter. */
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path: {
+                /** @description Identifiant du super-héros. */
+                heroId: components["parameters"]["HeroId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Films liés au héros et approuvés par un modérateur. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HeroFilmPage"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listVillainFilms: {
+        parameters: {
+            query?: {
+                /** @description Nombre d'éléments par page (1 à 100, 20 par défaut). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Nombre d'éléments à sauter. */
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path: {
+                /** @description Identifiant du super-vilain. */
+                villainId: components["parameters"]["VillainId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Films associés au vilain, visibles dès leur rattachement par un modérateur. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VillainFilmPage"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    searchFilmTitles: {
+        parameters: {
+            query: {
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Résultats de la recherche, au plus dix titres. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FilmTitle"][];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            /** @description Catalogue OMDb indisponible (`catalog_unavailable`). */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getFilmTitle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Détail du film. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FilmTitle"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description Film absent du catalogue (`film_not_found`). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Catalogue OMDb indisponible (`catalog_unavailable`). */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listMyFilms: {
+        parameters: {
+            query?: {
+                /** @description Nombre d'éléments par page (1 à 100, 20 par défaut). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Nombre d'éléments à sauter. */
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Films du héros courant, tous statuts de modération confondus. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HeroFilmPage"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    addMyFilm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FilmInput"];
+            };
+        };
+        responses: {
+            /** @description Film ajouté en attente de modération. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Film"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description Ce film est déjà présent dans la vidéothèque. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+            /** @description Catalogue OMDb indisponible. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteMyFilm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant du film. */
+                filmId: components["parameters"]["FilmId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Film retiré. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listHeroFilmsForModeration: {
+        parameters: {
+            query?: {
+                status?: "pending" | "approved" | "rejected";
+                /** @description Nombre d'éléments par page (1 à 100, 20 par défaut). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Nombre d'éléments à sauter. */
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tous les statuts si le filtre est absent. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HeroFilmPage"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    addFilmToHeroByModerator: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "heroId": "0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10",
+                 *       "imdbId": "tt0133093"
+                 *     }
+                 */
+                "application/json": components["schemas"]["AdminHeroFilmInput"];
+            };
+        };
+        responses: {
+            /** @description Film rattaché et approuvé. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Film"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description Le film est déjà lié à ce héros. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+            /** @description Catalogue OMDb indisponible. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    approveHeroFilm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant du super-héros. */
+                heroId: components["parameters"]["HeroId"];
+                /** @description Identifiant du film. */
+                filmId: components["parameters"]["FilmId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rattachement approuvé. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Le rattachement n'est plus en attente. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    rejectHeroFilm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant du super-héros. */
+                heroId: components["parameters"]["HeroId"];
+                /** @description Identifiant du film. */
+                filmId: components["parameters"]["FilmId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rattachement rejeté. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Le rattachement n'est plus en attente. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteHeroFilmByModerator: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant du super-héros. */
+                heroId: components["parameters"]["HeroId"];
+                /** @description Identifiant du film. */
+                filmId: components["parameters"]["FilmId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rattachement supprimé. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    addFilmToVillain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "villainId": "1b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10",
+                 *       "imdbId": "tt0133093"
+                 *     }
+                 */
+                "application/json": components["schemas"]["AdminVillainFilmInput"];
+            };
+        };
+        responses: {
+            /** @description Association créée, sans modération supplémentaire. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Film"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Le film est déjà lié à ce vilain. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+            /** @description Catalogue OMDb indisponible. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteVillainFilm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant du super-vilain. */
+                villainId: components["parameters"]["VillainId"];
+                /** @description Identifiant du film. */
+                filmId: components["parameters"]["FilmId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Association supprimée. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
     };

@@ -8,6 +8,7 @@ import { getMyVideos, searchImdbTitles } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import { routes } from "@/lib/routes";
 import { requireHeroSession } from "@/lib/server-session";
+import { apiFailureMessage } from "@/lib/validation/form-state";
 import type { ModerationStatus } from "@/types";
 import { AddVideoForm } from "./AddVideoForm";
 
@@ -27,11 +28,12 @@ export async function ImdbSearch({ searchParams }: { searchParams: VideoSearchPa
   const { token } = await requireHeroSession();
   const raw = (await searchParams).q;
   const query = (Array.isArray(raw) ? raw[0] : raw)?.trim() ?? "";
-  const [results, videos] = await Promise.all([
-    query ? searchImdbTitles(token, query) : [],
+  const [search, videos] = await Promise.all([
+    query ? searchImdbTitles(token, query) : null,
     getMyVideos(token),
   ]);
   const owned = new Set(videos.map(({ imdbId }) => imdbId));
+  const results = search?.ok ? search.titles : [];
 
   return (
     <>
@@ -53,8 +55,14 @@ export async function ImdbSearch({ searchParams }: { searchParams: VideoSearchPa
         </button>
       </form>
 
-      {query &&
-        (results.length === 0 ? (
+      {search &&
+        (!search.ok ? (
+          <p role="alert" className="text-sm text-danger">
+            {search.error === "catalog-unavailable"
+              ? "Le catalogue IMDb est momentanément indisponible. Réessayez dans quelques instants."
+              : apiFailureMessage(search)}
+          </p>
+        ) : results.length === 0 ? (
           <EmptyState>Aucun film ne correspond à «&nbsp;{query}&nbsp;» sur IMDb.</EmptyState>
         ) : (
           <>
@@ -69,10 +77,14 @@ export async function ImdbSearch({ searchParams }: { searchParams: VideoSearchPa
                 >
                   <div className="min-w-0 flex-1">
                     <p className="font-display font-semibold">
-                      {title.title}{" "}
-                      <span className="font-mono text-sm text-muted">({title.year})</span>
+                      {title.title}
+                      {title.year && (
+                        <span className="font-mono text-sm text-muted"> ({title.year})</span>
+                      )}
                     </p>
-                    <p className="mt-1 text-sm text-pretty text-muted">{title.plot}</p>
+                    {title.plot && (
+                      <p className="mt-1 text-sm text-pretty text-muted">{title.plot}</p>
+                    )}
                   </div>
                   {owned.has(title.id) ? (
                     <p className="text-sm text-muted">Déjà dans votre vidéothèque</p>

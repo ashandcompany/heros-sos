@@ -1,5 +1,5 @@
 import { deleteVideoAction, moderateVideoAction } from "@/app/actions/admin";
-import { getHeroVideos } from "@/lib/api";
+import { getHeroVideos, heroVideoKey } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import { routes } from "@/lib/routes";
 import { requireAdminSession } from "@/lib/server-session";
@@ -22,7 +22,8 @@ const videoStatusLabels: Record<ModerationStatus, string> = {
 };
 
 function VideoCard({ video }: { video: HeroVideo }) {
-  const titleId = `film-${video.id}-titre`;
+  const key = heroVideoKey(video);
+  const titleId = `film-${video.hero.id}-${video.id}-titre`;
 
   return (
     <article
@@ -59,7 +60,7 @@ function VideoCard({ video }: { video: HeroVideo }) {
       <div className="flex flex-wrap items-start gap-2 lg:flex-col lg:items-end">
         <ModerationForm
           action={moderateVideoAction}
-          id={video.id}
+          id={key}
           subject={video.title}
           decisions={decisionsFor(video.moderation, {
             approve: "Publier",
@@ -69,7 +70,7 @@ function VideoCard({ video }: { video: HeroVideo }) {
         />
         <ConfirmDeleteButton
           action={deleteVideoAction}
-          id={video.id}
+          id={key}
           subject={video.title}
           description={`Le film sera retiré de la vidéothèque de ${video.hero.alias}. Cette action est irréversible.`}
         />
@@ -96,7 +97,7 @@ export async function VideosModeration({ searchParams }: { searchParams: Moderat
       ) : (
         <ul className="space-y-4">
           {videos.map((video) => (
-            <li key={video.id}>
+            <li key={heroVideoKey(video)}>
               <VideoCard video={video} />
             </li>
           ))}

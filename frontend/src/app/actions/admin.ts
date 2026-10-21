@@ -14,6 +14,7 @@ import {
   moderateComment,
   moderateIncident,
   moderateVideo,
+  parseHeroVideoKey,
   reviewEmailChange,
   reviewHeroApplication,
   updateArticle,
@@ -314,7 +315,10 @@ export async function moderateVideoAction(
   const request = readDecision(formData);
   if (!request) return invalidRequest;
 
-  const result = await moderateVideo(token, request.id, request.decision);
+  const film = parseHeroVideoKey(request.id);
+  if (!film) return invalidRequest;
+
+  const result = await moderateVideo(token, film.heroId, film.filmId, request.decision);
   return settle(result, [routes.adminVideos], decisionMessages[request.decision]);
 }
 
@@ -323,10 +327,10 @@ export async function deleteVideoAction(
   formData: FormData,
 ): Promise<FormState> {
   const token = await requireAdminSession();
-  const id = String(formData.get("id") ?? "");
-  if (!id) return invalidRequest;
+  const film = parseHeroVideoKey(String(formData.get("id") ?? ""));
+  if (!film) return invalidRequest;
 
-  const result = await deleteVideo(token, id);
+  const result = await deleteVideo(token, film.heroId, film.filmId);
   return settle(result, [routes.adminVideos], "Film supprimé.");
 }
 

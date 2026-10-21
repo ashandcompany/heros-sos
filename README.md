@@ -145,6 +145,8 @@ Documentation détaillée dans `frontend/docs/` : [architecture](frontend/docs/a
 - **Frontend** (`frontend-ci.yml`) : installation, audit des dépendances, vérification Prettier, build.
 - **Backend** (`backend-ci.yml`) : vérification de `go.mod`/`go.sum`, recherche de vulnérabilités (`govulncheck`), tests avec PostgreSQL, build.
 - **Documentation** (`docs-ci.yml`) : build du site `docs-site/` ; un lien cassé ou un OpenAPI illisible fait échouer le job. Rien n'est publié.
+- **Publication de la documentation** (`docs-deploy.yml`) : mêmes étapes, puis déploiement sur GitHub Pages à chaque push sur `develop`. Il reste inactif tant que Pages n'est pas activé dans les réglages du dépôt : voir [docs-site/README.md](docs-site/README.md#intégration-continue-et-déploiement).
+- **Relecteurs** : `.github/CODEOWNERS` désigne qui relire selon les fichiers touchés (frontend, backend, CI et Docker, `docs-site/`).
 
 La CI ne construit pas encore les images Docker et ne vérifie pas les fichiers Compose : lancer `make check` (syntaxe Compose) avant de pousser une modification de `docker-compose*.yml`.
 

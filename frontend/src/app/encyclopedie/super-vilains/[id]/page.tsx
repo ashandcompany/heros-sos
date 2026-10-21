@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { StatusBadge } from "@/components/hero/IncidentBadges";
 import { threatTone } from "@/components/encyclopedia/VillainCard";
+import { VillainSpecialties } from "@/components/encyclopedia/VillainSpecialties";
 import { Badge } from "@/components/ui/Badge";
 import { Container } from "@/components/ui/Container";
 import { getIncidentsByVillain, getVillain } from "@/lib/api";
@@ -54,6 +55,12 @@ async function VillainSheet({ params }: { params: Promise<{ id: string }> }) {
           </Badge>
         </div>
         <p className="mt-4 max-w-2xl text-lg text-pretty">{villain.description}</p>
+        {villain.specialties.length > 0 && (
+          <div className="mt-5">
+            <h2 className="mb-2 text-sm font-medium text-muted">Spécialités</h2>
+            <VillainSpecialties specialties={villain.specialties} />
+          </div>
+        )}
         <p className="mt-6 text-sm">
           <span className="font-mono text-2xl font-semibold">
             {formatInteger(villain.reportedIncidentsCount)}

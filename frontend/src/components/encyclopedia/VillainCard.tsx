@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/Badge";
 import { formatInteger, threatLevelLabels } from "@/lib/format";
 import { villainSheetRoute } from "@/lib/routes";
 import type { ThreatLevel, Villain } from "@/types";
+import { VillainSpecialties } from "./VillainSpecialties";
 
 export const threatTone: Record<ThreatLevel, "sage" | "warning" | "danger"> = {
   faible: "sage",
@@ -30,6 +31,7 @@ export function VillainCard({ villain }: { villain: Villain }) {
         </Badge>
       </div>
       <p className="mt-2 text-sm text-muted text-pretty">{villain.description}</p>
+      <VillainSpecialties specialties={villain.specialties} className="mt-3" />
       {villain.status === "emprisonne" && (
         <p className="mt-3">
           <Badge tone="sage">Emprisonné</Badge>

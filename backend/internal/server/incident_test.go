@@ -16,7 +16,11 @@ type typeView struct {
 type villainView struct {
 	ID, Alias, ThreatLevel, Status string
 	TypeIDs                        []int16
-	ReportedIncidentsCount       int64
+	Specialties                    []struct {
+		ID          int16
+		Code, Label string
+	}
+	ReportedIncidentsCount int64
 }
 
 func (e *e2e) createType(a *actor, code, label string, endangersLife bool) typeView {
@@ -94,6 +98,11 @@ func TestVillainsAreCreatedByUsers(t *testing.T) {
 		villain.ThreatLevel != "faible" || villain.Status != "en-liberte" {
 		t.Fatalf("création : %d %s", created.status, created.body)
 	}
+	// Spécialités détaillées, par libellé : « Cambriolage » avant « Vol ».
+	if s := villain.Specialties; len(s) != 2 || s[0].ID != burglary.ID || s[0].Label != "Cambriolage" ||
+		s[0].Code != "burglary" || s[1].ID != theft.ID || s[1].Label != "Vol" {
+		t.Errorf("spécialités détaillées : %+v", s)
+	}
 	if got := citizen.request(http.MethodPatch, "/villains/"+villain.ID, map[string]any{
 		"alias": "Le Corbeau Gris", "typeIds": []int16{burglary.ID},
 	}); got.status != http.StatusOK {
@@ -161,6 +170,24 @@ func TestVillainsAreCreatedByUsers(t *testing.T) {
 		if page.Total != 0 {
 			t.Errorf("« %% » ne doit rien trouver : %+v", page)
 		}
+	}
+
+	// Lecture publique (encyclopédie) : liste et fiche sans session.
+	anonymous := e.newActor()
+	if got := anonymous.get("/villains"); got.status != http.StatusOK {
+		t.Errorf("liste anonyme : %d %s", got.status, got.body)
+	}
+	var found villainView
+	if got := anonymous.get("/villains/" + villain.ID); got.status != http.StatusOK {
+		t.Errorf("fiche anonyme : %d %s", got.status, got.body)
+	} else if got.decode(t, &found); found.ID != villain.ID || found.ThreatLevel != "eleve" {
+		t.Errorf("fiche : %+v", found)
+	}
+	if got := anonymous.get("/villains/00000000-0000-0000-0000-000000000000"); got.status != http.StatusNotFound {
+		t.Errorf("vilain inconnu : %d", got.status)
+	}
+	if got := anonymous.get("/villains/pas-un-uuid"); got.status != http.StatusNotFound {
+		t.Errorf("identifiant invalide : %d", got.status)
 	}
 }
 

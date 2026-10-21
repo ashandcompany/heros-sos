@@ -29,7 +29,7 @@ contrat.
 | Incidents, interventions              | `lib/api/incidents.ts`                                                                                                                                                                                       | `/incidents/*`, `/interventions/*` (§ 3)                                                                                      | mock       |
 | Types d'incident                      | `incident-types.ts` (`getIncidentTypes`, `getAllIncidentTypes`, `createIncidentType`)                                                                                                                        | `/intervention-types`, `/admin/intervention-types`                                                                            | ✅ branché |
 | Notes et avis                         | `reviews.ts` (`getMyInterventions`, `rateIntervention`, `getMyReputation`, `replyToReview`, `getHeroPublicReviews`, `getReviewsForModeration`, `moderateReview`, `getRepliesForModeration`, `moderateReply`) | `/me/interventions`, `/interventions/{id}/reviews`, `/hero/reviews*`, `/heroes/{heroId}/reviews`, `/admin/hero-review*` (§ 3) | ✅ branché |
-| Super-vilains                         | `villains.ts`                                                                                                                                                                                                | `/villains` (liste, création, modification), `/villains/{id}/films`                                                           | mock       |
+| Super-vilains                         | `villains.ts` (`getVillains`, `getVillainsPage`, `getVillain`, `createVillain`, `updateVillain`)                                                                                                             | `GET /villains`, `GET /villains/{id}` (publics), `POST /villains`, `PATCH /villains/{id}`                                     | ✅ branché |
 | Fiches super-héros                    | `super-heroes.ts` (profils)                                                                                                                                                                                  | ❌ aucun                                                                                                                      | mock       |
 | Vidéothèque (films)                   | `videos.ts` (`getMyVideos`, `addMyVideo`, `deleteMyVideo`, `getHeroVideos`, `moderateVideo`, `deleteVideo`, `getPublishedVideos`), `imdb.ts` (`searchImdbTitles`, `getImdbTitle`)                            | `/films`, `/heroes/{heroId}/films`, `/hero/films*`, `/admin/hero-films*`, `/imdb/titles*` (§ 3)                               | ✅ branché |
 | Films des super-vilains               | aucune (pas d'écran)                                                                                                                                                                                         | `/villains/{id}/films`, `/admin/villain-films`, `/admin/villains/{id}/films/{filmId}`                                         | à faire    |
@@ -87,8 +87,9 @@ Navigateur ──cookie session──► Next (serveur) ──Cookie: session=�
   `HEROS_ALLOWED_ORIGINS`. Cette liste ne sert qu'aux appels directs du navigateur.
 - `proxy.ts` appelle `getUserFromToken`, donc `GET /auth/me`, sur chaque page des espaces
   protégés (voir son `matcher`), en plus des vérifications de `requireRole()` pendant le rendu.
-- `rememberMe` (connexion prolongée, 30 j) existe côté API, pas encore dans `LoginCredentials`
-  ni dans le formulaire.
+- « Rester connecté 30 jours » (case du formulaire) envoie `rememberMe` : session de 30 jours
+  au lieu de 7, sans effet pour un modérateur (8 h). Le cookie suit l'`expiresAt` renvoyé ; le
+  mock applique les mêmes durées.
 
 ### Domaines encore mockés avec une session réelle
 
@@ -220,8 +221,12 @@ chaque modification de `lib/validation/`.
   | `catalog_unavailable` (502)         | Catalogue IMDb momentanément indisponible |
   | autre                               | `apiFailureMessage(toApiFailure(…))`      |
 
-- **Pas encore branché** : films des super-vilains (aucun écran), ajout direct d'un film à un
-  héros par un modérateur (`POST /admin/hero-films`), vidéos libres sans IMDb
+- **Ajout par un modérateur** (`/admin/videotheque`, section « Ajouter un film à un
+  super-héros ») : `POST /admin/hero-films` avec `{ heroId, imdbId }`, film publié aussitôt
+  (`addHeroVideo`). Les fiches super-héros étant mockées, la liste des héros vient des comptes
+  (`GET /admin/users?role=hero&status=active`, `getHeroesForVideos`) : seuls leurs identifiants
+  sont valides pour l'API.
+- **Pas encore branché** : films des super-vilains (aucun écran), vidéos libres sans IMDb
   (`title`, `description`, `videoUrl` dans `FilmInput`).
 
 ### Avis : choix du branchement
@@ -256,9 +261,11 @@ Types dans [src/types/review.ts](../src/types/review.ts) (`HeroReview`, `ReviewR
 - **Fiche publique** : `GET /heroes/{heroId}/reviews` ne renvoie pas de `total` : les pages sont
   lues jusqu'à une page incomplète. Un héros inconnu de l'API (404, ou identifiant mock en 422,
   tant que les fiches super-héros sont mockées) n'a aucun avis, comme pour ses films.
-- **Pas encore branché** : la notation par un héros déclarant (l'API l'accepte, l'écran est
-  dans l'espace citoyen), la note moyenne des fiches publiques
-  (`averageRating` de l'API, les fiches restant mockées).
+- **Héros déclarant** : un héros qui a signalé un incident note les héros intervenus depuis
+  `/heros/noter` (même `InterventionsList`, avec `role="super-heros"`). Il ne s'y voit jamais
+  lui-même : l'API l'exclut de `/me/interventions`.
+- **Pas encore branché** : la note moyenne des fiches publiques (`averageRating` de l'API, les
+  fiches restant mockées).
 - **Erreurs** :
 
   | Code API (statut)                     | Message affiché                                            |
@@ -282,10 +289,10 @@ pas seulement changer les URL.
 | Intervention    | `POST` / `PUT /hero/incidents/{id}/intervention` : un héros se positionne sur l'incident | Ressource à part : `POST /incidents/{incidentId}/interventions`, puis `join`, invitations (`confirm` / `decline`), `outcome`, `outcome/validate` |
 | Carte, priorité | `GET /incidents/map`, `GET /hero/incidents/map`, `PUT /hero/incidents/{id}/priority`     | Absents du contrat                                                                                                                               |
 | Modération      | `PUT /admin/incidents/{id}/moderation`, `PATCH /admin/incidents/{id}`                    | Absente du contrat (seul l'arbitrage du résultat d'une intervention existe)                                                                      |
-| Super-vilains   | Lecture seule : `GET /villains`, `/villains/{id}`, `/villains/{id}/incidents`            | `GET /villains` (recherche `q`), `POST /villains`, `PATCH /villains/{id}` ; ni détail ni incidents d'un vilain                                   |
+| Super-vilains   | `GET /villains/{id}/incidents` (derniers méfaits sur la fiche publique)                  | Absent du contrat (liste et fiche branchées : `GET /villains`, `GET /villains/{id}`, publics)                                                    |
 
 À trancher avec le backend avant de brancher : ce qui manque au contrat (carte, priorité,
-modération des incidents, fiche d'un vilain) est-il à ajouter, ou les écrans du frontend
+modération des incidents, incidents d'un vilain) est-il à ajouter, ou les écrans du frontend
 doivent-ils changer ?
 
 ### Pagination

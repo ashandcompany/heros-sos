@@ -1,6 +1,7 @@
+import { superHeroesMock } from "@/mocks/super-heroes";
 import { videosMock } from "@/mocks/videos";
 import { apiFailureMessage } from "@/lib/validation/form-state";
-import type { HeroVideo, ModerationStatus, MutationResult } from "@/types";
+import type { HeroVideo, ModerationStatus, MutationResult, SuperHeroSummary } from "@/types";
 import { isApiEnabled, mockResponse } from "./config";
 import { ApiError, type ApiSchema, apiFetch, toApiFailure } from "./http";
 import { getImdbTitle } from "./imdb";
@@ -179,6 +180,81 @@ export async function deleteVideo(
     return toFilmMutationFailure(error, "Suppression d'un film");
   }
 }
+
+/**
+ * Super-héros auxquels un modérateur peut ajouter un film, par pseudo. Les fiches publiques
+ * restant mockées, la liste vient des comptes de l'API (seuls leurs identifiants sont valides).
+ * API : `GET /admin/users?role=hero`, page après page.
+ */
+export async function getHeroesForVideos(token: string): Promise<SuperHeroSummary[]> {
+  const byAlias = (a: SuperHeroSummary, b: SuperHeroSummary) =>
+    a.alias.localeCompare(b.alias, "fr");
+
+  if (!isApiEnabled) {
+    await userFromToken(token, "admin");
+    return mockResponse(superHeroesMock.map(({ id, alias }) => ({ id, alias })).sort(byAlias));
+  }
+
+  const heroes: SuperHeroSummary[] = [];
+  for (let offset = 0; ; offset += MAX_PAGE_SIZE) {
+    const response = await apiFetch(
+      `/admin/users${pageQuery({ limit: MAX_PAGE_SIZE, offset }, { role: "hero", status: "active" })}`,
+      { sessionToken: token },
+    );
+    const page = (await response.json()) as ApiSchema<"UserSummaryPage">;
+    heroes.push(...page.items.map(({ id, alias, email }) => ({ id, alias: alias ?? email })));
+    if (page.items.length === 0 || heroes.length >= page.total) return heroes.sort(byAlias);
+  }
+}
+
+/**
+ * Ajoute un film du catalogue IMDb à la vidéothèque d'un héros, directement publié.
+ * API : `POST /admin/hero-films` avec `{ heroId, imdbId }`.
+ */
+export async function addHeroVideo(
+  token: string,
+  heroId: string,
+  imdbId: string,
+): Promise<MutationResult> {
+  if (!isApiEnabled) {
+    await userFromToken(token, "admin");
+    const hero = superHeroesMock.find(({ id }) => id === heroId);
+    const title = await getImdbTitle(token, imdbId);
+    if (!hero || !title) return mockResponse({ ok: false, error: "Film introuvable." });
+    if (videosMock.some((video) => video.hero.id === heroId && video.imdbId === imdbId)) {
+      return mockResponse({ ok: false, error: alreadyInHeroLibrary });
+    }
+
+    videosMock.push({
+      id: `video-${crypto.randomUUID()}`,
+      hero: { id: hero.id, alias: hero.alias },
+      title: title.title,
+      description: title.plot,
+      videoUrl: `https://www.imdb.com/title/${title.id}/`,
+      imdbId: title.id,
+      year: title.year,
+      addedAt: new Date().toISOString(),
+      moderation: "valide",
+    });
+    return mockResponse({ ok: true });
+  }
+
+  try {
+    await apiFetch("/admin/hero-films", {
+      method: "POST",
+      sessionToken: token,
+      body: { heroId, imdbId } satisfies ApiSchema<"AdminHeroFilmInput">,
+    });
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof ApiError && error.code === "film_already_linked") {
+      return { ok: false, error: alreadyInHeroLibrary };
+    }
+    return toFilmMutationFailure(error, "Ajout d'un film par la modération");
+  }
+}
+
+const alreadyInHeroLibrary = "Ce film est déjà dans la vidéothèque de ce super-héros.";
 
 /* ---------- Espace super-héros (rôle super-heros) ---------- */
 

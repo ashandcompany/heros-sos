@@ -453,11 +453,13 @@ const isResolved = (incident: Incident): incident is ResolvedIncident =>
 
 /** Mock : un incident résolu = une intervention réussie de son héros. */
 async function getMyInterventionsWithMocks(token: string): Promise<RateableIntervention[]> {
-  const user = await userFromToken(token, "citoyen");
+  const user = await userFromToken(token, ["citoyen", "super-heros"]);
   return mockResponse(
     incidentsMock
       .filter((incident) => incident.reporterId === user.id)
       .filter(isResolved)
+      // Un héros déclarant ne peut pas se noter lui-même.
+      .filter((incident) => incident.hero.id !== user.id)
       .sort((a, b) => Date.parse(b.resolvedAt) - Date.parse(a.resolvedAt))
       .map((incident) => {
         const interventionId = mockInterventionId(incident.id);
@@ -483,13 +485,14 @@ async function rateInterventionWithMocks(
   heroId: string,
   { rating, comment }: { rating: number; comment: string | null },
 ): Promise<MutationResult> {
-  const user = await userFromToken(token, "citoyen");
+  const user = await userFromToken(token, ["citoyen", "super-heros"]);
   const incident = incidentsMock.find(
     (existing) =>
       mockInterventionId(existing.id) === interventionId &&
       existing.reporterId === user.id &&
       isResolved(existing) &&
-      existing.hero?.id === heroId,
+      existing.hero?.id === heroId &&
+      heroId !== user.id,
   );
   if (!incident?.hero) {
     return mockResponse({ ok: false, error: "Cette intervention ne peut pas être notée." });

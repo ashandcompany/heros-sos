@@ -54,6 +54,21 @@ export function LoginForm() {
         }
       />
 
+      <label className="flex items-center gap-3 text-sm">
+        <input
+          type="checkbox"
+          name="rememberMe"
+          defaultChecked={state.rememberMe}
+          className="size-5 accent-primary"
+        />
+        <span>
+          Rester connecté 30 jours
+          <span className="block text-muted">
+            À éviter sur un appareil partagé. Sans effet pour les modérateurs.
+          </span>
+        </span>
+      </label>
+
       <button
         type="submit"
         disabled={isPending}

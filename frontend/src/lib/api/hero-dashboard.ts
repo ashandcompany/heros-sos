@@ -3,12 +3,12 @@ import { interventionsMock } from "@/mocks/interventions";
 import { reviewsMock } from "@/mocks/reviews";
 import { superHeroesMock, superHeroProfilesMock } from "@/mocks/super-heroes";
 import { videosMock } from "@/mocks/videos";
-import { villainsMock } from "@/mocks/villains";
 import type { HeroDashboard, VillainSummary } from "@/types";
 import { mockResponse } from "./config";
 import { getIncidentTypes } from "./incident-types";
 import { summarizeRatings } from "./reviews";
 import { userFromToken } from "./session-user";
+import { getVillains } from "./villains";
 
 const MAIN_ENEMIES_LIMIT = 3;
 const RECENT_INCIDENTS_LIMIT = 5;
@@ -29,6 +29,7 @@ export async function getHeroDashboard(token: string): Promise<HeroDashboard> {
     .map(({ code, label }) => ({ type: { code, label }, count: counts.get(code) ?? 0 }))
     .sort((a, b) => b.count - a.count);
 
+  const villains = await getVillains();
   const myInterventions = interventionsMock.filter(({ hero }) => hero.id === user.id);
   const myVideos = videosMock.filter(({ hero }) => hero.id === user.id);
 
@@ -51,8 +52,8 @@ export async function getHeroDashboard(token: string): Promise<HeroDashboard> {
       incidentsByType,
       // Mock : un incident résolu compte pour un citoyen secouru (l'API fournira le chiffre réel).
       rescuedCitizens: incidents.filter(({ status }) => status === "resolu").length,
-      villainsIdentified: villainsMock.length,
-      villainsImprisoned: villainsMock.filter(({ status }) => status === "emprisonne").length,
+      villainsIdentified: villains.length,
+      villainsImprisoned: villains.filter(({ status }) => status === "emprisonne").length,
     },
     personal: {
       interventions: profile?.interventionsCount ?? myInterventions.length,

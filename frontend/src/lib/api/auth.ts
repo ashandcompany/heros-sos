@@ -1,6 +1,6 @@
 import { headers } from "next/headers";
 import { cache } from "react";
-import { MOCK_SESSION_MAX_AGE } from "@/lib/cookies";
+import { MOCK_REMEMBERED_SESSION_MAX_AGE, MOCK_SESSION_MAX_AGE } from "@/lib/cookies";
 import { citizensMock } from "@/mocks/citizens";
 import { accountsMock } from "@/mocks/users";
 import type {
@@ -71,12 +71,16 @@ async function visitorHeaders(): Promise<Headers> {
   return forwarded;
 }
 
-async function loginWithApi({ identifier, password }: LoginCredentials): Promise<LoginResult> {
+async function loginWithApi({
+  identifier,
+  password,
+  rememberMe = false,
+}: LoginCredentials): Promise<LoginResult> {
   let response: Response;
   try {
     response = await apiFetch("/auth/login", {
       method: "POST",
-      body: { identifier, password },
+      body: { identifier, password, rememberMe } satisfies ApiSchema<"LoginRequest">,
       headers: await visitorHeaders(),
     });
   } catch (error) {
@@ -101,7 +105,11 @@ async function loginWithApi({ identifier, password }: LoginCredentials): Promise
   };
 }
 
-async function loginWithMocks({ identifier, password }: LoginCredentials): Promise<LoginResult> {
+async function loginWithMocks({
+  identifier,
+  password,
+  rememberMe = false,
+}: LoginCredentials): Promise<LoginResult> {
   const normalized = identifier.trim().toLowerCase();
 
   const account = accountsMock.find(
@@ -117,11 +125,16 @@ async function loginWithMocks({ identifier, password }: LoginCredentials): Promi
     return mockResponse({ ok: false, error: "account-suspended" });
   }
 
+  // Comme l'API : « Rester connecté » est sans effet pour un modérateur.
+  const maxAge =
+    rememberMe && account.user.role !== "admin"
+      ? MOCK_REMEMBERED_SESSION_MAX_AGE
+      : MOCK_SESSION_MAX_AGE;
   return mockResponse({
     ok: true,
     user: account.user,
     token: `${MOCK_TOKEN_PREFIX}${account.user.id}`,
-    expiresAt: new Date(Date.now() + MOCK_SESSION_MAX_AGE * 1000).toISOString(),
+    expiresAt: new Date(Date.now() + maxAge * 1000).toISOString(),
   });
 }
 

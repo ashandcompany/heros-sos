@@ -1214,9 +1214,8 @@ paths:
     get:
       tags: [Vilains]
       summary: Liste des vilains
-      description: Par alias. Le filtre `q` porte sur le début de l'alias.
+      description: Publique (encyclopédie), par alias. Le filtre `q` porte sur le début de l'alias.
       operationId: listVillains
-      security: [{ sessionCookie: [] }]
       parameters:
         - name: q
           in: query
@@ -1229,7 +1228,6 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/VillainPage" }
-        "401": { $ref: "#/components/responses/Unauthenticated" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/InternalError" }
 
@@ -1583,6 +1581,21 @@ paths:
         "500": { $ref: "#/components/responses/InternalError" }
 
   /villains/{id}:
+    get:
+      tags: [Vilains]
+      summary: Fiche d'un vilain
+      description: Publique (encyclopédie).
+      operationId: getVillain
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: Le vilain.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Villain" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
     patch:
       tags: [Vilains]
       summary: Modifier un vilain et remplacer ses spécialités
@@ -2610,6 +2623,7 @@ components:
           id,
           alias,
           typeIds,
+          specialties,
           threatLevel,
           status,
           reportedIncidentsCount,
@@ -2625,10 +2639,22 @@ components:
         typeIds:
           type: array
           items: { type: integer, format: int32 }
+        specialties:
+          type: array
+          description: Spécialités détaillées (types d'incident de `typeIds`), par libellé.
+          items: { $ref: "#/components/schemas/VillainSpecialty" }
         threatLevel: { type: string, enum: [faible, modere, eleve, critique] }
         status: { type: string, enum: [en-liberte, emprisonne] }
         reportedIncidentsCount: { type: integer, minimum: 0 }
         createdAt: { type: string, format: date-time }
+
+    VillainSpecialty:
+      type: object
+      required: [id, code, label]
+      properties:
+        id: { type: integer, format: int32 }
+        code: { type: string }
+        label: { type: string }
 
     VillainPage:
       type: object

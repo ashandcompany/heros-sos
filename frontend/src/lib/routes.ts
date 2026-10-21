@@ -25,10 +25,12 @@ export const routes = {
   heroVideos: "/heros/films",
   heroReputation: "/heros/reputation",
   heroDeclare: "/heros/signaler",
+  heroRate: "/heros/noter",
   admin: "/admin",
   adminIncidents: "/admin/incidents",
   adminReportIncident: "/admin/incidents/signaler",
   adminIncidentTypes: "/admin/types-incident",
+  adminVillains: "/admin/super-vilains",
   adminAccounts: "/admin/comptes",
   adminHeroes: "/admin/super-heros",
   adminVideos: "/admin/videotheque",
@@ -43,6 +45,7 @@ export const routes = {
 } as const;
 
 export const adminIncidentRoute = (id: string) => `${routes.adminIncidents}/${id}`;
+export const adminVillainRoute = (id: string) => `${routes.adminVillains}/${id}`;
 export const adminArticleRoute = (id: string) => `${routes.adminBlog}/${id}`;
 export const citizenIncidentRoute = (id: string) => `${routes.profileIncidents}/${id}`;
 export const heroIncidentRoute = (id: string) => `${routes.heroIncidents}/${id}`;
@@ -83,6 +86,7 @@ export const heroNav: NavItem[] = [
   { label: "Incidents", href: routes.heroIncidents },
   { label: "Carte", href: routes.heroMap },
   { label: "Signaler un incident", href: routes.heroDeclare },
+  { label: "Noter un héros", href: routes.heroRate },
   { label: "Ma vidéothèque", href: routes.heroVideos },
   { label: "Ma réputation", href: routes.heroReputation },
   { label: "Mon profil", href: routes.heroProfile },
@@ -95,6 +99,7 @@ export const adminNav: NavItem[] = [
   { label: "Types d'incident", href: routes.adminIncidentTypes },
   { label: "Comptes", href: routes.adminAccounts },
   { label: "Super-héros", href: routes.adminHeroes },
+  { label: "Super-vilains", href: routes.adminVillains },
   { label: "Vidéothèque", href: routes.adminVideos },
   { label: "Commentaires", href: routes.adminComments },
   { label: "Blog", href: routes.adminBlog },

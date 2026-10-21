@@ -2,14 +2,22 @@ import { Avatar } from "@/components/ui/Avatar";
 import { RatingStars } from "@/components/ui/RatingStars";
 import { getMyInterventions } from "@/lib/api";
 import { formatDate, formatDateTime } from "@/lib/format";
-import { requireCitizenSession } from "@/lib/server-session";
+import { requireRole } from "@/lib/server-session";
+import type { UserRole } from "@/types";
 import { RatingForm } from "./RatingForm";
 
 const outcomeLabels = { reussi: "Intervention réussie", echoue: "Intervention échouée" } as const;
 
-/** Super-héros à noter / déjà notés. Lit la session : à rendre sous <Suspense>. */
-export async function InterventionsList() {
-  const token = await requireCitizenSession();
+/**
+ * Super-héros à noter / déjà notés, pour le déclarant connecté (citoyen, ou héros dans son
+ * espace). Lit la session : à rendre sous <Suspense>.
+ */
+export async function InterventionsList({
+  role = "citoyen",
+}: {
+  role?: Extract<UserRole, "citoyen" | "super-heros">;
+}) {
+  const { token } = await requireRole(role);
   const interventions = await getMyInterventions(token);
 
   if (interventions.length === 0) {

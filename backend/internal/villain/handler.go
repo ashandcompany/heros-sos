@@ -58,17 +58,28 @@ type Response struct {
 	MainSector  string    `json:"mainSector,omitempty"`
 	Description string    `json:"description,omitempty"`
 	TypeIDs     []int16   `json:"typeIds"`
+	Specialties []specialtyResponse `json:"specialties"`
 	ReportedIncidentsCount int64 `json:"reportedIncidentsCount"`
 	ThreatLevel string    `json:"threatLevel"`
 	Status      string    `json:"status"`
 	CreatedAt   time.Time `json:"createdAt"`
 }
 
+type specialtyResponse struct {
+	ID    int16  `json:"id"`
+	Code  string `json:"code"`
+	Label string `json:"label"`
+}
+
 func newResponse(v Villain) Response {
+	specialties := make([]specialtyResponse, len(v.Specialties))
+	for i, s := range v.Specialties {
+		specialties[i] = specialtyResponse{ID: s.ID, Code: s.Code, Label: s.Label}
+	}
 	return Response{
 		ID: v.ID, Alias: v.Alias, LastName: v.LastName, FirstName: v.FirstName,
 		MainSector: v.MainSector, Description: v.Description, TypeIDs: v.TypeIDs,
-		ReportedIncidentsCount: v.ReportedIncidentsCount,
+		Specialties: specialties, ReportedIncidentsCount: v.ReportedIncidentsCount,
 		ThreatLevel: string(v.ThreatLevel), Status: string(v.Status), CreatedAt: v.CreatedAt,
 	}
 }
@@ -119,6 +130,21 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusCreated, newResponse(*created))
+}
+
+// Get traite GET /villains/{id}.
+func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, ErrNotFound)
+		return
+	}
+	found, err := h.service.Get(r.Context(), id)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, newResponse(*found))
 }
 
 // List traite GET /villains?q=&limit=&offset=.

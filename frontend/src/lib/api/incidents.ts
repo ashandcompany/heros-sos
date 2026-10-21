@@ -4,7 +4,6 @@ import { incidentsMock } from "@/mocks/incidents";
 import { interventionsMock } from "@/mocks/interventions";
 import { reviewsMock } from "@/mocks/reviews";
 import { superHeroesMock, superHeroProfilesMock } from "@/mocks/super-heroes";
-import { villainsMock } from "@/mocks/villains";
 import type {
   CitizenIncidentDetail,
   GeoPoint,
@@ -26,6 +25,7 @@ import type {
 import { mockResponse } from "./config";
 import { getIncidentTypes } from "./incident-types";
 import { userFromToken } from "./session-user";
+import { getVillain } from "./villains";
 
 /** Type du référentiel (API ou mock), réduit à ce qu'embarque un incident ; `undefined` si inconnu. */
 async function findIncidentType(
@@ -106,7 +106,7 @@ export async function declareIncident(
   declaration: IncidentDeclaration,
 ): Promise<MutationResult> {
   const user = await userFromToken(token, ["citoyen", "super-heros", "admin"]);
-  const villain = villainsMock.find(({ id }) => id === declaration.villainId);
+  const villain = declaration.villainId ? await getVillain(declaration.villainId) : null;
   const type = await findIncidentType(token, declaration.typeId);
   if (!type) return mockResponse({ ok: false, error: "Type d'incident inconnu." });
   const coordinates = (await geocodeLocation(declaration.location)) ?? undefined;
@@ -167,7 +167,7 @@ export async function updateIncident(
   const incident = incidentsMock.find((existing) => existing.id === id);
   if (!incident) return mockResponse({ ok: false, error: "Incident introuvable." });
 
-  const villain = villainsMock.find(({ id: villainId }) => villainId === update.villainId);
+  const villain = update.villainId ? await getVillain(update.villainId) : null;
   const hero = superHeroesMock.find(({ id: heroId }) => heroId === update.heroId);
   if (update.status !== "signale" && !hero) {
     return mockResponse({

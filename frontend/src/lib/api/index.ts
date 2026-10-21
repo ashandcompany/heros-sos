@@ -85,9 +85,11 @@ export {
   updateMyHeroContact,
 } from "./super-heroes";
 export {
+  addHeroVideo,
   addMyVideo,
   deleteMyVideo,
   deleteVideo,
+  getHeroesForVideos,
   getHeroVideos,
   getMyVideos,
   getPublishedVideos,
@@ -95,4 +97,4 @@ export {
   moderateVideo,
   parseHeroVideoKey,
 } from "./videos";
-export { getVillain, getVillains } from "./villains";
+export { createVillain, getVillain, getVillains, getVillainsPage, updateVillain } from "./villains";

@@ -23,6 +23,7 @@ COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api && \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/createmoderator ./cmd/createmoderator && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/resetmfa ./cmd/resetmfa && \
     mkdir /out/avatars
 
 # ---- Image finale -----------------------------------------------------------------------------
@@ -30,9 +31,11 @@ FROM scratch
 
 # Certificats racine : nécessaires au SMTP chiffré (STARTTLS, TLS) et aux futurs appels HTTPS.
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
-# `api` est le serveur ; `createmoderator` crée le premier modérateur :
+# `api` est le serveur ; `createmoderator` crée le premier modérateur ; `resetmfa` réinitialise la 2FA d'un compte
+# qui a perdu son appareil (jamais par l'API) :
 #   docker compose run --rm --entrypoint /createmoderator api -email … -first-name … -last-name … -birth-date …
-COPY --from=builder /out/api /out/createmoderator /
+#   docker compose run --rm --entrypoint /resetmfa api -email …
+COPY --from=builder /out/api /out/createmoderator /out/resetmfa /
 
 LABEL org.opencontainers.image.title="heros-sos-api" \
       org.opencontainers.image.description="API REST de la plateforme Heros-SOS" \

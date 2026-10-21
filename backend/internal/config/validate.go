@@ -48,6 +48,9 @@ func (c Config) validate() error {
 		fail("%s ne peut pas dépasser %s", envLockoutBaseDelay, envLockoutMaxDelay)
 	}
 	if production {
+		if !c.Security.MFA.ModeratorRequired {
+			fail("%s ne peut pas valoir false en production : la 2FA des modérateurs est obligatoire avant toute mise en ligne", envMFAModeratorRequired)
+		}
 		if c.Security.Argon2.MemoryKiB < productionMinArgon2MemoryKiB || c.Security.Argon2.Time < productionMinArgon2Time {
 			fail("argon2id trop faible pour la production (mémoire ≥ %d Kio, itérations ≥ %d)",
 				productionMinArgon2MemoryKiB, productionMinArgon2Time)

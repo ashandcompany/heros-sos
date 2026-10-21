@@ -365,6 +365,133 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/mfa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * État de la double authentification
+         * @description Où en est la double authentification de la session, et combien de codes de secours restent. Une
+         *     session **limitée** (`verification_required`, `enrollment_required`) peut l'appeler.
+         */
+        get: operations["getMfaStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/mfa/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Commencer l'activation de la double authentification
+         * @description Réservé aux modérateurs. Tire un secret TOTP et le rend, pour le configurer dans une application
+         *     d'authentification (Google Authenticator, Aegis, 1Password…) : `otpauthUrl` s'ouvre dans l'application
+         *     (lien ou QR code), `secret` se saisit à la main. La double authentification n'est active qu'une fois
+         *     confirmée par un premier code (`POST /auth/mfa/enable`) ; recommencer remplace le secret d'une
+         *     activation non confirmée. Une double authentification **déjà activée** ne se réinitialise pas par
+         *     l'API (`mfa_already_enabled`) : un compte piraté ne doit pas pouvoir remplacer sa propre protection ;
+         *     l'exploitation la réinitialise (`make resetmfa-dev`).
+         *
+         *     Une session **limitée** peut l'appeler.
+         */
+        post: operations["setupMfa"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/mfa/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Activer la double authentification
+         * @description Réservé aux modérateurs. Le premier code de l'application confirme l'activation. La réponse donne
+         *     **les codes de secours, montrés cette seule fois** (à garder hors ligne : chacun remplace un code TOTP
+         *     une fois), et ouvre une **session complète avec un nouveau cookie et un nouveau jeton CSRF** : les
+         *     autres sessions du compte sont fermées, celles ouvertes avant n'ayant jamais passé le second facteur.
+         *
+         *     Un code faux compte comme un échec de connexion (verrouillage progressif du compte).
+         *
+         *     Une session **limitée** peut l'appeler.
+         */
+        post: operations["enableMfa"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/mfa/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Valider la double authentification
+         * @description Pour un compte qui a activé la double authentification, la session ouverte par `POST /auth/login`
+         *     est **limitée** (`mfa: verification_required`) : elle ne donne accès qu'à cette route, à l'état de la
+         *     session et à la déconnexion (toute autre route répond `mfa_required`). Un code de l'application
+         *     (`code`), ou à défaut un code de secours (`recoveryCode`, à usage unique), ouvre une **session
+         *     complète avec un nouveau cookie et un nouveau jeton CSRF**.
+         *
+         *     Un code TOTP ne sert qu'une fois. Un code faux compte comme un échec de connexion : après quelques-uns,
+         *     le compte est verrouillé avec un délai croissant (`account_locked`, 429) et ses sessions sont fermées.
+         *     Le mot de passe seul ne remet pas ce compteur à zéro, pour qu'on ne puisse pas alterner connexion et
+         *     devinette.
+         */
+        post: operations["verifyMfa"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/mfa/recovery-codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Régénérer les codes de secours
+         * @description Réservé aux modérateurs, avec une **session complète**. Remplace tous les codes de secours (utilisés
+         *     ou non) par de nouveaux, montrés cette seule fois. Demande le code TOTP courant : une session volée ne
+         *     suffit pas à s'en procurer.
+         */
+        post: operations["regenerateMfaRecoveryCodes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/password-reset": {
         parameters: {
             query?: never;
@@ -1641,6 +1768,57 @@ export interface components {
             /** @description Prolonge la session (sans effet pour un modérateur). */
             rememberMe?: boolean;
         };
+        /**
+         * @description Où en est la double authentification de la session :
+         *
+         *     - `verified` : activée et validée, la session est complète ;
+         *     - `verification_required` : activée, le code reste à saisir (`POST /auth/mfa/verify`) ; la session est **limitée** ;
+         *     - `enrollment_required` : obligatoire pour ce compte (modérateur en production) et pas encore activée (`POST /auth/mfa/setup`, puis `enable`) ; la session est **limitée** ;
+         *     - `not_enrolled` : ni activée ni obligatoire, la session est complète.
+         *
+         *     Une session limitée ne donne accès qu'à `/auth/me`, `/auth/mfa*`, `/auth/logout` et `/auth/logout-all` : toute autre route répond `mfa_required` (403).
+         * @enum {string}
+         */
+        MfaStatus: "verified" | "verification_required" | "enrollment_required" | "not_enrolled";
+        MfaStatusResponse: {
+            status: components["schemas"]["MfaStatus"];
+            /** @description Nombre de codes de secours qui n'ont pas servi (0 sans double authentification). */
+            recoveryCodesRemaining: number;
+        };
+        MfaSetupResponse: {
+            /** @description Le secret TOTP en base32, à saisir à la main dans l'application. */
+            secret: string;
+            /** @description Adresse `otpauth://` que lisent les applications d'authentification (lien ou QR code). */
+            otpauthUrl: string;
+        };
+        MfaCodeRequest: {
+            /** @description Le code à 6 chiffres de l'application d'authentification (les espaces sont ignorés). */
+            code: string;
+        };
+        /** @description Un code de l'application, ou à défaut un code de secours (à usage unique). */
+        MfaVerifyRequest: {
+            /** @description Le code à 6 chiffres de l'application d'authentification. */
+            code?: string;
+            /** @description Un code de secours (la casse, les tirets et les espaces sont ignorés). */
+            recoveryCode?: string;
+        };
+        MfaEnabledResponse: {
+            user: components["schemas"]["UserView"];
+            /** @description Jeton CSRF de la nouvelle session. */
+            csrfToken: string;
+            /**
+             * Format: date-time
+             * @description Fin de la session (inchangée par l'activation).
+             */
+            expiresAt: string;
+            mfa: components["schemas"]["MfaStatus"];
+            /** @description Les codes de secours, montrés cette seule fois. */
+            recoveryCodes: string[];
+        };
+        RecoveryCodesResponse: {
+            /** @description Les nouveaux codes de secours, montrés cette seule fois. */
+            recoveryCodes: string[];
+        };
         LoginResponse: {
             user: components["schemas"]["UserView"];
             /** @description À renvoyer dans `X-CSRF-Token` sur les écritures authentifiées. */
@@ -1650,11 +1828,13 @@ export interface components {
              * @description Durée de vie maximale de la session.
              */
             expiresAt: string;
+            mfa: components["schemas"]["MfaStatus"];
         };
         MeResponse: {
             user: components["schemas"]["UserView"];
             /** @description Jeton CSRF à jour, à renvoyer dans `X-CSRF-Token` sur les écritures authentifiées. */
             csrfToken: string;
+            mfa: components["schemas"]["MfaStatus"];
         };
         PasswordResetConfirmRequest: {
             /** @description Jeton du lien de réinitialisation reçu par mail. */
@@ -2464,7 +2644,8 @@ export interface components {
         };
         /**
          * @description Refusé : origine non autorisée (`origin_not_allowed`), jeton CSRF absent ou invalide
-         *     (`csrf_invalid`), ou rôle insuffisant (`forbidden`, `protected_account`).
+         *     (`csrf_invalid`), rôle insuffisant (`forbidden`, `protected_account`), ou **session limitée**
+         *     (`mfa_required` : la double authentification doit d'abord être validée ou activée, voir `GET /auth/mfa`).
          */
         Forbidden: {
             headers: {
@@ -3122,6 +3303,214 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getMfaStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description L'état de la double authentification. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfaStatusResponse"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    setupMfa: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Le secret à configurer. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfaSetupResponse"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description La double authentification est déjà activée (`mfa_already_enabled`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    enableMfa: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MfaCodeRequest"];
+            };
+        };
+        responses: {
+            /** @description Double authentification activée ; session complète. */
+            200: {
+                headers: {
+                    /** @description Le nouveau cookie de session (le précédent est révoqué). */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfaEnabledResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description La double authentification est déjà activée (`mfa_already_enabled`), ou son activation n'a pas été commencée (`mfa_not_set_up`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            /** @description Code absent (`required`) ou faux, périmé ou déjà utilisé (`invalid`). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    verifyMfa: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MfaVerifyRequest"];
+            };
+        };
+        responses: {
+            /** @description Session complète. */
+            200: {
+                headers: {
+                    /** @description Le nouveau cookie de session (le précédent est révoqué). */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description La double authentification n'est pas activée pour ce compte (`mfa_not_set_up`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            /** @description Aucun code (`required`), ou code faux, périmé, déjà utilisé (`invalid`). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    regenerateMfaRecoveryCodes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MfaCodeRequest"];
+            };
+        };
+        responses: {
+            /** @description Les nouveaux codes de secours. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoveryCodesResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description La double authentification n'est pas activée (`mfa_not_set_up`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            /** @description Code absent (`required`) ou faux (`invalid`). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -3303,6 +3692,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             /** @description Aucune demande (`hero_request_not_found`). */
             404: {
                 headers: {
@@ -3612,6 +4002,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
             500: components["responses"]["InternalError"];
         };
@@ -4820,6 +5211,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };

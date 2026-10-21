@@ -62,7 +62,7 @@ func newHarness(t *testing.T, overrides map[string]string) *harness {
 	}
 	users := user.NewRepository(db, sealer)
 	tokens := auth.NewTokenStore(db)
-	sessions := auth.NewSessionService(auth.NewSessionStore(db), clk, cfg.Session, logger)
+	sessions := auth.NewSessionService(auth.NewSessionStore(db), clk, cfg.Session, cfg.Security.MFA, logger)
 	hasher := auth.NewPasswordHasher(cfg.Security.Argon2)
 
 	recorder := mail.NewRecorder()
@@ -72,7 +72,7 @@ func newHarness(t *testing.T, overrides map[string]string) *harness {
 	}
 
 	service := auth.NewService(auth.ServiceDeps{
-		Users: users, Tokens: tokens, Sessions: sessions, Hasher: hasher, Mailer: mailService,
+		Users: users, Tokens: tokens, MFA: auth.NewMFAStore(db, sealer), Sessions: sessions, Hasher: hasher, Mailer: mailService,
 		Audit: audit.NewStore(db, clk), Tx: database.NewTransactor(db), Clock: clk,
 		Security: cfg.Security, App: cfg.App, Logger: logger,
 	})

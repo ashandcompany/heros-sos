@@ -60,12 +60,16 @@ const (
 	envRateNewsletterPerEmail = "HEROS_RATE_NEWSLETTER_PER_EMAIL"
 	envRateEmailChangePerUser = "HEROS_RATE_EMAIL_CHANGE_PER_USER"
 	envRateAvatarPerUser      = "HEROS_RATE_AVATAR_PER_USER"
+	envRateMFAVerifyPerUser   = "HEROS_RATE_MFA_VERIFY_PER_USER"
 
 	envActivationTokenTTL    = "HEROS_ACTIVATION_TOKEN_TTL"
 	envPasswordResetTokenTTL = "HEROS_PASSWORD_RESET_TOKEN_TTL"
 
 	envNewsletterConfirmTTL  = "HEROS_NEWSLETTER_CONFIRM_TTL"
 	envEmailChangeConfirmTTL = "HEROS_EMAIL_CHANGE_CONFIRM_TTL"
+
+	envMFAModeratorRequired = "HEROS_MFA_MODERATOR_REQUIRED"
+	envMFAIssuer            = "HEROS_MFA_ISSUER"
 
 	envCSRFSecret    = "HEROS_CSRF_SECRET"
 	envCryptoKeys    = "HEROS_CRYPTO_KEYS"
@@ -129,8 +133,9 @@ func EnvVarNames() []string {
 		envRateLoginPerIP, envRateLoginPerIdentifier, envRateRegisterPerIP,
 		envRatePasswordResetPerIP, envRatePasswordResetPerKey, envRateIncidentCreatePerUser, envMaxTrackedRateKeys,
 		envRateContactPerIP, envRateNewsletterPerIP, envRateNewsletterPerEmail, envRateEmailChangePerUser,
-		envRateAvatarPerUser,
+		envRateAvatarPerUser, envRateMFAVerifyPerUser,
 		envActivationTokenTTL, envPasswordResetTokenTTL, envNewsletterConfirmTTL, envEmailChangeConfirmTTL,
+		envMFAModeratorRequired, envMFAIssuer,
 		envCSRFSecret, envCryptoKeys, envCryptoActiveK,
 		envMailDriver, envMailFromAddress, envMailFromName, envSMTPHost, envSMTPPort,
 		envSMTPUsername, envSMTPPassword, envSMTPTLSMode, envSMTPTimeout, envMailWorkers,

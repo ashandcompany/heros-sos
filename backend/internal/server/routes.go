@@ -25,10 +25,16 @@ func registerRoutes(router *Router, c *components) {
 	registerPublicMailRoutes(router, c)
 }
 
-// protected exige une session valide (et le jeton CSRF sur les écritures) ; avec des rôles, il
-// restreint en plus l'accès à ces rôles.
+// protected exige une session valide et complète (double authentification validée quand elle s'applique) et
+// le jeton CSRF sur les écritures ; avec des rôles, il restreint en plus l'accès à ces rôles.
 func (c *components) protected(h http.HandlerFunc, roles ...user.Role) http.Handler {
 	return c.authMiddleware.Protected(roles...)(h)
+}
+
+// protectedPendingMFA est protected pour les routes qu'une session limitée (code 2FA à saisir, ou activation
+// obligatoire pas encore faite) doit pouvoir appeler : la 2FA elle-même, l'état de la session, la déconnexion.
+func (c *components) protectedPendingMFA(h http.HandlerFunc, roles ...user.Role) http.Handler {
+	return c.authMiddleware.ProtectedPendingMFA(roles...)(h)
 }
 
 func registerHealthRoutes(router *Router, c *components) {
@@ -45,9 +51,18 @@ func registerAuthRoutes(router *Router, c *components) {
 	router.HandleFunc(http.MethodPost, "/auth/password-reset", h.RequestPasswordReset)
 	router.HandleFunc(http.MethodPost, "/auth/password-reset/confirm", h.ConfirmPasswordReset)
 
-	router.Handle(http.MethodPost, "/auth/logout", c.protected(h.Logout))
-	router.Handle(http.MethodPost, "/auth/logout-all", c.protected(h.LogoutAll))
-	router.Handle(http.MethodGet, "/auth/me", c.protected(h.Me))
+	// Une session limitée (2FA pas encore validée) peut se déconnecter et lire son état.
+	router.Handle(http.MethodPost, "/auth/logout", c.protectedPendingMFA(h.Logout))
+	router.Handle(http.MethodPost, "/auth/logout-all", c.protectedPendingMFA(h.LogoutAll))
+	router.Handle(http.MethodGet, "/auth/me", c.protectedPendingMFA(h.Me))
+
+	// Double authentification des modérateurs. L'activation et la validation se font avec une session
+	// limitée ; les nouveaux codes de secours exigent une session complète.
+	router.Handle(http.MethodGet, "/auth/mfa", c.protectedPendingMFA(h.MFAStatus))
+	router.Handle(http.MethodPost, "/auth/mfa/setup", c.protectedPendingMFA(h.MFASetup, user.RoleModerator))
+	router.Handle(http.MethodPost, "/auth/mfa/enable", c.protectedPendingMFA(h.MFAEnable, user.RoleModerator))
+	router.Handle(http.MethodPost, "/auth/mfa/verify", c.protectedPendingMFA(h.MFAVerify))
+	router.Handle(http.MethodPost, "/auth/mfa/recovery-codes", c.protected(h.MFARecoveryCodes, user.RoleModerator))
 }
 
 func registerHeroRoutes(router *Router, c *components) {

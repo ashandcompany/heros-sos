@@ -158,18 +158,23 @@ func NewWithDB(cfg config.Config, logger *slog.Logger, db *gorm.DB, opts ...Opti
 		health: healthHandler{db: db, pingTimeout: cfg.Database.PingTimeout},
 	}
 
-	sessions := auth.NewSessionService(auth.NewSessionStore(db), c.clock, cfg.Session, logger)
+	sessions := auth.NewSessionService(auth.NewSessionStore(db), c.clock, cfg.Session, cfg.Security.MFA, logger)
 	cookies := auth.NewCookieManager(cfg.Session)
 	csrf := auth.NewCSRF(cfg.Security.CSRFSecret)
 
+	mfaStore := auth.NewMFAStore(db, sealer)
 	c.authService = auth.NewService(auth.ServiceDeps{
-		Users: c.users, Tokens: auth.NewTokenStore(db), Sessions: sessions,
+		Users: c.users, Tokens: auth.NewTokenStore(db), MFA: mfaStore, Sessions: sessions,
 		Hasher: auth.NewPasswordHasher(cfg.Security.Argon2), Mailer: mailService,
 		Audit: c.audit, Tx: c.tx, Clock: c.clock, Security: cfg.Security, App: cfg.App, Logger: logger,
 	})
 	c.authMiddleware = auth.NewMiddleware(sessions, cookies, csrf, cfg.HTTP.AllowedOrigins, logger)
 	c.authHandler = auth.NewHandler(auth.HandlerDeps{
-		Service: c.authService, Cookies: cookies, CSRF: csrf, Clock: c.clock, Logger: logger,
+		Service: c.authService, Cookies: cookies,
+		MFA: auth.NewMFAService(auth.MFADeps{
+			Store: mfaStore, Sessions: sessions, Users: c.users, Audit: c.audit, Tx: c.tx, Clock: c.clock,
+			Security: cfg.Security,
+		}), CSRF: csrf, Clock: c.clock, Logger: logger,
 		HTTP: cfg.HTTP, Limits: cfg.Security.RateLimits,
 	})
 	heroProfiles := hero.NewRepository(db)

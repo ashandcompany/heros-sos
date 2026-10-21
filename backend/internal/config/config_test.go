@@ -407,6 +407,45 @@ func TestProductionRulesStillApplyToSecretsFromFiles(t *testing.T) {
 		t.Fatalf("la validation de production doit s'appliquer à une valeur lue depuis un fichier : %v", err)
 	}
 }
+
+// La 2FA des modérateurs est obligatoire avant toute mise en ligne : en production elle est exigée par défaut
+// et ne peut pas être désactivée ; en développement elle est facultative, pour une démonstration.
+func TestModeratorTwoFactorIsRequiredInProductionAndCannotBeDisabled(t *testing.T) {
+	development, err := Load(fakeEnv(validEnv()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if development.Security.MFA.ModeratorRequired || development.Security.MFA.Issuer != defaultMFAIssuer ||
+		development.Security.MFA.RecoveryCodes != defaultMFARecoveryCodes {
+		t.Errorf("développement : %+v", development.Security.MFA)
+	}
+	optional := validEnv()
+	optional[envMFAModeratorRequired] = "true"
+	if cfg, err := Load(fakeEnv(optional)); err != nil || !cfg.Security.MFA.ModeratorRequired {
+		t.Errorf("exigée en développement : %+v %v", cfg.Security.MFA, err)
+	}
+
+	production, err := Load(fakeEnv(productionEnv()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !production.Security.MFA.ModeratorRequired {
+		t.Error("la 2FA des modérateurs doit être exigée par défaut en production")
+	}
+
+	env := productionEnv()
+	env[envMFAModeratorRequired] = "false"
+	_, err = Load(fakeEnv(env))
+	if err == nil || !strings.Contains(err.Error(), envMFAModeratorRequired) {
+		t.Fatalf("désactiver la 2FA en production doit être refusé : %v", err)
+	}
+
+	env[envMFAModeratorRequired] = "peut-être"
+	if _, err = Load(fakeEnv(env)); err == nil || !strings.Contains(err.Error(), "booléen attendu") {
+		t.Errorf("valeur invalide : %v", err)
+	}
+}
+
 func TestLinkPathsAndTTLsOfTheAccountFlows(t *testing.T) {
 	cfg, err := Load(fakeEnv(validEnv()))
 	if err != nil {

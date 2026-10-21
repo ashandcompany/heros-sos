@@ -185,6 +185,7 @@ type RateLimits struct {
 	NewsletterPerEmail    RateRule
 	EmailChangePerUser    RateRule
 	AvatarPerUser         RateRule
+	MFAVerifyPerUser      RateRule
 	MaxTrackedKeys        int
 }
 
@@ -200,6 +201,18 @@ type Tokens struct {
 	EmailChangeConfirmTTL time.Duration
 }
 
+// MFA regroupe les réglages de la double authentification (TOTP).
+type MFA struct {
+	// ModeratorRequired impose aux modérateurs d'activer la 2FA : sans elle, leur session ne donne accès
+	// qu'à l'activation. Vrai par défaut en production, où il ne peut pas être désactivé ; faux en
+	// développement pour ne pas gêner une démonstration.
+	ModeratorRequired bool
+	// Issuer est le nom du service affiché dans l'application d'authentification.
+	Issuer string
+	// RecoveryCodes est le nombre de codes de secours remis à l'activation.
+	RecoveryCodes int
+}
+
 // Security regroupe les réglages de sécurité.
 type Security struct {
 	Argon2     Argon2
@@ -208,6 +221,7 @@ type Security struct {
 	RateLimits RateLimits
 	Tokens     Tokens
 	CSRFSecret []byte
+	MFA        MFA
 }
 
 // Crypto regroupe les clés maîtresses du chiffrement des données personnelles.
@@ -394,6 +408,7 @@ func Load(getenv func(string) string) (Config, error) {
 				NewsletterPerEmail:    l.rateRule(envRateNewsletterPerEmail, defaultRateNewsletterPerEmail),
 				EmailChangePerUser:    l.rateRule(envRateEmailChangePerUser, defaultRateEmailChangePerUser),
 				AvatarPerUser:         l.rateRule(envRateAvatarPerUser, defaultRateAvatarPerUser),
+				MFAVerifyPerUser:      l.rateRule(envRateMFAVerifyPerUser, defaultRateMFAVerifyPerUser),
 				MaxTrackedKeys:        l.positiveInt(envMaxTrackedRateKeys, defaultMaxTrackedRateKeys),
 			},
 			Tokens: Tokens{
@@ -404,6 +419,11 @@ func Load(getenv func(string) string) (Config, error) {
 				EmailChangeConfirmTTL: l.duration(envEmailChangeConfirmTTL, defaultEmailChangeConfirmTTL),
 			},
 			CSRFSecret: l.base64Secret(envCSRFSecret),
+			MFA: MFA{
+				ModeratorRequired: l.boolean(envMFAModeratorRequired, production),
+				Issuer:            l.text(envMFAIssuer, defaultMFAIssuer),
+				RecoveryCodes:     defaultMFARecoveryCodes,
+			},
 		},
 		Crypto: Crypto{
 			Keys:        cryptoKeys,

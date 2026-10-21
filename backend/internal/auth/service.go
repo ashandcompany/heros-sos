@@ -29,6 +29,7 @@ type AccountMailer interface {
 type ServiceDeps struct {
 	Users    user.Repository
 	Tokens   *TokenStore
+	MFA      *MFAStore
 	Sessions *SessionService
 	Hasher   *PasswordHasher
 	Mailer   AccountMailer
@@ -210,10 +211,12 @@ type LoginInput struct {
 	UserAgent  string
 }
 
-// LoginResult est une connexion réussie.
+// LoginResult est une connexion réussie. Quand MFA n'est pas « verified » ni « not_enrolled », la session
+// est limitée : elle n'ouvre que la saisie du code (ou l'activation de la 2FA) et la déconnexion.
 type LoginResult struct {
 	User    *user.User
 	Session IssuedSession
+	MFA     MFAStatus
 }
 
 // Login authentifie un utilisateur et ouvre une session.
@@ -223,55 +226,89 @@ type LoginResult struct {
 // révéler des comptes existants. Les états « non activé » et « désactivé » ne sont annoncés
 // qu'avec le bon mot de passe.
 func (s *Service) Login(ctx context.Context, in LoginInput) (LoginResult, error) {
+	now := s.Clock.Now()
+	u, check, err := s.verifyCredentials(ctx, in, now)
+	if err != nil {
+		return LoginResult{}, err
+	}
+	if err := statusError(u.Status); err != nil {
+		return LoginResult{}, err
+	}
+	if check.NeedsRehash {
+		s.upgradePasswordHash(ctx, u, in.Password, now)
+	}
+	return s.openSession(ctx, u, in, now)
+}
+
+// verifyCredentials retrouve le compte et contrôle le mot de passe : identifiant inconnu, compte verrouillé,
+// mot de passe faux (l'échec est compté, et verrouille le compte après trop d'essais). Il ne regarde pas l'état
+// du compte, qui ne s'annonce qu'avec le bon mot de passe.
+func (s *Service) verifyCredentials(ctx context.Context, in LoginInput, now time.Time) (*user.User, PasswordCheck, error) {
 	identifier, code := validation.Identifier(in.Identifier)
 	if code != "" || in.Password == "" {
-		return LoginResult{}, s.rejectUnknown(ctx, in.Password)
+		return nil, PasswordCheck{}, s.rejectUnknown(ctx, in.Password)
 	}
 
 	u, err := s.findByIdentifier(ctx, identifier)
 	if errors.Is(err, user.ErrNotFound) {
-		return LoginResult{}, s.rejectUnknown(ctx, in.Password)
+		return nil, PasswordCheck{}, s.rejectUnknown(ctx, in.Password)
 	}
 	if err != nil {
-		return LoginResult{}, err
+		return nil, PasswordCheck{}, err
 	}
-
-	now := s.Clock.Now()
 	if u.IsLocked(now) {
-		return LoginResult{}, &LockedError{Until: *u.LockedUntil}
+		return nil, PasswordCheck{}, &LockedError{Until: *u.LockedUntil}
 	}
 
 	check, err := s.Hasher.Verify(ctx, u.PasswordHash, in.Password)
 	if err != nil {
-		return LoginResult{}, fmt.Errorf("auth : vérification du mot de passe : %w", err)
+		return nil, PasswordCheck{}, fmt.Errorf("auth : vérification du mot de passe : %w", err)
 	}
 	if !check.Match {
 		if _, err := s.Users.RecordLoginFailure(ctx, u.ID, now, s.Security.Lockout); err != nil {
-			return LoginResult{}, err
+			return nil, PasswordCheck{}, err
 		}
-		return LoginResult{}, ErrInvalidCredentials
+		return nil, PasswordCheck{}, ErrInvalidCredentials
 	}
+	return u, check, nil
+}
 
-	switch u.Status {
+// statusError est l'erreur d'un compte qui ne peut pas se connecter, ou nil s'il est actif.
+func statusError(status user.Status) error {
+	switch status {
 	case user.StatusPendingActivation:
-		return LoginResult{}, ErrAccountNotActivated
+		return ErrAccountNotActivated
 	case user.StatusDeactivated:
-		return LoginResult{}, ErrAccountDeactivated
+		return ErrAccountDeactivated
+	case user.StatusActive:
 	}
+	return nil
+}
 
-	if check.NeedsRehash {
-		s.upgradePasswordHash(ctx, u, in.Password, now)
-	}
-	if err := s.Users.RecordLoginSuccess(ctx, u.ID, now); err != nil {
+// openSession ouvre la session d'un compte dont le mot de passe est bon. Elle n'est complète que sans second
+// facteur à fournir : ni activé, ni obligatoire pour ce rôle.
+func (s *Service) openSession(ctx context.Context, u *user.User, in LoginInput, now time.Time) (LoginResult, error) {
+	enrolled, err := s.MFA.IsEnrolled(ctx, u.ID)
+	if err != nil {
 		return LoginResult{}, err
 	}
+	// Le mot de passe seul ne remet pas à zéro le compteur d'échecs d'un compte qui a la 2FA : c'est le code
+	// qui le fera (MFAService.Verify). Sans cela, celui qui connaît le mot de passe se reconnecterait entre
+	// deux séries de devinettes du code.
+	if !enrolled {
+		if err := s.Users.RecordLoginSuccess(ctx, u.ID, now); err != nil {
+			return LoginResult{}, err
+		}
+	}
+	complete := !enrolled && !s.Sessions.mfaRequired(u.Role)
 	issued, err := s.Sessions.Issue(ctx, IssueRequest{
 		UserID: u.ID, Role: u.Role, RememberMe: in.RememberMe, IP: in.IP, UserAgent: in.UserAgent,
+		MFAVerified: complete,
 	})
 	if err != nil {
 		return LoginResult{}, err
 	}
-	return LoginResult{User: u, Session: issued}, nil
+	return LoginResult{User: u, Session: issued, MFA: NewMFAStatus(enrolled, complete)}, nil
 }
 
 // rejectUnknown dépense le temps d'une vérification de mot de passe puis refuse la connexion.

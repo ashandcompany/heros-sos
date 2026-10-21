@@ -34,6 +34,13 @@ const (
 	ActionPasswordReset     = "auth.password_reset"
 	ActionLogoutAllSessions = "auth.logout_all"
 
+	// Double authentification : jamais de code, de secret ni de code de secours dans le journal.
+	ActionMFAEnabled             = "auth.mfa_enabled"
+	ActionMFAFailed              = "auth.mfa_failed"
+	ActionMFARecoveryUsed        = "auth.mfa_recovery_used"
+	ActionMFARecoveryRegenerated = "auth.mfa_recovery_regenerated"
+	ActionMFAReset               = "auth.mfa_reset"
+
 	ActionInterventionTypeCreated = "intervention_type.create"
 	ActionVillainCreated          = "villain.create"
 	ActionVillainUpdated          = "villain.update"

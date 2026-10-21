@@ -13,6 +13,7 @@ import (
 	"github.com/ashandcompany/heros-sos/backend/internal/httpx"
 	"github.com/ashandcompany/heros-sos/backend/internal/ratelimit"
 	"github.com/ashandcompany/heros-sos/backend/internal/user"
+	"github.com/ashandcompany/heros-sos/backend/internal/validation"
 )
 
 // Codes d'erreur de l'API d'authentification, stables et destinés au frontend.
@@ -23,6 +24,8 @@ const (
 	CodeAccountLocked      = "account_locked"
 	CodeInvalidToken       = "invalid_token"
 	CodeEmailAlreadyUsed   = "email_already_used"
+	CodeMFAAlreadyEnabled  = "mfa_already_enabled"
+	CodeMFANotSetUp        = "mfa_not_set_up"
 )
 
 const (
@@ -34,6 +37,7 @@ const (
 // HandlerDeps regroupe les dépendances des handlers d'authentification.
 type HandlerDeps struct {
 	Service *Service
+	MFA     *MFAService
 	Cookies CookieManager
 	CSRF    *CSRF
 	Clock   clock.Clock
@@ -52,6 +56,7 @@ type Handler struct {
 	loginPerIdentifier    *ratelimit.Limiter
 	passwordResetPerIP    *ratelimit.Limiter
 	passwordResetPerEmail *ratelimit.Limiter
+	mfaPerUser            *ratelimit.Limiter
 }
 
 // NewHandler crée les handlers et leurs limiteurs de débit.
@@ -66,6 +71,7 @@ func NewHandler(deps HandlerDeps) *Handler {
 		loginPerIdentifier:    limiter(deps.Limits.LoginPerIdentifier),
 		passwordResetPerIP:    limiter(deps.Limits.PasswordResetPerIP),
 		passwordResetPerEmail: limiter(deps.Limits.PasswordResetPerEmail),
+		mfaPerUser:            limiter(deps.Limits.MFAVerifyPerUser),
 	}
 }
 
@@ -73,7 +79,7 @@ func NewHandler(deps HandlerDeps) *Handler {
 // périodiquement.
 func (h *Handler) SweepLimiters() {
 	for _, limiter := range []*ratelimit.Limiter{
-		h.registerPerIP, h.loginPerIP, h.loginPerIdentifier, h.passwordResetPerIP, h.passwordResetPerEmail,
+		h.registerPerIP, h.loginPerIP, h.loginPerIdentifier, h.passwordResetPerIP, h.passwordResetPerEmail, h.mfaPerUser,
 	} {
 		limiter.Sweep()
 	}
@@ -199,6 +205,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		User:      NewUserResponse(result.User),
 		CSRFToken: h.CSRF.Token(result.Session.Token),
 		ExpiresAt: result.Session.ExpiresAt,
+		MFA:       result.MFA,
 	})
 }
 
@@ -234,7 +241,10 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sessionToken, _ := h.Cookies.Read(r)
-	httpx.WriteJSON(w, http.StatusOK, meResponse{User: NewUserResponse(current), CSRFToken: h.CSRF.Token(sessionToken)})
+	httpx.WriteJSON(w, http.StatusOK, meResponse{
+		User: NewUserResponse(current), CSRFToken: h.CSRF.Token(sessionToken),
+		MFA: NewMFAStatus(principal.MFAEnrolled, principal.MFAVerified),
+	})
 }
 
 // allow compte une requête pour une clé et traduit un dépassement en erreur 429.
@@ -268,6 +278,17 @@ func (h *Handler) toHTTPError(err error) error {
 		return httpx.NewError(http.StatusBadRequest, CodeInvalidToken, "Ce lien est invalide, expiré ou déjà utilisé.")
 	case errors.Is(err, user.ErrEmailTaken):
 		return httpx.Conflict(CodeEmailAlreadyUsed, "Cette adresse email est déjà utilisée.")
+	case errors.Is(err, ErrMFAAlreadyEnabled):
+		return httpx.Conflict(CodeMFAAlreadyEnabled, "La double authentification est déjà activée.")
+	case errors.Is(err, ErrMFANotSetUp):
+		return httpx.Conflict(CodeMFANotSetUp, "La double authentification n'est pas configurée.")
+	case errors.Is(err, ErrMFAInvalidCode):
+		// 422 et non 401 : une session valide qui se trompe de code n'est pas une session expirée, et le
+		// frontend redirige vers la connexion sur tout 401.
+		return &httpx.Error{
+			Status: http.StatusUnprocessableEntity, Code: httpx.CodeValidationFailed,
+			Message: "Certaines informations sont invalides.", Fields: map[string]string{"code": validation.CodeInvalid},
+		}
 	}
 	return err
 }

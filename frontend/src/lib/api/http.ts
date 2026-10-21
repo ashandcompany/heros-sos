@@ -3,7 +3,7 @@ import { redirect, unstable_rethrow } from "next/navigation";
 import { cache } from "react";
 import { SESSION_COOKIE } from "@/lib/cookies";
 import { routes } from "@/lib/routes";
-import type { ApiFailure, AuthUser, UserRole } from "@/types";
+import type { ApiFailure, AuthUser, MfaStatus, UserRole } from "@/types";
 import { API_URL } from "./config";
 import type { components } from "./schema";
 
@@ -246,6 +246,23 @@ export function fromApiRole(role: ApiRole): UserRole {
 /** Rôle du frontend vers celui de l'API (filtres). */
 export function roleToApi(role: UserRole): ApiRole {
   return roleToApiByRole[role];
+}
+
+const mfaStatusFromApi: Record<ApiSchema<"MfaStatus">, MfaStatus> = {
+  verified: "verified",
+  verification_required: "verification-required",
+  enrollment_required: "enrollment-required",
+  not_enrolled: "not-enrolled",
+};
+
+/** État de la double authentification de l'API vers celui du frontend. */
+export function fromApiMfaStatus(status: ApiSchema<"MfaStatus">): MfaStatus {
+  return mfaStatusFromApi[status];
+}
+
+/** Une session limitée ne sert qu'à la 2FA et à la déconnexion : l'API refuse tout le reste (`mfa_required`). */
+export function isLimitedSession(status: MfaStatus): boolean {
+  return status === "verification-required" || status === "enrollment-required";
 }
 
 /** Convertit un compte de l'API vers `AuthUser`. */

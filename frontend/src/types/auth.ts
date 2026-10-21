@@ -1,3 +1,6 @@
+import type { ApiFailure } from "./api";
+import type { MfaStatus } from "./mfa";
+
 export type UserRole = "citoyen" | "super-heros" | "admin";
 
 export interface AuthUser {
@@ -63,6 +66,8 @@ export type LoginResult =
       token: string;
       /** Fin de validité de la session (ISO 8601), qui fixe l'expiration du cookie. */
       expiresAt: string;
+      /** Un modérateur doit encore saisir son code (ou activer la 2FA) : sa session est limitée. */
+      mfa: MfaStatus;
     }
   | { ok: false; error: LoginError; retryAfterSeconds?: number };
 
@@ -99,3 +104,6 @@ export type SignupResult =
   | { ok: false; error: "too-many-attempts"; retryAfterSeconds?: number }
   /** Refusé par l'API (422) : champ du `SignupPayload` (`email`, `address.city`…) → code. */
   | { ok: false; error: "invalid-fields"; fields: Record<string, string> };
+
+/** Fermeture de toutes les sessions du compte : un échec est rapporté (voir `logoutAll`). */
+export type LogoutAllResult = { ok: true } | ApiFailure;

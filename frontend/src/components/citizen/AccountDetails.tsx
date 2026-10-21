@@ -5,7 +5,26 @@ import { formatDate } from "@/lib/format";
 import { requireCitizenSession } from "@/lib/server-session";
 import { civilityOptions } from "@/lib/validation/signup";
 import type { MyAccount } from "@/types";
-import { AvatarForm, ContactForm, EmailChangeForm, NewsletterSettingsForm } from "./AccountForms";
+import {
+  AvatarForm,
+  ContactForm,
+  EmailChangeForm,
+  LogoutAllForm,
+  NewsletterSettingsForm,
+} from "./AccountForms";
+
+/** Panneau « Sessions » : même texte pour tous les rôles (citoyen, héros, modérateur). */
+export function SessionsPanel() {
+  return (
+    <Panel
+      id="sessions-title"
+      title="Sessions"
+      description="Ferme toutes vos sessions ouvertes, sur tous vos appareils, celle-ci comprise. Utile si vous avez oublié de vous déconnecter d'un ordinateur partagé ou si vous pensez que quelqu'un d'autre a accès à votre compte."
+    >
+      <LogoutAllForm />
+    </Panel>
+  );
+}
 
 export function Panel({
   id,
@@ -111,6 +130,8 @@ function AccountPanels({ account }: { account: MyAccount }) {
         <Panel id="newsletter-settings-title" title="Newsletter">
           <NewsletterSettingsForm subscribed={account.newsletterSubscribed} />
         </Panel>
+
+        <SessionsPanel />
       </div>
     </div>
   );

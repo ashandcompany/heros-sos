@@ -11,14 +11,23 @@ export {
 export {
   activateAccount,
   confirmPasswordReset,
+  getMfaSession,
   getSessionUser,
   login,
   logout,
+  logoutAll,
   register,
   requestPasswordReset,
   resendActivation,
 } from "./auth";
 export { getMyAvatar, type AvatarData } from "./avatar";
+export {
+  enableMfa,
+  getMfaOverview,
+  regenerateMfaRecoveryCodes,
+  startMfaSetup,
+  verifyMfa,
+} from "./mfa";
 export {
   getHeroApplications,
   getMyHeroRequest,

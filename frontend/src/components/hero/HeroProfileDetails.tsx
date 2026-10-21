@@ -3,7 +3,7 @@ import {
   updateHeroAvatarAction,
   updateHeroContactAction,
 } from "@/app/actions/hero";
-import { Panel } from "@/components/citizen/AccountDetails";
+import { Panel, SessionsPanel } from "@/components/citizen/AccountDetails";
 import { AvatarForm, ContactForm, EmailChangeForm } from "@/components/citizen/AccountForms";
 import { Avatar } from "@/components/ui/Avatar";
 import { getMyHeroProfile } from "@/lib/api";
@@ -83,6 +83,8 @@ export async function HeroProfileDetails() {
           )}
           <EmailChangeForm action={requestHeroEmailChangeAction} />
         </Panel>
+
+        <SessionsPanel />
       </div>
     </div>
   );

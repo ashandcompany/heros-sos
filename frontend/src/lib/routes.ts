@@ -9,6 +9,10 @@ export const routes = {
   blog: "/blog",
   login: "/connexion",
   signup: "/inscription",
+  /** Saisie du code de double authentification, après le mot de passe (session limitée). */
+  loginVerification: "/connexion/verification",
+  /** Activation obligatoire de la double authentification (modérateur en production, session limitée). */
+  loginTwoFactorSetup: "/connexion/double-authentification",
   forgotPassword: "/mot-de-passe-oublie",
   /** Lien du mail de réinitialisation (`?token=…`) : doit rester égal à HEROS_PASSWORD_RESET_PATH du backend. */
   passwordReset: "/reinitialisation-mot-de-passe",
@@ -41,6 +45,7 @@ export const routes = {
   adminHeroes: "/admin/super-heros",
   adminVideos: "/admin/videotheque",
   adminComments: "/admin/commentaires",
+  adminSecurity: "/admin/securite",
   adminBlog: "/admin/blog",
   adminNewArticle: "/admin/blog/nouveau",
   about: "/a-propos",
@@ -109,4 +114,5 @@ export const adminNav: NavItem[] = [
   { label: "Vidéothèque", href: routes.adminVideos },
   { label: "Commentaires", href: routes.adminComments },
   { label: "Blog", href: routes.adminBlog },
+  { label: "Sécurité", href: routes.adminSecurity },
 ];

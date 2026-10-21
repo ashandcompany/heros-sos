@@ -8,6 +8,8 @@ import type {
   LoginCredentials,
   LoginError,
   LoginResult,
+  LogoutAllResult,
+  MfaStatus,
   PasswordResetConfirmResult,
   PasswordResetRequestResult,
   ResendActivationResult,
@@ -19,9 +21,12 @@ import {
   ApiError,
   type ApiSchema,
   apiFetch,
+  fromApiMfaStatus,
   fromApiUser,
   getApiSession,
+  isLimitedSession,
   readSessionCookie,
+  toApiFailure,
   visitorHeaders,
 } from "./http";
 
@@ -87,6 +92,7 @@ async function loginWithApi({
     user: fromApiUser(body.user),
     token: readSessionCookie(response),
     expiresAt: body.expiresAt,
+    mfa: fromApiMfaStatus(body.mfa),
   };
 }
 
@@ -120,13 +126,18 @@ async function loginWithMocks({
     user: account.user,
     token: `${MOCK_TOKEN_PREFIX}${account.user.id}`,
     expiresAt: new Date(Date.now() + maxAge * 1000).toISOString(),
+    mfa: "not-enrolled",
   });
 }
 
 /**
- * Utilisateur associé à un jeton de session, ou `null` si le jeton est invalide, expiré
- * ou si le compte a été suspendu entre-temps. Une API injoignable donne aussi `null` : sans
- * réponse fiable, l'utilisateur est traité en visiteur (les espaces protégés restent fermés).
+ * Utilisateur associé à un jeton de session, ou `null` si le jeton est invalide, expiré ou si le compte
+ * a été suspendu entre-temps. Une API injoignable donne aussi `null` : sans réponse fiable, l'utilisateur
+ * est traité en visiteur (les espaces protégés restent fermés).
+ *
+ * Une session **limitée** (code de double authentification à saisir, ou activation obligatoire pas encore
+ * faite) donne aussi `null` : elle n'ouvre rien d'autre que la 2FA elle-même, et le frontend ne doit jamais
+ * l'afficher comme connectée. Les pages de la 2FA la lisent avec `getMfaSession`.
  * API : `GET /auth/me` (`getApiSession`), avec le jeton dans le cookie de session. Mémorisé le
  * temps d'un rendu (`cache`) : les helpers de session et les fonctions mockées l'appellent
  * plusieurs fois, et les écritures y relisent le jeton CSRF.
@@ -134,7 +145,8 @@ async function loginWithMocks({
 export const getSessionUser = cache(async (token: string): Promise<AuthUser | null> => {
   if (isApiEnabled) {
     const session = await getApiSession(token);
-    return session ? fromApiUser(session.user) : null;
+    if (!session || isLimitedSession(fromApiMfaStatus(session.mfa))) return null;
+    return fromApiUser(session.user);
   }
 
   const userId = token.startsWith(MOCK_TOKEN_PREFIX) ? token.slice(MOCK_TOKEN_PREFIX.length) : "";
@@ -144,6 +156,24 @@ export const getSessionUser = cache(async (token: string): Promise<AuthUser | nu
 
   return mockResponse(account?.user ?? null);
 });
+
+/**
+ * Compte et état de la double authentification d'une session, **limitée ou non** : c'est ce que lisent les
+ * pages de la 2FA (saisie du code, activation) et ce qui décide où envoyer une session limitée. `null` si
+ * la session est invalide. Sans API, aucune 2FA n'existe : la session est toujours complète.
+ */
+export const getMfaSession = cache(
+  async (token: string): Promise<{ user: AuthUser; status: MfaStatus } | null> => {
+    if (!isApiEnabled) {
+      const user = await getSessionUser(token);
+      return user ? { user, status: "not-enrolled" } : null;
+    }
+    const session = await getApiSession(token);
+    return session
+      ? { user: fromApiUser(session.user), status: fromApiMfaStatus(session.mfa) }
+      : null;
+  },
+);
 
 /**
  * Révoque la session côté API. Ne lève jamais d'erreur : l'action de déconnexion efface le cookie
@@ -166,6 +196,23 @@ export async function logout(token: string): Promise<void> {
     });
   } catch (error) {
     console.error("Déconnexion : révocation de la session par l'API en échec", error);
+  }
+}
+
+/**
+ * Ferme toutes les sessions du compte, sur tous ses appareils, celle-ci comprise. Contrairement à
+ * `logout`, un échec est rapporté : la personne doit savoir que ses autres appareils sont peut-être
+ * restés connectés. Mock : sans effet (un jeton mock est sans état, il ne se révoque pas).
+ * API : `POST /auth/logout-all` (le jeton CSRF est ajouté par `apiFetch`).
+ */
+export async function logoutAll(token: string): Promise<LogoutAllResult> {
+  if (!isApiEnabled) return mockResponse({ ok: true });
+
+  try {
+    await apiFetch("/auth/logout-all", { method: "POST", sessionToken: token });
+    return { ok: true };
+  } catch (error) {
+    return toApiFailure(error, "Déconnexion de tous les appareils");
   }
 }
 

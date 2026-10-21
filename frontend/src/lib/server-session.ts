@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { asMockDataUser, getMyAvatar, type AvatarData } from "@/lib/api";
 import { SESSION_COOKIE, sessionCookieAttributes } from "@/lib/cookies";
 import { accountHomeByRole, routes } from "@/lib/routes";
-import { getUserFromToken } from "@/lib/session";
+import { getMfaRedirect, getUserFromToken } from "@/lib/session";
 import type { AuthUser, UserRole } from "@/types";
 
 /*
@@ -34,7 +34,7 @@ export async function requireRole(
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   const user = await getUserFromToken(token);
 
-  if (!user || !token) redirect(routes.login);
+  if (!user || !token) redirect((await getMfaRedirect(token)) ?? routes.login);
   if (![role].flat().includes(user.role)) redirect(accountHomeByRole[user.role]);
 
   // Les données des espaces sont encore mockées : l'utilisateur renvoyé porte l'identifiant que

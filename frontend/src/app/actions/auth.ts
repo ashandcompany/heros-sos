@@ -2,11 +2,12 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { login, logout } from "@/lib/api";
+import { login, logout, logoutAll } from "@/lib/api";
 import { SESSION_COOKIE, sessionCookieAttributes } from "@/lib/cookies";
 import { formatRetryDelay } from "@/lib/format";
 import { setSessionCookie } from "@/lib/server-session";
 import { accountHomeByRole, routes } from "@/lib/routes";
+import { apiFailureMessage, type FormState } from "@/lib/validation/form-state";
 import type { LoginResult } from "@/types";
 
 export interface LoginFormState {
@@ -55,6 +56,9 @@ export async function loginAction(
   // Le cookie de l'API est recopié vers le navigateur avec la même durée de vie que la session.
   await setSessionCookie(result.token, result.expiresAt);
 
+  // Un modérateur n'a pas fini : sa session est limitée jusqu'à la saisie du code (ou l'activation de la 2FA).
+  if (result.mfa === "verification-required") redirect(routes.loginVerification);
+  if (result.mfa === "enrollment-required") redirect(routes.loginTwoFactorSetup);
   redirect(accountHomeByRole[result.user.role]);
 }
 
@@ -81,6 +85,25 @@ export async function logoutAction(): Promise<void> {
   // Révoque la session côté API, puis efface le cookie dans tous les cas. Les attributs sont
   // repris : un cookie `__Host-` ne peut être effacé que par un Set-Cookie Secure.
   if (token) await logout(token);
+  cookieStore.delete({ name: SESSION_COOKIE, ...sessionCookieAttributes });
+  redirect(routes.home);
+}
+
+/**
+ * « Me déconnecter partout » : ferme toutes les sessions du compte puis efface le cookie de ce
+ * navigateur. Si l'API échoue, la session reste ouverte et l'erreur est affichée : la personne ne doit
+ * pas croire ses autres appareils déconnectés.
+ */
+export async function logoutAllAction(): Promise<FormState> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE)?.value;
+  if (!token) redirect(routes.login);
+
+  const result = await logoutAll(token);
+  if (!result.ok) {
+    return { status: "error", message: apiFailureMessage(result), fieldErrors: {} };
+  }
+
   cookieStore.delete({ name: SESSION_COOKIE, ...sessionCookieAttributes });
   redirect(routes.home);
 }

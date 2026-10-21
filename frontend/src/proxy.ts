@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE } from "@/lib/cookies";
 import { accountHomeByRole, routes } from "@/lib/routes";
-import { getUserFromToken } from "@/lib/session";
+import { getMfaRedirect, getUserFromToken } from "@/lib/session";
 import type { UserRole } from "@/types";
 
 /** Espaces réservés à un rôle (le préfixe couvre aussi les sous-pages). */
@@ -28,7 +28,8 @@ export async function proxy(request: NextRequest) {
   );
 
   if (area) {
-    if (!user) return redirectTo(routes.login);
+    // Une session limitée (2FA pas encore validée) n'est pas un utilisateur : elle est envoyée à la 2FA.
+    if (!user) return redirectTo((await getMfaRedirect(sessionToken)) ?? routes.login);
     if (user.role !== area.role) return redirectTo(accountHomeByRole[user.role]);
     return NextResponse.next();
   }

@@ -78,3 +78,15 @@ func ClientIPFrom(ctx context.Context) netip.Addr {
 	addr, _ := ctx.Value(clientIPKey{}).(netip.Addr)
 	return addr
 }
+
+// unknownClientKey remplace l'adresse d'un client dont l'IP est inconnue (connexion sans adresse
+// exploitable) : ces requêtes partagent alors une même limite, la plus prudente.
+const unknownClientKey = "unknown"
+
+// ClientKey identifie le client d'une requête pour la limitation de débit : son adresse IP.
+func ClientKey(r *http.Request) string {
+	if ip := ClientIPFrom(r.Context()); ip.IsValid() {
+		return "ip:" + ip.String()
+	}
+	return "ip:" + unknownClientKey
+}

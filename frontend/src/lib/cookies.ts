@@ -22,3 +22,6 @@ export const sessionCookieAttributes = {
 
 /** Durée d'une session mock (7 jours), sans API pour la fixer. */
 export const MOCK_SESSION_MAX_AGE = 60 * 60 * 24 * 7;
+
+/** Session mock « Rester connecté » (30 jours, comme l'API ; pas pour un modérateur). */
+export const MOCK_REMEMBERED_SESSION_MAX_AGE = 60 * 60 * 24 * 30;

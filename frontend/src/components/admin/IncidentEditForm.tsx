@@ -111,6 +111,7 @@ export function IncidentEditForm({
           label="Super-vilain impliqué"
           name="villainId"
           defaultValue={value("villainId", incident.villain?.id)}
+          hint={villains.length === 0 ? "Aucun super-vilain n'est encore répertorié." : undefined}
           error={errors.villainId}
         >
           <option value="">Non identifié</option>

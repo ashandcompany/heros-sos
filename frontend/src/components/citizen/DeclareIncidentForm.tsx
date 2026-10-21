@@ -157,6 +157,11 @@ export function DeclareIncidentForm({ villains, types, action }: DeclareIncident
         label="Super-vilain impliqué"
         name="villainId"
         defaultValue={values.villainId ?? ""}
+        hint={
+          villains.length === 0
+            ? "Aucun super-vilain n'est encore répertorié : précisez-le dans la description si vous le connaissez."
+            : undefined
+        }
         error={errors.villainId}
       >
         <option value="">Je ne sais pas</option>

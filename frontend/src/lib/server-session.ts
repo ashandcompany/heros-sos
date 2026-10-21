@@ -23,16 +23,19 @@ export async function getCurrentUserAvatar(): Promise<AvatarData | null> {
 }
 
 /**
- * Vérifie côté serveur que l'utilisateur a le rôle attendu et renvoie son jeton et son profil.
+ * Vérifie côté serveur que l'utilisateur a le rôle attendu (ou l'un d'eux) et renvoie son jeton
+ * et son profil.
  * Le proxy filtre déjà les espaces protégés, mais la doc Next recommande de revérifier
  * au plus près des données (y compris dans chaque Server Action).
  */
-export async function requireRole(role: UserRole): Promise<{ token: string; user: AuthUser }> {
+export async function requireRole(
+  role: UserRole | UserRole[],
+): Promise<{ token: string; user: AuthUser }> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   const user = await getUserFromToken(token);
 
   if (!user || !token) redirect(routes.login);
-  if (user.role !== role) redirect(accountHomeByRole[user.role]);
+  if (![role].flat().includes(user.role)) redirect(accountHomeByRole[user.role]);
 
   // Les données des espaces sont encore mockées : l'utilisateur renvoyé porte l'identifiant que
   // ces mocks connaissent (voir asMockDataUser).

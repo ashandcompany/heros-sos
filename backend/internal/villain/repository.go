@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -41,7 +42,17 @@ type Villain struct {
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	TypeIDs     []int16
+	// Specialties détaille TypeIDs (code et libellé du référentiel), par libellé. Renseigné à la
+	// lecture uniquement.
+	Specialties            []Specialty
 	ReportedIncidentsCount int64
+}
+
+// Specialty est un type d'incident dont un vilain est coutumier.
+type Specialty struct {
+	ID    int16
+	Code  string
+	Label string
 }
 
 type record struct {
@@ -155,13 +166,11 @@ func (r *gormRepository) Find(ctx context.Context, id uuid.UUID) (*Villain, erro
 	if err != nil {
 		return nil, fmt.Errorf("villain : lecture : %w", err)
 	}
-	v := found.toVillain()
-	typeIDs, err := r.typeIDs(ctx, []uuid.UUID{id})
-	if err != nil {
+	villains := []Villain{found.toVillain()}
+	if err := r.withSpecialties(ctx, villains); err != nil {
 		return nil, err
 	}
-	v.TypeIDs = typeIDs[id]
-	return &v, nil
+	return &villains[0], nil
 }
 
 func (r *gormRepository) List(ctx context.Context, aliasPrefix string, limit, offset int) ([]Villain, int64, error) {
@@ -189,16 +198,8 @@ func (r *gormRepository) List(ctx context.Context, aliasPrefix string, limit, of
 	for i, rec := range records {
 		villains[i] = rec.toVillain()
 	}
-	ids := make([]uuid.UUID, len(records))
-	for i, rec := range records {
-		ids[i] = rec.Record.ID
-	}
-	typeIDs, err := r.typeIDs(ctx, ids)
-	if err != nil {
+	if err := r.withSpecialties(ctx, villains); err != nil {
 		return nil, 0, err
-	}
-	for i := range villains {
-		villains[i].TypeIDs = typeIDs[villains[i].ID]
 	}
 	return villains, total, nil
 }
@@ -210,22 +211,44 @@ func (r *gormRepository) viewQuery(ctx context.Context) *gorm.DB {
 		Group("villains.id")
 }
 
-func (r *gormRepository) typeIDs(ctx context.Context, villainIDs []uuid.UUID) (map[uuid.UUID][]int16, error) {
-	result := make(map[uuid.UUID][]int16, len(villainIDs))
-	for _, id := range villainIDs {
-		result[id] = []int16{}
+// withSpecialties renseigne TypeIDs (par identifiant) et Specialties (par libellé) des vilains,
+// en une requête.
+func (r *gormRepository) withSpecialties(ctx context.Context, villains []Villain) error {
+	index := make(map[uuid.UUID]*Villain, len(villains))
+	ids := make([]uuid.UUID, len(villains))
+	for i := range villains {
+		villains[i].TypeIDs = []int16{}
+		villains[i].Specialties = []Specialty{}
+		index[villains[i].ID] = &villains[i]
+		ids[i] = villains[i].ID
 	}
-	if len(villainIDs) == 0 {
-		return result, nil
+	if len(villains) == 0 {
+		return nil
 	}
-	var rows []specialtyRecord
-	if err := r.conn(ctx).Where("villain_id IN ?", villainIDs).Order("villain_id, type_id").Find(&rows).Error; err != nil {
-		return nil, fmt.Errorf("villain : lecture des spécialités : %w", err)
+	var rows []struct {
+		VillainID uuid.UUID
+		TypeID    int16
+		Code      string
+		Label     string
+	}
+	err := r.conn(ctx).Table("villain_specialties").
+		Select("villain_specialties.villain_id, villain_specialties.type_id, incident_types.code, incident_types.label").
+		Joins("JOIN incident_types ON incident_types.id = villain_specialties.type_id").
+		Where("villain_specialties.villain_id IN ?", ids).
+		Order("incident_types.label, villain_specialties.type_id").
+		Scan(&rows).Error
+	if err != nil {
+		return fmt.Errorf("villain : lecture des spécialités : %w", err)
 	}
 	for _, row := range rows {
-		result[row.VillainID] = append(result[row.VillainID], row.TypeID)
+		v := index[row.VillainID]
+		v.TypeIDs = append(v.TypeIDs, row.TypeID)
+		v.Specialties = append(v.Specialties, Specialty{ID: row.TypeID, Code: row.Code, Label: row.Label})
 	}
-	return result, nil
+	for i := range villains {
+		slices.Sort(villains[i].TypeIDs)
+	}
+	return nil
 }
 
 func (r *gormRepository) Update(ctx context.Context, v *Villain) error {

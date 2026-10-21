@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="fr">
+  <body style="font-family: sans-serif; line-height: 1.5; color: #1a1a2e;">
+    <p>Bonjour,</p>
+    <p>Vous avez demandé à recevoir la newsletter de <strong>{{.AppName}}</strong>. Pour confirmer votre abonnement, cliquez sur le bouton ci-dessous.</p>
+    <p>
+      <a href="{{.Link}}" style="display: inline-block; padding: 10px 18px; background: #e63946; color: #ffffff; text-decoration: none; border-radius: 4px;">Confirmer mon abonnement</a>
+    </p>
+    <p>Ce lien est valable {{.ExpiresIn}}.</p>
+    <p>Si vous n'êtes pas à l'origine de cette demande, ignorez simplement ce message : vous ne recevrez rien.</p>
+    <p>L'équipe {{.AppName}}</p>
+  </body>
+</html>

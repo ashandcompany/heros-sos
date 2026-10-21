@@ -48,6 +48,9 @@ const (
 	ActionEmailChangeRequested = "user.email_change_request"
 	ActionEmailChangeApproved  = "user.email_change_approve"
 	ActionEmailChangeRejected  = "user.email_change_reject"
+	ActionArticleCreated          = "article.create"
+	ActionArticleUpdated          = "article.update"
+	ActionArticleDeleted          = "article.delete"
 )
 
 // Entry décrit une action à journaliser.

@@ -122,6 +122,12 @@ tags:
     description: "Profil de l'utilisateur connecté (citoyen ou super-héros) : coordonnées, photo, changement d'adresse email soumis à un modérateur, préférence de newsletter."
   - name: Contact et newsletter
     description: "Formulaires publics qui passent par le Mailer, sans session : message à l'équipe et abonnement à la newsletter (double opt-in)."
+  - name: Blog
+    description: |
+      Articles du blog. Tout le monde lit les articles publiés ; les modérateurs les rédigent sous
+      `/admin/articles` et voient aussi les brouillons. Le contenu est du HTML limité aux balises
+      de l'éditeur (`p`, `br`, `h2`, `h3`, `strong`, `em`, `s`, `ul`, `ol`, `li`, `blockquote`,
+      `hr`, `a`), assaini par l'API à l'enregistrement.
 
 paths:
   /me/interventions:
@@ -733,7 +739,8 @@ paths:
         - name: sort
           in: query
           description: "Ordre de tri : pseudo croissant par défaut, ou note moyenne décroissante."
-          schema: { type: string, enum: [alias, -averageRating], default: alias }
+          schema:
+            { type: string, enum: [alias, -averageRating], default: alias }
         - { $ref: "#/components/parameters/Limit" }
         - { $ref: "#/components/parameters/Offset" }
       responses:
@@ -1237,6 +1244,167 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/VillainPage" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /articles:
+    get:
+      tags: [Blog]
+      summary: Articles publiés
+      description: |
+        Publique, sans session. Uniquement les articles publiés, du plus récent au plus ancien ;
+        le contenu n'est pas inclus (utiliser `GET /articles/{slug}`).
+      operationId: listPublishedArticles
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Une page d'articles publiés.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ArticleSummaryPage" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /articles/{slug}:
+    get:
+      tags: [Blog]
+      summary: Lire un article publié
+      description: Publique, sans session. Un brouillon ou un slug inconnu répond 404.
+      operationId: getPublishedArticle
+      parameters:
+        - { $ref: "#/components/parameters/ArticleSlug" }
+      responses:
+        "200":
+          description: L'article, contenu HTML compris.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Article" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/articles:
+    get:
+      tags: [Blog]
+      summary: Tous les articles (modérateur)
+      description: |
+        Brouillons compris, les derniers modifiés d'abord. Le filtre `status` restreint la liste
+        à un statut. Le contenu n'est pas inclus.
+      operationId: listArticles
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/ArticleStatus" }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Une page d'articles.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ArticleSummaryPage" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    post:
+      tags: [Blog]
+      summary: Créer un article
+      description: |
+        Le slug dérive du titre (suffixe numérique s'il est déjà pris). Publier à la création
+        fixe `publishedAt`.
+      operationId: createArticle
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ArticlePayload" }
+      responses:
+        "201":
+          description: Article créé.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Article" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: Aucun slug unique n'a pu être généré (`article_slug_already_used`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/articles/{id}:
+    get:
+      tags: [Blog]
+      summary: Consulter un article, brouillon compris (modérateur)
+      operationId: getArticle
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/ArticleId" }
+      responses:
+        "200":
+          description: L'article.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Article" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    put:
+      tags: [Blog]
+      summary: Modifier un article
+      description: |
+        Remplace titre, chapeau, contenu et statut. `publishedAt` est fixé à la première
+        publication et conservé ensuite (même après un retour en brouillon). Le slug ne change
+        plus une fois l'article publié.
+      operationId: updateArticle
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/ArticleId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ArticlePayload" }
+      responses:
+        "200":
+          description: Article modifié.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Article" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Aucun slug unique n'a pu être généré (`article_slug_already_used`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    delete:
+      tags: [Blog]
+      summary: Supprimer un article
+      operationId: deleteArticle
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/ArticleId" }
+      responses:
+        "204": { description: Article supprimé. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   /films:
@@ -2148,7 +2316,8 @@ paths:
           headers:
             Cache-Control:
               description: Mise en cache d'un an, sans revalidation.
-              schema: { type: string, example: "public, max-age=31536000, immutable" }
+              schema:
+                { type: string, example: "public, max-age=31536000, immutable" }
           content:
             image/jpeg: { schema: { type: string, format: binary } }
         "404": { $ref: "#/components/responses/NotFound" }
@@ -2423,14 +2592,18 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/NewsletterSubscriptionRequest" }
+            schema:
+              { $ref: "#/components/schemas/NewsletterSubscriptionRequest" }
             examples:
               visiteur:
                 summary: Un visiteur
                 value:
                   email: natasha.romanoff@example.org
       responses:
-        "202": { description: Demande prise en compte ; un lien de confirmation est envoyé si l'adresse n'était pas déjà abonnée. }
+        "202":
+          {
+            description: Demande prise en compte ; un lien de confirmation est envoyé si l'adresse n'était pas déjà abonnée.,
+          }
         "400": { $ref: "#/components/responses/BadRequest" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
@@ -2497,6 +2670,18 @@ components:
       required: true
       description: Identifiant du super-vilain.
       schema: { type: string, format: uuid }
+    ArticleId:
+      name: id
+      in: path
+      required: true
+      description: Identifiant de l'article.
+      schema: { type: string, format: uuid }
+    ArticleSlug:
+      name: slug
+      in: path
+      required: true
+      description: Identifiant d'URL de l'article.
+      schema: { type: string }
     FilmId:
       name: filmId
       in: path
@@ -3205,6 +3390,72 @@ components:
         code: { type: string }
         label: { type: string }
 
+    ArticleStatus:
+      type: string
+      enum: [brouillon, publie]
+    ArticlePayload:
+      type: object
+      required: [title, excerpt, content, status]
+      properties:
+        title: { type: string, minLength: 5, maxLength: 120 }
+        excerpt:
+          {
+            type: string,
+            minLength: 1,
+            maxLength: 300,
+            description: Chapeau affiché dans les listes.,
+          }
+        content:
+          type: string
+          description: |
+            HTML (balises de l'éditeur uniquement, le reste est retiré). Au moins 20 caractères de
+            texte visible, 200 000 octets au plus.
+        status: { $ref: "#/components/schemas/ArticleStatus" }
+    ArticleSummary:
+      type: object
+      required:
+        [
+          id,
+          title,
+          slug,
+          excerpt,
+          status,
+          authorName,
+          createdAt,
+          updatedAt,
+          publishedAt,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        slug: { type: string }
+        excerpt: { type: string }
+        status: { $ref: "#/components/schemas/ArticleStatus" }
+        authorName: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        publishedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Vide tant que l'article n'a jamais été publié.
+    Article:
+      allOf:
+        - { $ref: "#/components/schemas/ArticleSummary" }
+        - type: object
+          required: [content]
+          properties:
+            content: { type: string, description: HTML assaini. }
+    ArticleSummaryPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ArticleSummary" }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
     VillainPage:
       type: object
       required: [items, total, limit, offset]
@@ -3630,12 +3881,21 @@ components:
             description: Rôle du compte.,
           }
         civility:
-          { type: string, enum: [madame, monsieur, non-precise], description: Civilité. }
+          {
+            type: string,
+            enum: [madame, monsieur, non-precise],
+            description: Civilité.,
+          }
         firstName: { type: string, description: Prénom. }
         lastName: { type: string, description: Nom de famille. }
         birthDate:
-          { type: string, format: date, description: "Date de naissance (AAAA-MM-JJ)." }
-        email: { type: string, format: email, description: Adresse de connexion. }
+          {
+            type: string,
+            format: date,
+            description: "Date de naissance (AAAA-MM-JJ).",
+          }
+        email:
+          { type: string, format: email, description: Adresse de connexion. }
         pendingEmail:
           type: string
           format: email
@@ -3652,19 +3912,32 @@ components:
         newsletterSubscribed:
           type: boolean
           description: Vrai si l'adresse du compte reçoit la newsletter.
-        createdAt: { type: string, format: date-time, description: Date de création du compte. }
-        hero:
-          { $ref: "#/components/schemas/AccountHero" }
+        createdAt:
+          {
+            type: string,
+            format: date-time,
+            description: Date de création du compte.,
+          }
+        hero: { $ref: "#/components/schemas/AccountHero" }
 
     AccountAddress:
       type: object
       required: [street, postalCode, city, country]
       properties:
         street: { type: string, description: Numéro et nom de la voie. }
-        complement: { type: string, description: "Complément d'adresse, absent s'il n'y en a pas." }
+        complement:
+          {
+            type: string,
+            description: "Complément d'adresse, absent s'il n'y en a pas.",
+          }
         postalCode: { type: string, description: Code postal. }
         city: { type: string, description: Commune. }
-        country: { type: string, description: Code pays ISO 3166-1 alpha-2., example: FR }
+        country:
+          {
+            type: string,
+            description: Code pays ISO 3166-1 alpha-2.,
+            example: FR,
+          }
 
     AccountHero:
       type: object
@@ -3689,15 +3962,29 @@ components:
       required: [street, postalCode, city, country]
       additionalProperties: false
       properties:
-        street: { type: string, maxLength: 200, description: Numéro et nom de la voie. }
+        street:
+          {
+            type: string,
+            maxLength: 200,
+            description: Numéro et nom de la voie.,
+          }
         complement:
           type: string
           nullable: true
           maxLength: 200
           description: "Complément d'adresse. Absent ou `null` : le complément actuel est conservé. Chaîne vide : il est effacé."
-        postalCode: { type: string, description: Code postal (cinq chiffres pour la France). }
+        postalCode:
+          {
+            type: string,
+            description: Code postal (cinq chiffres pour la France).,
+          }
         city: { type: string, maxLength: 100, description: Commune. }
-        country: { type: string, description: "Code pays ISO 3166-1 alpha-2, en majuscules.", example: FR }
+        country:
+          {
+            type: string,
+            description: "Code pays ISO 3166-1 alpha-2, en majuscules.",
+            example: FR,
+          }
 
     AvatarResponse:
       type: object
@@ -3712,38 +3999,93 @@ components:
       required: [email]
       additionalProperties: false
       properties:
-        email: { type: string, format: email, description: Nouvelle adresse souhaitée. }
+        email:
+          {
+            type: string,
+            format: email,
+            description: Nouvelle adresse souhaitée.,
+          }
 
     EmailChangeRequestStatus:
       type: object
       required: [newEmail, status]
       properties:
-        newEmail: { type: string, format: email, description: "La nouvelle adresse, normalisée en minuscules." }
-        status: { type: string, enum: [pending, approved, rejected], description: État de la demande. }
+        newEmail:
+          {
+            type: string,
+            format: email,
+            description: "La nouvelle adresse, normalisée en minuscules.",
+          }
+        status:
+          {
+            type: string,
+            enum: [pending, approved, rejected],
+            description: État de la demande.,
+          }
 
     NewsletterPreferencePayload:
       type: object
       required: [subscribed]
       additionalProperties: false
       properties:
-        subscribed: { type: boolean, description: "Vrai pour recevoir la newsletter, faux pour s'en retirer." }
+        subscribed:
+          {
+            type: boolean,
+            description: "Vrai pour recevoir la newsletter, faux pour s'en retirer.",
+          }
 
     EmailChangeRequestItem:
       type: object
-      required: [id, userId, firstName, lastName, currentEmail, newEmail, status, createdAt]
+      required:
+        [
+          id,
+          userId,
+          firstName,
+          lastName,
+          currentEmail,
+          newEmail,
+          status,
+          createdAt,
+        ]
       properties:
         id:
           type: string
           format: uuid
           description: Identifiant de la demande (paramètre `id` des routes de décision). Il change quand le titulaire remplace sa demande.
-        userId: { type: string, format: uuid, description: Identifiant du compte concerné. }
+        userId:
+          {
+            type: string,
+            format: uuid,
+            description: Identifiant du compte concerné.,
+          }
         firstName: { type: string, description: Prénom du demandeur. }
         lastName: { type: string, description: Nom du demandeur. }
-        currentEmail: { type: string, format: email, description: Adresse actuelle du compte. }
-        newEmail: { type: string, format: email, description: Adresse demandée. }
-        status: { type: string, enum: [pending, approved, rejected], description: État de la demande. }
-        createdAt: { type: string, format: date-time, description: Date de dépôt de la demande. }
-        reviewedAt: { type: string, format: date-time, description: "Date de la décision, absente tant que la demande est en attente." }
+        currentEmail:
+          {
+            type: string,
+            format: email,
+            description: Adresse actuelle du compte.,
+          }
+        newEmail:
+          { type: string, format: email, description: Adresse demandée. }
+        status:
+          {
+            type: string,
+            enum: [pending, approved, rejected],
+            description: État de la demande.,
+          }
+        createdAt:
+          {
+            type: string,
+            format: date-time,
+            description: Date de dépôt de la demande.,
+          }
+        reviewedAt:
+          {
+            type: string,
+            format: date-time,
+            description: "Date de la décision, absente tant que la demande est en attente.",
+          }
 
     EmailChangeRequestPage:
       type: object
@@ -3766,7 +4108,12 @@ components:
       additionalProperties: false
       properties:
         name: { type: string, maxLength: 80, description: Nom du visiteur. }
-        email: { type: string, format: email, description: Adresse où l'équipe répondra. }
+        email:
+          {
+            type: string,
+            format: email,
+            description: Adresse où l'équipe répondra.,
+          }
         subject:
           type: string
           enum: [question, compte, donnees, partenariat, autre]

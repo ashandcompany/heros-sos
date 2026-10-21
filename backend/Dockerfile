@@ -4,7 +4,9 @@
 # gestionnaire d'identités) exécutée par un utilisateur non privilégié. La surface d'attaque se
 # réduit à deux binaires et aux certificats racine.
 
-ARG GO_IMAGE=golang:1.26-alpine3.23
+# Version de Go épinglée (même numéro que la directive `go` de go.mod) : un tag « 1.26 » flottant
+# laisserait une image en cache compiler avec une bibliothèque standard déjà vulnérable.
+ARG GO_IMAGE=golang:1.26.10-alpine3.23
 
 # ---- Compilation ------------------------------------------------------------------------------
 FROM ${GO_IMAGE} AS builder

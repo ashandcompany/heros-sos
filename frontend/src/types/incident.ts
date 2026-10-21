@@ -7,14 +7,31 @@ export type IncidentType =
 
 export type IncidentStatus = "signale" | "en-cours" | "resolu";
 
+/** Urgence de l'incident, définie par les super-héros. */
+export type IncidentPriority = "basse" | "normale" | "haute" | "critique";
+
+/** Résultat d'une intervention terminée. */
+export type InterventionOutcome = "reussi" | "echoue";
+
 /** Le citoyen qui déclare est témoin ou victime de l'incident. */
 export type ReporterRole = "temoin" | "victime";
+
+/** Coordonnées WGS 84 (degrés décimaux). */
+export interface GeoPoint {
+  lat: number;
+  lng: number;
+}
 
 export interface IncidentLocation {
   city: string;
   district?: string;
   /** Lieu précis saisi par le déclarant (adresse, repère…). */
   address?: string;
+  /**
+   * Position géocodée à partir de l'adresse et de la ville (Base Adresse Nationale).
+   * Absente si le lieu n'a pas pu être géocodé : l'incident n'apparaît alors pas sur la carte.
+   */
+  coordinates?: GeoPoint;
 }
 
 export interface Incident {
@@ -27,6 +44,8 @@ export interface Incident {
    * Un incident rejeté n'apparaît plus dans les listes publiques.
    */
   moderation: ModerationStatus;
+  /** Priorité fixée par un super-héros (`normale` tant qu'elle n'a pas été définie). */
+  priority?: IncidentPriority;
   location: IncidentLocation;
   /** Date ISO 8601 du signalement. */
   reportedAt: string;
@@ -74,6 +93,14 @@ export interface InterventionRating {
   /** Modération du commentaire : un commentaire rejeté est masqué (la note reste comptée). */
   commentModeration: ModerationStatus;
   ratedAt: string;
+  /** Réponse du super-héros au commentaire. */
+  reply?: HeroReply | null;
+}
+
+export interface HeroReply {
+  content: string;
+  /** Date ISO 8601. */
+  repliedAt: string;
 }
 
 /** Évaluation affichée dans le back-office, avec l'incident et le héros concernés. */
@@ -98,4 +125,94 @@ export interface IncidentUpdate {
 export interface RateableIntervention {
   incident: ResolvedIncident;
   rating: InterventionRating | null;
+}
+
+/**
+ * Intervention d'un super-héros sur un incident. Un seul héros intervient à la fois :
+ * après un échec, l'incident redevient disponible pour une nouvelle prise en charge.
+ */
+export interface HeroIntervention {
+  id: string;
+  incidentId: string;
+  hero: SuperHeroSummary;
+  /** Dates ISO 8601. */
+  startedAt: string;
+  endedAt: string | null;
+  /** `null` tant que l'intervention est en cours. */
+  outcome: InterventionOutcome | null;
+}
+
+/** Incident vu depuis l'espace super-héros : priorité et historique des interventions. */
+export interface HeroIncident extends Incident {
+  priority: IncidentPriority;
+  /** Interventions sur cet incident, des plus récentes aux plus anciennes. */
+  interventions: HeroIntervention[];
+}
+
+/**
+ * Avis affiché sur la fiche publique d'un super-héros : uniquement les commentaires publiés
+ * par la modération, sans aucune information sur le citoyen qui l'a écrit.
+ */
+export interface PublicReview {
+  incidentId: string;
+  rating: number;
+  comment: string;
+  ratedAt: string;
+  reply: HeroReply | null;
+}
+
+/** Détail d'un incident consulté depuis l'espace citoyen. */
+export interface CitizenIncidentDetail {
+  /** Sans `reporterId` quand l'incident a été déclaré par quelqu'un d'autre. */
+  incident: Incident;
+  /** L'incident a été déclaré par le citoyen connecté. */
+  isMine: boolean;
+  /** Interventions des super-héros, des plus anciennes aux plus récentes (en cours comprise). */
+  interventions: HeroIntervention[];
+  /** Note déjà donnée par le citoyen (uniquement pour ses propres incidents). */
+  rating: InterventionRating | null;
+}
+
+/** Incident placé sur la carte des super-héros : uniquement ce qu'il faut pour l'afficher. */
+export interface MapIncident {
+  id: string;
+  title: string;
+  type: IncidentType;
+  status: Exclude<IncidentStatus, "resolu">;
+  priority: IncidentPriority;
+  /** Ville et quartier, déjà mis en forme. */
+  place: string;
+  position: GeoPoint;
+  /** Date ISO 8601 du signalement. */
+  reportedAt: string;
+}
+
+/**
+ * Super-héros en intervention. Sa position est celle de l'incident qu'il traite : la plateforme
+ * ne suit pas la géolocalisation des héros en temps réel.
+ */
+export interface MapTeam {
+  hero: SuperHeroSummary;
+  incidentId: string;
+  position: GeoPoint;
+  /** Date ISO 8601 du début de l'intervention, `null` si elle n'est pas connue. */
+  startedAt: string | null;
+}
+
+/** Zone touchée : regroupement des incidents non résolus d'une même ville. */
+export interface MapZone {
+  city: string;
+  /** Centre des incidents de la zone. */
+  center: GeoPoint;
+  /** Distance en mètres entre le centre et l'incident le plus éloigné. */
+  radius: number;
+  incidentsCount: number;
+}
+
+export interface IncidentMapData {
+  incidents: MapIncident[];
+  teams: MapTeam[];
+  zones: MapZone[];
+  /** Incidents non résolus dont le lieu n'a pas pu être géocodé. */
+  unlocatedCount: number;
 }

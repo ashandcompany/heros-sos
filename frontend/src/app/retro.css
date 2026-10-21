@@ -1,154 +1,119 @@
 /*
- * Direction artistique « administration rétro-futuriste » (années 70) : CSS pur, aucune image.
+ * Direction artistique « bureau d'agence spatiale » : rétro-futurisme, brutalisme et design du
+ * milieu du XXe siècle. CSS pur, aucune image. Béton, grilles, filets épais, ombres dures,
+ * formes géométriques (cercles, soleils atomiques) et bandes tricolores.
  * Tout est décoratif ; les couleurs viennent des tokens définis dans globals.css (@theme).
  * Les effets animés sont désactivés sous prefers-reduced-motion (voir bas de fichier).
  */
 
 :root {
-  /* Fond des écrans (cathodique, afficheur) : toujours noir, quel que soit le thème.
-     Contours et ombres : tokens --color-edge / --color-shadow (globals.css), adoucis en thème clair. */
-  --retro-screen: #0d0906;
-  /* Ombrage des lattes de bois */
-  --retro-wood-shade: 1;
-  --retro-noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  /* Fond des écrans (cathodique, afficheur) : toujours noir, quel que soit le thème. */
+  --retro-screen: #0a0b0c;
+  /* Intensité des lignes de grille du béton */
+  --retro-grid: 0.07;
 }
 
-/* Focus visible : filet ambre double sur fond sombre, brun sur papier */
+/* Focus visible : filet turquoise épais sur fond sombre, brun-orangé sur papier */
 :focus-visible {
   outline: 3px solid var(--color-accent);
   outline-offset: 3px;
-  box-shadow: 0 0 0 2px var(--color-edge);
 }
 
 .paper :focus-visible {
   outline-color: var(--color-primary-ink);
-  box-shadow: 0 0 0 2px var(--color-paper);
 }
 
-/* Grain de papier : voile discret sur toute la page, jamais interactif */
-body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 90;
-  pointer-events: none;
-  background-image: var(--retro-noise);
-  opacity: 0.07;
-  mix-blend-mode: overlay;
-}
-
-/* Thème clair : lattes de bois nettement plus discrètes */
 :root[data-theme="light"] {
-  --retro-wood-shade: 0.4;
+  --retro-grid: 0.09;
 }
 
-/* Fond lattes de bois verticales */
+/* Béton à joints : plaques de 96 px séparées par un filet fin (pied de page) */
 .bg-wood {
   background-color: var(--color-surface);
   background-image:
-    repeating-linear-gradient(
-      90deg,
-      rgb(0 0 0 / calc(0.22 * var(--retro-wood-shade))) 0 2px,
-      transparent 2px 28px
-    ),
-    repeating-linear-gradient(90deg, rgb(255 255 255 / 0.035) 0 14px, transparent 14px 28px),
-    linear-gradient(
-      180deg,
-      rgb(0 0 0 / calc(0.18 * var(--retro-wood-shade))),
-      transparent 30%,
-      transparent 70%,
-      rgb(0 0 0 / calc(0.25 * var(--retro-wood-shade)))
-    );
-}
-
-/* Carrelage géométrique : quarts de cercle et joints, version très atténuée */
-.bg-tiles {
-  background-image:
-    radial-gradient(
-      circle at 0 0,
-      transparent 0 41px,
-      color-mix(in oklab, var(--color-accent) 22%, transparent) 41px 43px,
-      transparent 43px
-    ),
-    radial-gradient(
-      circle at 100% 100%,
-      transparent 0 41px,
-      color-mix(in oklab, var(--color-primary) 26%, transparent) 41px 43px,
-      transparent 43px
-    ),
-    linear-gradient(color-mix(in oklab, var(--color-edge) 55%, transparent) 2px, transparent 2px),
-    linear-gradient(
-      90deg,
-      color-mix(in oklab, var(--color-edge) 55%, transparent) 2px,
-      transparent 2px
-    );
+    linear-gradient(rgb(128 128 128 / var(--retro-grid)) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(128 128 128 / var(--retro-grid)) 1px, transparent 1px);
   background-size: 96px 96px;
 }
 
-/* Plaque vissée : cadre épais, filet intérieur, ombre dure */
+/* Grille d'ingénieur et orbites : grille fine, anneaux concentriques façon trajectoire */
+.bg-tiles {
+  background-image:
+    repeating-radial-gradient(
+      circle at 82% 38%,
+      transparent 0 70px,
+      color-mix(in oklab, var(--color-accent) 35%, transparent) 70px 72px
+    ),
+    linear-gradient(color-mix(in oklab, var(--color-border) 35%, transparent) 1px, transparent 1px),
+    linear-gradient(
+      90deg,
+      color-mix(in oklab, var(--color-border) 35%, transparent) 1px,
+      transparent 1px
+    );
+  background-size:
+    100% 100%,
+    48px 48px,
+    48px 48px;
+}
+
+/* Soleil atomique : rayons alternés en éventail, décoratif */
+.starburst {
+  background-image: repeating-conic-gradient(
+    from 0deg,
+    var(--color-primary) 0 7.5deg,
+    transparent 7.5deg 15deg
+  );
+  -webkit-mask-image: radial-gradient(circle, #000 0 22%, transparent 23% 38%, #000 39% 100%);
+  mask-image: radial-gradient(circle, #000 0 22%, transparent 23% 38%, #000 39% 100%);
+}
+
+/* Bande tricolore milieu de siècle : orange, moutarde, turquoise */
+.bar-tricolor {
+  height: 0.5rem;
+  background-image: linear-gradient(
+    90deg,
+    var(--color-primary) 0 34%,
+    var(--color-mustard) 34% 67%,
+    var(--color-accent) 67% 100%
+  );
+}
+
+/* Plaque brute : cadre épais, ombre dure décalée */
 .panel {
   position: relative;
   background-color: var(--color-surface);
   border: 3px solid var(--color-edge);
-  box-shadow:
-    inset 0 0 0 2px var(--color-border),
-    4px 4px 0 var(--color-shadow);
+  box-shadow: 3px 3px 0 var(--color-shadow);
 }
 
 @media (min-width: 640px) {
   .panel {
     border-width: 4px;
-    box-shadow:
-      inset 0 0 0 3px var(--color-border),
-      inset 0 0 0 5px var(--color-edge),
-      6px 6px 0 var(--color-shadow);
+    box-shadow: 5px 5px 0 var(--color-shadow);
   }
 }
 
-/* Rivets aux quatre coins (masqués sur petit écran) */
+/* Trois pastilles de couleur en haut à droite (masquées sur petit écran) */
 .rivets::before {
   content: "";
   position: absolute;
-  inset: 0;
+  top: 12px;
+  right: 14px;
   z-index: 1;
   display: none;
+  width: 44px;
+  height: 10px;
   pointer-events: none;
   background-repeat: no-repeat;
-  background-size: 9px 9px;
+  background-size: 10px 10px;
   background-image:
-    radial-gradient(
-      circle at 35% 35%,
-      #ead9b6 0 1.5px,
-      #9a7a58 2.5px,
-      #3b2a1e 4.5px,
-      transparent 5px
-    ),
-    radial-gradient(
-      circle at 35% 35%,
-      #ead9b6 0 1.5px,
-      #9a7a58 2.5px,
-      #3b2a1e 4.5px,
-      transparent 5px
-    ),
-    radial-gradient(
-      circle at 35% 35%,
-      #ead9b6 0 1.5px,
-      #9a7a58 2.5px,
-      #3b2a1e 4.5px,
-      transparent 5px
-    ),
-    radial-gradient(
-      circle at 35% 35%,
-      #ead9b6 0 1.5px,
-      #9a7a58 2.5px,
-      #3b2a1e 4.5px,
-      transparent 5px
-    );
+    radial-gradient(circle, var(--color-primary) 0 4.5px, transparent 5px),
+    radial-gradient(circle, var(--color-mustard) 0 4.5px, transparent 5px),
+    radial-gradient(circle, #1f8f84 0 4.5px, transparent 5px);
   background-position:
-    10px 10px,
-    calc(100% - 10px) 10px,
-    10px calc(100% - 10px),
-    calc(100% - 10px) calc(100% - 10px);
+    0 0,
+    17px 0,
+    34px 0;
 }
 
 @media (min-width: 640px) {
@@ -157,35 +122,30 @@ body::after {
   }
 }
 
-/* Papier / carton : fiches, formulaires. Le texte y est brun foncé (contraste ≈ 14:1). */
+/* Fiche : aplat crème net, liseré orange en tête. Le texte y est presque noir (contraste ≈ 16:1). */
 .paper {
   color: var(--color-ink);
   background-color: var(--color-paper);
-  background-image:
-    var(--retro-noise), linear-gradient(180deg, rgb(255 255 255 / 0.25), rgb(120 80 40 / 0.08));
-  background-blend-mode: multiply, normal;
+  background-image: linear-gradient(var(--color-primary), var(--color-primary));
+  background-repeat: no-repeat;
+  background-size: 100% 6px;
 }
 
-/* Écran cathodique */
+/* Écran cathodique : seule forme arrondie du site, hommage aux postes de contrôle */
 .crt {
   position: relative;
   padding: 0.75rem;
   background-color: var(--retro-screen);
-  border: 4px solid var(--color-border);
-  border-radius: 1rem;
-  box-shadow:
-    inset 0 0 0 3px var(--retro-screen),
-    5px 5px 0 var(--color-shadow);
+  border: 4px solid var(--color-edge);
+  border-radius: 1.25rem;
+  box-shadow: 3px 3px 0 var(--color-shadow);
 }
 
 @media (min-width: 640px) {
   .crt {
-    padding: 1.5rem;
-    border-width: 6px;
-    border-radius: 2rem;
-    box-shadow:
-      inset 0 0 0 4px var(--retro-screen),
-      8px 8px 0 var(--color-shadow);
+    padding: 1.25rem;
+    border-radius: 1.75rem;
+    box-shadow: 5px 5px 0 var(--color-shadow);
   }
 }
 
@@ -202,7 +162,7 @@ body::after {
 @media (min-width: 640px) {
   .crt__screen {
     padding: 1.25rem;
-    border-radius: 1.5rem;
+    border-radius: 1.25rem;
     box-shadow: inset 0 0 90px rgb(0 0 0 / 0.8);
   }
 }
@@ -242,7 +202,7 @@ body::after {
   }
 }
 
-/* Tampon encré : police machine à écrire usée, légèrement incliné */
+/* Tampon encré : police machine à écrire, bordure nette, légèrement incliné */
 .stamp {
   display: inline-block;
   padding: 0.2rem 0.7rem;
@@ -253,10 +213,9 @@ body::after {
   text-transform: uppercase;
   white-space: nowrap;
   color: var(--color-brick);
-  border: 3px double currentColor;
-  border-radius: 0.2rem;
-  opacity: 0.85;
-  transform: rotate(-9deg);
+  border: 3px solid currentColor;
+  opacity: 0.9;
+  transform: rotate(-6deg);
   pointer-events: none;
   user-select: none;
 }
@@ -275,7 +234,6 @@ body::after {
   color: var(--color-terminal);
   background-color: var(--retro-screen);
   border: 2px solid var(--color-border);
-  border-radius: 0.2rem;
   text-shadow: 0 0 6px color-mix(in oklab, var(--color-terminal) 55%, transparent);
   box-shadow: inset 0 0 8px rgb(0 0 0 / 0.8);
 }
@@ -300,8 +258,7 @@ body::after {
 }
 
 .rule-thick {
-  border-top: 6px solid var(--color-edge);
-  box-shadow: 0 2px 0 var(--color-border);
+  border-top: 8px solid var(--color-primary);
 }
 
 .field-line {

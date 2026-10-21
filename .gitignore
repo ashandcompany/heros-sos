@@ -1,0 +1,32 @@
+# Claude Code (configuration et sessions locales)
+.claude/
+
+# macOS
+.DS_Store
+
+# Variables d'environnement locales et secrets (seuls les .env.example sont versionnés)
+.env
+.env.*
+!.env.example
+!.env.production.example
+secrets/
+*.pem
+*.key
+
+# Go
+backend/bin/
+backend/tmp/
+*.test
+*.out
+coverage.*
+go.work
+go.work.sum
+
+# Node
+node_modules/
+.next/
+
+# Éditeurs
+.idea/
+.vscode/
+*.swp

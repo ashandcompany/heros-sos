@@ -1,9 +1,12 @@
 import { incidentsMock } from "@/mocks/incidents";
 import { ratingsMock } from "@/mocks/ratings";
 import type {
+  HeroReputation,
   Incident,
+  InterventionRating,
   ModerationStatus,
   MutationResult,
+  PublicReview,
   RateableIntervention,
   RatingForModeration,
   ResolvedIncident,
@@ -108,4 +111,84 @@ export async function moderateComment(
 
   rating.commentModeration = decision;
   return mockResponse({ ok: true });
+}
+
+/* ---------- Espace super-héros (rôle super-heros) ---------- */
+
+/** Note moyenne et nombre d'évaluations d'un héros (les commentaires masqués comptent aussi). */
+export function summarizeRatings(ratings: InterventionRating[]): {
+  averageRating: number;
+  ratingsCount: number;
+} {
+  const total = ratings.reduce((sum, { rating }) => sum + rating, 0);
+  return {
+    averageRating: ratings.length > 0 ? total / ratings.length : 0,
+    ratingsCount: ratings.length,
+  };
+}
+
+/**
+ * Note globale et avis reçus par le héros connecté, des plus récents aux plus anciens.
+ * Un commentaire n'est transmis qu'une fois publié par la modération.
+ * Future implémentation : `GET ${API_URL}/hero/ratings`
+ */
+export async function getMyReputation(token: string): Promise<HeroReputation> {
+  const user = await userFromToken(token, "super-heros");
+  const mine = ratingsMock.filter(({ heroId }) => heroId === user.id);
+
+  return mockResponse({
+    ...summarizeRatings(mine),
+    ratings: [...mine]
+      .sort((a, b) => Date.parse(b.ratedAt) - Date.parse(a.ratedAt))
+      .map((rating) => {
+        const incident = incidentsMock.find(({ id }) => id === rating.incidentId);
+        return {
+          ...rating,
+          comment: rating.commentModeration === "valide" ? rating.comment : null,
+          incident: { id: rating.incidentId, title: incident?.title ?? "Incident supprimé" },
+        };
+      }),
+  });
+}
+
+/**
+ * Répond (une seule fois) au commentaire publié d'un citoyen.
+ * Future implémentation : `PUT ${API_URL}/hero/ratings/${incidentId}/reply` avec `{ content }`.
+ */
+export async function replyToRating(
+  token: string,
+  incidentId: string,
+  content: string,
+): Promise<MutationResult> {
+  const user = await userFromToken(token, "super-heros");
+  const rating = ratingsMock.find(
+    (existing) => existing.incidentId === incidentId && existing.heroId === user.id,
+  );
+
+  if (!rating?.comment || rating.commentModeration !== "valide") {
+    return mockResponse({ ok: false, error: "Ce commentaire n'accepte pas de réponse." });
+  }
+  if (rating.reply) {
+    return mockResponse({ ok: false, error: "Vous avez déjà répondu à ce commentaire." });
+  }
+
+  rating.reply = { content, repliedAt: new Date().toISOString() };
+  return mockResponse({ ok: true });
+}
+
+/* ---------- Fiches publiques de l'encyclopédie ---------- */
+
+/**
+ * Commentaires publiés sur un super-héros, des plus récents aux plus anciens.
+ * Future implémentation : `GET ${API_URL}/heroes/${heroId}/reviews`
+ */
+export async function getHeroPublicReviews(heroId: string): Promise<PublicReview[]> {
+  return mockResponse(
+    ratingsMock
+      .filter((rating) => rating.heroId === heroId && rating.commentModeration === "valide")
+      .flatMap(({ incidentId, rating, comment, ratedAt, reply }) =>
+        comment ? [{ incidentId, rating, comment, ratedAt, reply: reply ?? null }] : [],
+      )
+      .sort((a, b) => Date.parse(b.ratedAt) - Date.parse(a.ratedAt)),
+  );
 }

@@ -21,6 +21,27 @@ defaults:
 jobs:
   ci:
     runs-on: ubuntu-latest
+
+    # Base PostgreSQL pour les tests d'intégration (dépôts, services, API de bout en bout).
+    # Sans elle, ces tests échouent en CI plutôt que d'être ignorés silencieusement.
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: heros
+          POSTGRES_PASSWORD: heros
+          POSTGRES_DB: herossos_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U heros -d herossos_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      HEROS_TEST_DATABASE_URL: postgres://heros:heros@localhost:5432/herossos_test?sslmode=disable
+
     steps:
       - uses: actions/checkout@v7
 

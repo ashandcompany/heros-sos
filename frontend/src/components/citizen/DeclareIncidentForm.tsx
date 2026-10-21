@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useRef, type FormEvent } from "react";
 import type { DeclareIncidentFormAction } from "@/app/actions/incidents";
+import { AddressField } from "@/components/ui/AddressField";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { RadioGroup } from "@/components/ui/RadioGroup";
 import { SelectField } from "@/components/ui/SelectField";
@@ -108,14 +109,16 @@ export function DeclareIncidentForm({ villains, action }: DeclareIncidentFormPro
       />
 
       <div className="grid gap-5 sm:grid-cols-[1fr_12rem]">
-        <TextField
+        <AddressField
+          kind="place"
           label="Lieu précis"
-          hint="Adresse, nom d'un commerce, repère…"
+          hint="Adresse, nom d'un commerce, gare… Choisissez une suggestion pour remplir la ville."
           name="address"
-          autoComplete="street-address"
+          autoComplete="off"
           required
           defaultValue={values.address}
           error={errors.address}
+          fill={{ city: "city" }}
         />
         <TextField
           label="Ville"

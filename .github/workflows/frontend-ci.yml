@@ -33,9 +33,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Seules les vulnérabilités high/critical font échouer (low/moderate tolérées)
+      # Seules les vulnérabilités high/critical font échouer (low/moderate tolérées).
+      # Avis ignorés (à retirer dès qu'un correctif existe) :
+      # - GHSA-vfj7-8cjw-p6xm : braces@3.0.3 (dernière version, aucun correctif), dépendance de dev
+      #   d'eslint-config-next ; absent des dépendances de production (`npm audit --omit=dev`).
       - name: Dependency audit
-        run: npm audit --audit-level=high
+        run: npx --yes audit-ci@7.1.0 --high --allowlist GHSA-vfj7-8cjw-p6xm
 
       - name: Check formatting
         run: npx prettier --check .

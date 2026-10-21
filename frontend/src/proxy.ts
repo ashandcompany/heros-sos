@@ -8,6 +8,7 @@ import type { UserRole } from "@/types";
 const protectedAreas: Array<{ prefix: string; role: UserRole }> = [
   { prefix: "/admin", role: "admin" },
   { prefix: "/profil", role: "citoyen" },
+  { prefix: "/heros", role: "super-heros" },
 ];
 
 /**
@@ -38,5 +39,5 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   // Valeurs littérales obligatoires (analysées au build). Voir `routes` dans src/lib/routes.ts.
-  matcher: ["/mot-de-passe-oublie", "/admin/:path*", "/profil/:path*"],
+  matcher: ["/mot-de-passe-oublie", "/admin/:path*", "/profil/:path*", "/heros/:path*"],
 };

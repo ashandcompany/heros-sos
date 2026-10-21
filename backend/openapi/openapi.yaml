@@ -1,0 +1,2101 @@
+openapi: 3.0.3
+
+info:
+  title: Heros-SOS API
+  version: 0.1.0
+  description: |
+    API de la plateforme Heros-SOS : authentification, demandes de statut de super-héros et
+    modération des comptes.
+
+    **Ce fichier est la référence du contrat** (spec d'abord). Les tests de bout en bout du
+    backend valident chaque requête et chaque réponse contre lui, et vérifient que les routes
+    enregistrées sont exactement celles décrites ici : une route ou un statut non documenté
+    fait échouer les tests.
+
+    ## Essayer l'API depuis cette page
+
+    Cette page n'existe qu'en développement et parle à la vraie API, sur la même origine que le
+    site. Pour parcourir le cycle complet d'un compte :
+
+    1. **Inscription** : `POST /auth/register` puis **Try it out**. L'exemple est valide ;
+       changez l'adresse email à chaque essai (sinon `email_already_used`).
+    2. **Activation** : le mail d'activation est reçu dans Mailpit (http://localhost:8025 avec
+       `make up-dev`). Copiez le `token` du lien, puis `POST /auth/activate`.
+    3. **Connexion** : `POST /auth/login`. Le navigateur conserve le cookie de session ; copiez le
+       `csrfToken` de la réponse.
+    4. **Écritures authentifiées** : cliquez sur **Authorize**, collez le `csrfToken` dans la case
+       `csrfToken` (laissez `sessionCookie` vide : le navigateur l'envoie tout seul), puis
+       essayez la route.
+    5. **Routes `/admin`** : elles demandent un compte modérateur, créé en ligne de commande avec
+       `make moderator-dev`.
+
+    ## Rôles
+
+    | Rôle | Qui | Ce qu'il peut faire |
+    |---|---|---|
+    | `citizen` | tout compte activé | demander le statut de super-héros et suivre sa demande |
+    | `hero` | citoyen accepté par un modérateur | idem ; une nouvelle demande répond `already_hero` |
+    | `moderator` | créé en ligne de commande | décider des demandes, lister, désactiver, réactiver et vérifier les comptes |
+
+    ## Pagination
+
+    Les listes (`/admin/…`) acceptent `limit` (1 à 100, 20 par défaut) et `offset`. La réponse
+    contient `items`, `total`, `limit` et `offset`.
+
+    ## Session et CSRF
+
+    La session est un cookie opaque (`HttpOnly`, `SameSite=Lax`, sans `Domain`) posé par
+    `POST /auth/login`. Son nom est `__Host-session` en production (HTTPS) et `session` en
+    développement. Le jeton est aléatoire et n'est jamais lisible en JavaScript.
+
+    Toute requête **authentifiée qui modifie des données** (POST, PUT, PATCH, DELETE) doit porter
+    l'en-tête `X-CSRF-Token`, dont la valeur est le champ `csrfToken` renvoyé par `POST /auth/login`
+    et `GET /auth/me`. Toute requête qui modifie des données doit aussi venir d'une origine
+    autorisée : l'en-tête `Origin`, s'il est présent, doit figurer dans la liste du serveur.
+
+    ## Erreurs
+
+    Toutes les erreurs ont la forme `{"error": {"code", "message", "fields"?}}`. Le `code` est
+    stable et sert au frontend ; le `message` est destiné à l'affichage. Les erreurs de
+    validation (422) détaillent les champs : `fields` associe un nom de champ à un code
+    (`required`, `invalid`, `too_short`, `too_long`, `weak`).
+
+    | Code | Statut | Quand |
+    |---|---|---|
+    | `bad_request` | 400 | JSON invalide, champ inconnu, corps vide |
+    | `invalid_token` | 400 | lien d'activation ou de réinitialisation invalide, expiré ou déjà utilisé |
+    | `unauthenticated` | 401 | session absente ou expirée |
+    | `invalid_credentials` | 401 | identifiant ou mot de passe incorrect |
+    | `origin_not_allowed` | 403 | `Origin` absente de la liste du serveur (écritures) |
+    | `csrf_invalid` | 403 | en-tête `X-CSRF-Token` absent ou invalide |
+    | `forbidden` | 403 | rôle insuffisant |
+    | `protected_account` | 403 | action interdite sur un compte de modérateur |
+    | `account_not_activated` | 403 | compte pas encore activé (révélé avec le bon mot de passe) |
+    | `account_deactivated` | 403 | compte désactivé (révélé avec le bon mot de passe) |
+    | `hero_request_not_eligible` | 403 | compte qui ne peut pas faire de demande (modérateur) |
+    | `not_found` | 404 | ressource ou route introuvable |
+    | `hero_request_not_found` | 404 | aucune demande déposée par l'utilisateur |
+    | `email_already_used` | 409 | adresse email déjà inscrite |
+    | `hero_request_pending` | 409 | demande déjà en attente |
+    | `already_hero` | 409 | utilisateur déjà super-héros |
+    | `alias_already_used` | 409 | pseudo déjà pris |
+    | `hero_request_not_pending` | 409 | demande déjà traitée |
+    | `self_action_forbidden` | 409 | action interdite sur son propre compte |
+    | `payload_too_large` | 413 | corps de requête trop volumineux |
+    | `unsupported_media_type` | 415 | corps qui n'est pas en `application/json` |
+    | `validation_failed` | 422 | données invalides ; `fields` détaille chaque champ |
+    | `rate_limited` | 429 | trop de requêtes ; `Retry-After` indique le délai |
+    | `account_locked` | 429 | compte verrouillé après plusieurs échecs ; `Retry-After` indique le délai |
+    | `internal_error` | 500 | erreur interne, sans détail |
+  contact:
+    name: Équipe Heros-SOS
+    url: https://github.com/ashandcompany/heros-sos
+
+servers:
+  - url: /api/v1
+    description: Même origine que le site (le reverse proxy route /api/v1 vers l'API).
+
+tags:
+  - name: Santé
+    description: Sondes de vie et de disponibilité, utilisées par Docker et la supervision. Publiques, sans session.
+  - name: Authentification
+    description: Inscription, activation par mail, connexion par cookie de session, déconnexion et réinitialisation du mot de passe.
+  - name: Super-héros
+    description: Demande du statut de super-héros par un citoyen connecté, et suivi de cette demande.
+  - name: Modération
+    description: Réservé aux modérateurs. Décision sur les demandes de statut de super-héros et gestion des comptes (désactiver, réactiver, vérifier).
+  - name: Incidents
+    description: "Déclaration et consultation des incidents, puis cycle d'une intervention : démarrer, rejoindre ou inviter des héros, proposer et valider le résultat."
+  - name: Types d'intervention
+    description: "Les types d'incident (catégories) proposés à la déclaration. Les modérateurs les gèrent sous `/admin`."
+  - name: Vilains
+    description: Les super-vilains que l'on peut associer à un incident. Tout utilisateur connecté peut en déclarer un et modifier ses spécialités.
+
+paths:
+  /health:
+    get:
+      tags: [Santé]
+      summary: Le processus répond
+      description: |
+        Sonde de vie : répond 200 tant que le processus tourne, sans interroger la base de données.
+        Utilisée par le reverse proxy pour surveiller l'API.
+      operationId: health
+      responses:
+        "200":
+          description: Le serveur est en vie.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+
+  /ready:
+    get:
+      tags: [Santé]
+      summary: La base de données répond
+      description: |
+        Sonde de disponibilité : interroge la base de données, avec un délai borné. Répond 200 si
+        elle répond, 503 sinon. C'est ce que vérifie le contrôle de santé du conteneur
+        (`api -healthcheck`).
+      operationId: ready
+      responses:
+        "200":
+          description: Le serveur est prêt à recevoir du trafic.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+              examples:
+                pret:
+                  summary: La base de données répond
+                  value:
+                    status: ok
+        "503":
+          description: La base de données ne répond pas.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+              examples:
+                indisponible:
+                  summary: La base de données ne répond pas
+                  value:
+                    status: unavailable
+
+  /auth/register:
+    post:
+      tags: [Authentification]
+      summary: Inscription d'un citoyen
+      description: |
+        Crée un compte citoyen **en attente d'activation** et envoie un mail contenant le lien
+        d'activation. Aucune session n'est ouverte : il faut activer le compte puis se connecter.
+        Aucun rôle n'est choisi ici ; le statut de super-héros se demande ensuite via
+        `POST /heroes/requests`.
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterRequest" }
+            examples:
+              citoyen:
+                summary: Un citoyen (changez l'adresse email à chaque essai)
+                value:
+                  civility: madame
+                  firstName: Natasha
+                  lastName: Romanoff
+                  birthDate: "1984-11-22"
+                  email: natasha.romanoff@example.org
+                  mobilePhone: 06 12 34 56 78
+                  address:
+                    street: 10 rue de Rivoli
+                    postalCode: "75004"
+                    city: Paris
+                    country: FR
+                  password: MotDePasse2026
+      responses:
+        "201":
+          description: Compte créé, en attente d'activation.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RegisterResponse" }
+              examples:
+                compte-cree:
+                  summary: Compte créé, en attente d'activation
+                  value:
+                    user:
+                      id: 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
+                      displayName: Natasha
+                      role: citizen
+                      email: natasha.romanoff@example.org
+                    activationRequired: true
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: Cette adresse email est déjà utilisée (`email_already_used`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                email-deja-utilisee:
+                  summary: Adresse déjà inscrite
+                  value:
+                    error:
+                      code: email_already_used
+                      message: Cette adresse email est déjà utilisée.
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /auth/activate:
+    post:
+      tags: [Authentification]
+      summary: Activation du compte
+      description: Active le compte avec le jeton du lien reçu par mail. Un jeton ne sert qu'une fois.
+      operationId: activate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TokenRequest" }
+            examples:
+              lien-recu:
+                summary: Le jeton du lien reçu par mail (à remplacer)
+                value:
+                  token: collez-ici-le-jeton-du-lien-recu-par-mail
+      responses:
+        "204": { description: Compte activé. }
+        "400": { $ref: "#/components/responses/BadRequestOrInvalidToken" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /auth/resend-activation:
+    post:
+      tags: [Authentification]
+      summary: Renvoyer le lien d'activation
+      description: |
+        Envoie un nouveau lien si l'adresse correspond à un compte en attente d'activation (les
+        liens précédents sont invalidés). La réponse est identique dans tous les cas : elle ne
+        révèle pas quelles adresses ont un compte.
+      operationId: resendActivation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmailRequest" }
+            examples:
+              compte-en-attente:
+                summary: L'adresse d'un compte pas encore activé
+                value:
+                  email: natasha.romanoff@example.org
+      responses:
+        "202": { description: Demande prise en compte. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /auth/login:
+    post:
+      tags: [Authentification]
+      summary: Connexion
+      description: |
+        Authentifie par adresse email, ou par pseudo pour un super-héros, et ouvre une session
+        (cookie). Un identifiant inconnu et un mauvais mot de passe donnent exactement la même
+        réponse (`invalid_credentials`). Les états « non activé » et « désactivé » ne sont annoncés
+        qu'avec le bon mot de passe. Après plusieurs échecs, le compte est verrouillé pour une
+        durée croissante (`account_locked`, avec `Retry-After`).
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+            examples:
+              citoyen:
+                summary: Connexion par adresse email
+                value:
+                  identifier: natasha.romanoff@example.org
+                  password: MotDePasse2026
+                  rememberMe: false
+      responses:
+        "200":
+          description: Connecté. Le cookie de session est posé.
+          headers:
+            Set-Cookie:
+              description: Cookie de session (`HttpOnly`, `SameSite=Lax`, `Path=/`).
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResponse" }
+              examples:
+                connecte:
+                  summary: "Connecté : copiez csrfToken dans Authorize"
+                  value:
+                    user:
+                      id: 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
+                      displayName: Natasha
+                      role: citizen
+                      email: natasha.romanoff@example.org
+                    csrfToken: t3rS7fGZpLRHk0evrzh9Q1oSSA0NxbjgQsTImRWH0IA
+                    expiresAt: "2026-10-27T10:30:00Z"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401":
+          description: Identifiant ou mot de passe incorrect (`invalid_credentials`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                identifiants-incorrects:
+                  summary: Identifiant ou mot de passe incorrect
+                  value:
+                    error:
+                      code: invalid_credentials
+                      message: Identifiant ou mot de passe incorrect.
+        "403":
+          description: Origine non autorisée, compte non activé (`account_not_activated`) ou désactivé (`account_deactivated`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                compte-non-active:
+                  summary: Compte pas encore activé
+                  value:
+                    error:
+                      code: account_not_activated
+                      message: "Votre compte n'est pas encore activé : consultez le mail d'activation."
+                compte-desactive:
+                  summary: Compte désactivé
+                  value:
+                    error:
+                      code: account_deactivated
+                      message: Ce compte a été désactivé.
+                origine:
+                  summary: Origine non autorisée
+                  value:
+                    error:
+                      code: origin_not_allowed
+                      message: Origine non autorisée.
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /auth/logout:
+    post:
+      tags: [Authentification]
+      summary: Déconnexion de l'appareil courant
+      description: Ferme la session de cet appareil et efface le cookie. Les sessions des autres appareils restent ouvertes.
+      operationId: logout
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      responses:
+        "204":
+          description: Session fermée, cookie effacé.
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /auth/logout-all:
+    post:
+      tags: [Authentification]
+      summary: Déconnexion de tous les appareils
+      description: Ferme toutes les sessions de l'utilisateur, sur tous ses appareils, celle-ci comprise.
+      operationId: logoutAll
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      responses:
+        "204":
+          description: Toutes les sessions de l'utilisateur sont fermées.
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /auth/me:
+    get:
+      tags: [Authentification]
+      summary: Utilisateur courant
+      description: |
+        Retourne l'utilisateur de la session et un jeton CSRF à jour. Le frontend s'en sert pour
+        rediriger selon le rôle et pour récupérer le jeton CSRF après un rechargement de page.
+      operationId: me
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: L'utilisateur de la session.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MeResponse" }
+              examples:
+                connecte:
+                  summary: L'utilisateur de la session
+                  value:
+                    user:
+                      id: 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
+                      displayName: Natasha
+                      role: citizen
+                      email: natasha.romanoff@example.org
+                    csrfToken: t3rS7fGZpLRHk0evrzh9Q1oSSA0NxbjgQsTImRWH0IA
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /auth/password-reset:
+    post:
+      tags: [Authentification]
+      summary: Demander la réinitialisation du mot de passe
+      description: |
+        Envoie un lien à l'adresse si elle correspond à un compte actif (les liens précédents sont
+        invalidés). La réponse est identique pour une adresse inconnue : elle ne révèle rien.
+      operationId: requestPasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmailRequest" }
+            examples:
+              compte:
+                summary: L'adresse du compte
+                value:
+                  email: natasha.romanoff@example.org
+      responses:
+        "202": { description: Demande prise en compte. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /auth/password-reset/confirm:
+    post:
+      tags: [Authentification]
+      summary: Choisir un nouveau mot de passe
+      description: |
+        Change le mot de passe avec le jeton reçu par mail et ferme toutes les sessions de
+        l'utilisateur. Un mot de passe trop faible est refusé (422) **sans consommer le jeton**.
+      operationId: confirmPasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PasswordResetConfirmRequest" }
+            examples:
+              lien-recu:
+                summary: Le jeton du lien reçu par mail (à remplacer)
+                value:
+                  token: collez-ici-le-jeton-du-lien-recu-par-mail
+                  newPassword: NouveauMotDePasse2026
+      responses:
+        "204": { description: Mot de passe changé. }
+        "400": { $ref: "#/components/responses/BadRequestOrInvalidToken" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /heroes/requests:
+    post:
+      tags: [Super-héros]
+      summary: Demander le statut de super-héros
+      description: |
+        Dépose la demande d'un citoyen actif. Elle reste « en attente » jusqu'à la décision d'un
+        modérateur. Une demande refusée peut être redéposée.
+      operationId: requestHeroStatus
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HeroRequestPayload" }
+            examples:
+              demande:
+                summary: Une demande avec pseudo, description et message
+                value:
+                  alias: Veuve Noire
+                  bio: Ancienne espionne, spécialiste de l'infiltration.
+                  requestMessage: Je peux fournir mes états de service sur demande.
+      responses:
+        "201":
+          description: Demande enregistrée, en attente.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HeroRequestStatus" }
+              examples:
+                en-attente:
+                  summary: Demande enregistrée
+                  value:
+                    status: pending
+                    alias: Veuve Noire
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403":
+          description: Origine non autorisée, jeton CSRF invalide, ou compte non éligible (`hero_request_not_eligible`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                non-eligible:
+                  summary: Compte qui ne peut pas faire de demande
+                  value:
+                    error:
+                      code: hero_request_not_eligible
+                      message: Votre compte ne peut pas faire cette demande.
+                csrf:
+                  summary: Jeton CSRF absent ou invalide
+                  value:
+                    error:
+                      code: csrf_invalid
+                      message: Jeton CSRF absent ou invalide.
+        "409":
+          description: Demande déjà en attente (`hero_request_pending`), déjà super-héros (`already_hero`) ou pseudo pris (`alias_already_used`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                deja-en-attente:
+                  summary: Demande déjà en attente
+                  value:
+                    error:
+                      code: hero_request_pending
+                      message: Une demande est déjà en cours d'examen.
+                deja-super-heros:
+                  summary: Déjà super-héros
+                  value:
+                    error:
+                      code: already_hero
+                      message: Vous êtes déjà super-héros.
+                pseudo-pris:
+                  summary: Pseudo déjà pris
+                  value:
+                    error:
+                      code: alias_already_used
+                      message: Ce pseudo est déjà utilisé.
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /heroes/requests/me:
+    get:
+      tags: [Super-héros]
+      summary: État de ma demande
+      description: |
+        Retourne la demande de l'utilisateur connecté : `pending` (en attente), `approved` ou
+        `rejected` (avec le motif du refus dans `rejectionReason`). Répond 404 tant qu'aucune demande
+        n'a été déposée.
+      operationId: myHeroRequest
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: La demande de l'utilisateur courant.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HeroRequestStatus" }
+              examples:
+                en-attente:
+                  summary: Demande en attente
+                  value:
+                    status: pending
+                    alias: Veuve Noire
+                refusee:
+                  summary: Demande refusée
+                  value:
+                    status: rejected
+                    alias: Veuve Noire
+                    rejectionReason: Le dossier ne permet pas de vérifier l'identité du demandeur.
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404":
+          description: Aucune demande (`hero_request_not_found`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                aucune-demande:
+                  summary: Aucune demande n'a été déposée
+                  value:
+                    error:
+                      code: hero_request_not_found
+                      message: Aucune demande trouvée.
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/hero-requests:
+    get:
+      tags: [Modération]
+      summary: Demandes de statut de super-héros
+      description: Réservé aux modérateurs. Les demandes les plus anciennes viennent d'abord.
+      operationId: listHeroRequests
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: status
+          in: query
+          description: Ne garde que les demandes dans cet état. Sans valeur, toutes les demandes sont listées.
+          schema: { type: string, enum: [pending, approved, rejected] }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Une page de demandes, avec l'identité des demandeurs.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HeroApplicantPage" }
+              examples:
+                une-demande:
+                  summary: Une demande en attente
+                  value:
+                    items:
+                      - userId: 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
+                        alias: Veuve Noire
+                        bio: Ancienne espionne, spécialiste de l'infiltration.
+                        requestMessage: Je peux fournir mes états de service sur demande.
+                        status: pending
+                        createdAt: "2026-10-20T09:15:00Z"
+                        email: natasha.romanoff@example.org
+                        firstName: Natasha
+                        lastName: Romanoff
+                    total: 1
+                    limit: 20
+                    offset: 0
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/hero-requests/{userId}/approve:
+    post:
+      tags: [Modération]
+      summary: Accepter une demande
+      description: Réservé aux modérateurs. Le demandeur devient super-héros immédiatement, sans reconnexion.
+      operationId: approveHeroRequest
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/UserId" }
+      responses:
+        "204": { description: Demande acceptée. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: La demande a déjà été traitée (`hero_request_not_pending`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                deja-traitee:
+                  summary: Demande déjà traitée
+                  value:
+                    error:
+                      code: hero_request_not_pending
+                      message: Cette demande a déjà été traitée.
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/hero-requests/{userId}/reject:
+    post:
+      tags: [Modération]
+      summary: Refuser une demande
+      description: |
+        Réservé aux modérateurs. Le motif est conservé et retourné au demandeur dans
+        `rejectionReason` ; il peut ensuite déposer une nouvelle demande.
+      operationId: rejectHeroRequest
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/UserId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RejectPayload" }
+            examples:
+              motif:
+                summary: Un motif de refus
+                value:
+                  reason: Le dossier ne permet pas de vérifier l'identité du demandeur.
+      responses:
+        "204": { description: Demande refusée. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: La demande a déjà été traitée (`hero_request_not_pending`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                deja-traitee:
+                  summary: Demande déjà traitée
+                  value:
+                    error:
+                      code: hero_request_not_pending
+                      message: Cette demande a déjà été traitée.
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/users:
+    get:
+      tags: [Modération]
+      summary: Liste des comptes
+      description: Réservé aux modérateurs. Le filtre `email` porte sur le début de l'adresse, sans tenir compte de la casse.
+      operationId: listUsers
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: role
+          in: query
+          description: Ne garde que les comptes de ce rôle.
+          schema: { type: string, enum: [citizen, hero, moderator] }
+        - name: status
+          in: query
+          description: "Ne garde que les comptes dans cet état (`pending_activation` : le lien d'activation n'a pas encore été utilisé)."
+          schema:
+            { type: string, enum: [pending_activation, active, deactivated] }
+        - name: email
+          in: query
+          description: Début de l'adresse email, sans tenir compte de la casse.
+          schema: { type: string }
+          example: demo
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Une page de comptes.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserSummaryPage" }
+              examples:
+                un-compte:
+                  summary: Un compte actif
+                  value:
+                    items:
+                      - id: 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
+                        email: natasha.romanoff@example.org
+                        firstName: Natasha
+                        lastName: Romanoff
+                        role: citizen
+                        status: active
+                        createdAt: "2026-10-20T09:00:00Z"
+                    total: 1
+                    limit: 20
+                    offset: 0
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/users/{id}/deactivate:
+    post:
+      tags: [Modération]
+      summary: Désactiver un compte
+      description: |
+        Réservé aux modérateurs. Le compte ne peut plus se connecter et toutes ses sessions sont
+        fermées immédiatement.
+        Idempotent. Impossible sur son propre compte (`self_action_forbidden`) et sur un compte de
+        modérateur (`protected_account`).
+      operationId: deactivateUser
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "204": { description: Compte désactivé. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Action interdite sur son propre compte (`self_action_forbidden`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                son-propre-compte:
+                  summary: Action sur son propre compte
+                  value:
+                    error:
+                      code: self_action_forbidden
+                      message: Vous ne pouvez pas effectuer cette action sur votre propre compte.
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/users/{id}/reactivate:
+    post:
+      tags: [Modération]
+      summary: Réactiver un compte
+      description: Réservé aux modérateurs. Le compte désactivé peut de nouveau se connecter.
+      operationId: reactivateUser
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "204": { description: Compte réactivé. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/users/{id}/verify:
+    post:
+      tags: [Modération]
+      summary: Marquer un citoyen comme vérifié
+      description: "Réservé aux modérateurs. Information de confiance uniquement : elle ne donne aucun droit supplémentaire."
+      operationId: verifyUser
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "204": { description: Compte marqué comme vérifié. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /intervention-types:
+    get:
+      tags: [Types d'intervention]
+      summary: Types d'incident disponibles
+      description: Liste les types d'incident par libellé.
+      operationId: listInterventionTypes
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Une page de types d'incident.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InterventionTypePage" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/intervention-types:
+    get:
+      tags: [Types d'intervention]
+      summary: Liste des types d'incident
+      description: Réservé aux modérateurs.
+      operationId: listAllInterventionTypes
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Une page de types.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InterventionTypePage" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    post:
+      tags: [Types d'intervention]
+      summary: Créer un type d'incident
+      description: Ajoute une ligne à la table de référence `incident_types`.
+      operationId: createInterventionType
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InterventionTypePayload" }
+      responses:
+        "201":
+          description: Type d'incident créé avec son identifiant numérique.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InterventionType" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: Ce code est déjà utilisé (`incident_type_code_already_used`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /villains:
+    post:
+      tags: [Vilains]
+      summary: Créer un vilain
+      description: |
+        Tout utilisateur connecté peut déclarer un vilain. L'alias est unique ; les champs nom,
+        prénom, secteur principal et description sont facultatifs.
+      operationId: createVillain
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VillainPayload" }
+      responses:
+        "201":
+          description: Vilain créé.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Villain" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: Cet alias est déjà utilisé (`villain_alias_already_used`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    get:
+      tags: [Vilains]
+      summary: Liste des vilains
+      description: Par alias. Le filtre `q` porte sur le début de l'alias.
+      operationId: listVillains
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Une page de vilains.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VillainPage" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /villains/{id}:
+    patch:
+      tags: [Vilains]
+      summary: Modifier un vilain et remplacer ses spécialités
+      description: Le créateur du vilain ou un modérateur peut remplacer la fiche et la liste complète des `typeIds`.
+      operationId: updateVillain
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VillainUpdatePayload" }
+      responses:
+        "200":
+          description: Vilain mis à jour.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Villain" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Cet alias est déjà utilisé (`villain_alias_already_used`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /incidents:
+    get:
+      tags: [Incidents]
+      summary: Incidents disponibles pour une intervention
+      description: Liste les incidents signalés, en cours ou échoués, sans identité civile du déclarant.
+      operationId: listIncidents
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: reporterId
+          in: query
+          description: Identifiant du déclarant; un citoyen ne peut filtrer que sur son propre identifiant.
+          schema: { type: string, format: uuid }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Une page d'incidents.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IncidentPage" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    post:
+      tags: [Incidents]
+      summary: Déclarer un incident
+      description: |
+        Tout utilisateur connecté peut déclarer un incident classé par un type existant. Les vilains
+        sont facultatifs et plusieurs vilains peuvent être associés. L'adresse est conservée en clair
+        pour permettre la détection des doublons prévue par le schéma.
+      operationId: createIncident
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IncidentPayload" }
+      responses:
+        "201":
+          description: Incident déclaré, à l'état `reported` et à la priorité `normal` par défaut.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Incident" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /incidents/{id}:
+    get:
+      tags: [Incidents]
+      summary: Détail d'un incident
+      operationId: getIncident
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: L'incident et ses vilains associés.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Incident" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /incidents/{incidentId}/interventions:
+    post:
+      tags: [Incidents]
+      summary: Démarrer une intervention
+      description: Réservé aux héros approuvés. Le héros devient lead et participant confirmé.
+      operationId: startIntervention
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - name: incidentId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "201":
+          description: Intervention démarrée.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Intervention" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Incident déjà pris, héros déjà actif ailleurs, ou incident non disponible.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /interventions/{id}:
+    get:
+      tags: [Incidents]
+      summary: Détail d'une intervention
+      description: Accessible aux héros connectés et aux modérateurs afin de permettre aux héros de rejoindre l'équipe.
+      operationId: getIntervention
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: Intervention et participants.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Intervention" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /interventions/{id}/join:
+    post:
+      tags: [Incidents]
+      summary: Rejoindre une intervention
+      description: Un héros approuvé rejoint directement comme membre confirmé.
+      operationId: joinIntervention
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "204": { description: Participation confirmée. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Le héros est déjà lié ou engagé ailleurs.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /interventions/{id}/invitations:
+    post:
+      tags: [Incidents]
+      summary: Inviter des héros à une intervention
+      description: Un participant confirmé peut inviter des héros approuvés, qui doivent confirmer leur présence.
+      operationId: inviteHeroes
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InviteHeroesPayload" }
+      responses:
+        "204": { description: Invitations enregistrées et envoyées. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Un héros est déjà lié à l'intervention.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /interventions/{id}/invitations/me/confirm:
+    post:
+      tags: [Incidents]
+      summary: Confirmer une invitation
+      operationId: confirmInterventionInvitation
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "204": { description: Invitation confirmée. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Aucune invitation en attente, intervention en vote ou héros déjà actif ailleurs.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /interventions/{id}/invitations/me/decline:
+    post:
+      tags: [Incidents]
+      summary: Refuser une invitation
+      description: La ligne de participation invitée est supprimée.
+      operationId: declineInterventionInvitation
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "204": { description: Invitation refusée. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Aucune invitation en attente.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /interventions/{id}/outcome:
+    post:
+      tags: [Incidents]
+      summary: Proposer ou déclarer le résultat
+      description: Un héros seul clôt directement; une équipe soumet le résultat à validation unanime.
+      operationId: proposeInterventionOutcome
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InterventionOutcomePayload" }
+      responses:
+        "204": { description: Résultat déclaré ou soumis à validation. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Résultat déjà proposé ou héros non participant.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /interventions/{id}/outcome/validate:
+    post:
+      tags: [Incidents]
+      summary: Valider ou refuser le résultat proposé
+      operationId: validateInterventionOutcome
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              {
+                $ref: "#/components/schemas/InterventionOutcomeValidationPayload",
+              }
+      responses:
+        "204":
+          {
+            description: Validation enregistrée; le résultat peut clore l'intervention si tous approuvent.,
+          }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Aucun résultat en attente, validation déjà enregistrée ou héros non participant.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/interventions/{id}/decision:
+    post:
+      tags: [Modération]
+      summary: Arbitrer le résultat d'une intervention
+      description: Un modérateur tranche et clôt l'intervention et l'incident.
+      operationId: arbitrateInterventionOutcome
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InterventionOutcomePayload" }
+      responses:
+        "204": { description: Décision appliquée. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: L'intervention n'est plus en cours ou aucun désaccord n'a été signalé.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: session
+      description: |
+        Cookie de session, posé par `POST /auth/login` (`__Host-session` en production). Un
+        navigateur l'envoie tout seul : **ne rien saisir ici**. Il existe pour indiquer quelles
+        routes demandent d'être connecté.
+    csrfToken:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+      description: |
+        Jeton CSRF : la valeur de `csrfToken` renvoyée par `POST /auth/login` et `GET /auth/me`.
+        Exigé sur les écritures authentifiées. À coller ici après la connexion.
+
+  parameters:
+    UserId:
+      name: userId
+      in: path
+      required: true
+      description: Identifiant de l'utilisateur dont la demande est traitée (champ `userId` de la liste des demandes).
+      schema: { type: string, format: uuid }
+      example: 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
+    Id:
+      name: id
+      in: path
+      required: true
+      description: Identifiant de l'utilisateur (champ `id` de la liste des comptes).
+      schema: { type: string, format: uuid }
+      example: 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
+    Limit:
+      name: limit
+      in: query
+      description: Nombre d'éléments par page (1 à 100, 20 par défaut).
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    Offset:
+      name: offset
+      in: query
+      description: Nombre d'éléments à sauter.
+      schema: { type: integer, minimum: 0, default: 0 }
+
+  responses:
+    BadRequest:
+      description: "Requête mal formée (`bad_request`) : JSON invalide, champ inconnu, corps vide."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            json-invalide:
+              summary: Corps qui n'est pas du JSON valide
+              value:
+                error:
+                  code: bad_request
+                  message: Le corps de la requête n'est pas un JSON valide.
+    BadRequestOrInvalidToken:
+      description: Requête mal formée (`bad_request`) ou lien invalide, expiré ou déjà utilisé (`invalid_token`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            lien-invalide:
+              summary: Lien invalide, expiré ou déjà utilisé
+              value:
+                error:
+                  code: invalid_token
+                  message: Ce lien est invalide, expiré ou déjà utilisé.
+            json-invalide:
+              summary: Corps qui n'est pas du JSON valide
+              value:
+                error:
+                  code: bad_request
+                  message: Le corps de la requête n'est pas un JSON valide.
+    Unauthenticated:
+      description: Session absente ou expirée (`unauthenticated`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            session-absente:
+              summary: Session absente ou expirée
+              value:
+                error:
+                  code: unauthenticated
+                  message: Authentification requise.
+    Forbidden:
+      description: |
+        Refusé : origine non autorisée (`origin_not_allowed`), jeton CSRF absent ou invalide
+        (`csrf_invalid`), ou rôle insuffisant (`forbidden`, `protected_account`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            origine:
+              summary: Origine non autorisée
+              value:
+                error:
+                  code: origin_not_allowed
+                  message: Origine non autorisée.
+            csrf:
+              summary: Jeton CSRF absent ou invalide
+              value:
+                error:
+                  code: csrf_invalid
+                  message: Jeton CSRF absent ou invalide.
+            role:
+              summary: Rôle insuffisant
+              value:
+                error:
+                  code: forbidden
+                  message: Vous n'avez pas les droits nécessaires.
+            compte-protege:
+              summary: Compte de modérateur
+              value:
+                error:
+                  code: protected_account
+                  message: Les comptes de modérateur ne peuvent pas être désactivés par l'API.
+    NotFound:
+      description: Ressource introuvable (`not_found`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            utilisateur:
+              summary: Utilisateur introuvable
+              value:
+                error:
+                  code: not_found
+                  message: Utilisateur introuvable.
+    PayloadTooLarge:
+      description: Corps de requête trop volumineux (`payload_too_large`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            trop-gros:
+              summary: Corps trop volumineux
+              value:
+                error:
+                  code: payload_too_large
+                  message: Le corps de la requête est trop volumineux.
+    UnsupportedMediaType:
+      description: Le corps doit être de type `application/json` (`unsupported_media_type`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            pas-json:
+              summary: Corps qui n'est pas en application/json
+              value:
+                error:
+                  code: unsupported_media_type
+                  message: Le corps de la requête doit être au format application/json.
+    ValidationFailed:
+      description: Données invalides (`validation_failed`) ; `fields` détaille chaque champ.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            champs-invalides:
+              summary: Deux champs invalides
+              value:
+                error:
+                  code: validation_failed
+                  message: Certaines informations sont invalides.
+                  fields:
+                    email: invalid
+                    password: weak
+    RateLimited:
+      description: Trop de requêtes (`rate_limited`) ou compte verrouillé (`account_locked`).
+      headers:
+        Retry-After:
+          description: Délai en secondes avant de réessayer.
+          schema: { type: integer }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            trop-de-requetes:
+              summary: Trop de requêtes
+              value:
+                error:
+                  code: rate_limited
+                  message: Trop de tentatives, réessayez plus tard.
+            compte-verrouille:
+              summary: Compte verrouillé
+              value:
+                error:
+                  code: account_locked
+                  message: Compte temporairement verrouillé après trop d'échecs de connexion.
+    InternalError:
+      description: Erreur interne (`internal_error`). Le détail n'est jamais exposé.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            erreur-interne:
+              summary: Erreur interne
+              value:
+                error:
+                  code: internal_error
+                  message: Une erreur interne est survenue.
+
+  schemas:
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [ok, unavailable] }
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Code stable destiné au frontend.
+              example: invalid_credentials
+            message:
+              type: string
+              description: Message destiné à l'affichage.
+            fields:
+              type: object
+              description: Pour les erreurs de validation, champ → code (`required`, `invalid`, `too_short`, `too_long`, `weak`).
+              additionalProperties: { type: string }
+
+    UserView:
+      type: object
+      required: [id, displayName, role, email]
+      properties:
+        id:
+          {
+            type: string,
+            format: uuid,
+            description: Identifiant de l'utilisateur.,
+          }
+        displayName:
+          type: string
+          description: Pseudo pour un super-héros, prénom sinon.
+        role:
+          {
+            type: string,
+            enum: [citizen, hero, moderator],
+            description: Rôle de l'utilisateur.,
+          }
+        email:
+          { type: string, format: email, description: Adresse email du compte. }
+
+    Address:
+      type: object
+      required: [street, postalCode, city, country]
+      additionalProperties: false
+      properties:
+        street:
+          {
+            type: string,
+            maxLength: 200,
+            description: Numéro et nom de la voie.,
+          }
+        complement:
+          {
+            type: string,
+            maxLength: 200,
+            description: "Complément d'adresse (bâtiment, étage…), facultatif.",
+          }
+        postalCode: { type: string, description: Code postal. }
+        city: { type: string, maxLength: 100, description: Commune. }
+        country:
+          type: string
+          description: Code pays ISO 3166-1 alpha-2, en majuscules.
+          example: FR
+
+    RegisterRequest:
+      type: object
+      required:
+        [
+          civility,
+          firstName,
+          lastName,
+          birthDate,
+          email,
+          mobilePhone,
+          address,
+          password,
+        ]
+      additionalProperties: false
+      properties:
+        civility:
+          {
+            type: string,
+            enum: [madame, monsieur, non-precise],
+            description: Civilité.,
+          }
+        firstName: { type: string, description: Prénom. }
+        lastName: { type: string, description: Nom de famille. }
+        birthDate:
+          type: string
+          format: date
+          description: Date ISO AAAA-MM-JJ, ni future ni antérieure à 120 ans.
+        email:
+          {
+            type: string,
+            format: email,
+            description: "Adresse email, unique : elle sert d'identifiant de connexion.",
+          }
+        mobilePhone:
+          type: string
+          description: Mobile français (06 ou 07) ou international (+33…). Les espaces, points et tirets sont ignorés.
+        address: { $ref: "#/components/schemas/Address" }
+        password:
+          type: string
+          format: password
+          description: Au moins 10 caractères, avec une minuscule, une majuscule et un chiffre.
+
+    RegisterResponse:
+      type: object
+      required: [user, activationRequired]
+      properties:
+        user: { $ref: "#/components/schemas/UserView" }
+        activationRequired:
+          type: boolean
+          enum: [true]
+          description: "Toujours vrai : le compte doit être activé par le lien reçu par mail avant toute connexion."
+
+    TokenRequest:
+      type: object
+      required: [token]
+      additionalProperties: false
+      properties:
+        token: { type: string, description: Jeton du lien reçu par mail. }
+
+    EmailRequest:
+      type: object
+      required: [email]
+      additionalProperties: false
+      properties:
+        email:
+          {
+            type: string,
+            format: email,
+            description: Adresse email du compte concerné.,
+          }
+
+    LoginRequest:
+      type: object
+      required: [identifier, password]
+      additionalProperties: false
+      properties:
+        identifier:
+          type: string
+          description: Adresse email, ou pseudo pour un super-héros.
+        password: { type: string, format: password }
+        rememberMe:
+          type: boolean
+          description: Prolonge la session (sans effet pour un modérateur).
+
+    LoginResponse:
+      type: object
+      required: [user, csrfToken, expiresAt]
+      properties:
+        user: { $ref: "#/components/schemas/UserView" }
+        csrfToken:
+          type: string
+          description: À renvoyer dans `X-CSRF-Token` sur les écritures authentifiées.
+        expiresAt:
+          type: string
+          format: date-time
+          description: Durée de vie maximale de la session.
+
+    MeResponse:
+      type: object
+      required: [user, csrfToken]
+      properties:
+        user: { $ref: "#/components/schemas/UserView" }
+        csrfToken:
+          type: string
+          description: Jeton CSRF à jour, à renvoyer dans `X-CSRF-Token` sur les écritures authentifiées.
+
+    PasswordResetConfirmRequest:
+      type: object
+      required: [token, newPassword]
+      additionalProperties: false
+      properties:
+        token:
+          {
+            type: string,
+            description: Jeton du lien de réinitialisation reçu par mail.,
+          }
+        newPassword:
+          type: string
+          format: password
+          description: Au moins 10 caractères, avec une minuscule, une majuscule et un chiffre.
+
+    HeroRequestPayload:
+      type: object
+      required: [alias]
+      additionalProperties: false
+      properties:
+        alias:
+          type: string
+          description: "Pseudo public (2 à 30 caractères : lettres, chiffres, espaces, tirets)."
+        bio:
+          type: string
+          maxLength: 1000
+          description: Description publique.
+        requestMessage:
+          type: string
+          maxLength: 2000
+          description: Message destiné aux modérateurs, jamais public.
+
+    HeroRequestStatus:
+      type: object
+      required: [status, alias]
+      properties:
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+          description: "`pending` : en attente d'un modérateur ; `approved` : l'utilisateur est super-héros ; `rejected` : refusée."
+        alias: { type: string, description: Pseudo demandé. }
+        rejectionReason:
+          {
+            type: string,
+            description: "Motif du refus, présent seulement si la demande est `rejected`.",
+          }
+
+    RejectPayload:
+      type: object
+      required: [reason]
+      additionalProperties: false
+      properties:
+        reason:
+          {
+            type: string,
+            maxLength: 1000,
+            description: "Motif du refus, retourné au demandeur.",
+          }
+
+    HeroApplicant:
+      type: object
+      required:
+        [
+          userId,
+          alias,
+          bio,
+          requestMessage,
+          status,
+          createdAt,
+          email,
+          firstName,
+          lastName,
+        ]
+      properties:
+        userId:
+          {
+            type: string,
+            format: uuid,
+            description: Identifiant du demandeur (paramètre `userId` des routes de décision).,
+          }
+        alias: { type: string, description: Pseudo demandé. }
+        bio: { type: string, description: Description publique proposée. }
+        requestMessage:
+          { type: string, description: Message adressé aux modérateurs. }
+        status:
+          {
+            type: string,
+            enum: [pending, approved, rejected],
+            description: État de la demande.,
+          }
+        createdAt:
+          {
+            type: string,
+            format: date-time,
+            description: Date de dépôt de la demande.,
+          }
+        email:
+          {
+            type: string,
+            format: email,
+            description: Adresse email du demandeur.,
+          }
+        firstName: { type: string, description: Prénom du demandeur. }
+        lastName: { type: string, description: Nom du demandeur. }
+
+    HeroApplicantPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/HeroApplicant" }
+        total:
+          {
+            type: integer,
+            description: "Nombre total de demandes correspondant au filtre, toutes pages confondues.",
+          }
+        limit: { type: integer, description: Taille de page appliquée. }
+        offset: { type: integer, description: Nombre d'éléments sautés. }
+
+    UserSummary:
+      type: object
+      required: [id, email, firstName, lastName, role, status, createdAt]
+      properties:
+        id:
+          {
+            type: string,
+            format: uuid,
+            description: Identifiant du compte (paramètre `id` des routes de modération).,
+          }
+        email:
+          { type: string, format: email, description: Adresse email du compte. }
+        firstName: { type: string, description: Prénom. }
+        lastName: { type: string, description: Nom de famille. }
+        alias: { type: string, description: "Pseudo, pour un super-héros." }
+        role:
+          {
+            type: string,
+            enum: [citizen, hero, moderator],
+            description: Rôle du compte.,
+          }
+        status:
+          {
+            type: string,
+            enum: [pending_activation, active, deactivated],
+            description: État du compte.,
+          }
+        verifiedAt:
+          {
+            type: string,
+            format: date-time,
+            description: "Date de vérification par un modérateur, absente si le compte n'est pas vérifié.",
+          }
+        createdAt:
+          {
+            type: string,
+            format: date-time,
+            description: Date de création du compte.,
+          }
+
+    UserSummaryPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/UserSummary" }
+        total:
+          {
+            type: integer,
+            description: "Nombre total de comptes correspondant aux filtres, toutes pages confondues.",
+          }
+        limit: { type: integer, description: Taille de page appliquée. }
+        offset: { type: integer, description: Nombre d'éléments sautés. }
+
+    InterventionTypePayload:
+      type: object
+      required: [code, label]
+      additionalProperties: false
+      properties:
+        code: { type: string }
+        label: { type: string }
+        endangersLife: { type: boolean }
+
+    InterventionType:
+      type: object
+      required: [id, code, label, endangersLife]
+      properties:
+        id: { type: integer, format: int32 }
+        code: { type: string }
+        label: { type: string }
+        endangersLife: { type: boolean }
+
+    InterventionTypePage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/InterventionType" }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+
+    VillainPayload:
+      type: object
+      required: [alias]
+      additionalProperties: false
+      properties:
+        alias: { type: string }
+        lastName: { type: string, nullable: true }
+        firstName: { type: string, nullable: true }
+        mainSector: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        typeIds:
+          type: array
+          items: { type: integer, format: int32 }
+
+    VillainUpdatePayload:
+      type: object
+      required: [alias, typeIds]
+      additionalProperties: false
+      properties:
+        alias: { type: string }
+        lastName: { type: string, nullable: true }
+        firstName: { type: string, nullable: true }
+        mainSector: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        typeIds:
+          type: array
+          description: Remplace intégralement les spécialités du vilain.
+          items: { type: integer, format: int32 }
+        threatLevel:
+          type: string
+          enum: [faible, modere, eleve, critique]
+          description: Réservé aux modérateurs.
+        status:
+          type: string
+          enum: [en-liberte, emprisonne]
+          description: Réservé aux modérateurs.
+
+    Villain:
+      type: object
+      required:
+        [
+          id,
+          alias,
+          typeIds,
+          threatLevel,
+          status,
+          reportedIncidentsCount,
+          createdAt,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        alias: { type: string }
+        lastName: { type: string }
+        firstName: { type: string }
+        mainSector: { type: string }
+        description: { type: string }
+        typeIds:
+          type: array
+          items: { type: integer, format: int32 }
+        threatLevel: { type: string, enum: [faible, modere, eleve, critique] }
+        status: { type: string, enum: [en-liberte, emprisonne] }
+        reportedIncidentsCount: { type: integer, minimum: 0 }
+        createdAt: { type: string, format: date-time }
+
+    VillainPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Villain" }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+
+    IncidentPayload:
+      type: object
+      required: [typeId, description, location]
+      additionalProperties: false
+      properties:
+        typeId: { type: integer, format: int32 }
+        description: { type: string }
+        citizensRescued:
+          { type: integer, format: int32, minimum: 0, default: 0 }
+        location:
+          type: object
+          required: [address, city]
+          additionalProperties: false
+          properties:
+            address: { type: string }
+            city: { type: string }
+            postalCode: { type: string }
+            country: { type: string }
+            addressComplement: { type: string }
+            latitude: { type: number, format: double, nullable: true }
+            longitude: { type: number, format: double, nullable: true }
+        occurredAt: { type: string, format: date-time, nullable: true }
+        villainIds:
+          type: array
+          items: { type: string, format: uuid }
+
+    Incident:
+      type: object
+      required:
+        [
+          id,
+          typeId,
+          description,
+          status,
+          priority,
+          citizensRescued,
+          location,
+          villainIds,
+          createdAt,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        typeId: { type: integer, format: int32 }
+        typeCode: { type: string }
+        typeLabel: { type: string }
+        description: { type: string }
+        status:
+          { type: string, enum: [reported, in_progress, succeeded, failed] }
+        priority: { type: string, enum: [high, normal, low] }
+        citizensRescued: { type: integer, format: int32 }
+        location:
+          type: object
+          required: [address, city]
+          properties:
+            address: { type: string }
+            city: { type: string }
+            postalCode: { type: string }
+            country: { type: string }
+            addressComplement: { type: string }
+            latitude: { type: number, format: double, nullable: true }
+            longitude: { type: number, format: double, nullable: true }
+        occurredAt: { type: string, format: date-time, nullable: true }
+        villainIds:
+          type: array
+          items: { type: string, format: uuid }
+        interventionId: { type: string, format: uuid }
+        villains:
+          type: array
+          items:
+            type: object
+            required: [id, alias]
+            properties:
+              id: { type: string, format: uuid }
+              alias: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    IncidentPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Incident" }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+
+    InterventionParticipant:
+      type: object
+      required: [heroId, role, participation, outcomeValidation, isActive]
+      properties:
+        heroId: { type: string, format: uuid }
+        alias: { type: string }
+        role: { type: string, enum: [lead, member] }
+        participation: { type: string, enum: [invited, confirmed] }
+        invitedBy: { type: string, format: uuid }
+        outcomeValidation: { type: string, enum: [pending, approved, rejected] }
+        isActive: { type: boolean }
+        invitedAt: { type: string, format: date-time }
+        joinedAt: { type: string, format: date-time }
+
+    Intervention:
+      type: object
+      required: [id, incidentId, status, startedAt, participants]
+      properties:
+        id: { type: string, format: uuid }
+        incidentId: { type: string, format: uuid }
+        status: { type: string, enum: [in_progress, succeeded, failed] }
+        proposedStatus: { type: string, enum: [succeeded, failed] }
+        proposedBy: { type: string, format: uuid }
+        decidedBy: { type: string, format: uuid }
+        notes: { type: string }
+        startedAt: { type: string, format: date-time }
+        endedAt: { type: string, format: date-time }
+        participants:
+          type: array
+          items: { $ref: "#/components/schemas/InterventionParticipant" }
+
+    InviteHeroesPayload:
+      type: object
+      required: [heroIds]
+      additionalProperties: false
+      properties:
+        heroIds:
+          type: array
+          minItems: 1
+          items: { type: string, format: uuid }
+
+    InterventionOutcomePayload:
+      type: object
+      required: [status]
+      additionalProperties: false
+      properties:
+        status: { type: string, enum: [succeeded, failed] }
+        notes: { type: string }
+
+    InterventionOutcomeValidationPayload:
+      type: object
+      required: [approved]
+      additionalProperties: false
+      properties:
+        approved: { type: boolean }

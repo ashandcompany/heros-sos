@@ -2,9 +2,10 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { login } from "@/lib/api";
-import { SESSION_COOKIE, sessionCookieOptions } from "@/lib/cookies";
-import { afterLoginRouteByRole, routes } from "@/lib/routes";
+import { login, logout } from "@/lib/api";
+import { SESSION_COOKIE, sessionCookieAttributes } from "@/lib/cookies";
+import { accountHomeByRole, routes } from "@/lib/routes";
+import type { LoginResult } from "@/types";
 
 export interface LoginFormState {
   /** Identifiant renvoyé pour pré-remplir le champ (le mot de passe ne l'est jamais). */
@@ -43,23 +44,43 @@ export async function loginAction(
   const result = await login({ identifier, password });
 
   if (!result.ok) {
-    return {
-      identifier,
-      fieldErrors: {},
-      formError:
-        result.error === "account-suspended"
-          ? "Ce compte a été suspendu par la modération. Contactez-nous pour en savoir plus."
-          : "Identifiant ou mot de passe incorrect.",
-    };
+    return { identifier, fieldErrors: {}, formError: loginErrorMessage(result) };
   }
 
-  (await cookies()).set(SESSION_COOKIE, result.token, sessionCookieOptions);
+  // Le cookie de l'API est recopié vers le navigateur avec la même durée de vie que la session.
+  (await cookies()).set(SESSION_COOKIE, result.token, {
+    ...sessionCookieAttributes,
+    expires: new Date(result.expiresAt),
+  });
 
-  redirect(afterLoginRouteByRole[result.user.role]);
+  redirect(accountHomeByRole[result.user.role]);
+}
+
+/** Message affiché pour un échec de connexion, sans dire lequel des deux champs est faux. */
+function loginErrorMessage(result: Extract<LoginResult, { ok: false }>): string {
+  switch (result.error) {
+    case "account-suspended":
+      return "Ce compte a été suspendu par la modération. Contactez-nous pour en savoir plus.";
+    case "account-not-activated":
+      return "Votre compte n'est pas encore activé : consultez le mail d'activation.";
+    case "too-many-attempts": {
+      const minutes = Math.ceil((result.retryAfterSeconds ?? 60) / 60);
+      return `Trop de tentatives de connexion. Réessayez dans ${minutes} minute${minutes > 1 ? "s" : ""}.`;
+    }
+    case "unavailable":
+      return "La connexion est momentanément indisponible. Réessayez dans quelques instants.";
+    case "invalid-credentials":
+      return "Identifiant ou mot de passe incorrect.";
+  }
 }
 
 export async function logoutAction(): Promise<void> {
-  // Future implémentation : invalider aussi la session côté API (`POST ${API_URL}/auth/logout`).
-  (await cookies()).delete(SESSION_COOKIE);
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE)?.value;
+
+  // Révoque la session côté API, puis efface le cookie dans tous les cas. Les attributs sont
+  // repris : un cookie `__Host-` ne peut être effacé que par un Set-Cookie Secure.
+  if (token) await logout(token);
+  cookieStore.delete({ name: SESSION_COOKIE, ...sessionCookieAttributes });
   redirect(routes.home);
 }

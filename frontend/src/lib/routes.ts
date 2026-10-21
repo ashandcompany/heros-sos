@@ -4,15 +4,27 @@ import type { UserRole } from "@/types";
 export const routes = {
   home: "/",
   encyclopedia: "/encyclopedie",
+  map: "/carte",
   videos: "/videotheque",
   blog: "/blog",
   login: "/connexion",
   signup: "/inscription",
   forgotPassword: "/mot-de-passe-oublie",
+  /** Lien du mail de réinitialisation (`?token=…`) : doit rester égal à HEROS_PASSWORD_RESET_PATH du backend. */
+  passwordReset: "/reinitialisation-mot-de-passe",
+  /** Lien du mail d'activation (`?token=…`) : doit rester égal à HEROS_ACTIVATION_PATH du backend. */
+  activation: "/activation",
   profile: "/profil",
   profileIncidents: "/profil/incidents",
   profileInterventions: "/profil/interventions",
-  heroSpace: "/espace-heros",
+  heroSpace: "/heros",
+  heroDashboard: "/heros/dashboard",
+  heroIncidents: "/heros/incidents",
+  heroMap: "/heros/carte",
+  heroProfile: "/heros/profil",
+  heroVideos: "/heros/films",
+  heroReputation: "/heros/reputation",
+  heroDeclare: "/heros/signaler",
   admin: "/admin",
   adminIncidents: "/admin/incidents",
   adminReportIncident: "/admin/incidents/signaler",
@@ -31,6 +43,11 @@ export const routes = {
 
 export const adminIncidentRoute = (id: string) => `${routes.adminIncidents}/${id}`;
 export const adminArticleRoute = (id: string) => `${routes.adminBlog}/${id}`;
+export const citizenIncidentRoute = (id: string) => `${routes.profileIncidents}/${id}`;
+export const heroIncidentRoute = (id: string) => `${routes.heroIncidents}/${id}`;
+export const blogArticleRoute = (slug: string) => `${routes.blog}/${slug}`;
+export const heroSheetRoute = (id: string) => `${routes.encyclopedia}/super-heros/${id}`;
+export const villainSheetRoute = (id: string) => `${routes.encyclopedia}/super-vilains/${id}`;
 
 export interface NavItem {
   label: string;
@@ -40,6 +57,7 @@ export interface NavItem {
 export const mainNav: NavItem[] = [
   { label: "Accueil", href: routes.home },
   { label: "Encyclopédie", href: routes.encyclopedia },
+  { label: "Carte", href: routes.map },
   { label: "Vidéothèque", href: routes.videos },
   { label: "Blog", href: routes.blog },
 ];
@@ -47,7 +65,7 @@ export const mainNav: NavItem[] = [
 /** Page d'accueil de l'espace personnel selon le rôle de l'utilisateur connecté. */
 export const accountHomeByRole: Record<UserRole, string> = {
   citoyen: routes.profile,
-  "super-heros": routes.heroSpace,
+  "super-heros": routes.heroDashboard,
   admin: routes.admin,
 };
 
@@ -58,15 +76,16 @@ export const citizenNav: NavItem[] = [
   { label: "Noter un super-héros", href: routes.profileInterventions },
 ];
 
-/**
- * Page affichée après connexion. L'espace héros n'existant pas encore,
- * les super-héros restent sur l'accueil.
- */
-export const afterLoginRouteByRole: Record<UserRole, string> = {
-  citoyen: routes.profile,
-  "super-heros": routes.home,
-  admin: routes.admin,
-};
+/** Sous-navigation de l'espace professionnel des super-héros. */
+export const heroNav: NavItem[] = [
+  { label: "Tableau de bord", href: routes.heroDashboard },
+  { label: "Incidents", href: routes.heroIncidents },
+  { label: "Carte", href: routes.heroMap },
+  { label: "Signaler un incident", href: routes.heroDeclare },
+  { label: "Ma vidéothèque", href: routes.heroVideos },
+  { label: "Ma réputation", href: routes.heroReputation },
+  { label: "Mon profil", href: routes.heroProfile },
+];
 
 /** Sous-navigation du back-office (modération). */
 export const adminNav: NavItem[] = [

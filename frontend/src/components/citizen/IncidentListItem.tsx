@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import {
   formatDateTime,
@@ -5,9 +6,10 @@ import {
   incidentTypeLabels,
   reporterRoleLabels,
 } from "@/lib/format";
+import { citizenIncidentRoute } from "@/lib/routes";
 import type { Incident, IncidentStatus } from "@/types";
 
-const statusTone: Record<IncidentStatus, "paper" | "warning" | "success"> = {
+export const statusTone: Record<IncidentStatus, "paper" | "warning" | "success"> = {
   signale: "paper",
   "en-cours": "warning",
   resolu: "success",
@@ -23,7 +25,7 @@ export function IncidentListItem({ incident, detailed = false }: IncidentListIte
   const place = [incident.location.address, incident.location.city].filter(Boolean).join(", ");
 
   return (
-    <article className="rounded-2xl border border-border bg-surface p-4 sm:p-5">
+    <article className="relative border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-4 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary hover:border-muted sm:p-5">
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone={statusTone[incident.status]}>{incidentStatusLabels[incident.status]}</Badge>
         <Badge>{incidentTypeLabels[incident.type]}</Badge>
@@ -36,7 +38,15 @@ export function IncidentListItem({ incident, detailed = false }: IncidentListIte
           </span>
         )}
       </div>
-      <h3 className="mt-3 font-display font-semibold">{incident.title}</h3>
+      <h3 className="mt-3 font-display font-semibold">
+        {/* Lien étiré : toute la carte mène au détail de l'incident. */}
+        <Link
+          href={citizenIncidentRoute(incident.id)}
+          className="after:absolute after:inset-0 hover:underline focus-visible:outline-none"
+        >
+          {incident.title}
+        </Link>
+      </h3>
       <p className="mt-1 text-sm text-muted">
         <span className="sr-only">Lieu : </span>
         {place}

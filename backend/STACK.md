@@ -6,10 +6,10 @@ Complément au cahier des charges (go / pg) : le backend est en **Go**, avec pg 
 
 Deux approches possibles :
 
-| Approche | Outil | Avantage | Compromis |
-|---|---|---|---|
-| **Spec d'abord** (recommandée) | Fichier `openapi.yaml` (OpenAPI 3) et `oapi-codegen` pour générer les types et l'interface serveur | Le contrat est la référence, le front peut générer son client, le code ne peut pas dériver de la doc | Il faut écrire le YAML d'abord |
-| **Code d'abord** | `swaggo/swag` (annotations en commentaires) | Rapide à démarrer | Génère surtout du Swagger 2.0, et la doc peut dériver du code |
+| Approche                       | Outil                                                                                              | Avantage                                                                                             | Compromis                                                     |
+| ------------------------------ | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| **Spec d'abord** (recommandée) | Fichier `openapi.yaml` (OpenAPI 3) et `oapi-codegen` pour générer les types et l'interface serveur | Le contrat est la référence, le front peut générer son client, le code ne peut pas dériver de la doc | Il faut écrire le YAML d'abord                                |
+| **Code d'abord**               | `swaggo/swag` (annotations en commentaires)                                                        | Rapide à démarrer                                                                                    | Génère surtout du Swagger 2.0, et la doc peut dériver du code |
 
 Dans les deux cas, Swagger UI est servi sur `/docs`, uniquement hors production.
 
@@ -18,10 +18,10 @@ Dans les deux cas, Swagger UI est servi sur `/docs`, uniquement hors production.
 Un `docker-compose.yml` avec ces services :
 
 - `api` : image Go en multi-stage, avec une image finale minimale.
-- `db` : MySQL, avec un volume.
+- `db` : PostgreSQL, avec un volume.
 - `rabbitmq` : si retenu, avec l'interface de management.
 - `mailpit` : faux serveur SMTP pour voir les mails en développement.
-- `adminer` ou phpMyAdmin dans un profil `dev` uniquement, car le cahier §2.4 l'interdit en production.
+- `adminer` ou pgAdmin dans un profil `dev` uniquement, car le cahier §2.4 l'interdit en production.
 
 Les secrets passent par `.env`, avec un `.env.example` commité et jamais le vrai fichier.
 
@@ -37,7 +37,7 @@ Proposition :
 Deux points à connaître :
 
 - **Hébergement :** le cahier §2.1 dit que chaque groupe héberge chez son hébergeur. Un hébergement mutualisé ne fera pas tourner RabbitMQ. Vérifier que l'hébergeur supporte Docker.
-- **Alternative sans RabbitMQ :** une table `mail_outbox` en MySQL lue par un worker. Il n'y a rien de plus à héberger et c'est suffisant à cette échelle. RabbitMQ est un peu surdimensionné ici, mais il se justifie pour la démonstration technique ou si d'autres événements sont prévus.
+- **Alternative sans RabbitMQ :** une table `mail_outbox` en PostgreSQL lue par un worker. Il n'y a rien de plus à héberger et c'est suffisant à cette échelle. RabbitMQ est un peu surdimensionné ici, mais il se justifie pour la démonstration technique ou si d'autres événements sont prévus.
 
 Avec RabbitMQ, le message est publié après le commit en base, avec confirmation de publication. Sinon un crash entre les deux ferait perdre un mail.
 
@@ -63,13 +63,13 @@ OMDb ne remplace pas l'encyclopédie Marvel du §6.1.4, qui reste à trancher.
 
 Le RGPD n'impose pas d'algorithme précis (article 32 : mesures appropriées, état de l'art). Le chiffrement symétrique est déjà résistant au quantique : AES-256 garde environ 128 bits de sécurité face à Grover. Le post-quantique ne compte que là où l'on utilise de la clé publique.
 
-| Mesure | Pertinence | Où dans le projet |
-|---|---|---|
-| **Cascade AES-256-GCM puis XChaCha20-Poly1305** (clé de 512 bits) sur les données personnelles | Oui, retenu : 512 bits de clé réelle avec des algorithmes standards | Champs sensibles en base : identité civile des héros (nom, prénom, §5.5 et §5.7), puis téléphone, adresse postale et date de naissance (§5.4). Un paquet `internal/crypto` avec un format versionné pour pouvoir changer d'algorithme plus tard. Détail ci-dessous. |
-| **TLS avec échange hybride ML-KEM** (`X25519MLKEM768`) | Oui, gratuit avec une version récente de Go et un navigateur à jour. Protège contre « récolter maintenant, déchiffrer plus tard ». | Navigateur vers Next.js, Next.js vers l'API Go, API vers la base et vers le SMTP. Le composant qui termine le TLS (proxy Docker ou Go) doit être assez récent : à vérifier. |
-| **Partage de secret de Shamir** pour la clé maîtresse | Oui, simple et utile | Opérations, pas le code applicatif : la clé maîtresse qui protège les clés de données et les sauvegardes est répartie entre *n* personnes de l'équipe, *k* suffisent pour la reconstituer. |
-| **Ed25519** pour des liens signés | Oui, car ils sont de courte durée et le risque quantique est négligeable | Lien de désabonnement de la newsletter (§4.2), lien de notation d'un héros dans le mail de fin d'intervention (§4.3.3 et §6.1.3). Aussi les clés SSH de déploiement. Un identifiant `kid` permet de renouveler la clé. |
-| ML-DSA, FHE, MPC, QKD, Threefish | Non, hors de proportion pour ce projet | Non utilisés. Threefish pourra s'ajouter plus tard comme autre id d'algorithme du format versionné. |
+| Mesure                                                                                         | Pertinence                                                                                                                         | Où dans le projet                                                                                                                                                                                                                                                   |
+| ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Cascade AES-256-GCM puis XChaCha20-Poly1305** (clé de 512 bits) sur les données personnelles | Oui, retenu : 512 bits de clé réelle avec des algorithmes standards                                                                | Champs sensibles en base : identité civile des héros (nom, prénom, §5.5 et §5.7), puis téléphone, adresse postale et date de naissance (§5.4). Un paquet `internal/crypto` avec un format versionné pour pouvoir changer d'algorithme plus tard. Détail ci-dessous. |
+| **TLS avec échange hybride ML-KEM** (`X25519MLKEM768`)                                         | Oui, gratuit avec une version récente de Go et un navigateur à jour. Protège contre « récolter maintenant, déchiffrer plus tard ». | Navigateur vers Next.js, Next.js vers l'API Go, API vers la base et vers le SMTP. Le composant qui termine le TLS (proxy Docker ou Go) doit être assez récent : à vérifier.                                                                                         |
+| **Partage de secret de Shamir** pour la clé maîtresse                                          | Oui, simple et utile                                                                                                               | Opérations, pas le code applicatif : la clé maîtresse qui protège les clés de données et les sauvegardes est répartie entre _n_ personnes de l'équipe, _k_ suffisent pour la reconstituer.                                                                          |
+| **Ed25519** pour des liens signés                                                              | Oui, car ils sont de courte durée et le risque quantique est négligeable                                                           | Lien de désabonnement de la newsletter (§4.2), lien de notation d'un héros dans le mail de fin d'intervention (§4.3.3 et §6.1.3). Aussi les clés SSH de déploiement. Un identifiant `kid` permet de renouveler la clé.                                              |
+| ML-DSA, FHE, MPC, QKD, Threefish                                                               | Non, hors de proportion pour ce projet                                                                                             | Non utilisés. Threefish pourra s'ajouter plus tard comme autre id d'algorithme du format versionné.                                                                                                                                                                 |
 
 ### Chiffrement des données : cascade à clé de 512 bits
 
@@ -118,10 +118,10 @@ Le cahier §2.2 impose une gestion des sessions via le formulaire de connexion :
 
 **Durées** (à ajuster)
 
-| Profil | Inactivité | Durée maximale |
-|---|---|---|
-| Citoyen, héros | 2 h | 7 jours (30 jours avec « se souvenir de moi ») |
-| Modérateur | 15 min | 8 h |
+| Profil         | Inactivité | Durée maximale                                 |
+| -------------- | ---------- | ---------------------------------------------- |
+| Citoyen, héros | 2 h        | 7 jours (30 jours avec « se souvenir de moi ») |
+| Modérateur     | 15 min     | 8 h                                            |
 
 **Règles**
 
@@ -143,7 +143,7 @@ Le cahier §2.2 impose une gestion des sessions via le formulaire de connexion :
 
 ## Prochaines étapes
 
-- Mettre à jour la section Stack du `README.md` (Go, MySQL, Docker, OpenAPI, OMDb, plus RabbitMQ si retenu).
+- Mettre à jour la section Stack du `README.md` (Go, PostgreSQL, Docker, OpenAPI, OMDb, plus RabbitMQ si retenu).
 - Initialiser `backend/` : `go mod init`, structure, `Dockerfile`, `docker-compose.yml` et `openapi.yaml`, avec `/health` comme premier endpoint.
 
 AES et RSA ne sont pas des protocoles en eux-mêmes : ce sont des **algorithmes**. Voici leurs variantes, leurs modes d'utilisation et les protocoles qui les emploient.
@@ -151,6 +151,7 @@ AES et RSA ne sont pas des protocoles en eux-mêmes : ce sont des **algorithmes*
 ## AES (chiffrement symétrique)
 
 **Tailles de clé**
+
 - AES-128 : 10 tours
 - AES-192 : 12 tours
 - AES-256 : 14 tours
@@ -158,6 +159,7 @@ AES et RSA ne sont pas des protocoles en eux-mêmes : ce sont des **algorithmes*
 Dans tous les cas, le bloc fait 128 bits.
 
 **Modes de chiffrement classiques (confidentialité seule)**
+
 - **ECB** (Electronic Codebook) : à éviter, car il révèle les motifs du texte clair.
 - **CBC** (Cipher Block Chaining) : courant, nécessite un IV aléatoire.
 - **CFB** (Cipher Feedback)
@@ -166,6 +168,7 @@ Dans tous les cas, le bloc fait 128 bits.
 - **XTS** : conçu pour le chiffrement de disque (BitLocker, LUKS, FileVault).
 
 **Modes authentifiés (AEAD : confidentialité et intégrité)**
+
 - **GCM** (Galois/Counter Mode) : le plus utilisé aujourd'hui (TLS, IPsec).
 - **CCM** (Counter with CBC-MAC) : Wi-Fi WPA2, Bluetooth, IoT.
 - **GCM-SIV** : résistant à la réutilisation de nonce.
@@ -174,6 +177,7 @@ Dans tous les cas, le bloc fait 128 bits.
 - **SIV** (Synthetic IV)
 
 **Autres usages**
+
 - **AES Key Wrap** (KW / KWP, RFC 3394 et 5649) : chiffrement de clés.
 - **CMAC** (AES-CMAC) : code d'authentification de message.
 - **GMAC** : authentification seule, variante de GCM.
@@ -181,37 +185,41 @@ Dans tous les cas, le bloc fait 128 bits.
 ## RSA (chiffrement asymétrique)
 
 **Tailles de clé**
+
 - 1024 bits : obsolète.
 - 2048 bits : minimum actuel.
 - 3072 bits et 4096 bits : recommandés pour le long terme.
 
 **Schémas de chiffrement**
+
 - **RSAES-PKCS1-v1_5** : ancien, vulnérable à l'attaque de Bleichenbacher.
 - **RSAES-OAEP** (Optimal Asymmetric Encryption Padding) : recommandé.
 - **RSA-KEM** : encapsulation de clé.
 - **Textbook RSA** (sans padding) : jamais sûr en pratique.
 
 **Schémas de signature**
+
 - **RSASSA-PKCS1-v1_5** : encore très répandu (certificats).
 - **RSASSA-PSS** (Probabilistic Signature Scheme) : recommandé, obligatoire dans TLS 1.3.
 
 **Échange de clé**
+
 - **Transport de clé RSA** : TLS ≤ 1.2, supprimé de TLS 1.3 faute de confidentialité persistante (forward secrecy).
 
 ## Protocoles qui utilisent AES et/ou RSA
 
-| Protocole | AES | RSA |
-|---|---|---|
-| **TLS / HTTPS** | AES-GCM, AES-CCM, AES-CBC (anciennes versions) | Signatures de certificats, échange de clé (≤ TLS 1.2) |
-| **SSH** | aes128/256-ctr, aes-gcm | Clés d'hôte et d'utilisateur (rsa-sha2-256/512) |
-| **IPsec / IKE** | AES-CBC, AES-GCM, AES-CTR | Authentification par certificats |
-| **WPA2 / WPA3** (Wi-Fi) | AES-CCMP, AES-GCMP | via EAP-TLS en entreprise |
-| **OpenVPN / WireGuard** | OpenVPN : AES-GCM (WireGuard utilise ChaCha20) | OpenVPN : certificats RSA |
-| **PGP / GPG, S/MIME** | Chiffrement du message | Chiffrement de la clé de session et signatures |
-| **Kerberos** | aes128/256-cts-hmac-sha1/sha2 | — |
-| **Signal / messageries** | AES-CBC / AES-GCM | — (courbes elliptiques) |
-| **Chiffrement de disque** (BitLocker, LUKS, FileVault) | AES-XTS | — |
-| **PKI / X.509** | — | Signatures de certificats |
-| **JWT / JOSE** | A128GCM, A256GCM, A256KW | RS256, PS256, RSA-OAEP |
+| Protocole                                              | AES                                            | RSA                                                   |
+| ------------------------------------------------------ | ---------------------------------------------- | ----------------------------------------------------- |
+| **TLS / HTTPS**                                        | AES-GCM, AES-CCM, AES-CBC (anciennes versions) | Signatures de certificats, échange de clé (≤ TLS 1.2) |
+| **SSH**                                                | aes128/256-ctr, aes-gcm                        | Clés d'hôte et d'utilisateur (rsa-sha2-256/512)       |
+| **IPsec / IKE**                                        | AES-CBC, AES-GCM, AES-CTR                      | Authentification par certificats                      |
+| **WPA2 / WPA3** (Wi-Fi)                                | AES-CCMP, AES-GCMP                             | via EAP-TLS en entreprise                             |
+| **OpenVPN / WireGuard**                                | OpenVPN : AES-GCM (WireGuard utilise ChaCha20) | OpenVPN : certificats RSA                             |
+| **PGP / GPG, S/MIME**                                  | Chiffrement du message                         | Chiffrement de la clé de session et signatures        |
+| **Kerberos**                                           | aes128/256-cts-hmac-sha1/sha2                  | —                                                     |
+| **Signal / messageries**                               | AES-CBC / AES-GCM                              | — (courbes elliptiques)                               |
+| **Chiffrement de disque** (BitLocker, LUKS, FileVault) | AES-XTS                                        | —                                                     |
+| **PKI / X.509**                                        | —                                              | Signatures de certificats                             |
+| **JWT / JOSE**                                         | A128GCM, A256GCM, A256KW                       | RS256, PS256, RSA-OAEP                                |
 
 Je peux détailler le fonctionnement d'un mode en particulier (par exemple GCM ou OAEP), ou te faire une fiche de révision si c'est pour un cours.

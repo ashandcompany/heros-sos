@@ -1,0 +1,16 @@
+# Contexte de build du front : ni dépendances installées, ni sorties de build, ni secrets.
+node_modules
+.next
+out
+coverage
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+Dockerfile
+.dockerignore
+build
+tsconfig.tsbuildinfo

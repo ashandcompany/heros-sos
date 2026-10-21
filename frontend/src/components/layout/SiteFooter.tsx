@@ -33,7 +33,8 @@ const footerColumns: Array<{ id: string; title: string; links: NavItem[] }> = [
 
 export function SiteFooter() {
   return (
-    <footer className="bg-wood border-t-8 border-double border-edge text-foreground">
+    <footer className="bg-wood text-foreground">
+      <div aria-hidden="true" className="bar-tricolor" />
       <Container className="grid gap-12 py-12 lg:grid-cols-[1fr_1.1fr] lg:py-16">
         <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
           {footerColumns.map((column) => (

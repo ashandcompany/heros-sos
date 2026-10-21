@@ -1,0 +1,93 @@
+package config
+
+import "time"
+
+// Valeurs par défaut de la configuration. C'est le seul endroit du backend où l'on trouve des
+// durées, des tailles ou des seuils codés en dur : le reste du code les lit depuis Config.
+// Chaque valeur peut être surchargée par une variable d'environnement (voir env.go).
+const (
+	defaultHTTPAddr           = ":8080"
+	defaultReadHeaderTimeout  = 5 * time.Second
+	defaultReadTimeout        = 15 * time.Second
+	defaultWriteTimeout       = 30 * time.Second
+	defaultIdleTimeout        = 60 * time.Second
+	defaultShutdownTimeout    = 20 * time.Second
+	defaultMaxBodyBytes       = 1 << 20 // 1 Mio
+	defaultHealthcheckTimeout = 3 * time.Second
+
+	defaultDBMaxOpenConns    = 25
+	defaultDBMaxIdleConns    = 5
+	defaultDBConnMaxLifetime = 30 * time.Minute
+	defaultDBConnMaxIdleTime = 10 * time.Minute
+	defaultDBPingTimeout     = 5 * time.Second
+	defaultDBSlowQuery       = 200 * time.Millisecond
+
+	defaultMemberSessionIdle  = 2 * time.Hour
+	defaultMemberSessionMax   = 7 * 24 * time.Hour
+	defaultRememberMeIdle     = 30 * 24 * time.Hour
+	defaultRememberMeMax      = 30 * 24 * time.Hour
+	defaultModeratorIdle      = 15 * time.Minute
+	defaultModeratorMax       = 8 * time.Hour
+	defaultSessionTouchPeriod = time.Minute
+
+	defaultArgon2Time          = 3
+	defaultArgon2MemoryKiB     = 64 * 1024
+	defaultArgon2Threads       = 2
+	defaultArgon2KeyLength     = 32
+	defaultArgon2SaltLength    = 16
+	defaultArgon2MaxConcurrent = 4
+
+	defaultPasswordMinLength = 10
+	defaultPasswordMaxLength = 128
+
+	defaultLockoutMaxFailures = 5
+	defaultLockoutBaseDelay   = time.Minute
+	defaultLockoutMaxDelay    = time.Hour
+
+	defaultMaxTrackedRateKeys = 100_000
+
+	defaultActivationTokenTTL    = 24 * time.Hour
+	defaultPasswordResetTokenTTL = time.Hour
+
+	defaultMailFromAddress = "no-reply@heros-sos.local"
+	defaultMailFromName    = "Heros-SOS"
+	defaultSMTPHost        = "localhost"
+	defaultSMTPPort        = 1025 // port de Mailpit en développement
+	defaultSMTPTimeout     = 10 * time.Second
+	defaultMailWorkers     = 4
+	defaultMailQueueSize   = 256
+	defaultMailMaxAttempts = 3
+	defaultMailRetryDelay  = 2 * time.Second
+	defaultMailSendTimeout = 30 * time.Second
+
+	defaultPublicBaseURL     = "http://localhost:3000"
+	defaultActivationPath    = "/activation"
+	defaultPasswordResetPath = "/reinitialisation-mot-de-passe"
+
+	defaultCleanupInterval  = 15 * time.Minute
+	defaultSessionRetention = 7 * 24 * time.Hour
+	defaultTokenRetention   = 7 * 24 * time.Hour
+)
+
+// Règles de limitation de débit par défaut (maximum de requêtes par fenêtre).
+var (
+	defaultRateLoginPerIP            = RateRule{Max: 20, Window: 15 * time.Minute}
+	defaultRateLoginPerIdentifier    = RateRule{Max: 5, Window: 15 * time.Minute}
+	defaultRateRegisterPerIP         = RateRule{Max: 5, Window: time.Hour}
+	defaultRatePasswordResetPerIP    = RateRule{Max: 10, Window: time.Hour}
+	defaultRatePasswordResetPerKey   = RateRule{Max: 3, Window: time.Hour}
+	defaultRateIncidentCreatePerUser = RateRule{Max: 10, Window: time.Hour}
+)
+
+// Plancher de sécurité imposé en production pour le hachage des mots de passe
+// (recommandation OWASP : 19 Mio de mémoire, 2 itérations).
+const (
+	productionMinArgon2MemoryKiB = 19 * 1024
+	productionMinArgon2Time      = 2
+)
+
+// Taille attendue d'une clé maîtresse de chiffrement (cascade à 512 bits) et du secret CSRF.
+const (
+	MasterKeyLength = 64
+	minCSRFSecret   = 32
+)

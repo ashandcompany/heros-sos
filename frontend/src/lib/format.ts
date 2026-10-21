@@ -1,10 +1,13 @@
 import type {
   IncidentLocation,
+  IncidentPriority,
   IncidentStatus,
   IncidentType,
+  InterventionOutcome,
   ModerationStatus,
   ReporterRole,
   ThreatLevel,
+  VillainStatus,
 } from "@/types";
 
 const dateFormatter = new Intl.DateTimeFormat("fr-FR", {
@@ -82,6 +85,27 @@ export const incidentStatusLabels: Record<IncidentStatus, string> = {
   signale: "Signalé",
   "en-cours": "Intervention en cours",
   resolu: "Résolu",
+};
+
+/** Du moins urgent au plus urgent (ordre des listes déroulantes et du tri). */
+export const incidentPriorityLabels: Record<IncidentPriority, string> = {
+  basse: "Basse",
+  normale: "Normale",
+  haute: "Haute",
+  critique: "Critique",
+};
+
+export const isIncidentPriority = (value: string): value is IncidentPriority =>
+  value in incidentPriorityLabels;
+
+export const interventionOutcomeLabels: Record<InterventionOutcome, string> = {
+  reussi: "Réussi",
+  echoue: "Échoué",
+};
+
+export const villainStatusLabels: Record<VillainStatus, string> = {
+  "en-liberte": "En liberté",
+  emprisonne: "Emprisonné",
 };
 
 export const reporterRoleLabels: Record<ReporterRole, string> = {

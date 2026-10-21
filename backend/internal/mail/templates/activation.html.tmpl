@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="fr">
+  <body style="font-family: sans-serif; line-height: 1.5; color: #1a1a2e;">
+    <p>Bonjour {{.FirstName}},</p>
+    <p>Bienvenue sur <strong>{{.AppName}}</strong> ! Pour activer votre compte, cliquez sur le bouton ci-dessous.</p>
+    <p>
+      <a href="{{.Link}}" style="display: inline-block; padding: 10px 18px; background: #e63946; color: #ffffff; text-decoration: none; border-radius: 4px;">Activer mon compte</a>
+    </p>
+    <p>Ce lien est valable {{.ExpiresIn}} et ne peut servir qu'une fois.</p>
+    <p>Si vous n'êtes pas à l'origine de cette inscription, ignorez simplement ce message : aucun compte ne sera activé.</p>
+    <p>L'équipe {{.AppName}}</p>
+  </body>
+</html>

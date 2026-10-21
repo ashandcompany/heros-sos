@@ -30,7 +30,7 @@ export function RadioGroup({
           <label
             key={option.value}
             className={cn(
-              "flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border bg-background px-4 text-sm has-checked:border-primary has-checked:bg-primary/10 has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-primary",
+              "flex min-h-11 cursor-pointer items-center gap-2 border-2 bg-background px-4 text-sm has-checked:border-primary has-checked:bg-primary/10 has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-primary",
               error ? "border-danger" : "border-border",
             )}
           >

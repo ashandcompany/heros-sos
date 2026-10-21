@@ -14,80 +14,96 @@
   --font-mono: var(--font-plex-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
   --font-stamp: var(--font-special-elite), var(--font-plex-mono), ui-monospace, monospace;
 
-  /* Fonds et surfaces : bruns boisés */
-  --color-background: #1e1611;
-  --color-surface: #4a3426;
-  --color-surface-raised: #5a4132;
-  --color-border: #6d4f3b;
+  /*
+   * Direction artistique : rétro-futurisme + brutalisme + modernisme du milieu du XXe siècle.
+   * Béton sombre, papier crème, terre cuite, turquoise et moutarde ; angles droits, filets
+   * épais et ombres dures décalées. Les arrondis sont supprimés (rounded-full reste disponible).
+   */
+  --radius-xs: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-3xl: 0;
 
-  /* Textes : beige papier */
-  --color-foreground: #efe4cf;
-  --color-muted: #cdbea4;
+  /* Fonds et surfaces : béton sombre */
+  --color-background: #111315;
+  --color-surface: #1b1e22;
+  --color-surface-raised: #272b31;
+  --color-border: #5b636d;
 
-  /* Couleur principale : orange brûlé (boutons, logo, filets). Texte orange sur beige : primary-ink */
-  --color-primary: #c8561e;
-  --color-primary-hover: #e0652a;
-  --color-primary-foreground: #1e1611;
-  --color-primary-ink: #a3441a;
+  /* Textes : crème */
+  --color-foreground: #f2ebd9;
+  --color-muted: #b4b9bf;
 
-  /* Couleur secondaire : ambre moutarde (titres sur fond sombre, survols, « en cours ») */
-  --color-accent: #d9a13b;
+  /* Couleur principale : terre cuite. Texte orange sur crème : primary-ink */
+  --color-primary: #cf6a3c;
+  --color-primary-hover: #dc7d52;
+  --color-primary-foreground: #111315;
+  --color-primary-ink: #a8330a;
+
+  /* Couleur secondaire : turquoise (eyebrows, survols, « en cours ») */
+  --color-accent: #0a6b63;
+
+  /* Moutarde : bandes tricolores, notes */
+  --color-mustard: #f2b134;
 
   /* Papier : fond des dossiers et formulaires */
-  --color-paper: #efe4cf;
+  --color-paper: #f2ebd9;
 
-  /* Encre : texte brun foncé posé sur du papier, identique dans les deux thèmes */
-  --color-ink: #1e1611;
+  /* Encre : texte presque noir posé sur du papier, identique dans les deux thèmes */
+  --color-ink: #111315;
 
-  /* Contours épais et ombres dures (cadres, cartes, boutons) : brun presque noir */
-  --color-edge: #0d0906;
-  --color-shadow: #0d0906;
-  /* Seconde ombre, sous la tranche des boutons */
+  /* Contours épais et ombres dures décalées : crème et gris béton sur fond sombre */
+  --color-edge: #f2ebd9;
+  --color-shadow: #262a30;
+  /* Ombre secondaire, sous la tranche des boutons */
   --color-shadow-deep: #000;
 
-  /* Vert sauge sourd : sections secondaires, badges, priorité basse */
-  --color-sage: #4f6b5e;
+  /* Vert-gris turquoise sourd : sections secondaires, badges, priorité basse */
+  --color-sage: #2f6f6a;
 
   /* Vert phosphore : éléments « machine » (chiffres, statuts), en font-mono */
   --color-terminal: #9be37f;
 
-  /* Rouge brique : priorité haute, échec (fonds, badges). Texte sur fond sombre : danger */
-  --color-brick: #a8322a;
+  /* Rouge signal : priorité haute, échec (fonds, badges). Texte sur fond sombre : danger */
+  --color-brick: #b32b1c;
 
   /* Couleurs sémantiques */
   --color-success: #9be37f;
-  --color-rating: #d9a13b;
-  --color-danger: #e57a6e;
+  --color-rating: #f2b134;
+  --color-danger: #ff8a7a;
 }
 
 /*
  * Thème clair (« papier crème »), activé par <html data-theme="light"> (voir ThemeToggle).
  * Le thème sombre ci-dessus reste celui par défaut. Contrastes vérifiés (WCAG AA) pour le texte
- * sur background, surface et paper ; ambre, vert et rouge sont foncés pour rester lisibles.
+ * sur background, surface et paper ; turquoise, vert et rouge sont foncés pour rester lisibles.
  * Les couleurs fixes (primary, brick, sage, terminal, ink) ne changent pas.
  */
 :root[data-theme="light"] {
   color-scheme: light;
 
-  --color-background: #f4ecdc;
-  --color-surface: #e9dcc3;
-  --color-surface-raised: #dfcdaa;
-  --color-border: #94775a;
+  --color-background: #efe9da;
+  --color-surface: #f8f3e6;
+  --color-surface-raised: #e1d9c4;
+  --color-border: #6b6757;
 
-  --color-foreground: #24180f;
-  --color-muted: #5a4634;
+  --color-foreground: #111315;
+  --color-muted: #4a4d52;
 
-  --color-accent: #7a4e0c;
-  --color-paper: #fbf6ec;
+  --color-accent: #0a6b63;
+  --color-paper: #fbf7ec;
 
-  --color-success: #28601d;
-  --color-rating: #7a4e0c;
-  --color-danger: #9a2c25;
+  --color-success: #1d6a2b;
+  --color-rating: #7f5400;
+  --color-danger: #b3261e;
 
-  /* Contours brun moyen et ombres beige foncé : le relief reste lisible sans noir */
-  --color-edge: #7d6249;
-  --color-shadow: #c4ab86;
-  --color-shadow-deep: #ad9370;
+  /* Béton et encre : contours noirs, ombres douces beige-gris */
+  --color-edge: #111315;
+  --color-shadow: #cfc8b4;
+  --color-shadow-deep: #bfb8a3;
 }
 
 /*
@@ -95,24 +111,24 @@
  * du thème sombre pour que son contenu garde ses couleurs d'origine.
  */
 :root[data-theme="light"] .crt {
-  --color-background: #1e1611;
-  --color-surface: #4a3426;
-  --color-surface-raised: #5a4132;
-  --color-border: #6d4f3b;
-  --color-foreground: #efe4cf;
-  --color-muted: #cdbea4;
-  --color-accent: #d9a13b;
-  --color-paper: #efe4cf;
+  --color-background: #111315;
+  --color-surface: #1b1e22;
+  --color-surface-raised: #272b31;
+  --color-border: #5b636d;
+  --color-foreground: #f2ebd9;
+  --color-muted: #b4b9bf;
+  --color-accent: #0a6b63;
+  --color-paper: #f2ebd9;
   --color-success: #9be37f;
-  --color-rating: #d9a13b;
-  --color-danger: #e57a6e;
+  --color-rating: #f2b134;
+  --color-danger: #ff8a7a;
   color: var(--color-foreground);
 }
 
-/* Contenu de l'écran (fond noir) : contours et ombres noirs, comme en thème sombre. */
+/* Contenu de l'écran (fond noir) : contours crème et ombres grises, comme en thème sombre. */
 :root[data-theme="light"] .crt__screen {
-  --color-edge: #0d0906;
-  --color-shadow: #0d0906;
+  --color-edge: #f2ebd9;
+  --color-shadow: #262a30;
   --color-shadow-deep: #000;
 }
 
@@ -142,4 +158,229 @@
   &::-webkit-scrollbar {
     display: none;
   }
+}
+
+/*
+ * Carte des incidents (Leaflet, components/map/IncidentMap). Les éléments sont créés par Leaflet,
+ * hors de React : ils se stylent ici, avec les tokens pour suivre le thème.
+ */
+.incident-map {
+  font-family: var(--font-sans);
+  /* Les contrôles et bulles de Leaflet passent au-dessus de l'en-tête collant sinon. */
+  isolation: isolate;
+  z-index: 0;
+}
+
+/* Thème sombre : tuiles inversées pour ne pas éblouir (les couleurs restent reconnaissables). */
+:root:not([data-theme="light"]) .incident-map .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9);
+}
+
+/* Incident : carré à fort contour, couleur selon la priorité */
+.incident-map__marker > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 3px solid var(--color-ink);
+  box-shadow: 2px 2px 0 0 var(--color-ink);
+}
+.incident-map__marker--basse > span {
+  background: var(--color-sage);
+}
+.incident-map__marker--normale > span {
+  background: var(--color-mustard);
+}
+.incident-map__marker--haute > span {
+  background: var(--color-primary);
+}
+.incident-map__marker--critique > span {
+  background: var(--color-brick);
+}
+/* Pris en charge : losange, pour ne pas reposer sur la seule couleur */
+.incident-map__marker--en-cours > span {
+  /* Leaflet positionne le marqueur avec transform : on ne fait tourner que la forme. */
+  rotate: 45deg;
+  scale: 0.85;
+}
+
+/* Super-héros en intervention : écusson turquoise */
+.incident-map__team {
+  display: grid;
+  place-items: center;
+  border: 3px solid var(--color-paper);
+  border-radius: 9999px;
+  background: var(--color-accent);
+  box-shadow: 2px 2px 0 0 var(--color-ink);
+  color: var(--color-paper);
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.incident-map__zone {
+  fill: var(--color-brick);
+  fill-opacity: 0.18;
+  stroke: var(--color-brick);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+}
+
+.incident-map__marker:focus-visible,
+.incident-map__team:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+/* Bulles et sélecteur de couches : papier, encre et ombre dure, sans arrondi */
+.incident-map .leaflet-popup-content-wrapper,
+.incident-map .leaflet-popup-tip,
+.incident-map .leaflet-control-layers,
+.incident-map .leaflet-bar a {
+  border-radius: 0;
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+.incident-map .leaflet-popup-content-wrapper,
+.incident-map .leaflet-control-layers,
+.incident-map .leaflet-bar {
+  border: 2px solid var(--color-ink);
+  box-shadow: 3px 3px 0 0 var(--color-ink);
+}
+/* Leaflet impose sa police (Helvetica 12 px) au conteneur : on rétablit celle du site. */
+.incident-map.leaflet-container {
+  font: inherit;
+  font-family: var(--font-sans);
+}
+.incident-map .leaflet-popup-content-wrapper {
+  padding: 0;
+  box-shadow: 5px 5px 0 0 var(--color-ink);
+}
+.incident-map .leaflet-popup-content {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+.incident-map .leaflet-popup-tip {
+  border: 2px solid var(--color-ink);
+}
+.incident-map.leaflet-container a.leaflet-popup-close-button {
+  top: 10px;
+  right: 6px;
+  color: var(--color-ink);
+  font-size: 22px;
+}
+.incident-map.leaflet-container a.leaflet-popup-close-button:hover {
+  color: var(--color-primary-ink);
+}
+
+/* Fiche d'une bulle : papier, liseré orange en tête (comme .paper), encre presque noire */
+.map-card {
+  display: grid;
+  gap: 0.625rem;
+  padding: 1.125rem 2.25rem 1rem 1rem;
+  background-image: linear-gradient(var(--color-primary), var(--color-primary));
+  background-repeat: no-repeat;
+  background-size: 100% 6px;
+  color: var(--color-ink);
+}
+.incident-map .map-card p,
+.map-card dl,
+.map-card dd {
+  margin: 0;
+}
+.map-card__eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-primary-ink);
+}
+.map-card__title {
+  margin: -0.375rem 0 0;
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+.map-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+.map-card__badge {
+  border: 2px solid var(--color-ink);
+  padding: 0.0625rem 0.375rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+/* Priorités : mêmes couleurs que les repères */
+.map-card__badge--basse {
+  background: var(--color-sage);
+  color: var(--color-paper);
+}
+.map-card__badge--normale {
+  background: var(--color-mustard);
+}
+.map-card__badge--haute {
+  background: var(--color-primary);
+}
+.map-card__badge--critique {
+  border-color: var(--color-brick);
+  background: var(--color-brick);
+  color: var(--color-paper);
+}
+/* Statuts : contour seul */
+.map-card__badge--en-cours {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+.map-card__facts {
+  display: grid;
+  gap: 0.25rem;
+  border-top: 2px dashed color-mix(in srgb, var(--color-ink) 35%, transparent);
+  padding-top: 0.625rem;
+}
+.map-card__fact {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr;
+  gap: 0.5rem;
+}
+.map-card__fact dt {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  line-height: 1.45rem;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-ink) 65%, transparent);
+}
+.map-card__fact dd {
+  font-weight: 500;
+}
+.incident-map a.map-card__link {
+  justify-self: start;
+  border: 2px solid var(--color-ink);
+  background: var(--color-primary);
+  box-shadow: 3px 3px 0 0 var(--color-ink);
+  padding: 0.375rem 0.75rem;
+  color: var(--color-ink);
+  font-weight: 600;
+  text-decoration: none;
+}
+.incident-map a.map-card__link:hover {
+  background: var(--color-primary-hover);
+}
+.incident-map a.map-card__link:active {
+  translate: 2px 2px;
+  box-shadow: 1px 1px 0 0 var(--color-ink);
+}
+.incident-map .leaflet-control-attribution {
+  background: color-mix(in srgb, var(--color-paper) 85%, transparent);
+  color: var(--color-ink);
+}
+.incident-map .leaflet-control-attribution a {
+  color: var(--color-ink);
 }

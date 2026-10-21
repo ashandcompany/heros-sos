@@ -29,4 +29,28 @@ export const videosMock: HeroVideo[] = [
     addedAt: "2026-10-18T19:12:00+02:00",
     moderation: "en-attente",
   },
+  {
+    id: "video-4",
+    hero: { id: "hero-1", alias: "Lumen" },
+    title: "Lumen : La Nuit des Corbeaux",
+    description:
+      "Lyon plonge dans le noir et une héroïne de lumière traque une nuée d'oiseaux mécaniques.",
+    videoUrl: "https://www.imdb.com/title/tt9900101/",
+    imdbId: "tt9900101",
+    year: 2025,
+    addedAt: "2026-10-15T18:00:00+02:00",
+    moderation: "valide",
+  },
+  {
+    id: "video-5",
+    hero: { id: "hero-1", alias: "Lumen" },
+    title: "Lumen 2 : Éclipse",
+    description:
+      "Face à un vilain capable d'absorber la lumière, Lumen doit apprendre à se battre dans l'ombre.",
+    videoUrl: "https://www.imdb.com/title/tt9900102/",
+    imdbId: "tt9900102",
+    year: 2026,
+    addedAt: "2026-10-18T22:30:00+02:00",
+    moderation: "en-attente",
+  },
 ];

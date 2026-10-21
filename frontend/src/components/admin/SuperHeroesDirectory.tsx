@@ -40,7 +40,10 @@ function Stats({ heroes }: { heroes: SuperHeroProfile[] }) {
   return (
     <dl className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
       {stats.map((stat) => (
-        <div key={stat.label} className="rounded-2xl border border-border bg-surface p-4">
+        <div
+          key={stat.label}
+          className="border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-4"
+        >
           <dt className="text-sm text-muted">{stat.label}</dt>
           <dd className="mt-1 font-display text-2xl font-bold">{stat.value}</dd>
         </div>
@@ -65,7 +68,10 @@ export async function SuperHeroesDirectory() {
       {/* Mobile : une carte par héros */}
       <ul className="space-y-3 md:hidden">
         {heroes.map((hero) => (
-          <li key={hero.id} className="rounded-2xl border border-border bg-surface p-4">
+          <li
+            key={hero.id}
+            className="border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-4"
+          >
             <div className="flex items-center gap-3">
               <Avatar name={hero.alias} src={hero.avatarUrl} size={44} />
               <div className="min-w-0">
@@ -170,11 +176,11 @@ export function SuperHeroesDirectorySkeleton() {
         {Array.from({ length: 4 }, (_, index) => (
           <div
             key={index}
-            className="h-22 rounded-2xl border border-border bg-surface motion-safe:animate-pulse"
+            className="h-22 border-2 border-border bg-surface motion-safe:animate-pulse"
           />
         ))}
       </div>
-      <div className="h-96 rounded-2xl border border-border bg-surface motion-safe:animate-pulse" />
+      <div className="h-96 border-2 border-border bg-surface motion-safe:animate-pulse" />
     </div>
   );
 }

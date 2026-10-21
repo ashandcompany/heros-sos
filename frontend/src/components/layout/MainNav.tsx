@@ -3,14 +3,20 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Suspense, useEffect, useId, useRef, useState } from "react";
+import { Avatar } from "@/components/ui/Avatar";
 import { buttonClasses } from "@/components/ui/ButtonLink";
 import { cn } from "@/components/ui/cn";
 import { logoutAction } from "@/app/actions/auth";
 import { mainNav, routes } from "@/lib/routes";
+import type { AvatarData } from "@/lib/api";
 import type { AuthUser } from "@/types";
 
-/** Utilisateur connecté (`null` : visiteur, `undefined` : session en cours de lecture). */
-type NavUser = Pick<AuthUser, "displayName" | "role"> | null | undefined;
+/**
+ * Utilisateur connecté (`null` : visiteur, `undefined` : session en cours de lecture).
+ * `avatar` est `null` pour un compte sans profil (administrateur) : initiales du `displayName`.
+ */
+type NavUser =
+  (Pick<AuthUser, "displayName" | "role"> & { avatar: AvatarData | null }) | null | undefined;
 
 function MenuIcon({ open }: { open: boolean }) {
   return (
@@ -24,10 +30,10 @@ function MenuIcon({ open }: { open: boolean }) {
   );
 }
 
-/** Lien vers l'espace de chaque rôle (l'espace héros n'existe pas encore). */
+/** Lien vers l'espace de chaque rôle. */
 const spaceLinkByRole: Record<AuthUser["role"], { label: string; href: string } | null> = {
   citoyen: { label: "Mon espace", href: routes.profile },
-  "super-heros": null,
+  "super-heros": { label: "Espace pro", href: routes.heroDashboard },
   admin: { label: "Back-office", href: routes.admin },
 };
 
@@ -71,8 +77,19 @@ function AccountActions({ user, variant, isSpacePage, onNavigate }: AccountActio
 
   return (
     <>
-      <p className={cn("text-sm text-muted", mobile ? "col-span-2" : "hidden xl:block")}>
-        Connecté·e : <span className="font-semibold text-foreground">{user.displayName}</span>
+      {/* Sur desktop étroit, seule la photo reste : le nom passe en infobulle. */}
+      <p
+        title={mobile ? undefined : user.displayName}
+        className={cn("flex items-center gap-3 text-sm text-muted", mobile && "col-span-2")}
+      >
+        <Avatar
+          name={user.avatar?.name ?? user.displayName}
+          src={user.avatar?.src ?? null}
+          size={mobile ? 40 : 32}
+        />
+        <span className={cn(!mobile && "sr-only xl:not-sr-only")}>
+          Connecté·e : <span className="font-semibold text-foreground">{user.displayName}</span>
+        </span>
       </p>
       {spaceLink && (
         <Link
@@ -134,7 +151,10 @@ function MainNavView({ user, pathname }: { user: NavUser; pathname: string | nul
 
   const close = () => setOpen(false);
   const isSpacePage =
-    !!pathname && (pathname.startsWith("/admin") || pathname.startsWith("/profil"));
+    !!pathname &&
+    ["/admin", "/profil", routes.heroSpace].some(
+      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+    );
 
   const navLinks = (variant: "desktop" | "mobile") =>
     mainNav.map((item) => {
@@ -148,12 +168,12 @@ function MainNavView({ user, pathname }: { user: NavUser; pathname: string | nul
             className={cn(
               "block font-mono font-medium tracking-wider uppercase",
               variant === "desktop"
-                ? "rounded-t-sm border-2 border-b-0 px-3 py-2.5 text-xs"
+                ? "border-2 border-b-0 px-3 py-2.5 text-xs font-semibold"
                 : "px-3 py-3 text-sm",
               variant === "desktop" &&
                 (isCurrent
-                  ? "border-edge bg-paper text-ink"
-                  : "border-border bg-surface text-muted hover:bg-surface-raised hover:text-foreground"),
+                  ? "border-edge bg-primary text-primary-foreground"
+                  : "border-border bg-surface text-muted hover:border-edge hover:bg-surface-raised hover:text-foreground"),
               variant === "mobile" &&
                 (isCurrent ? "bg-surface-raised text-accent" : "text-muted hover:text-foreground"),
             )}
@@ -186,7 +206,7 @@ function MainNavView({ user, pathname }: { user: NavUser; pathname: string | nul
         aria-expanded={open}
         aria-controls={menuId}
         aria-label={open ? "Fermer le menu" : "Ouvrir le menu"}
-        className="-mr-2 inline-flex size-11 items-center justify-center rounded-sm border-2 border-border text-foreground hover:bg-surface-raised lg:hidden"
+        className="-mr-2 inline-flex size-11 items-center justify-center border-2 border-edge text-foreground hover:bg-surface-raised lg:hidden"
       >
         <MenuIcon open={open} />
       </button>
@@ -194,7 +214,7 @@ function MainNavView({ user, pathname }: { user: NavUser; pathname: string | nul
       <div
         id={menuId}
         hidden={!open}
-        className="absolute inset-x-0 top-full border-b-4 border-double border-border bg-background px-4 pt-2 pb-6 shadow-[0_6px_0_0_var(--color-shadow)] lg:hidden"
+        className="absolute inset-x-0 top-full border-b-4 border-edge bg-background px-4 pt-2 pb-6 lg:hidden"
       >
         <nav aria-label="Navigation principale">
           <ul className="flex flex-col gap-1">{navLinks("mobile")}</ul>

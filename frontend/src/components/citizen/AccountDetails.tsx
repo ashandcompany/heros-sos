@@ -6,7 +6,7 @@ import { requireCitizenSession } from "@/lib/server-session";
 import { civilityOptions } from "@/lib/validation/signup";
 import { AvatarForm, ContactForm, EmailChangeForm, NewsletterSettingsForm } from "./AccountForms";
 
-function Panel({
+export function Panel({
   id,
   title,
   description,
@@ -20,7 +20,7 @@ function Panel({
   return (
     <section
       aria-labelledby={id}
-      className="rounded-2xl border border-border bg-surface p-5 sm:p-8"
+      className="border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-5 sm:p-8"
     >
       <h2 id={id} className="font-display text-xl font-semibold">
         {title}
@@ -78,7 +78,7 @@ export async function AccountDetails() {
 
       <div className="space-y-6">
         <Panel id="contact-title" title="Coordonnées">
-          <ContactForm account={account} />
+          <ContactForm contact={account} />
         </Panel>
 
         <Panel id="email-title" title="Adresse email">
@@ -104,8 +104,8 @@ export async function AccountDetails() {
 export function AccountDetailsSkeleton() {
   return (
     <div aria-hidden="true" className="grid gap-6 lg:grid-cols-[20rem_1fr]">
-      <div className="h-96 rounded-2xl border border-border bg-surface motion-safe:animate-pulse" />
-      <div className="h-[36rem] rounded-2xl border border-border bg-surface motion-safe:animate-pulse" />
+      <div className="h-96 border-2 border-border bg-surface motion-safe:animate-pulse" />
+      <div className="h-[36rem] border-2 border-border bg-surface motion-safe:animate-pulse" />
     </div>
   );
 }

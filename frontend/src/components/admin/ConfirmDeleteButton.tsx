@@ -40,7 +40,7 @@ export function ConfirmDeleteButton({
       <dialog
         ref={dialogRef}
         aria-labelledby={titleId}
-        className="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-border bg-surface p-6 text-foreground backdrop:bg-black/70 backdrop:backdrop-blur-sm sm:p-8"
+        className="m-auto w-[calc(100%-2rem)] max-w-md border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-6 text-foreground backdrop:bg-black/70 backdrop:backdrop-blur-sm sm:p-8"
       >
         <h2 id={titleId} className="font-display text-xl font-bold">
           Supprimer «&nbsp;{subject}&nbsp;»&nbsp;?

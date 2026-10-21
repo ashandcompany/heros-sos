@@ -131,6 +131,31 @@
   background-size: 100% 6px;
 }
 
+/* Avis de recherche : même fiche, liseré rouge signal au lieu de l'orange */
+.paper--wanted {
+  background-image: linear-gradient(var(--color-brick), var(--color-brick));
+}
+
+/* Photo d'identité judiciaire : fond noir, graduations de toise, initiales crème */
+.mugshot {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  line-height: 1;
+  color: #f2ebd9;
+  background-color: var(--retro-screen);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0 calc(10% - 1px),
+    rgb(242 235 217 / 0.16) calc(10% - 1px) 10%
+  );
+  border: 4px solid var(--color-ink);
+  box-shadow: 3px 3px 0 0 rgb(0 0 0 / 0.4);
+}
+
 /* Écran cathodique : seule forme arrondie du site, hommage aux postes de contrôle */
 .crt {
   position: relative;
@@ -222,6 +247,10 @@
 
 .stamp--terminal {
   color: var(--color-terminal);
+}
+
+.stamp--sage {
+  color: var(--color-sage);
 }
 
 /* Affichage numérique : compteurs, horloge */

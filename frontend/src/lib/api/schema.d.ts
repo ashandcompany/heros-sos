@@ -647,7 +647,7 @@ export interface paths {
         };
         /**
          * Liste des vilains
-         * @description Par alias. Le filtre `q` porte sur le début de l'alias.
+         * @description Publique (encyclopédie), par alias. Le filtre `q` porte sur le début de l'alias.
          */
         get: operations["listVillains"];
         put?: never;
@@ -896,7 +896,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Fiche d'un vilain
+         * @description Publique (encyclopédie).
+         */
+        get: operations["getVillain"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2915,7 +2919,6 @@ export interface operations {
                     "application/json": components["schemas"]["VillainPage"];
                 };
             };
-            401: components["responses"]["Unauthenticated"];
             422: components["responses"]["ValidationFailed"];
             500: components["responses"]["InternalError"];
         };
@@ -3480,6 +3483,34 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getVillain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identifiant de l'utilisateur (champ `id` de la liste des comptes).
+                 * @example 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
+                 */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Le vilain. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Villain"];
+                };
+            };
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };

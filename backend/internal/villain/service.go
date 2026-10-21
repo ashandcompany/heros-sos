@@ -191,6 +191,11 @@ func (s *Service) validateTypeIDs(ctx context.Context, raw []int16, fields *vali
 	return valid, nil
 }
 
+// Get retourne un vilain, ou ErrNotFound.
+func (s *Service) Get(ctx context.Context, id uuid.UUID) (*Villain, error) {
+	return s.repo.Find(ctx, id)
+}
+
 // List retourne une page de vilains, éventuellement filtrée par début de pseudo.
 func (s *Service) List(ctx context.Context, aliasPrefix string, limit, offset int) ([]Villain, int64, error) {
 	return s.repo.List(ctx, aliasPrefix, limit, offset)

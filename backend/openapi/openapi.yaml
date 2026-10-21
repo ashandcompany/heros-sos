@@ -1170,9 +1170,8 @@ paths:
     get:
       tags: [Vilains]
       summary: Liste des vilains
-      description: Par alias. Le filtre `q` porte sur le début de l'alias.
+      description: Publique (encyclopédie), par alias. Le filtre `q` porte sur le début de l'alias.
       operationId: listVillains
-      security: [{ sessionCookie: [] }]
       parameters:
         - name: q
           in: query
@@ -1185,7 +1184,6 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/VillainPage" }
-        "401": { $ref: "#/components/responses/Unauthenticated" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/InternalError" }
 
@@ -1539,6 +1537,21 @@ paths:
         "500": { $ref: "#/components/responses/InternalError" }
 
   /villains/{id}:
+    get:
+      tags: [Vilains]
+      summary: Fiche d'un vilain
+      description: Publique (encyclopédie).
+      operationId: getVillain
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: Le vilain.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Villain" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
     patch:
       tags: [Vilains]
       summary: Modifier un vilain et remplacer ses spécialités

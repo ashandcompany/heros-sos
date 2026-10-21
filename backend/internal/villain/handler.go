@@ -121,6 +121,21 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusCreated, newResponse(*created))
 }
 
+// Get traite GET /villains/{id}.
+func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, ErrNotFound)
+		return
+	}
+	found, err := h.service.Get(r.Context(), id)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, newResponse(*found))
+}
+
 // List traite GET /villains?q=&limit=&offset=.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	page, err := httpx.ParsePage(r)

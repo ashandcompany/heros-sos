@@ -162,6 +162,24 @@ func TestVillainsAreCreatedByUsers(t *testing.T) {
 			t.Errorf("« %% » ne doit rien trouver : %+v", page)
 		}
 	}
+
+	// Lecture publique (encyclopédie) : liste et fiche sans session.
+	anonymous := e.newActor()
+	if got := anonymous.get("/villains"); got.status != http.StatusOK {
+		t.Errorf("liste anonyme : %d %s", got.status, got.body)
+	}
+	var found villainView
+	if got := anonymous.get("/villains/" + villain.ID); got.status != http.StatusOK {
+		t.Errorf("fiche anonyme : %d %s", got.status, got.body)
+	} else if got.decode(t, &found); found.ID != villain.ID || found.ThreatLevel != "eleve" {
+		t.Errorf("fiche : %+v", found)
+	}
+	if got := anonymous.get("/villains/00000000-0000-0000-0000-000000000000"); got.status != http.StatusNotFound {
+		t.Errorf("vilain inconnu : %d", got.status)
+	}
+	if got := anonymous.get("/villains/pas-un-uuid"); got.status != http.StatusNotFound {
+		t.Errorf("identifiant invalide : %d", got.status)
+	}
 }
 
 func TestIncidentDeclaration(t *testing.T) {

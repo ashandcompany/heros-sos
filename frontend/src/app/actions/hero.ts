@@ -230,11 +230,28 @@ export async function replyToReviewAction(
       : undefined;
   if (error) return { status: "error", fieldErrors: { reply: error }, values: { reply } };
 
+  // Modification : un texte inchangé remettrait la réponse en vérification pour rien.
+  const currentReply = formData.get("currentReply");
+  const editing = currentReply !== null;
+  if (editing && String(currentReply).trim() === reply) {
+    return {
+      status: "error",
+      fieldErrors: { reply: "Votre réponse n'a pas changé." },
+      values: { reply },
+    };
+  }
+
   const result = await replyToReview(token, reviewId, reply);
   if (!result.ok) {
     return { status: "error", message: result.error, fieldErrors: {}, values: { reply } };
   }
 
   revalidatePath(routes.heroReputation);
-  return { status: "success", message: "Votre réponse a été publiée.", fieldErrors: {} };
+  return {
+    status: "success",
+    message: editing
+      ? "Réponse modifiée : elle sera de nouveau publiée après vérification par la modération."
+      : "Votre réponse a été publiée.",
+    fieldErrors: {},
+  };
 }

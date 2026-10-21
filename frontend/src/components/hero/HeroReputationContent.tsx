@@ -107,6 +107,20 @@ export async function HeroReputationContent() {
                           </time>
                           {review.reply.editedAt && " (modifiée)"}
                         </p>
+                        {/* L'API n'accepte une réponse que sur un avis publié et commenté. */}
+                        {review.status === "valide" && review.comment && (
+                          <details className="group mt-3 border-t border-border pt-3">
+                            <summary className="inline-flex min-h-11 cursor-pointer items-center text-sm font-semibold text-accent hover:underline">
+                              <span className="group-open:hidden">Modifier ma réponse</span>
+                              <span className="hidden group-open:inline">
+                                Annuler la modification
+                              </span>
+                            </summary>
+                            <div className="mt-2">
+                              <ReplyForm reviewId={review.id} currentReply={review.reply.content} />
+                            </div>
+                          </details>
+                        )}
                       </div>
                     ) : (
                       review.status === "valide" &&

@@ -231,8 +231,11 @@ Types dans [src/types/review.ts](../src/types/review.ts) (`HeroReview`, `ReviewR
   l'ancien mock, où seule la note restait) et son commentaire n'est plus transmis au héros.
   Statuts : `published` → `valide`, `hidden` → `rejete` (`ReviewStatus`, pas d'`en-attente`).
 - **Réponse du héros** : publiée à sa création, remise `pending` (`en-attente`) à chaque
-  modification (`PUT /hero/reviews/{reviewId}/reply`). L'écran ne propose qu'une première
-  réponse ; la modification est possible côté API mais pas encore dans l'interface.
+  modification : la même route sert aux deux (`PUT /hero/reviews/{reviewId}/reply`). Dans
+  « Ma réputation », « Modifier ma réponse » (`<details>`, sans JavaScript) rouvre `ReplyForm`
+  prérempli (`currentReply`) ; un texte inchangé est refusé avant l'appel, pour ne pas remettre
+  la réponse en vérification pour rien. Modification possible tant que l'avis est publié et
+  commenté (condition de l'API).
 - **Back-office** (`/admin/commentaires`) : deux onglets, « Avis des citoyens »
   (`/admin/hero-reviews`, filtre Publiés / Masqués, seuls les avis commentés sont listés) et
   « Réponses des super-héros » (`?type=reponses`, `/admin/hero-review-replies`, « À vérifier » par
@@ -246,7 +249,7 @@ Types dans [src/types/review.ts](../src/types/review.ts) (`HeroReview`, `ReviewR
   lues jusqu'à une page incomplète. Un héros inconnu de l'API (404, ou identifiant mock en 422,
   tant que les fiches super-héros sont mockées) n'a aucun avis, comme pour ses films.
 - **Pas encore branché** : la notation par un héros déclarant (l'API l'accepte, l'écran est
-  dans l'espace citoyen), la modification d'une réponse, la note moyenne des fiches publiques
+  dans l'espace citoyen), la note moyenne des fiches publiques
   (`averageRating` de l'API, les fiches restant mockées).
 - **Erreurs** :
 

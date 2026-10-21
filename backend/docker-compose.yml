@@ -11,15 +11,21 @@
 
 name: heros-sos
 
+# Journaux des conteneurs (stdout/stderr, lus par `make logs-dev` ou `make logs-prod`). Sans rotation,
+# Docker les garde sans limite : un conteneur bavard finit par remplir le disque. Chaque conteneur garde
+# au plus LOG_MAX_FILE fichiers de LOG_MAX_SIZE. Les fichiers dev et prod en déclarent autant pour
+# leurs propres services (une ancre YAML ne traverse pas les fichiers) : même réglage, même variables.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: ${LOG_MAX_SIZE:-10m}
+    max-file: ${LOG_MAX_FILE:-3}
+
 x-hardening: &hardening
   restart: unless-stopped
   security_opt:
     - no-new-privileges:true
-  logging:
-    driver: json-file
-    options:
-      max-size: "10m"
-      max-file: "3"
+  logging: *logging
 
 services:
   api:

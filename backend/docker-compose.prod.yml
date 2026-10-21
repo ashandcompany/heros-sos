@@ -12,6 +12,13 @@
 #
 # Prérequis : `.env.production` (voir .env.production.example) et `secrets/` (voir `make secrets`).
 
+# Même rotation que docker-compose.yml (api, db et proxy la reçoivent de là) pour les services ajoutés ici.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: ${LOG_MAX_SIZE:-10m}
+    max-file: ${LOG_MAX_FILE:-3}
+
 x-api-config: &api-config
   image: heros-sos/api:${APP_VERSION:-dev}
   env_file:
@@ -41,6 +48,7 @@ services:
     <<: *api-config
     command: ["-migrate"]
     restart: "no"
+    logging: *logging
     depends_on:
       db:
         condition: service_healthy
@@ -104,11 +112,7 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging
     mem_limit: 512m
     cpus: 1.0
     pids_limit: 256
@@ -125,6 +129,7 @@ services:
     image: rabbitmq:4-management-alpine
     profiles: ["rabbitmq"]
     restart: unless-stopped
+    logging: *logging
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-heros}
       RABBITMQ_DEFAULT_PASS_FILE: /run/secrets/rabbitmq_password

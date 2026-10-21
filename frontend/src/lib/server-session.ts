@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { asMockDataUser, getMyAvatar, type AvatarData } from "@/lib/api";
+import { getMyAvatar, type AvatarData } from "@/lib/api";
 import { SESSION_COOKIE } from "@/lib/cookies";
 import { accountHomeByRole, routes } from "@/lib/routes";
 import { getUserFromToken } from "@/lib/session";
@@ -37,9 +37,7 @@ export async function requireRole(
   if (!user || !token) redirect(routes.login);
   if (![role].flat().includes(user.role)) redirect(accountHomeByRole[user.role]);
 
-  // Les données des espaces sont encore mockées : l'utilisateur renvoyé porte l'identifiant que
-  // ces mocks connaissent (voir asMockDataUser).
-  return { token, user: asMockDataUser(user) };
+  return { token, user };
 }
 
 export async function requireAdminSession(): Promise<string> {

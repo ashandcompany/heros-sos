@@ -127,15 +127,16 @@ flowchart LR
 ### Domaines encore mockés avec une session réelle
 
 Les fonctions mockées reçoivent le vrai jeton et vérifient le rôle avec la vraie session
-(`userFromToken`). Mais leurs données sont indexées par les identifiants des comptes mock
-(`user-1`, `hero-1`, `admin-1`) : `asMockDataUser`
-([session-user.ts](../src/lib/api/session-user.ts)) donne au vrai compte l'identifiant du compte
-mock de son rôle, en gardant son nom. `requireRole()` l'applique aussi, pour les composants qui
-comparent `user.id` aux données (incidents d'un héros).
+(`userFromToken`, [session-user.ts](../src/lib/api/session-user.ts)). Leurs données sont indexées
+par les identifiants des comptes mock (`user-1`, `hero-1`, `admin-1`) : un vrai compte, avec son
+vrai identifiant, n'y retrouve rien de lui. Aucun compte réel n'emprunte l'identité d'un compte
+mock, donc personne ne voit les données d'un autre.
 
 > [!WARNING]
-> Conséquence : deux citoyens réels voient le même profil mock (celui de Camille). **`asMockDataUser`
-> est à supprimer quand tous les domaines seront branchés.**
+> Conséquence, tant que ces domaines ne sont pas branchés : listes vides (tableau de bord héros…),
+> et **erreur 404** sur les écrans qui exigent un profil mock : modification du compte citoyen
+> (contact, photo, email), « Mon profil » et ses formulaires côté héros (`findMyAccount`,
+> `findMyProfile`). La photo de la barre de navigation retombe sur les initiales.
 
 ### Rôles : deux vocabulaires
 
@@ -361,7 +362,7 @@ Fonctions dans [incidents.ts](../src/lib/api/incidents.ts) (incidents) et
 - **Vilains** : l'API en accepte plusieurs ; le formulaire en envoie un (`villainIds: [id]`) et
   l'écran affiche le premier.
 - **Équipe** : le héros connecté est reconnu côté serveur (`isMe`, d'après le vrai identifiant de
-  `GET /auth/me`), pas par `user.id` qui reste celui du compte mock (`asMockDataUser`). Seul,
+  `GET /auth/me`). Seul,
   un héros clôt directement ; en équipe, le résultat proposé (proposant compris) doit être validé
   à l'unanimité. Un refus annule la proposition et prévient les modérateurs par mail.
 - **Arbitrage** : la réponse de l'API ne dit pas qu'un désaccord a eu lieu (la proposition est
@@ -457,5 +458,4 @@ Modèle à suivre : [src/lib/api/auth.ts](../src/lib/api/auth.ts) (`login`, `get
 5. Mapper les codes métier (`ApiError.code`) vers le résultat `{ ok: false, error }`, puis
    `return toApiFailure(error, "…")` ; ajouter `ApiFailure` au type du résultat et afficher
    `apiFailureMessage` dans l'action.
-6. Mettre à jour le tableau de la section 1. Quand le domaine n'utilise plus `userFromToken`,
-   vérifier si `asMockDataUser` sert encore.
+6. Mettre à jour le tableau de la section 1.

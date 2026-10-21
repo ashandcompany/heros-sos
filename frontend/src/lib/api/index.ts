@@ -28,7 +28,6 @@ export {
 export { createIncidentType, getAllIncidentTypes, getIncidentTypes } from "./incident-types";
 export { pagePosition } from "./pagination";
 export { getAccounts, moderateAccount } from "./user-moderation";
-export { asMockDataUser } from "./session-user";
 export {
   createArticle,
   deleteArticle,

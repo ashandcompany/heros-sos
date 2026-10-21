@@ -151,8 +151,8 @@ ce qui est branché et ce qui reste à faire, dans [backend-contract.md](./backe
 
 > [!NOTE]
 > Avec l'API, les domaines encore mockés reçoivent une session réelle, mais leurs données sont
-> indexées par les comptes mock : `asMockDataUser` donne au vrai compte l'identifiant du compte
-> mock de son rôle (voir [backend-contract.md](./backend-contract.md#domaines-encore-mockés-avec-une-session-réelle)).
+> indexées par les comptes mock : un vrai compte n'y retrouve rien (listes vides, 404 sur les
+> profils ; voir [backend-contract.md](./backend-contract.md#domaines-encore-mockés-avec-une-session-réelle)).
 
 ## Formulaires et Server Actions
 

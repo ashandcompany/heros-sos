@@ -18,6 +18,19 @@ const (
 	StatusRejected VerificationStatus = "rejected"
 )
 
+// PublicSort est l'ordre de tri des profils publics de super-héros.
+type PublicSort string
+
+const (
+	PublicSortAlias         PublicSort = "alias"          // alias, croissant
+	PublicSortAverageRating PublicSort = "-averageRating" // note moyenne, décroissante
+)
+
+// Valid indique si l'ordre de tri est pris en charge.
+func (s PublicSort) Valid() bool {
+	return s == PublicSortAlias || s == PublicSortAverageRating
+}
+
 // Valid indique si le statut est connu.
 func (s VerificationStatus) Valid() bool {
 	switch s {
@@ -30,6 +43,8 @@ func (s VerificationStatus) Valid() bool {
 var (
 	// ErrNotFound indique que l'utilisateur n'a aucune demande.
 	ErrNotFound = errors.New("hero : demande introuvable")
+	// ErrProfileNotFound indique qu'aucun profil de héros public n'existe pour cet identifiant.
+	ErrProfileNotFound = errors.New("hero : profil public introuvable")
 	// ErrAlreadyPending indique qu'une demande est déjà en cours d'examen.
 	ErrAlreadyPending = errors.New("hero : demande déjà en attente")
 	// ErrAlreadyHero indique que l'utilisateur est déjà un super-héros validé.
@@ -54,4 +69,14 @@ type Profile struct {
 	ReviewedAt      *time.Time
 	RejectionReason string
 	CreatedAt       time.Time
+}
+
+// PublicProfile contient les données publiques d'un super-héros approuvé.
+type PublicProfile struct {
+	UserID             uuid.UUID
+	Alias              string
+	AvatarURL          *string
+	Bio                string
+	AverageRating      float64
+	InterventionsCount int64
 }

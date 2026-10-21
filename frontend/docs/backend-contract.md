@@ -42,6 +42,14 @@ Les « Future implémentation » écrites dans les commentaires de `lib/api/` po
 couverts sont des **hypothèses** du frontend, pas un contrat. Il faudra les faire valider (ou les
 remplacer) quand le backend ajoutera ces routes.
 
+Les deux routes publiques de super-héros sont une exception : `GET /heroes` est paginé et trié par
+pseudo par défaut (ou par note moyenne décroissante), et `GET /heroes/{heroId}` retourne la même
+fiche. Les profils doivent être approuvés et le compte actif. Pour rester compatible avec les
+cartes du frontend, `hero_profiles.bio` est exposé sous le nom `power`; `avatarUrl` n'est renseigné
+que si `users.avatar_path` contient une URL ou un chemin relatif publiquement exploitable. Aucune
+donnée d'identité civile n'est exposée. Ces routes n'impliquent pas encore que `getSuperHeroes` et
+`getSuperHero` soient branchées : elles continuent d'utiliser les mocks.
+
 ## 2. Ce qui est branché : la session
 
 ### Principe : le serveur Next sert d'intermédiaire

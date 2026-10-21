@@ -38,7 +38,6 @@ export {
 export { createIncidentType, getAllIncidentTypes, getIncidentTypes } from "./incident-types";
 export { pagePosition } from "./pagination";
 export { getAccounts, moderateAccount } from "./user-moderation";
-export { asMockDataUser } from "./session-user";
 export {
   createArticle,
   deleteArticle,
@@ -59,6 +58,7 @@ export {
   getHeroIncident,
   getHeroIncidents,
   getIncident,
+  getIncidentHeroes,
   getIncidentMap,
   getPublicIncidentMap,
   getLatestResolvedIncidents,
@@ -66,11 +66,19 @@ export {
   getIncidentsByVillain,
   getOngoingIncidents,
   getResolvedIncidentsByHero,
+  incidentFeatures,
   moderateIncident,
   setIncidentPriority,
   takeChargeOfIncident,
   updateIncident,
 } from "./incidents";
+export {
+  arbitrateIntervention,
+  inviteHeroes,
+  joinIntervention,
+  respondToInvitation,
+  voteOnOutcome,
+} from "./interventions";
 export { getModerationSummary } from "./moderation";
 export {
   confirmNewsletterSubscription,

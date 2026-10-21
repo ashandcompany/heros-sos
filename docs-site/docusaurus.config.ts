@@ -2,14 +2,27 @@ import {themes as prismThemes} from 'prism-react-renderer';
 import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 import type * as OpenApiPlugin from 'docusaurus-plugin-openapi-docs';
+import path from 'node:path';
+import githubAlerts from './src/remark/github-alerts';
+import repoLinks from './src/remark/repo-links';
 
 // Exécuté par Node.js : pas de code navigateur (window, JSX…) dans ce fichier.
 
 const REPO = 'https://github.com/ashandcompany/heros-sos';
 
+// Racine du dépôt : docs-site/.. (sur la machine comme dans le conteneur, où backend/ et frontend/ sont
+// montés à côté de docs-site/).
+const REPO_ROOT = path.resolve(__dirname, '..');
+const FRONTEND = path.join(REPO_ROOT, 'frontend');
+
+// Pages publiées depuis frontend/ : le README et les documents de frontend/docs/.
+const isFrontendPage = (file: string) =>
+  file === path.join(FRONTEND, 'README.md') ||
+  (path.dirname(file) === path.join(FRONTEND, 'docs') && file.endsWith('.md'));
+
 const config: Config = {
   title: 'Heros-SOS',
-  tagline: "Architecture, base de données et contrat d'API",
+  tagline: "Architecture, base de données, frontend et contrat d'API",
   favicon: 'img/favicon.ico',
 
   future: {
@@ -79,6 +92,24 @@ const config: Config = {
       },
     ],
     [
+      // Même principe pour le frontend : README et frontend/docs/ lus sur place. Ils restent écrits pour
+      // GitHub : les alertes `> [!NOTE]` deviennent des encadrés et les liens vers le code (src/…)
+      // pointent vers GitHub (voir src/remark/).
+      '@docusaurus/plugin-content-docs',
+      {
+        id: 'frontend',
+        path: '../frontend',
+        routeBasePath: 'frontend',
+        include: ['README.md', 'docs/*.md'],
+        sidebarPath: './sidebarsFrontend.ts',
+        editUrl: `${REPO}/tree/develop/frontend/`,
+        beforeDefaultRemarkPlugins: [
+          githubAlerts,
+          [repoLinks, {repoRoot: REPO_ROOT, blobUrl: `${REPO}/blob/develop`, isPage: isFrontendPage}],
+        ],
+      },
+    ],
+    [
       // Pages d'API générées depuis backend/openapi/openapi.yaml à chaque `npm run build` / `npm start`
       // (voir les scripts de package.json). docs/api/ n'est jamais versionné.
       'docusaurus-plugin-openapi-docs',
@@ -129,6 +160,13 @@ const config: Config = {
         },
         {
           type: 'docSidebar',
+          docsPluginId: 'frontend',
+          sidebarId: 'frontendSidebar',
+          position: 'left',
+          label: 'Frontend',
+        },
+        {
+          type: 'docSidebar',
           sidebarId: 'apiSidebar',
           position: 'left',
           label: 'API',
@@ -149,6 +187,8 @@ const config: Config = {
             {label: 'Périmètre du MVP', to: '/backend/MVP'},
             {label: 'Choix techniques', to: '/backend/STACK'},
             {label: 'Tables', to: '/backend/TABLES'},
+            {label: 'Frontend', to: '/frontend'},
+            {label: 'Contrat avec le backend', to: '/frontend/docs/backend-contract'},
           ],
         },
         {

@@ -19,6 +19,8 @@ on:
       - "backend/TABLES.md"
       - "backend/tables/**"
       - "backend/openapi/openapi.yaml"
+      - "frontend/README.md"
+      - "frontend/docs/**"
       - ".github/workflows/docs-deploy.yml"
   workflow_dispatch:
 

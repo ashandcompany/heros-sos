@@ -117,6 +117,7 @@ Pour **2 à 4 options** courtes. Le groupe est un `<fieldset>` avec `legend`.
 />
 ```
 
+> [!TIP]
 > Pour une saisie spécifique (ex : note en étoiles de `RatingForm`), le motif est le même :
 > vrais `<input type="radio">` masqués visuellement (`sr-only`), pour garder clavier et lecteurs
 > d'écran. Ne pas construire de widget à base de `<div onClick>`.
@@ -195,7 +196,8 @@ Note sur 5 en lecture seule, avec un libellé complet pour les lecteurs d'écran
 
 ## Décoratifs
 
-Masqués aux lecteurs d'écran, ne jamais y mettre d'information essentielle :
+> [!WARNING]
+> Masqués aux lecteurs d'écran : ne jamais y mettre d'information essentielle.
 
 - `WallPoster` : affiche punaisée, cachée en dessous de `lg`.
 - `Typewriter` : texte révélé lettre à lettre ; le texte complet reste dans un `sr-only`.

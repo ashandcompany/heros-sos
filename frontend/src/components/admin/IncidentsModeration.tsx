@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { moderateIncidentAction } from "@/app/actions/admin";
 import { Badge } from "@/components/ui/Badge";
-import { getAllIncidents } from "@/lib/api";
+import { getAllIncidents, incidentFeatures } from "@/lib/api";
 import { formatDateTime, incidentStatusLabels, reporterRoleLabels } from "@/lib/format";
 import { adminIncidentRoute, routes } from "@/lib/routes";
 import { requireAdminSession } from "@/lib/server-session";
@@ -33,7 +33,7 @@ function IncidentModerationCard({ incident }: { incident: Incident }) {
     >
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <ModerationBadge status={incident.moderation} />
+          {incidentFeatures.moderation && <ModerationBadge status={incident.moderation} />}
           <Badge>{incidentStatusLabels[incident.status]}</Badge>
           <Badge>{incident.type.label}</Badge>
         </div>
@@ -66,18 +66,21 @@ function IncidentModerationCard({ incident }: { incident: Incident }) {
       </div>
 
       <div className="flex flex-col gap-3 lg:items-end">
-        <ModerationForm
-          action={moderateIncidentAction}
-          id={incident.id}
-          subject={incident.title}
-          decisions={decisionsFor(incident.moderation, incidentDecisionLabels)}
-          className="lg:[&>div]:justify-end"
-        />
+        {incidentFeatures.moderation && (
+          <ModerationForm
+            action={moderateIncidentAction}
+            id={incident.id}
+            subject={incident.title}
+            decisions={decisionsFor(incident.moderation, incidentDecisionLabels)}
+            className="lg:[&>div]:justify-end"
+          />
+        )}
         <Link
           href={adminIncidentRoute(incident.id)}
           className="inline-flex min-h-11 items-center text-sm font-semibold text-accent hover:underline"
         >
-          Corriger les informations<span className="sr-only"> : {incident.title}</span>
+          {incidentFeatures.moderation ? "Corriger les informations" : "Voir le détail"}
+          <span className="sr-only"> : {incident.title}</span>
         </Link>
       </div>
     </article>
@@ -96,14 +99,21 @@ export async function IncidentsModeration({
 
   return (
     <>
-      <ModerationFilter
-        basePath={routes.adminIncidents}
-        current={filter}
-        labels={{ "en-attente": "À vérifier", valide: "Validés", rejete: "Rejetés", tous: "Tous" }}
-      />
+      {incidentFeatures.moderation && (
+        <ModerationFilter
+          basePath={routes.adminIncidents}
+          current={filter}
+          labels={{
+            "en-attente": "À vérifier",
+            valide: "Validés",
+            rejete: "Rejetés",
+            tous: "Tous",
+          }}
+        />
+      )}
       {incidents.length === 0 ? (
         <EmptyState>
-          {filter === "en-attente"
+          {incidentFeatures.moderation && filter === "en-attente"
             ? "Aucun incident en attente de vérification."
             : "Aucun incident dans cette catégorie."}
         </EmptyState>

@@ -105,8 +105,10 @@ services:
       - /app/docs-site/node_modules
       - /app/docs-site/.docusaurus
       - /app/docs-site/docs/api
-      # Ce que le site lit dans backend/ (les trois documents et l'OpenAPI), copié par docs-sync ci-dessous.
+      # Ce que le site lit dans backend/ (les trois documents et l'OpenAPI) et dans frontend/ (README et
+      # docs/*.md), copié par docs-sync ci-dessous.
       - docs-source:/app/backend:ro
+      - docs-frontend:/app/frontend:ro
     depends_on:
       docs-sync:
         condition: service_healthy
@@ -127,20 +129,20 @@ services:
       retries: 30
       start_period: 90s
 
-  # Recopie, toutes les 2 secondes, les seuls fichiers de backend/ que lit la documentation, dans un
-  # volume que le conteneur `docs` monte en lecture seule. Deux pièges évités :
+  # Recopie, toutes les 2 secondes, les seuls fichiers de backend/ et de frontend/ que lit la
+  # documentation, dans des volumes que le conteneur `docs` monte en lecture seule. Deux pièges évités :
   #   - monter ces fichiers un par un dans `docs` casse dès qu'un éditeur enregistre en remplaçant le
   #     fichier : le conteneur garde l'ancien fichier supprimé et le site perd la page ;
-  #   - monter backend/ en entier donnerait le .env (clés de chiffrement) à `docs`, qui exécute des
-  #     centaines de paquets tiers.
-  # Ce conteneur-ci voit backend/ (en lecture seule) mais n'exécute qu'un script fixe, sans npm.
+  #   - monter backend/ ou frontend/ en entier donnerait les .env (clés de chiffrement) à `docs`, qui
+  #     exécute des centaines de paquets tiers.
+  # Ce conteneur-ci voit backend/ et frontend/ (en lecture seule) mais n'exécute qu'un script fixe, sans npm.
   docs-sync:
     image: alpine:3
     command:
       - sh
       - -c
       - |
-        mkdir -p /dst/openapi /dst/tables /dst/stack
+        mkdir -p /dst/openapi /dst/tables /dst/stack /dst-frontend/docs
         cd /src  # pour que les motifs stack/*.md et tables/*.md ci-dessous se développent dans backend/
         while true; do
           # Les pages avant les index qui les citent : un lien vers une page absente fait échouer la compilation.
@@ -148,14 +150,26 @@ services:
             [ -f "/src/$$f" ] || continue
             cmp -s "/src/$$f" "/dst/$$f" || cp "/src/$$f" "/dst/$$f"
           done
+          for f in /src-frontend/README.md /src-frontend/docs/*.md; do
+            [ -f "$$f" ] || continue
+            d="/dst-frontend/$${f#/src-frontend/}"
+            cmp -s "$$f" "$$d" || cp "$$f" "$$d"
+          done
+          # Un document supprimé ou renommé dans frontend/docs/ disparaît aussi du site.
+          for d in /dst-frontend/docs/*.md; do
+            [ -f "$$d" ] || continue
+            [ -f "/src-frontend/docs/$${d##*/}" ] || rm -f "$$d"
+          done
           # Le conteneur `docs` tourne en utilisateur non root et doit pouvoir lire, même si un fichier de
           # l'hôte a des droits restreints (umask 077, fichier créé par un outil…).
-          chmod -R a+rX /dst
+          chmod -R a+rX /dst /dst-frontend
           sleep 2
         done
     volumes:
       - ./backend:/src:ro
       - docs-source:/dst
+      - ./frontend:/src-frontend:ro
+      - docs-frontend:/dst-frontend
     restart: unless-stopped
     logging: *logging
     read_only: true
@@ -166,7 +180,8 @@ services:
     # Aucun besoin de réseau : il ne fait que copier des fichiers.
     network_mode: none
     healthcheck:
-      test: ["CMD", "test", "-f", "/dst/openapi/openapi.yaml"]
+      # `docs` n'attend que ce test : les deux sources doivent être copiées avant son démarrage.
+      test: ["CMD-SHELL", "test -f /dst/openapi/openapi.yaml && test -f /dst-frontend/README.md"]
       interval: 2s
       timeout: 2s
       retries: 15
@@ -228,3 +243,5 @@ volumes:
   rabbitmq_data:
   # Copie des documents de backend/ lus par la documentation (voir docs-sync).
   docs-source:
+  # Copie des documents de frontend/ lus par la documentation (voir docs-sync).
+  docs-frontend:

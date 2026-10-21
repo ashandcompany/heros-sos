@@ -18,6 +18,7 @@ type record struct {
 	ID                uuid.UUID `gorm:"primaryKey"`
 	ReporterID        *uuid.UUID
 	TypeID            int16
+	Title             string
 	Description       string
 	Status            string
 	Priority          string
@@ -56,7 +57,7 @@ func toRecord(in *Incident) record {
 		complement = &in.AddressComplement
 	}
 	return record{
-		ID: in.ID, ReporterID: &reporterID, TypeID: in.TypeID, Description: in.Description,
+		ID: in.ID, ReporterID: &reporterID, TypeID: in.TypeID, Title: in.Title, Description: in.Description,
 		Status: string(in.Status), Priority: string(in.Priority), CitizensRescued: in.CitizensRescued,
 		Street: in.Street, PostalCode: in.PostalCode, City: in.City, Country: in.Country,
 		AddressComplement: complement, Latitude: in.Latitude, Longitude: in.Longitude,
@@ -141,7 +142,7 @@ func (r *gormRepository) hydrate(ctx context.Context, rows []joinedRecord) ([]In
 	for i, row := range rows {
 		rec := row.Record
 		item := Incident{
-			ID: rec.ID, TypeID: rec.TypeID, TypeCode: row.TypeCode, TypeLabel: row.TypeLabel,
+			ID: rec.ID, TypeID: rec.TypeID, TypeCode: row.TypeCode, TypeLabel: row.TypeLabel, Title: rec.Title,
 			Description: rec.Description, Status: Status(rec.Status), Priority: Priority(rec.Priority),
 			CitizensRescued: rec.CitizensRescued, Street: rec.Street, PostalCode: rec.PostalCode,
 			City: rec.City, Country: rec.Country, Latitude: rec.Latitude, Longitude: rec.Longitude,

@@ -2194,14 +2194,13 @@ paths:
   /incidents:
     get:
       tags: [Incidents]
-      summary: Incidents disponibles pour une intervention
-      description: Liste les incidents signalés, en cours ou échoués, sans identité civile du déclarant.
+      summary: Liste publique des incidents
+      description: Accessible sans session. Liste les incidents sans identité civile du déclarant.
       operationId: listIncidents
-      security: [{ sessionCookie: [] }]
       parameters:
         - name: reporterId
           in: query
-          description: Identifiant du déclarant; un citoyen ne peut filtrer que sur son propre identifiant.
+          description: Identifiant facultatif du déclarant; un citoyen connecté ne peut filtrer que sur son propre identifiant.
           schema: { type: string, format: uuid }
         - { $ref: "#/components/parameters/Limit" }
         - { $ref: "#/components/parameters/Offset" }
@@ -2211,7 +2210,6 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/IncidentPage" }
-        "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/InternalError" }
@@ -2247,9 +2245,9 @@ paths:
   /incidents/{id}:
     get:
       tags: [Incidents]
-      summary: Détail d'un incident
+      summary: Détail public d'un incident
+      description: Accessible sans session.
       operationId: getIncident
-      security: [{ sessionCookie: [] }]
       parameters:
         - { $ref: "#/components/parameters/Id" }
       responses:
@@ -2258,8 +2256,6 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Incident" }
-        "401": { $ref: "#/components/responses/Unauthenticated" }
-        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/InternalError" }
 
@@ -4180,10 +4176,14 @@ components:
 
     IncidentPayload:
       type: object
-      required: [typeId, description, location]
+      required: [typeId, title, description, location]
       additionalProperties: false
       properties:
         typeId: { type: integer, format: int32 }
+        title:
+          type: string
+          maxLength: 80
+          description: Titre court, affiché dans les listes.
         description: { type: string }
         citizensRescued:
           { type: integer, format: int32, minimum: 0, default: 0 }
@@ -4210,6 +4210,7 @@ components:
         [
           id,
           typeId,
+          title,
           description,
           status,
           priority,
@@ -4223,6 +4224,9 @@ components:
         typeId: { type: integer, format: int32 }
         typeCode: { type: string }
         typeLabel: { type: string }
+        title:
+          type: string
+          description: Titre court de l'incident ; vide pour un incident déclaré avant son introduction.
         description: { type: string }
         status:
           { type: string, enum: [reported, in_progress, succeeded, failed] }

@@ -5,55 +5,90 @@ Le contrat de l'API Go est [backend/openapi/openapi.yaml](../../backend/openapi/
 dit **où le frontend actuel s'écarte de ce contrat** et ce qu'il faut changer au moment du
 branchement. À mettre à jour à chaque fonction branchée.
 
+> [!NOTE]
 > État au 21/10/2026 : **identité (inscription, activation, connexion, session, mot de passe),
-> demandes de super-héros, modération des comptes, types d'incident, vidéothèque, avis, profil et
-> photo, changements d'adresse email, contact, newsletter, annuaire des super-héros, « déconnexion de tous les
-> appareils » et double authentification des modérateurs sont branchés** sur l'API dès que
-> `API_URL` est renseignée (tableau ci-dessous). Le reste fonctionne encore sur des mocks, y compris
+> demandes de super-héros, fiches publiques et annuaire admin des super-héros, modération des comptes, types
+> d'incident, incidents et interventions (hors écrans publics), vidéothèque et avis, compte (profil, photo,
+> changement d'e-mail confirmé par lien), contact, newsletter (confirmation et désinscription), « déconnexion
+> de tous les appareils » et double authentification des modérateurs sont branchés** sur l'API dès que
+> `API_URL` est renseignée (tableau ci-dessous). Le blog a ses routes dans le contrat mais n'est **pas encore
+> branché**. Le reste fonctionne encore sur des mocks, y compris
 > avec l'API.
 
 ## 1. Couverture : ce qui est dans le contrat, et le reste
 
-Le contrat décrit aujourd'hui **90 opérations** (plus `/health` et `/ready`) : identité (dont la
-double authentification des modérateurs) et modération des comptes, annuaire admin des héros, profil, photo
-et changements d'adresse email, contact et newsletter,
-incidents, interventions, types d'incident, super-vilains, avis sur les interventions et
-vidéothèque (films). Le blog (7 opérations, `/articles` et `/admin/articles`) a un contrat mais n'est pas encore branché.
+Le contrat décrit aujourd'hui **90 opérations** (plus `/health` et `/ready`) : identité (dont la double
+authentification des modérateurs) et modération des comptes, annuaire des héros, profil du compte (`/me`,
+photo, changements d'e-mail confirmés par lien), incidents, interventions, types d'incident, super-vilains,
+avis sur les interventions, vidéothèque (films), blog (articles), contact et newsletter. Les autres domaines du
+frontend (incidents publics, tableaux de bord) n'ont pas encore de contrat.
 
-| Domaine frontend                      | Fonctions `lib/api/`                                                                                                                                                                                                        | Contrat OpenAPI                                                                                                                                                                                        | État                                          |
-| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------- |
-| Connexion, session, déconnexion       | `login`, `getSessionUser`, `getMfaSession`, `logout`, `logoutAll`                                                                                                                                                           | `/auth/login`, `/auth/me`, `/auth/logout`, `/auth/logout-all`                                                                                                                                          | ✅ branché                                    |
-| Double authentification (TOTP)        | `mfa.ts` (`getMfaOverview`, `startMfaSetup`, `enableMfa`, `verifyMfa`, `regenerateMfaRecoveryCodes`)                                                                                                                        | `/auth/mfa`, `/auth/mfa/setup`, `/auth/mfa/enable`, `/auth/mfa/verify`, `/auth/mfa/recovery-codes`                                                                                                     | ✅ branché                                    |
-| Inscription                           | `register`                                                                                                                                                                                                                  | `/auth/register`                                                                                                                                                                                       | ✅ branché                                    |
-| Activation du compte                  | `activateAccount`, `resendActivation`                                                                                                                                                                                       | `/auth/activate`, `/auth/resend-activation`                                                                                                                                                            | ✅ branché                                    |
-| Mot de passe oublié (demande)         | `requestPasswordReset`                                                                                                                                                                                                      | `/auth/password-reset`                                                                                                                                                                                 | ✅ branché                                    |
-| Nouveau mot de passe (jeton)          | `confirmPasswordReset`                                                                                                                                                                                                      | `/auth/password-reset/confirm`                                                                                                                                                                         | ✅ branché                                    |
-| Demande de statut super-héros         | `hero-requests.ts` (`requestHeroStatus`, `getMyHeroRequest`, `getHeroApplications`, `reviewHeroApplication`)                                                                                                                | `/heroes/requests`, `/heroes/requests/me`, `/admin/hero-requests/*`                                                                                                                                    | ✅ branché                                    |
-| Comptes (désactivation, vérification) | `user-moderation.ts` (`getAccounts`, `moderateAccount`)                                                                                                                                                                     | `/admin/users`, `/admin/users/{id}/deactivate`, `…/reactivate`, `…/verify`                                                                                                                             | ✅ branché                                    |
-| Incidents, interventions              | `lib/api/incidents.ts`                                                                                                                                                                                                      | `/incidents/*`, `/interventions/*` (§ 3)                                                                                                                                                               | mock                                          |
-| Types d'incident                      | `incident-types.ts` (`getIncidentTypes`, `getAllIncidentTypes`, `createIncidentType`)                                                                                                                                       | `/intervention-types`, `/admin/intervention-types`                                                                                                                                                     | ✅ branché                                    |
-| Notes et avis                         | `reviews.ts` (`getMyInterventions`, `rateIntervention`, `getMyReputation`, `replyToReview`, `getHeroPublicReviews`, `getReviewsForModeration`, `moderateReview`, `getRepliesForModeration`, `moderateReply`)                | `/me/interventions`, `/interventions/{id}/reviews`, `/hero/reviews*`, `/heroes/{heroId}/reviews`, `/admin/hero-review*` (§ 3)                                                                          | ✅ branché                                    |
-| Super-vilains                         | `villains.ts` (`getVillains`, `getVillainsPage`, `getVillain`, `createVillain`, `updateVillain`)                                                                                                                            | `GET /villains`, `GET /villains/{id}` (publics), `POST /villains`, `PATCH /villains/{id}`                                                                                                              | ✅ branché                                    |
-| Fiches super-héros                    | `super-heroes.ts` : `getMyHeroProfile`, `updateMyHero…`, `requestHeroEmailChange` (profil du héros connecté), `getSuperHeroProfiles` (annuaire du back-office) ; `getSuperHero`, `getSuperHeroes`, `getFeaturedSuperHeroes` | `GET /me`, `PATCH /me`, `PUT /me/avatar`, `POST /me/email-change-requests` (profil connecté), `GET /admin/heroes` (annuaire) ; `GET /heroes`, `GET /heroes/{heroId}` (fiches publiques, non branchées) | ✅ branché (profil connecté, annuaire) / mock |
-| Vidéothèque (films)                   | `videos.ts` (`getMyVideos`, `addMyVideo`, `deleteMyVideo`, `getHeroVideos`, `moderateVideo`, `deleteVideo`, `getPublishedVideos`), `imdb.ts` (`searchImdbTitles`, `getImdbTitle`)                                           | `/films`, `/heroes/{heroId}/films`, `/hero/films*`, `/admin/hero-films*`, `/imdb/titles*` (§ 3)                                                                                                        | ✅ branché                                    |
-| Films des super-vilains               | aucune (pas d'écran)                                                                                                                                                                                                        | `/villains/{id}/films`, `/admin/villain-films`, `/admin/villains/{id}/films/{filmId}`                                                                                                                  | à faire                                       |
-| Blog                                  | `blog.ts`                                                                                                                                                                                                                   | `GET /articles`, `GET /articles/{slug}` (publics), `/admin/articles*`                                                                                                                                  | à brancher (mock)                             |
-| Newsletter                            | `newsletter.ts` (`subscribeToNewsletter`, `confirmNewsletterSubscription`), `account.ts` (`updateNewsletterPreference`)                                                                                                     | `/newsletter/subscriptions`, `/newsletter/subscriptions/confirm`, `/me/newsletter`                                                                                                                     | ✅ branché                                    |
-| Formulaire de contact                 | `sendContactMessage` (`contact.ts`)                                                                                                                                                                                         | `/contact/messages`                                                                                                                                                                                    | ✅ branché                                    |
-| Profil, photo, changements d'email    | `account.ts` (`getMyAccount`, `updateMyContact`, `updateMyAvatar`, `requestEmailChange`, `confirmEmailChange`, `getEmailChangeRequests`, `reviewEmailChange`), `avatar.ts`                                                  | `/me`, `/me/avatar`, `/avatars/{name}`, `/me/email-change-requests`, `/email-change-requests/confirm`, `/admin/email-change-requests*`                                                                 | ✅ branché                                    |
-| Tableau de bord héros, modération     | `hero-dashboard.ts`, `moderation.ts`                                                                                                                                                                                        | Partiel : `/admin/interventions/{id}/decision`                                                                                                                                                         | mock                                          |
+### ✅ Branché sur l'API
 
-Les « Future implémentation » écrites dans les commentaires de `lib/api/` pour les domaines non
-couverts sont des **hypothèses** du frontend, pas un contrat. Il faudra les faire valider (ou les
-remplacer) quand le backend ajoutera ces routes.
+| Domaine frontend                      | Fichier de `lib/api/`                              | Contrat OpenAPI                                                                                                                        |
+| ------------------------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Connexion, session, déconnexion       | `auth.ts`                                          | `/auth/login`, `/auth/me`, `/auth/logout`, `/auth/logout-all`                                                                          |
+| Double authentification (TOTP)        | `mfa.ts`                                           | `/auth/mfa`, `/auth/mfa/setup`, `/auth/mfa/enable`, `/auth/mfa/verify`, `/auth/mfa/recovery-codes`                                     |
+| Inscription                           | `auth.ts`                                          | `/auth/register`                                                                                                                       |
+| Activation du compte                  | `auth.ts`                                          | `/auth/activate`, `/auth/resend-activation`                                                                                            |
+| Mot de passe oublié (demande, jeton)  | `auth.ts`                                          | `/auth/password-reset`, `/auth/password-reset/confirm`                                                                                 |
+| Demande de statut super-héros         | `hero-requests.ts`                                 | `/heroes/requests`, `/heroes/requests/me`, `/admin/hero-requests/*`                                                                    |
+| Comptes (désactivation, vérification) | `user-moderation.ts`                               | `/admin/users`, `/admin/users/{id}/deactivate`, `…/reactivate`, `…/verify`                                                             |
+| Incidents, interventions, équipes     | `incidents.ts`, `interventions.ts` (§ 3)           | `/incidents/*`, `/interventions/*`, `/admin/interventions/{id}/decision`                                                               |
+| Types d'incident                      | `incident-types.ts`                                | `/intervention-types`, `/admin/intervention-types`                                                                                     |
+| Notes et avis                         | `reviews.ts` (§ 3)                                 | `/me/interventions`, `/interventions/{id}/reviews`, `/hero/reviews*`, `/heroes/{heroId}/reviews`, `/admin/hero-review*`                |
+| Super-vilains                         | `villains.ts`                                      | `GET /villains`, `GET /villains/{id}` (publics), `POST /villains`, `PATCH /villains/{id}`                                              |
+| Fiches publiques super-héros          | `super-heroes.ts` (§ 3)                            | `GET /heroes`, `GET /heroes/{heroId}` (publics)                                                                                        |
+| Annuaire admin des super-héros        | `super-heroes.ts`                                  | `GET /admin/heroes`                                                                                                                    |
+| Profil, photo, changements d'email    | `account.ts`, `avatar.ts`, `super-heroes.ts` (§ 3) | `/me`, `/me/avatar`, `/avatars/{name}`, `/me/email-change-requests`, `/email-change-requests/confirm`, `/admin/email-change-requests*` |
+| Newsletter                            | `newsletter.ts`, `account.ts`                      | `/newsletter/subscriptions`, `…/confirm`, `…/unsubscribe`, `PUT /me/newsletter`                                                        |
+| Formulaire de contact                 | `contact.ts`                                       | `POST /contact/messages`                                                                                                               |
+| Vidéothèque (films)                   | `videos.ts`, `imdb.ts` (§ 3)                       | `/films`, `/heroes/{heroId}/films`, `/hero/films*`, `/admin/hero-films*`, `/imdb/titles*`                                              |
+
+Fonctions de chaque fichier :
+
+- `auth.ts` : `login`, `getSessionUser`, `getMfaSession`, `logout`, `logoutAll`, `register`, `activateAccount`,
+  `resendActivation`, `requestPasswordReset`, `confirmPasswordReset`.
+- `mfa.ts` : `getMfaOverview`, `startMfaSetup`, `enableMfa`, `verifyMfa`, `regenerateMfaRecoveryCodes`.
+- `account.ts` : `getMyAccount`, `updateMyContact`, `updateMyAvatar`, `requestEmailChange`,
+  `confirmEmailChange`, `updateNewsletterPreference`, `getEmailChangeRequests`, `reviewEmailChange`.
+- `newsletter.ts` : `subscribeToNewsletter`, `confirmNewsletterSubscription`, `unsubscribeFromNewsletter` ;
+  `contact.ts` : `sendContactMessage`.
+- `hero-requests.ts` : `requestHeroStatus`, `getMyHeroRequest`, `getHeroApplications`,
+  `reviewHeroApplication`.
+- `user-moderation.ts` : `getAccounts`, `moderateAccount`.
+- `incident-types.ts` : `getIncidentTypes`, `getAllIncidentTypes`, `createIncidentType`.
+- `reviews.ts` : `getMyInterventions`, `rateIntervention`, `getMyReputation`, `replyToReview`,
+  `getHeroPublicReviews`, `getReviewsForModeration`, `moderateReview`, `getRepliesForModeration`,
+  `moderateReply`.
+- `villains.ts` : `getVillains`, `getVillainsPage`, `getVillain`, `createVillain`, `updateVillain`.
+- `super-heroes.ts` (fiches publiques) : `getSuperHeroes`, `getFeaturedSuperHeroes`, `getSuperHero` ; (profil
+  connecté) `getMyHeroProfile`, `updateMyHeroContact`, `updateMyHeroAvatar`, `requestHeroEmailChange` ;
+  (annuaire admin) `getSuperHeroProfiles`.
+- `videos.ts` : `getMyVideos`, `addMyVideo`, `deleteMyVideo`, `getHeroVideos`, `moderateVideo`,
+  `deleteVideo`, `getPublishedVideos` ; `imdb.ts` : `searchImdbTitles`, `getImdbTitle`.
+
+### ⏳ Encore sur les mocks (ou à faire)
+
+| Domaine frontend                   | Fonctions `lib/api/`                                                                                                                                | Contrat OpenAPI                                                                                                     | État    |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------- |
+| Incidents publics (accueil, carte) | `incidents.ts` : `getLatestResolvedIncidents`, `getOngoingIncidents`, `getPublicIncidentMap`, `getResolvedIncidentsByHero`, `getIncidentsByVillain` | ❌ aucun (routes réservées aux comptes connectés)                                                                   | mock    |
+| Tableau de bord héros, modération  | `hero-dashboard.ts`, `moderation.ts`                                                                                                                | ❌ aucun (statistiques)                                                                                             | mock    |
+| Blog                               | `blog.ts` : `getPublishedArticles`, `getPublishedArticle`, `getAllArticles`, `getArticle`, `createArticle`, `updateArticle`, `deleteArticle`        | `GET /articles`, `GET /articles/{slug}`, `/admin/articles`, `/admin/articles/{id}`                                  | à faire |
+| Films des super-vilains            | aucune (pas d'écran)                                                                                                                                | `GET /villains/{villainId}/films`, `POST /admin/villain-films`, `DELETE /admin/villains/{villainId}/films/{filmId}` | à faire |
+
+> [!WARNING]
+> Les « Future implémentation » écrites dans les commentaires de `lib/api/` pour les domaines non
+> couverts sont des **hypothèses** du frontend, pas un contrat. Il faudra les faire valider (ou les
+> remplacer) quand le backend ajoutera ces routes.
 
 Les deux routes publiques de super-héros sont une exception : `GET /heroes` est paginé et trié par
 pseudo par défaut (ou par note moyenne décroissante), et `GET /heroes/{heroId}` retourne la même
 fiche. Les profils doivent être approuvés et le compte actif. Pour rester compatible avec les
 cartes du frontend, `hero_profiles.bio` est exposé sous le nom `power`; `avatarUrl` n'est renseigné
 que si `users.avatar_path` contient une URL ou un chemin relatif publiquement exploitable. Aucune
-donnée d'identité civile n'est exposée. Ces routes n'impliquent pas encore que `getSuperHeroes` et
-`getSuperHero` soient branchées : elles continuent d'utiliser les mocks.
+donnée d'identité civile n'est exposée. Elles sont branchées (voir « Fiches publiques : choix du
+branchement », § 3).
 
 ## 2. Ce qui est branché : la session
 
@@ -63,10 +98,16 @@ Le navigateur ne parle **jamais** directement à l'API : tous les appels partent
 (Server Actions, Server Components, `proxy.ts`), à travers le client
 [src/lib/api/http.ts](../src/lib/api/http.ts) (`apiFetch`).
 
-```
-Navigateur ──cookie session──► Next (serveur) ──Cookie: session=… ──► API Go
-                                  ▲                      │
-                                  └──── Set-Cookie ◄─────┘  (login : recopié vers le navigateur)
+```mermaid
+flowchart LR
+    nav(["<b>Navigateur</b>"])
+    next["<b>Next</b><br/>(serveur)"]
+    api["<b>API Go</b>"]
+
+    nav -->|"cookie session"| next
+    next -->|"Cookie: session=…"| api
+    api -.->|"Set-Cookie (connexion)"| next
+    next -.->|"cookie recopié"| nav
 ```
 
 |               | Fonctionnement                                                                                                                                 |
@@ -141,14 +182,15 @@ déconnectés. Le bouton est dans « Mon compte », « Mon profil » (héros) et
 ### Domaines encore mockés avec une session réelle
 
 Les fonctions mockées reçoivent le vrai jeton et vérifient le rôle avec la vraie session
-(`userFromToken`). Mais leurs données sont indexées par les identifiants des comptes mock
-(`user-1`, `hero-1`, `admin-1`) : `asMockDataUser`
-([session-user.ts](../src/lib/api/session-user.ts)) donne au vrai compte l'identifiant du compte
-mock de son rôle, en gardant son nom. `requireRole()` l'applique aussi, pour les composants qui
-comparent `user.id` aux données (incidents d'un héros). **À supprimer quand tous les domaines
-seront branchés.**
+(`userFromToken`, [session-user.ts](../src/lib/api/session-user.ts)). Leurs données sont indexées
+par les identifiants des comptes mock (`user-1`, `hero-1`, `admin-1`) : un vrai compte, avec son
+vrai identifiant, n'y retrouve rien de lui. Aucun compte réel n'emprunte l'identité d'un compte
+mock, donc personne ne voit les données d'un autre.
 
-Conséquence : deux citoyens réels voient le même profil mock (celui de Camille).
+> [!WARNING]
+> Conséquence, tant que ces domaines ne sont pas branchés : listes vides (tableau de bord héros,
+> incidents publics…). Le compte (profil, photo, email) et « Mon profil » côté héros ne sont plus
+> concernés : ils lisent `GET /me`.
 
 ### Rôles : deux vocabulaires
 
@@ -176,35 +218,39 @@ La traduction se fait **à un seul endroit**, `fromApiUser` dans
 
 ### Erreurs : enveloppe `{ error: { code, message, fields } }`
 
-- `apiFetch` lève `ApiError` (`status`, `code`, `retryAfterSeconds`, `fields`) pour toute réponse
-  non 2xx. Chaque fonction mappe d'abord **ses** codes métier vers son `{ ok: false, error }`
-  typé, puis délègue le reste à `toApiFailure` ; un code inconnu tombe sur un message générique,
-  jamais sur le `message` brut de l'API.
-- Codes de champ de validation (422) : `required`, `invalid`, `too_short`, `too_long`, `weak`,
-  dans `ApiError.fields` (champ imbriqué : `address.city`). Exemple de table _code → message_ :
-  `toSignupErrors` dans [actions/signup.ts](../src/app/actions/signup.ts).
-- Statuts communs, traités une fois pour toutes dans [http.ts](../src/lib/api/http.ts) :
+`apiFetch` lève `ApiError` (`status`, `code`, `retryAfterSeconds`, `fields`) pour toute réponse
+non 2xx. Chaque fonction mappe d'abord **ses** codes métier vers son `{ ok: false, error }` typé,
+puis délègue le reste à `toApiFailure` ; un code inconnu tombe sur un message générique, jamais sur
+le `message` brut de l'API.
 
-  | Statut | Traitement                                                                                        | Message (`apiFailureMessage`)      |
-  | ------ | ------------------------------------------------------------------------------------------------- | ---------------------------------- |
-  | 401    | Appel authentifié : `apiFetch` redirige vers `/connexion` (`redirectOnUnauthorized: false` sinon) | aucun                              |
-  | 403    | `toApiFailure` → `forbidden`, journalisé (signe d'un bug : origine, CSRF ou rôle)                 | Action non autorisée               |
-  | 413    | `toApiFailure` → `payload-too-large`                                                              | Fichier trop volumineux            |
-  | 415    | `toApiFailure` → `unsupported-media-type`                                                         | Type de fichier refusé             |
-  | 429    | `toApiFailure` → `too-many-attempts`, avec `retryAfterSeconds`                                    | Réessayer dans N minutes           |
-  | autre  | `toApiFailure` → `unavailable`, journalisé                                                        | Service momentanément indisponible |
+Codes de champ de validation (422) : `required`, `invalid`, `too_short`, `too_long`, `weak`, dans
+`ApiError.fields` (champ imbriqué : `address.city`). Exemple de table _code → message_ :
+`toSignupErrors` dans [actions/signup.ts](../src/app/actions/signup.ts).
 
-  Les résultats des fonctions incluent `ApiFailure` ([src/types/api.ts](../src/types/api.ts)) ;
-  les actions affichent `apiFailureMessage(result)`
-  ([form-state.ts](../src/lib/validation/form-state.ts)) pour ces cas. Attention : certains codes
-  métier sont des 403 ou des 429 (`hero_request_not_eligible`, `account_locked`…), à traiter
-  **avant** `toApiFailure`. Comme `redirect()` de Next lève une exception, un `catch` qui
-  n'appelle pas `toApiFailure` doit appeler `unstable_rethrow(error)` en premier.
+Statuts communs, traités une fois pour toutes dans [http.ts](../src/lib/api/http.ts) :
 
-- Écritures authentifiées : `apiFetch` ajoute seul le `csrfToken` de `GET /auth/me` dans
-  `X-CSRF-Token` dès qu'il reçoit un `sessionToken` sur une méthode autre que `GET`. La session
-  est lue par `getApiSession`, mémorisée le temps d'un rendu : la page et ses écritures ne
-  déclenchent qu'un seul `GET /auth/me`.
+| Statut | Traitement                                                                                        | Message (`apiFailureMessage`)      |
+| ------ | ------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| 401    | Appel authentifié : `apiFetch` redirige vers `/connexion` (`redirectOnUnauthorized: false` sinon) | aucun                              |
+| 403    | `toApiFailure` → `forbidden`, journalisé (signe d'un bug : origine, CSRF ou rôle)                 | Action non autorisée               |
+| 413    | `toApiFailure` → `payload-too-large`                                                              | Fichier trop volumineux            |
+| 415    | `toApiFailure` → `unsupported-media-type`                                                         | Type de fichier refusé             |
+| 429    | `toApiFailure` → `too-many-attempts`, avec `retryAfterSeconds`                                    | Réessayer dans N minutes           |
+| autre  | `toApiFailure` → `unavailable`, journalisé                                                        | Service momentanément indisponible |
+
+Les résultats des fonctions incluent `ApiFailure` ([src/types/api.ts](../src/types/api.ts)) ; les
+actions affichent `apiFailureMessage(result)` ([form-state.ts](../src/lib/validation/form-state.ts))
+pour ces cas.
+
+> [!CAUTION]
+> Certains codes métier sont des 403 ou des 429 (`hero_request_not_eligible`, `account_locked`…),
+> à traiter **avant** `toApiFailure`. Et comme `redirect()` de Next lève une exception, un `catch`
+> qui n'appelle pas `toApiFailure` doit appeler `unstable_rethrow(error)` en premier.
+
+Écritures authentifiées : `apiFetch` ajoute seul le `csrfToken` de `GET /auth/me` dans
+`X-CSRF-Token` dès qu'il reçoit un `sessionToken` sur une méthode autre que `GET`. La session est
+lue par `getApiSession`, mémorisée le temps d'un rendu : la page et ses écritures ne déclenchent
+qu'un seul `GET /auth/me`.
 
 ### Inscription et activation de compte
 
@@ -216,9 +262,10 @@ La traduction se fait **à un seul endroit**, `fromApiUser` dans
 | Mot de passe              | `lib/validation/signup.ts` : ≥ 10 caractères, majuscule, minuscule, chiffre | Mêmes règles (`weak` sinon) : déjà alignés                                                   |
 | Téléphone                 | Règles frontend                                                             | Mobile FR (06/07) ou international (+33…), espaces et tirets ignorés                         |
 
-Les règles de validation du frontend et du backend doivent rester **identiques** : toute
-divergence se traduit par un formulaire qui accepte une valeur que l'API refuse. À vérifier à
-chaque modification de `lib/validation/`.
+> [!IMPORTANT]
+> Les règles de validation du frontend et du backend doivent rester **identiques** : toute
+> divergence se traduit par un formulaire qui accepte une valeur que l'API refuse. À vérifier à
+> chaque modification de `lib/validation/`.
 
 ### Demandes de super-héros, comptes et types d'incident : choix du branchement
 
@@ -236,6 +283,26 @@ chaque modification de `lib/validation/`.
   `typeCode` et `typeLabel` de l'API) ; les formulaires reçoivent la liste du référentiel et envoient
   son `id` (`typeId`). Le référentiel est **vide** dans une base neuve : tant qu'un modérateur n'a
   pas créé de type (`/admin/types-incident`), la déclaration d'incident est indisponible.
+
+### Fiches publiques des super-héros : choix du branchement
+
+- **Écrans** : accueil (`getFeaturedSuperHeroes` → `GET /heroes?sort=-averageRating&limit=8`),
+  encyclopédie (`getSuperHeroes` lit toutes les pages, tri par pseudo) et fiche
+  `/encyclopedie/super-heros/{id}` (`getSuperHero`, mémorisée le temps d'un rendu). Un héros
+  inconnu, non approuvé ou désactivé répond 404 (`null`, page introuvable), y compris pour un
+  ancien identifiant mock (`hero-1`).
+- **Note et interventions** : `averageRating` et `interventionsCount` viennent de l'API (moyenne des
+  avis publiés, interventions confirmées).
+- **Fiche publique, sections encore mockées** : « Dernières interventions réussies » et « Vilains
+  neutralisés » (`getResolvedIncidentsByHero`) restent vides pour un vrai héros tant que les
+  incidents ne sont pas branchés. Avis et films viennent déjà de l'API.
+- **Incidents mockés** : la correction d'un incident par la modération (`/admin/incidents/{id}`,
+  `updateIncidentAction`) prend ses héros dans `getIncidentHeroes` (mocks), pas dans
+  `getSuperHeroes` : les incidents mockés référencent les identifiants mock. À supprimer en
+  branchant les incidents.
+- **Espace héros et annuaire du back-office** : `getMyHeroProfile`, les coordonnées, la photo et le
+  changement d'email passent par `/me`, `/me/avatar` et `/me/email-change-requests` ; l'annuaire
+  (`getSuperHeroProfiles`) par `GET /admin/heroes` (voir « Profil, photo, email, newsletter et contact »).
 
 ### Vidéothèque : choix du branchement
 
@@ -270,7 +337,7 @@ chaque modification de `lib/validation/`.
 
 - **Ajout par un modérateur** (`/admin/videotheque`, section « Ajouter un film à un
   super-héros ») : `POST /admin/hero-films` avec `{ heroId, imdbId }`, film publié aussitôt
-  (`addHeroVideo`). Les fiches super-héros étant mockées, la liste des héros vient des comptes
+  (`addHeroVideo`). Les fiches complètes des super-héros étant mockées, la liste des héros vient des comptes
   (`GET /admin/users?role=hero&status=active`, `getHeroesForVideos`) : seuls leurs identifiants
   sont valides pour l'API.
 - **Pas encore branché** : films des super-vilains (aucun écran), vidéos libres sans IMDb
@@ -306,13 +373,10 @@ Types dans [src/types/review.ts](../src/types/review.ts) (`HeroReview`, `ReviewR
   `GET /incidents/{id}` pour afficher « type · ville » (une requête par incident, `null` en cas
   d'échec) ; l'espace héros et le back-office affichent la date de l'avis.
 - **Fiche publique** : `GET /heroes/{heroId}/reviews` ne renvoie pas de `total` : les pages sont
-  lues jusqu'à une page incomplète. Un héros inconnu de l'API (404, ou identifiant mock en 422,
-  tant que les fiches super-héros sont mockées) n'a aucun avis, comme pour ses films.
+  lues jusqu'à une page incomplète. Un héros inconnu de l'API (404, ou identifiant mal formé en 422) n'a aucun avis, comme pour ses films.
 - **Héros déclarant** : un héros qui a signalé un incident note les héros intervenus depuis
   `/heros/noter` (même `InterventionsList`, avec `role="super-heros"`). Il ne s'y voit jamais
   lui-même : l'API l'exclut de `/me/interventions`.
-- **Pas encore branché** : la note moyenne des fiches publiques (`averageRating` de l'API, les
-  fiches restant mockées).
 - **Erreurs** :
 
   | Code API (statut)                     | Message affiché                                            |
@@ -419,6 +483,65 @@ pas seulement changer les URL.
 modération des incidents, incidents d'un vilain) est-il à ajouter, ou les écrans du frontend
 doivent-ils changer ?
 
+### Incidents et interventions : choix du branchement
+
+Fonctions dans [incidents.ts](../src/lib/api/incidents.ts) (incidents) et
+[interventions.ts](../src/lib/api/interventions.ts) (équipes) ; types dans
+[src/types/incident.ts](../src/types/incident.ts) (`InterventionTeam`, `TeamMember`,
+`InterventionRef`). Toutes les routes demandent une session.
+
+| Écran                                    | Fonction                                                                   | API                                                                                      |
+| ---------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Déclaration (citoyen, héros, modérateur) | `declareIncident`                                                          | `POST /incidents`, position géocodée par le frontend (`latitude`, `longitude`)           |
+| « Mes incidents », « Mes déclarations »  | `getMyIncidents`                                                           | `GET /incidents?reporterId={moi}`                                                        |
+| Fiche d'un incident (citoyen)            | `getCitizenIncident`                                                       | Cherchée dans `getMyIncidents` : `GET /incidents/{id}` est fermé aux citoyens            |
+| Liste, fiche, carte (héros)              | `getHeroIncidents`, `getHeroIncident`, `getIncidentMap`                    | `GET /incidents`, `GET /incidents/{id}`, puis `GET /interventions/{id}` par équipe       |
+| Prise en charge                          | `takeChargeOfIncident`                                                     | `POST /incidents/{incidentId}/interventions` (le héros devient lead)                     |
+| Résultat                                 | `finishIntervention` → `proposeOutcome`                                    | `POST /interventions/{id}/outcome`, puis `GET` pour savoir si elle est close             |
+| Équipe                                   | `joinIntervention`, `inviteHeroes`, `respondToInvitation`, `voteOnOutcome` | `…/join`, `…/invitations`, `…/invitations/me/confirm` ou `decline`, `…/outcome/validate` |
+| Back-office : liste, fiche, arbitrage    | `getAllIncidents`, `getIncident`, `arbitrateIntervention`                  | `GET /incidents`, `GET /incidents/{id}`, `POST /admin/interventions/{id}/decision`       |
+
+- **Titre** : ajouté au contrat (`title`, obligatoire, 80 caractères au plus ; migration
+  `20261021130000_add_incident_title`). Un incident plus ancien a un titre vide : le frontend
+  affiche « type · ville ».
+- **Statuts** : `reported` → `signale`, `in_progress` → `en-cours`, `succeeded` → `resolu`,
+  `failed` → `signale` (un incident en échec redevient disponible). Priorités : `high` → `haute`,
+  `normal` → `normale`, `low` → `basse` (`critique` n'existe pas dans l'API).
+- **Pas de modération des déclarations** : l'API diffuse un incident dès sa déclaration et prévient
+  héros et modérateurs. `moderation` vaut `valide` ; le suivi du citoyen n'a pas d'étape « vérification ».
+- **Vilains** : l'API en accepte plusieurs ; le formulaire en envoie un (`villainIds: [id]`) et
+  l'écran affiche le premier.
+- **Équipe** : le héros connecté est reconnu côté serveur (`isMe`, d'après le vrai identifiant de
+  `GET /auth/me`). Seul,
+  un héros clôt directement ; en équipe, le résultat proposé (proposant compris) doit être validé
+  à l'unanimité. Un refus annule la proposition et prévient les modérateurs par mail.
+- **Arbitrage** : la réponse de l'API ne dit pas qu'un désaccord a eu lieu (la proposition est
+  effacée). Le formulaire d'arbitrage est donc proposé pour toute intervention en cours ; sans
+  désaccord, l'API répond `409 intervention_dispute_not_found`, affiché tel quel.
+- **Le citoyen ne voit pas l'équipe** : les interventions lui sont fermées. Sa fiche affiche
+  « une équipe intervient » et, une fois l'incident résolu, renvoie vers « Mes interventions »
+  pour noter.
+- **Formulaires d'équipe** : ils transmettent `id` (incident) et `interventionId` (champs cachés,
+  `InterventionRef`) : l'API utilise l'intervention, le mock l'incident. Sans API, les actions
+  d'équipe répondent qu'elles demandent l'API (le mock n'a qu'un héros par intervention).
+
+**Absent du contrat**, masqué avec l'API (`incidentFeatures` dans `incidents.ts`) :
+
+| Fonction                                        | Frontend (hypothèse)                                                  | Avec l'API                                  |
+| ----------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------- |
+| Validation, rejet, correction d'une déclaration | `PUT /admin/incidents/{id}/moderation`, `PATCH /admin/incidents/{id}` | Masquées : fiche en lecture seule           |
+| Priorité                                        | `PUT /hero/incidents/{id}/priority`                                   | Masquée (lue, jamais modifiable)            |
+| « Témoin » ou « victime »                       | `reporterRole` de la déclaration                                      | Champ retiré du formulaire                  |
+| Incidents résolus dans les listes               | `GET /incidents` ne les renvoie qu'à leur déclarant                   | Filtre « Résolus » retiré de l'espace héros |
+| Historique des interventions terminées          | `incident.interventionId` ne désigne que l'intervention en cours      | Section « Interventions précédentes » vide  |
+
+**Absent du contrat, encore sur les mocks avec l'API** (aucune route publique) : derniers
+incidents résolus de l'accueil (`getLatestResolvedIncidents`), incidents en cours de l'espace
+citoyen (`getOngoingIncidents`), carte publique (`getPublicIncidentMap`), interventions d'un héros
+et incidents d'un vilain sur les fiches de l'encyclopédie (`getResolvedIncidentsByHero`,
+`getIncidentsByVillain` : vides pour un vrai héros ou vilain), tableaux de bord
+(`hero-dashboard.ts`, `moderation.ts`).
+
 ### Pagination
 
 Les listes du contrat utilisent `limit` (1–100, défaut 20) et `offset`, et renvoient une page
@@ -485,5 +608,4 @@ Modèle à suivre : [src/lib/api/auth.ts](../src/lib/api/auth.ts) (`login`, `get
 5. Mapper les codes métier (`ApiError.code`) vers le résultat `{ ok: false, error }`, puis
    `return toApiFailure(error, "…")` ; ajouter `ApiFailure` au type du résultat et afficher
    `apiFailureMessage` dans l'action.
-6. Mettre à jour le tableau de la section 1. Quand le domaine n'utilise plus `userFromToken`,
-   vérifier si `asMockDataUser` sert encore.
+6. Mettre à jour le tableau de la section 1.

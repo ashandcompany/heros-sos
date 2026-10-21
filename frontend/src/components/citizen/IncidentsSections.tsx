@@ -1,7 +1,13 @@
 import Link from "next/link";
 import { buttonClasses } from "@/components/ui/ButtonLink";
 import { cn } from "@/components/ui/cn";
-import { getIncidentTypes, getMyIncidents, getOngoingIncidents, getVillains } from "@/lib/api";
+import {
+  getIncidentTypes,
+  getMyIncidents,
+  getOngoingIncidents,
+  getVillains,
+  incidentFeatures,
+} from "@/lib/api";
 import { routes } from "@/lib/routes";
 import { requireCitizenSession } from "@/lib/server-session";
 import { declareIncidentAction } from "@/app/actions/incidents";
@@ -76,6 +82,7 @@ export async function DeclareIncidentSection() {
       villains={villains.map(({ id, alias }) => ({ id, alias }))}
       types={types}
       action={declareIncidentAction}
+      askReporterRole={incidentFeatures.reporterRole}
     />
   );
 }

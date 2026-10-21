@@ -15,17 +15,158 @@ import type {
   IncidentStatus,
   IncidentUpdate,
   InterventionOutcome,
+  InterventionRef,
+  InterventionTeam,
   MapIncident,
   MapTeam,
   MapZone,
   ModerationStatus,
   MutationResult,
+  OutcomeProposalResult,
   ResolvedIncident,
 } from "@/types";
-import { mockResponse } from "./config";
+import { apiFailureMessage } from "@/lib/validation/form-state";
+import { isApiEnabled, mockResponse } from "./config";
+import { ApiError, type ApiSchema, apiFetch, toApiFailure } from "./http";
 import { getIncidentTypes } from "./incident-types";
+import {
+  getInterventionTeam,
+  proposeOutcome,
+  sessionUserId,
+  toInterventionFailure,
+} from "./interventions";
+import { MAX_PAGE_SIZE, pageQuery } from "./pagination";
 import { userFromToken } from "./session-user";
 import { getVillain } from "./villains";
+
+/*
+ * Incidents et interventions. Branchés sur l'API : déclaration, « mes incidents », espace
+ * super-héros (liste, fiche, carte, prise en charge, résultat, équipes : voir `interventions.ts`)
+ * et lecture par la modération. Toutes ces routes demandent une session.
+ *
+ * Restent mockés, faute de route : les écrans publics (derniers incidents résolus, incidents en
+ * cours, carte publique, historique d'un héros ou d'un vilain), la priorité, la modération des
+ * déclarations (validation, rejet, correction) et l'historique des interventions terminées.
+ */
+
+/** Fonctions que l'API ne couvre pas encore : les écrans les masquent quand elle est active. */
+export const incidentFeatures = {
+  /** Validation, rejet et correction d'une déclaration par la modération. */
+  moderation: !isApiEnabled,
+  /** Priorité fixée par les super-héros. */
+  priority: !isApiEnabled,
+  /** « Témoin » ou « victime » dans la déclaration. */
+  reporterRole: !isApiEnabled,
+  /** `GET /incidents` ne renvoie pas les incidents résolus aux héros ni aux modérateurs. */
+  resolvedInLists: !isApiEnabled,
+} as const;
+
+/* ---------- Conversion depuis l'API ---------- */
+
+type ApiIncident = ApiSchema<"Incident">;
+
+/** Un incident en échec redevient disponible : l'écran le traite comme un nouveau signalement. */
+const fromApiStatus: Record<ApiIncident["status"], IncidentStatus> = {
+  reported: "signale",
+  in_progress: "en-cours",
+  succeeded: "resolu",
+  failed: "signale",
+};
+
+const fromApiPriority: Record<ApiIncident["priority"], IncidentPriority> = {
+  high: "haute",
+  normal: "normale",
+  low: "basse",
+};
+
+/**
+ * Incident de l'API vers la forme du frontend. L'API diffuse un incident dès sa déclaration (aucune
+ * vérification préalable) : `moderation` vaut donc `valide`. Le héros affiché est le lead de
+ * l'équipe en cours, s'il est connu.
+ */
+function fromApiIncident(incident: ApiIncident, team: InterventionTeam | null = null): Incident {
+  const { address, city, latitude, longitude } = incident.location;
+  const villain = incident.villains?.[0];
+  const lead = team?.members.find(({ role }) => role === "lead");
+  return {
+    id: incident.id,
+    // Les incidents déclarés avant l'ajout du titre n'en ont pas.
+    title: incident.title || [incident.typeLabel, city].filter(Boolean).join(" · "),
+    type: { code: incident.typeCode ?? "", label: incident.typeLabel ?? "" },
+    status: fromApiStatus[incident.status],
+    moderation: "valide",
+    priority: fromApiPriority[incident.priority],
+    location: {
+      city,
+      address,
+      coordinates:
+        latitude != null && longitude != null ? { lat: latitude, lng: longitude } : undefined,
+    },
+    reportedAt: incident.createdAt,
+    villain: villain ? { id: villain.id, alias: villain.alias } : null,
+    hero: lead?.hero,
+    description: incident.description,
+    occurredAt: incident.occurredAt ?? undefined,
+  };
+}
+
+function toApiHeroIncident(incident: ApiIncident, team: InterventionTeam | null): HeroIncident {
+  const converted = fromApiIncident(incident, team);
+  return { ...converted, priority: converted.priority ?? "normale", interventions: [], team };
+}
+
+/** Toutes les pages de `GET /incidents` (100 par appel), du plus récent au plus ancien. */
+async function fetchAllIncidents(
+  token: string,
+  filters: Record<string, string> = {},
+): Promise<ApiIncident[]> {
+  const incidents: ApiIncident[] = [];
+  for (let offset = 0; ; offset += MAX_PAGE_SIZE) {
+    const response = await apiFetch(
+      `/incidents${pageQuery({ limit: MAX_PAGE_SIZE, offset }, filters)}`,
+      { sessionToken: token },
+    );
+    const page = (await response.json()) as ApiSchema<"IncidentPage">;
+    incidents.push(...page.items);
+    if (page.items.length === 0 || incidents.length >= page.total) return incidents;
+  }
+}
+
+/** `GET /incidents/{id}` (héros et modérateurs), `null` si l'incident n'existe pas. */
+async function fetchIncident(token: string, id: string): Promise<ApiIncident | null> {
+  try {
+    const response = await apiFetch(`/incidents/${encodeURIComponent(id)}`, {
+      sessionToken: token,
+    });
+    return (await response.json()) as ApiIncident;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null;
+    throw error;
+  }
+}
+
+/** Incidents et leur équipe en cours (`GET /interventions/{id}`, en parallèle). */
+async function withTeams(
+  token: string,
+  incidents: ApiIncident[],
+  meId: string | null,
+): Promise<HeroIncident[]> {
+  return Promise.all(
+    incidents.map(async (incident) =>
+      toApiHeroIncident(
+        incident,
+        incident.interventionId
+          ? await getInterventionTeam(token, incident.interventionId, meId)
+          : null,
+      ),
+    ),
+  );
+}
+
+const featureUnavailable: MutationResult = {
+  ok: false,
+  error: "Cette fonction n'est pas encore disponible.",
+};
 
 /** Type du référentiel (API ou mock), réduit à ce qu'embarque un incident ; `undefined` si inconnu. */
 async function findIncidentType(
@@ -84,11 +225,20 @@ export async function getOngoingIncidents(city?: string): Promise<Incident[]> {
 }
 
 /**
- * Incidents déclarés par le citoyen connecté, du plus récent au plus ancien
- * (y compris ceux rejetés par la modération, pour qu'il en soit informé).
- * Future implémentation : `GET ${API_URL}/me/incidents`
+ * Incidents déclarés par l'utilisateur connecté (citoyen ou super-héros), du plus récent au plus
+ * ancien (y compris ceux rejetés par la modération, pour qu'il en soit informé).
+ * API : `GET /incidents?reporterId={moi}`, toutes les pages. Le héros qui intervient n'est pas
+ * connu : un citoyen n'a pas accès aux interventions.
  */
 export async function getMyIncidents(token: string): Promise<Incident[]> {
+  if (isApiEnabled) {
+    const meId = await sessionUserId(token);
+    if (!meId) return [];
+    return (await fetchAllIncidents(token, { reporterId: meId })).map((incident) =>
+      fromApiIncident(incident),
+    );
+  }
+
   const user = await userFromToken(token, ["citoyen", "super-heros"]);
   return mockResponse(
     incidentsMock.filter((incident) => incident.reporterId === user.id).sort(byMostRecent),
@@ -96,20 +246,55 @@ export async function getMyIncidents(token: string): Promise<Incident[]> {
 }
 
 /**
- * Déclare un incident ; il est diffusé aux super-héros à proximité.
- * Un citoyen, un super-héros ou un modérateur peut déclarer : la déclaration d'un modérateur est validée d'office,
- * celle d'un citoyen ou d'un super-héros attend la vérification de la modération.
- * Future implémentation : `POST ${API_URL}/incidents` avec l'`IncidentDeclaration`.
+ * Déclare un incident ; il est diffusé aux super-héros.
+ * Un citoyen, un super-héros ou un modérateur peut déclarer. Mock : la déclaration d'un modérateur
+ * est validée d'office, celle d'un citoyen ou d'un super-héros attend la vérification de la
+ * modération. L'API, elle, prévient aussitôt les héros et les modérateurs.
+ * API : `POST /incidents`, avec la position géocodée par le frontend (carte des héros).
  */
 export async function declareIncident(
   token: string,
   declaration: IncidentDeclaration,
 ): Promise<MutationResult> {
+  const coordinates = (await geocodeLocation(declaration.location)) ?? undefined;
+
+  if (isApiEnabled) {
+    try {
+      await apiFetch("/incidents", {
+        method: "POST",
+        sessionToken: token,
+        body: {
+          typeId: declaration.typeId,
+          title: declaration.title,
+          description: declaration.description,
+          // Le formulaire ne le demande pas : nombre connu après l'intervention.
+          citizensRescued: 0,
+          location: {
+            address: declaration.location.address,
+            city: declaration.location.city,
+            latitude: coordinates?.lat ?? null,
+            longitude: coordinates?.lng ?? null,
+          },
+          occurredAt: declaration.occurredAt,
+          villainIds: declaration.villainId ? [declaration.villainId] : [],
+        } satisfies ApiSchema<"IncidentPayload">,
+      });
+      return { ok: true };
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "validation_failed") {
+        return {
+          ok: false,
+          error: "Certaines informations sont invalides. Vérifiez le formulaire.",
+        };
+      }
+      return { ok: false, error: apiFailureMessage(toApiFailure(error, "Déclaration d'incident")) };
+    }
+  }
+
   const user = await userFromToken(token, ["citoyen", "super-heros", "admin"]);
   const villain = declaration.villainId ? await getVillain(declaration.villainId) : null;
   const type = await findIncidentType(token, declaration.typeId);
   if (!type) return mockResponse({ ok: false, error: "Type d'incident inconnu." });
-  const coordinates = (await geocodeLocation(declaration.location)) ?? undefined;
 
   incidentsMock.push({
     id: `incident-${crypto.randomUUID()}`,
@@ -123,7 +308,7 @@ export async function declareIncident(
     villain: villain ? { id: villain.id, alias: villain.alias } : null,
     description: declaration.description,
     reporterId: user.id,
-    reporterRole: declaration.reporterRole,
+    reporterRole: declaration.reporterRole ?? undefined,
   });
 
   return mockResponse({ ok: true });
@@ -134,12 +319,15 @@ export async function declareIncident(
 /**
  * Tous les incidents, éventuellement filtrés par décision de modération,
  * du plus récent au plus ancien.
- * Future implémentation : `GET ${API_URL}/admin/incidents?moderation=${moderation}`
+ * API : `GET /incidents` (incidents signalés, en cours ou en échec, sans les résolus), avec leur
+ * équipe en cours. L'API n'a pas de modération des déclarations : `moderation` est ignoré.
  */
 export async function getAllIncidents(
   token: string,
   moderation?: ModerationStatus,
 ): Promise<Incident[]> {
+  if (isApiEnabled) return withTeams(token, await fetchAllIncidents(token), null);
+
   await userFromToken(token, "admin");
   return mockResponse(
     incidentsMock
@@ -148,21 +336,32 @@ export async function getAllIncidents(
   );
 }
 
-/** Future implémentation : `GET ${API_URL}/admin/incidents/${id}` (404 → `null`). */
-export async function getIncident(token: string, id: string): Promise<Incident | null> {
+/**
+ * Un incident et son équipe en cours, pour le back-office.
+ * API : `GET /incidents/{id}` puis `GET /interventions/{interventionId}` (404 → `null`).
+ */
+export async function getIncident(token: string, id: string): Promise<HeroIncident | null> {
+  if (isApiEnabled) {
+    const incident = await fetchIncident(token, id);
+    return incident ? (await withTeams(token, [incident], null))[0] : null;
+  }
+
   await userFromToken(token, "admin");
-  return mockResponse(incidentsMock.find((incident) => incident.id === id) ?? null);
+  const incident = incidentsMock.find((existing) => existing.id === id);
+  return mockResponse(incident ? toHeroIncident(incident, null) : null);
 }
 
 /**
  * Corrige les informations d'un incident (titre, lieu, vilain, héros, statut…).
- * Future implémentation : `PATCH ${API_URL}/admin/incidents/${id}` avec l'`IncidentUpdate`.
+ * Future implémentation : `PATCH ${API_URL}/admin/incidents/${id}` avec l'`IncidentUpdate`
+ * (absente du contrat : voir `incidentFeatures.moderation`).
  */
 export async function updateIncident(
   token: string,
   id: string,
   update: IncidentUpdate,
 ): Promise<MutationResult> {
+  if (isApiEnabled) return featureUnavailable;
   await userFromToken(token, "admin");
   const incident = incidentsMock.find((existing) => existing.id === id);
   if (!incident) return mockResponse({ ok: false, error: "Incident introuvable." });
@@ -204,13 +403,15 @@ export async function updateIncident(
 
 /**
  * Valide (déclaration conforme et réelle) ou rejette un incident.
- * Future implémentation : `PUT ${API_URL}/admin/incidents/${id}/moderation` avec `{ decision }`.
+ * Future implémentation : `PUT ${API_URL}/admin/incidents/${id}/moderation` avec `{ decision }`
+ * (absente du contrat : voir `incidentFeatures.moderation`).
  */
 export async function moderateIncident(
   token: string,
   id: string,
   decision: ModerationStatus,
 ): Promise<MutationResult> {
+  if (isApiEnabled) return featureUnavailable;
   await userFromToken(token, "admin");
   const incident = incidentsMock.find((existing) => existing.id === id);
   if (!incident) return mockResponse({ ok: false, error: "Incident introuvable." });
@@ -230,45 +431,86 @@ const priorityRank: Record<IncidentPriority, number> = {
 
 const statusRank: Record<IncidentStatus, number> = { signale: 0, "en-cours": 1, resolu: 2 };
 
-function toHeroIncident(incident: Incident): HeroIncident {
+/**
+ * Mock : un seul héros intervient à la fois, l'équipe se réduit à lui. `meId` reconnaît le héros
+ * connecté (`null` pour un modérateur).
+ */
+function mockTeam(incident: Incident, meId: string | null): InterventionTeam | null {
+  if (incident.status !== "en-cours" || !incident.hero) return null;
+  const open = interventionsMock.find(
+    ({ incidentId, outcome }) => incidentId === incident.id && outcome === null,
+  );
+  return {
+    id: open?.id ?? `intervention-${incident.id}`,
+    startedAt: open?.startedAt ?? incident.reportedAt,
+    members: [
+      {
+        hero: incident.hero,
+        role: "lead",
+        participation: "confirme",
+        vote: "en-attente",
+        isMe: incident.hero.id === meId,
+      },
+    ],
+    proposedOutcome: null,
+    proposedBy: null,
+    notes: "",
+  };
+}
+
+function toHeroIncident(incident: Incident, meId: string | null): HeroIncident {
   return {
     ...incident,
     priority: incident.priority ?? "normale",
     interventions: interventionsMock
-      .filter(({ incidentId }) => incidentId === incident.id)
+      .filter(({ incidentId, outcome }) => incidentId === incident.id && outcome !== null)
       .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt)),
+    team: mockTeam(incident, meId),
   };
 }
 
+const byHeroQueue = (a: HeroIncident, b: HeroIncident) =>
+  statusRank[a.status] - statusRank[b.status] ||
+  priorityRank[a.priority] - priorityRank[b.priority] ||
+  byMostRecent(a, b);
+
 /**
- * Signalements diffusés aux super-héros, triés par statut (à prendre en charge d'abord),
- * puis par priorité et du plus récent au plus ancien.
- * Future implémentation : `GET ${API_URL}/hero/incidents?status=${statuses}`
+ * Signalements diffusés aux super-héros, avec leur équipe en cours, triés par statut (à prendre
+ * en charge d'abord), puis par priorité et du plus récent au plus ancien.
+ * API : `GET /incidents` (sans les incidents résolus), puis l'équipe de chaque intervention en cours.
  */
 export async function getHeroIncidents(
   token: string,
   statuses?: readonly IncidentStatus[],
 ): Promise<HeroIncident[]> {
-  await userFromToken(token, "super-heros");
+  const wanted = (status: IncidentStatus) => !statuses || statuses.includes(status);
+
+  if (isApiEnabled) {
+    const [incidents, meId] = await Promise.all([fetchAllIncidents(token), sessionUserId(token)]);
+    const kept = incidents.filter(({ status }) => wanted(fromApiStatus[status]));
+    return (await withTeams(token, kept, meId)).sort(byHeroQueue);
+  }
+
+  const user = await userFromToken(token, "super-heros");
   const incidents = incidentsMock
     .filter(isPublic)
-    .filter((incident) => !statuses || statuses.includes(incident.status))
-    .map(toHeroIncident)
-    .sort(
-      (a, b) =>
-        statusRank[a.status] - statusRank[b.status] ||
-        priorityRank[a.priority] - priorityRank[b.priority] ||
-        byMostRecent(a, b),
-    );
+    .filter(({ status }) => wanted(status))
+    .map((incident) => toHeroIncident(incident, user.id))
+    .sort(byHeroQueue);
 
   return mockResponse(incidents);
 }
 
-/** Future implémentation : `GET ${API_URL}/hero/incidents/${id}` (404 → `null`). */
+/** Fiche d'un incident pour un héros. API : `GET /incidents/{id}` et son équipe (404 → `null`). */
 export async function getHeroIncident(token: string, id: string): Promise<HeroIncident | null> {
-  await userFromToken(token, "super-heros");
+  if (isApiEnabled) {
+    const [incident, meId] = await Promise.all([fetchIncident(token, id), sessionUserId(token)]);
+    return incident ? (await withTeams(token, [incident], meId))[0] : null;
+  }
+
+  const user = await userFromToken(token, "super-heros");
   const incident = incidentsMock.find((existing) => existing.id === id && isPublic(existing));
-  return mockResponse(incident ? toHeroIncident(incident) : null);
+  return mockResponse(incident ? toHeroIncident(incident, user.id) : null);
 }
 
 /** Rayon minimal d'une zone touchée, pour qu'un incident isolé reste visible. */
@@ -307,7 +549,10 @@ const roundCoordinate = (value: number) => Math.round(value * 100) / 100;
  * héros en intervention. `public` : positions arrondies, ville et quartier seulement, aucun héros.
  * Seuls les champs nécessaires à l'affichage sont renvoyés (ils partent vers le navigateur).
  */
-function buildIncidentMap(candidates: Incident[], audience: "hero" | "public"): IncidentMapData {
+function buildIncidentMap(
+  candidates: Array<Incident & { team?: InterventionTeam | null }>,
+  audience: "hero" | "public",
+): IncidentMapData {
   const open = candidates
     .filter((incident) => incident.status !== "resolu")
     .sort(
@@ -350,15 +595,16 @@ function buildIncidentMap(candidates: Incident[], audience: "hero" | "public"): 
     zone.incidents.push(mapIncident);
     byCity.set(key, zone);
 
-    if (audience === "hero" && incident.status === "en-cours" && incident.hero) {
-      const intervention = interventionsMock.find(
-        ({ incidentId, outcome }) => incidentId === incident.id && outcome === null,
-      );
+    const lead = incident.team?.members.find(({ role }) => role === "lead");
+    if (audience === "hero" && incident.status === "en-cours" && incident.team && lead) {
       teams.push({
-        hero: incident.hero,
+        hero: lead.hero,
+        isMe: incident.team.members.some(
+          ({ isMe, participation }) => isMe && participation === "confirme",
+        ),
         incidentId: incident.id,
         position,
-        startedAt: intervention?.startedAt ?? null,
+        startedAt: incident.team.startedAt,
       });
     }
   }
@@ -373,11 +619,10 @@ function buildIncidentMap(candidates: Incident[], audience: "hero" | "public"): 
 
 /**
  * Carte opérationnelle : incidents non résolus, super-héros en intervention et zones touchées.
- * Future implémentation : `GET ${API_URL}/hero/incidents/map`
+ * API : construite à partir de `getHeroIncidents` (position enregistrée à la déclaration).
  */
 export async function getIncidentMap(token: string): Promise<IncidentMapData> {
-  await userFromToken(token, "super-heros");
-  return mockResponse(buildIncidentMap(incidentsMock.filter(isPublic), "hero"));
+  return buildIncidentMap(await getHeroIncidents(token), "hero");
 }
 
 /**
@@ -402,12 +647,16 @@ function findActionableIncident(id: string): Incident | { error: string } {
   return incident;
 }
 
-/** Future implémentation : `PUT ${API_URL}/hero/incidents/${id}/priority` avec `{ priority }`. */
+/**
+ * Future implémentation : `PUT ${API_URL}/hero/incidents/${id}/priority` avec `{ priority }`
+ * (absente du contrat : voir `incidentFeatures.priority`).
+ */
 export async function setIncidentPriority(
   token: string,
   id: string,
   priority: IncidentPriority,
 ): Promise<MutationResult> {
+  if (isApiEnabled) return featureUnavailable;
   await userFromToken(token, "super-heros");
   const incident = findActionableIncident(id);
   if ("error" in incident) return mockResponse({ ok: false, error: incident.error });
@@ -417,11 +666,28 @@ export async function setIncidentPriority(
 }
 
 /**
- * Prise en charge d'un incident : un seul super-héros peut intervenir à la fois
- * (l'API répondra 409 si un autre héros l'a pris en charge entre-temps).
- * Future implémentation : `POST ${API_URL}/hero/incidents/${id}/intervention`
+ * Prise en charge d'un incident : le héros démarre l'intervention et en devient le lead. Une seule
+ * intervention à la fois par incident (409 si un autre héros l'a démarrée entre-temps) ; les
+ * autres héros rejoignent ensuite son équipe.
+ * API : `POST /incidents/{incidentId}/interventions`.
  */
 export async function takeChargeOfIncident(token: string, id: string): Promise<MutationResult> {
+  if (isApiEnabled) {
+    try {
+      await apiFetch(`/incidents/${encodeURIComponent(id)}/interventions`, {
+        method: "POST",
+        sessionToken: token,
+      });
+      return { ok: true };
+    } catch (error) {
+      return toInterventionFailure(error, "Prise en charge d'un incident", {
+        intervention_already_active:
+          "Un autre super-héros intervient déjà : rejoignez son équipe depuis la fiche de l'incident.",
+        hero_already_in_intervention: "Vous participez déjà à une autre intervention en cours.",
+      });
+    }
+  }
+
   const user = await userFromToken(token, "super-heros");
   const incident = findActionableIncident(id);
   if ("error" in incident) return mockResponse({ ok: false, error: incident.error });
@@ -450,15 +716,20 @@ export async function takeChargeOfIncident(token: string, id: string): Promise<M
 }
 
 /**
- * Termine l'intervention du héros. Réussie : l'incident est résolu. Échouée : il redevient
- * disponible pour un autre super-héros.
- * Future implémentation : `PUT ${API_URL}/hero/incidents/${id}/intervention` avec `{ outcome }`.
+ * Déclare le résultat de l'intervention. Héros seul : elle est close aussitôt (réussie : l'incident
+ * est résolu ; échouée : il redevient disponible). Équipe : le résultat est soumis au vote des
+ * membres confirmés (`closed: false`).
+ * API : `POST /interventions/{id}/outcome` (voir `proposeOutcome`).
  */
 export async function finishIntervention(
   token: string,
-  id: string,
+  ref: InterventionRef,
   outcome: InterventionOutcome,
-): Promise<MutationResult> {
+  notes = "",
+): Promise<OutcomeProposalResult> {
+  if (isApiEnabled) return proposeOutcome(token, ref, outcome, notes);
+
+  const id = ref.incidentId;
   const user = await userFromToken(token, "super-heros");
   const incident = findActionableIncident(id);
   if ("error" in incident) return mockResponse({ ok: false, error: incident.error });
@@ -500,7 +771,7 @@ export async function finishIntervention(
   const profile = superHeroProfilesMock.find(({ id: heroId }) => heroId === user.id);
   if (profile) profile.lastInterventionAt = now;
 
-  return mockResponse({ ok: true });
+  return mockResponse({ ok: true, closed: true });
 }
 
 /* ---------- Fiches publiques de l'encyclopédie ---------- */
@@ -542,12 +813,19 @@ export async function getIncidentsByVillain(villainId: string, limit = 6): Promi
 /**
  * Un citoyen peut consulter ses propres déclarations (y compris rejetées, pour en être informé)
  * et les incidents diffusés publiquement. Pour ces derniers, l'identité du déclarant est retirée.
- * Future implémentation : `GET ${API_URL}/incidents/${id}` (404 → `null`).
+ * API : un citoyen ne lit que ses propres déclarations (`GET /incidents/{id}` et les interventions
+ * lui sont fermés) : l'incident est cherché dans `GET /incidents?reporterId={moi}`, sans le suivi
+ * des interventions. Un autre incident → `null`.
  */
 export async function getCitizenIncident(
   token: string,
   id: string,
 ): Promise<CitizenIncidentDetail | null> {
+  if (isApiEnabled) {
+    const incident = (await getMyIncidents(token)).find((mine) => mine.id === id);
+    return incident ? { incident, isMine: true, interventions: [], review: null } : null;
+  }
+
   const user = await userFromToken(token, "citoyen");
   const incident = incidentsMock.find((existing) => existing.id === id);
   if (!incident) return mockResponse(null);
@@ -563,4 +841,17 @@ export async function getCitizenIncident(
       .sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt)),
     review: isMine ? (reviewsMock.find(({ incidentId }) => incidentId === id) ?? null) : null,
   });
+}
+
+/**
+ * Super-héros qu'on peut affecter à un incident mocké (correction par la modération), triés par
+ * pseudo : ceux des mocks, que les incidents mockés référencent. La correction n'existe pas avec
+ * l'API (`incidentFeatures.moderation`) : à supprimer avec elle.
+ */
+export async function getIncidentHeroes(): Promise<Array<{ id: string; alias: string }>> {
+  return mockResponse(
+    superHeroesMock
+      .map(({ id, alias }) => ({ id, alias }))
+      .sort((a, b) => a.alias.localeCompare(b.alias, "fr")),
+  );
 }

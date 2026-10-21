@@ -10,6 +10,13 @@ export const statusTone: Record<IncidentStatus, "paper" | "warning" | "success">
   resolu: "success",
 };
 
+/** Héros inconnu : en attente, ou intervention dont le citoyen ne voit pas l'équipe (API). */
+const heroPlaceholders: Record<IncidentStatus, string> = {
+  signale: "En attente",
+  "en-cours": "En intervention",
+  resolu: "Intervention terminée",
+};
+
 interface IncidentListItemProps {
   incident: Incident;
   /** Affiche aussi la description et le rôle du déclarant (liste « Mes déclarations »). */
@@ -62,7 +69,9 @@ export function IncidentListItem({ incident, detailed = false }: IncidentListIte
         </div>
         <div className="flex gap-1">
           <dt className="text-muted">Super-héros :</dt>
-          <dd className="font-medium">{incident.hero?.alias ?? "En attente"}</dd>
+          <dd className="font-medium">
+            {incident.hero?.alias ?? heroPlaceholders[incident.status]}
+          </dd>
         </div>
       </dl>
     </article>

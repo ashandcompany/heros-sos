@@ -11,10 +11,10 @@ import { PriorityBadge, StatusBadge } from "./IncidentBadges";
 
 /** Carte opérationnelle et sa liste. Lit la session : à rendre sous <Suspense>. */
 export async function HeroIncidentMapContent() {
-  const { token, user } = await requireHeroSession();
+  const { token } = await requireHeroSession();
   const data = await getIncidentMap(token);
   const tiles = getMapTileConfig();
-  const heroByIncident = new Map(data.teams.map((team) => [team.incidentId, team.hero]));
+  const teamByIncident = new Map(data.teams.map((team) => [team.incidentId, team]));
 
   return (
     <div className="space-y-6">
@@ -23,8 +23,8 @@ export async function HeroIncidentMapContent() {
 
       <p role="status" className="text-sm text-muted">
         {data.incidents.length} incident{data.incidents.length > 1 ? "s" : ""} non résolu
-        {data.incidents.length > 1 ? "s" : ""} sur la carte, {data.teams.length} super-héros en
-        intervention.
+        {data.incidents.length > 1 ? "s" : ""} sur la carte, {data.teams.length} équipe
+        {data.teams.length > 1 ? "s" : ""} de super-héros en intervention.
         {data.unlocatedCount > 0 &&
           ` ${data.unlocatedCount} incident${data.unlocatedCount > 1 ? "s" : ""} sans position connue n'${data.unlocatedCount > 1 ? "apparaissent" : "apparaît"} pas sur la carte.`}{" "}
         La position d&apos;un super-héros est celle de l&apos;incident qu&apos;il traite.
@@ -39,7 +39,7 @@ export async function HeroIncidentMapContent() {
         ) : (
           <ul className="divide-y divide-border border-2 border-border bg-surface">
             {data.incidents.map((incident) => {
-              const hero = heroByIncident.get(incident.id);
+              const team = teamByIncident.get(incident.id);
               return (
                 <li key={incident.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 p-3">
                   <span className="flex gap-2">
@@ -58,13 +58,9 @@ export async function HeroIncidentMapContent() {
                       {formatDateTime(incident.reportedAt)}
                     </time>
                   </span>
-                  {hero && (
-                    <span
-                      className={
-                        hero.id === user.id ? "text-sm font-semibold text-accent" : "text-sm"
-                      }
-                    >
-                      {hero.id === user.id ? "Vous intervenez" : `${hero.alias} intervient`}
+                  {team && (
+                    <span className={team.isMe ? "text-sm font-semibold text-accent" : "text-sm"}>
+                      {team.isMe ? "Vous intervenez" : `L'équipe de ${team.hero.alias} intervient`}
                     </span>
                   )}
                 </li>

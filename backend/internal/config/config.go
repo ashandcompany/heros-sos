@@ -62,6 +62,7 @@ type Config struct {
 	Crypto      Crypto
 	Mail        Mail
 	OMDb        OMDb
+	Avatar      Avatar
 	App         App
 	Jobs        Jobs
 }
@@ -71,6 +72,17 @@ type OMDb struct {
 	APIKey  string
 	BaseURL string
 	Timeout time.Duration
+}
+
+// Avatar regroupe les réglages des photos de profil.
+type Avatar struct {
+	// Dir est le dossier où les photos sont écrites : un volume inscriptible, car l'API tourne
+	// sinon avec un système de fichiers en lecture seule.
+	Dir string
+	// MaxBytes borne la taille du fichier reçu.
+	MaxBytes int64
+	// MaxDimension borne le côté de l'image, en pixels (protège contre les images « bombes »).
+	MaxDimension int
 }
 
 // HTTP regroupe les réglages du serveur.
@@ -164,6 +176,11 @@ type RateLimits struct {
 	PasswordResetPerIP    RateRule
 	PasswordResetPerEmail RateRule
 	IncidentCreatePerUser RateRule
+	ContactPerIP          RateRule
+	NewsletterPerIP       RateRule
+	NewsletterPerEmail    RateRule
+	EmailChangePerUser    RateRule
+	AvatarPerUser         RateRule
 	MaxTrackedKeys        int
 }
 
@@ -171,6 +188,9 @@ type RateLimits struct {
 type Tokens struct {
 	ActivationTTL    time.Duration
 	PasswordResetTTL time.Duration
+	// NewsletterConfirmTTL est la validité du lien de confirmation d'un abonnement (signé, sans
+	// jeton en base).
+	NewsletterConfirmTTL time.Duration
 }
 
 // Security regroupe les réglages de sécurité.
@@ -212,6 +232,8 @@ type Mail struct {
 	MaxAttempts int
 	RetryDelay  time.Duration
 	SendTimeout time.Duration
+	// ContactRecipient reçoit les messages du formulaire de contact.
+	ContactRecipient string
 }
 
 // App regroupe les réglages de l'application visibles des utilisateurs.
@@ -220,6 +242,8 @@ type App struct {
 	PublicBaseURL     *url.URL
 	ActivationPath    string
 	PasswordResetPath string
+	// NewsletterConfirmPath est la page du frontend qui confirme un abonnement (`?token=…`).
+	NewsletterConfirmPath string
 }
 
 // ActivationLink construit le lien d'activation de compte envoyé par mail.
@@ -230,6 +254,11 @@ func (a App) ActivationLink(token string) string {
 // PasswordResetLink construit le lien de réinitialisation de mot de passe envoyé par mail.
 func (a App) PasswordResetLink(token string) string {
 	return a.link(a.PasswordResetPath, token)
+}
+
+// NewsletterConfirmLink construit le lien de confirmation d'un abonnement à la newsletter.
+func (a App) NewsletterConfirmLink(token string) string {
+	return a.link(a.NewsletterConfirmPath, token)
 }
 
 // HeroReviewLink construit le lien de notation d'un héros après une intervention.
@@ -338,11 +367,18 @@ func Load(getenv func(string) string) (Config, error) {
 				PasswordResetPerIP:    l.rateRule(envRatePasswordResetPerIP, defaultRatePasswordResetPerIP),
 				PasswordResetPerEmail: l.rateRule(envRatePasswordResetPerKey, defaultRatePasswordResetPerKey),
 				IncidentCreatePerUser: l.rateRule(envRateIncidentCreatePerUser, defaultRateIncidentCreatePerUser),
+				ContactPerIP:          l.rateRule(envRateContactPerIP, defaultRateContactPerIP),
+				NewsletterPerIP:       l.rateRule(envRateNewsletterPerIP, defaultRateNewsletterPerIP),
+				NewsletterPerEmail:    l.rateRule(envRateNewsletterPerEmail, defaultRateNewsletterPerEmail),
+				EmailChangePerUser:    l.rateRule(envRateEmailChangePerUser, defaultRateEmailChangePerUser),
+				AvatarPerUser:         l.rateRule(envRateAvatarPerUser, defaultRateAvatarPerUser),
 				MaxTrackedKeys:        l.positiveInt(envMaxTrackedRateKeys, defaultMaxTrackedRateKeys),
 			},
 			Tokens: Tokens{
 				ActivationTTL:    l.duration(envActivationTokenTTL, defaultActivationTokenTTL),
 				PasswordResetTTL: l.duration(envPasswordResetTokenTTL, defaultPasswordResetTokenTTL),
+
+				NewsletterConfirmTTL: l.duration(envNewsletterConfirmTTL, defaultNewsletterConfirmTTL),
 			},
 			CSRFSecret: l.base64Secret(envCSRFSecret),
 		},
@@ -355,6 +391,11 @@ func Load(getenv func(string) string) (Config, error) {
 			APIKey:  l.text(envOMDbAPIKey, ""),
 			BaseURL: l.text(envOMDbBaseURL, defaultOMDbBaseURL),
 			Timeout: l.duration(envOMDbTimeout, defaultOMDbTimeout),
+		},
+		Avatar: Avatar{
+			Dir:          l.text(envAvatarDir, defaultAvatarDir),
+			MaxBytes:     int64(l.positiveInt(envAvatarMaxBytes, defaultAvatarMaxBytes)),
+			MaxDimension: l.positiveInt(envAvatarMaxDimension, defaultAvatarMaxDimension),
 		},
 		App: l.app(),
 		Jobs: Jobs{
@@ -402,6 +443,8 @@ func (l *loader) mail(production bool) Mail {
 		MaxAttempts: l.positiveInt(envMailMaxAttempts, defaultMailMaxAttempts),
 		RetryDelay:  l.duration(envMailRetryDelay, defaultMailRetryDelay),
 		SendTimeout: l.duration(envMailSendTimeout, defaultMailSendTimeout),
+
+		ContactRecipient: l.text(envContactRecipient, defaultContactRecipient),
 	}
 }
 
@@ -416,5 +459,7 @@ func (l *loader) app() App {
 		PublicBaseURL:     base,
 		ActivationPath:    l.text(envActivationPath, defaultActivationPath),
 		PasswordResetPath: l.text(envPasswordResetPath, defaultPasswordResetPath),
+
+		NewsletterConfirmPath: l.text(envNewsletterConfirmPath, defaultNewsletterConfirmPath),
 	}
 }

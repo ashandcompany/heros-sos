@@ -125,6 +125,9 @@ func (c Config) validateMail(fail func(string, ...any), production bool) {
 	if _, err := mail.ParseAddress(c.Mail.FromAddress); err != nil {
 		fail("%s : adresse invalide %q", envMailFromAddress, c.Mail.FromAddress)
 	}
+	if address, err := mail.ParseAddress(c.Mail.ContactRecipient); err != nil || address.Name != "" {
+		fail("%s : adresse simple attendue, reçu %q", envContactRecipient, c.Mail.ContactRecipient)
+	}
 	if c.Mail.Driver == MailDriverSMTP && c.Mail.SMTP.Host == "" {
 		fail("%s est obligatoire avec le driver smtp", envSMTPHost)
 	}

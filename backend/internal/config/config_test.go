@@ -63,6 +63,17 @@ func TestLoadAppliesDefaults(t *testing.T) {
 		{"driver mail", cfg.Mail.Driver, MailDriverLog},
 		{"TLS SMTP", cfg.Mail.SMTP.TLSMode, TLSModeNone},
 		{"migration auto", cfg.AutoMigrate, false},
+		{"limite contact par IP", cfg.Security.RateLimits.ContactPerIP, defaultRateContactPerIP},
+		{"limite newsletter par IP", cfg.Security.RateLimits.NewsletterPerIP, defaultRateNewsletterPerIP},
+		{"limite newsletter par adresse", cfg.Security.RateLimits.NewsletterPerEmail, defaultRateNewsletterPerEmail},
+		{"limite changement d'adresse", cfg.Security.RateLimits.EmailChangePerUser, defaultRateEmailChangePerUser},
+		{"limite photo de profil", cfg.Security.RateLimits.AvatarPerUser, defaultRateAvatarPerUser},
+		{"validité du lien newsletter", cfg.Security.Tokens.NewsletterConfirmTTL, defaultNewsletterConfirmTTL},
+		{"destinataire du contact", cfg.Mail.ContactRecipient, defaultContactRecipient},
+		{"dossier des photos", cfg.Avatar.Dir, defaultAvatarDir},
+		{"taille max d'une photo", cfg.Avatar.MaxBytes, int64(defaultAvatarMaxBytes)},
+		{"dimension max d'une photo", cfg.Avatar.MaxDimension, defaultAvatarMaxDimension},
+		{"page de confirmation newsletter", cfg.App.NewsletterConfirmPath, defaultNewsletterConfirmPath},
 	}
 	for _, check := range checks {
 		if check.got != check.want {
@@ -80,6 +91,13 @@ func TestLoadOverridesFromEnvironment(t *testing.T) {
 	env[envTrustedProxies] = "10.0.0.0/8, 192.168.1.5"
 	env[envAllowedOrigins] = "https://A.example/, http://localhost:3000"
 	env[envAutoMigrate] = "true"
+	env[envContactRecipient] = "bureau@heros-sos.example"
+	env[envAvatarDir] = "/var/lib/photos"
+	env[envAvatarMaxBytes] = "1048576"
+	env[envAvatarMaxDimension] = "512"
+	env[envRateContactPerIP] = "2/30m"
+	env[envNewsletterConfirmTTL] = "72h"
+	env[envNewsletterConfirmPath] = "/newsletter/ok"
 
 	cfg, err := Load(fakeEnv(env))
 	if err != nil {
@@ -103,6 +121,18 @@ func TestLoadOverridesFromEnvironment(t *testing.T) {
 	}
 	if !cfg.AutoMigrate {
 		t.Error("la migration automatique devrait être active")
+	}
+	if cfg.Mail.ContactRecipient != "bureau@heros-sos.example" {
+		t.Errorf("destinataire du contact = %q", cfg.Mail.ContactRecipient)
+	}
+	if got := cfg.Avatar; got.Dir != "/var/lib/photos" || got.MaxBytes != 1<<20 || got.MaxDimension != 512 {
+		t.Errorf("photos = %+v", got)
+	}
+	if got := cfg.Security.RateLimits.ContactPerIP; got.Max != 2 || got.Window != 30*time.Minute {
+		t.Errorf("limite du contact = %+v", got)
+	}
+	if cfg.Security.Tokens.NewsletterConfirmTTL != 72*time.Hour || cfg.App.NewsletterConfirmPath != "/newsletter/ok" {
+		t.Errorf("confirmation newsletter = %v, %q", cfg.Security.Tokens.NewsletterConfirmTTL, cfg.App.NewsletterConfirmPath)
 	}
 }
 
@@ -159,6 +189,12 @@ func TestLoadRejectsInconsistentValues(t *testing.T) {
 		}, envPasswordMinLength},
 		{"origine invalide", func(env map[string]string) { env[envAllowedOrigins] = "https://a.example/chemin" }, "origine invalide"},
 		{"URL de base de données", func(env map[string]string) { env[envDatabaseURL] = "mysql://x" }, "postgres://"},
+		{"destinataire du contact invalide", func(env map[string]string) { env[envContactRecipient] = "pas-une-adresse" }, envContactRecipient},
+		{"destinataire du contact avec un nom", func(env map[string]string) { env[envContactRecipient] = "Bureau <b@heros-sos.example>" }, envContactRecipient},
+		{"taille de photo nulle", func(env map[string]string) { env[envAvatarMaxBytes] = "0" }, envAvatarMaxBytes},
+		{"dimension de photo invalide", func(env map[string]string) { env[envAvatarMaxDimension] = "grande" }, envAvatarMaxDimension},
+		{"limite du contact invalide", func(env map[string]string) { env[envRateContactPerIP] = "beaucoup" }, envRateContactPerIP},
+		{"validité du lien newsletter invalide", func(env map[string]string) { env[envNewsletterConfirmTTL] = "-1h" }, envNewsletterConfirmTTL},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -251,6 +287,9 @@ func TestAppLinks(t *testing.T) {
 	}
 	if got, want := cfg.App.PasswordResetLink("xyz"), "http://localhost:3000/reinitialisation-mot-de-passe?token=xyz"; got != want {
 		t.Errorf("PasswordResetLink = %q, attendu %q", got, want)
+	}
+	if got, want := cfg.App.NewsletterConfirmLink("a b/c"), "http://localhost:3000/newsletter/confirmation?token=a+b%2Fc"; got != want {
+		t.Errorf("NewsletterConfirmLink = %q, attendu %q", got, want)
 	}
 	if got, want := cfg.App.HeroReviewLink("intervention id", "hero/id"), "http://localhost:3000/profil/interventions?heroId=hero%2Fid&interventionId=intervention+id"; got != want {
 		t.Errorf("HeroReviewLink = %q, attendu %q", got, want)

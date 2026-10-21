@@ -42,7 +42,11 @@ services:
     networks:
       - backend
       - edge
-    # L'API n'écrit rien sur le disque, ne garde aucune capacité Linux et ne peut pas en gagner.
+    volumes:
+      # Photos de profil : à sauvegarder avec la base (voir HEROS_AVATAR_DIR dans l'image).
+      - avatars:/var/lib/heros-sos/avatars
+    # Hors du volume des photos, l'API n'écrit rien sur le disque, ne garde aucune capacité Linux et ne
+    # peut pas en gagner.
     read_only: true
     cap_drop:
       - ALL
@@ -131,5 +135,6 @@ networks:
 
 volumes:
   pgdata:
+  avatars:
   caddy_data:
   caddy_config:

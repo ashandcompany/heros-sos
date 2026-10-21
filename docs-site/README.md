@@ -3,12 +3,13 @@
 Site de documentation technique, construit avec [Docusaurus](https://docusaurus.io/). Il a son propre
 `package.json` et ne dépend ni du front Next.js (`frontend/`) ni du backend Go (`backend/`).
 
-| Section      | Source                                                                                |
-| ------------ | ------------------------------------------------------------------------------------- |
-| Accueil      | `docs-site/docs/intro.mdx`                                                            |
-| Architecture | `docs-site/docs/architecture.md` (schémas Mermaid)                                    |
-| Backend      | `backend/MVP.md`, `backend/STACK.md` et `backend/stack/`, `backend/TABLES.md` et `backend/tables/` (lus sur place, non copiés) |
-| API          | `backend/openapi/openapi.yaml` (pages générées, non versionnées)                      |
+| Section        | Source                                                                                                                         |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Accueil        | `docs-site/docs/intro.mdx`                                                                                                     |
+| Architecture   | `docs-site/docs/architecture.md` et `architecture/` (schémas Mermaid)                                                          |
+| Fonctionnement | `docs-site/docs/fonctionnement.md`                                                                                             |
+| Backend        | `backend/MVP.md`, `backend/STACK.md` et `backend/stack/`, `backend/TABLES.md` et `backend/tables/` (lus sur place, non copiés) |
+| API            | `backend/openapi/openapi.yaml` (pages générées, non versionnées)                                                               |
 
 ## Commandes
 

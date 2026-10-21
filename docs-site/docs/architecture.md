@@ -3,7 +3,7 @@ title: Architecture
 ---
 
 Heros-SOS tourne dans quatre conteneurs Docker : `proxy`, `web`, `api` et `db`. En développement s'y ajoutent
-Mailpit (les mails), RabbitMQ et ce site de documentation. Cette page montre qui parle à qui, puis suit une connexion de bout en bout.
+Mailpit (les mails), RabbitMQ et ce site de documentation. Cette page montre qui parle à qui ; la page suivante, [Une connexion de bout en bout](architecture/connexion.md), suit une connexion.
 
 ## Vue d'ensemble
 
@@ -59,41 +59,3 @@ flowchart TB
   production vers un vrai serveur SMTP chiffré. La file d'envoi est dans le processus de l'API : RabbitMQ est
   démarré mais aucun code ne l'utilise encore.
 - **Deux volumes à sauvegarder** : `pgdata` (la base) et `avatars` (les photos de profil).
-
-## Une connexion de bout en bout
-
-Le cookie de session est posé par l'API, puis recopié par le serveur Next dans le navigateur (`HttpOnly`,
-`SameSite=Lax`). Le navigateur ne présente ensuite que ce cookie, à chaque page. À la connexion, le serveur Next
-transmet aussi à l'API l'adresse IP du visiteur (`X-Forwarded-For`) et son `User-Agent` : l'API limite les
-tentatives par IP et enregistre l'appareil de la session. Le mot de passe est vérifié avec argon2id.
-
-```mermaid
-sequenceDiagram
-    actor U as Visiteur
-    participant N as Navigateur
-    participant W as Next.js (serveur)
-    participant A as API Go
-    participant D as PostgreSQL
-
-    Note over N,W: tout passe par le proxy Caddy
-
-    U->>N: identifiant + mot de passe
-    N->>W: Server Action loginAction
-    W->>A: POST /auth/login
-    A->>D: vérifie le mot de passe, crée la session
-    A-->>W: 200 + Set-Cookie
-    W-->>N: recopie le cookie
-
-    Note over N,A: pages suivantes
-
-    N->>W: page protégée (cookie)
-    W->>A: GET /auth/me (cookie)
-    A->>D: lit la session
-    A-->>W: utilisateur, rôle, jeton CSRF
-    W-->>N: page selon le rôle
-```
-
-Les écritures authentifiées envoient en plus le jeton CSRF reçu de `GET /auth/me` dans l'en-tête
-`X-CSRF-Token`. Le détail (durées de session, codes d'erreur, noms du cookie) est dans le
-[contrat avec le backend](https://github.com/ashandcompany/heros-sos/blob/develop/frontend/docs/backend-contract.md)
-et les choix de sécurité dans [Stack](/backend/STACK).

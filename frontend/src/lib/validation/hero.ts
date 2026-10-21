@@ -1,6 +1,9 @@
 /** Longueur maximale de la réponse d'un super-héros à un commentaire. */
 export const REPLY_MAX_LENGTH = 500;
 
+/** Compte rendu joint au résultat d'une intervention (l'API ne le borne pas). */
+export const OUTCOME_NOTES_MAX_LENGTH = 1000;
+
 /* ---------- Demande de statut super-héros ---------- */
 
 /** Mêmes règles que l'API (`validation.Alias`, `MaxBioLength`, `MaxRequestMessageLength`). */

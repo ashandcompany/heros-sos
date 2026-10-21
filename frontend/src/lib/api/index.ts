@@ -57,11 +57,19 @@ export {
   getIncidentsByVillain,
   getOngoingIncidents,
   getResolvedIncidentsByHero,
+  incidentFeatures,
   moderateIncident,
   setIncidentPriority,
   takeChargeOfIncident,
   updateIncident,
 } from "./incidents";
+export {
+  arbitrateIntervention,
+  inviteHeroes,
+  joinIntervention,
+  respondToInvitation,
+  voteOnOutcome,
+} from "./interventions";
 export { getModerationSummary } from "./moderation";
 export { subscribeToNewsletter } from "./newsletter";
 export {

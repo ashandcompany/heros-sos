@@ -1,20 +1,33 @@
 import Link from "next/link";
 import { formatDateTime } from "@/lib/format";
 import { heroIncidentRoute } from "@/lib/routes";
-import type { Incident } from "@/types";
+import type { Incident, InterventionTeam } from "@/types";
 import { PriorityBadge, StatusBadge } from "./IncidentBadges";
 
 /**
- * Signalement vu par un super-héros : priorité, statut et héros qui intervient.
+ * Signalement vu par un super-héros : priorité, statut et équipe qui intervient.
  * Le titre est un lien vers le détail ; la carte entière est cliquable.
  */
-export function HeroIncidentCard({ incident, heroId }: { incident: Incident; heroId: string }) {
+interface HeroIncidentCardProps {
+  incident: Incident & { team?: InterventionTeam | null };
+  /** Tableau de bord (mocké) : héros connecté, quand l'incident n'embarque pas son équipe. */
+  heroId?: string;
+}
+
+export function HeroIncidentCard({ incident, heroId }: HeroIncidentCardProps) {
   const place = [incident.location.address, incident.location.city].filter(Boolean).join(", ");
-  const takenBy =
-    incident.status === "en-cours" && incident.hero
-      ? incident.hero.id === heroId
-        ? "Vous intervenez"
-        : `Pris en charge par ${incident.hero.alias}`
+  const me =
+    incident.team?.members.find(({ isMe }) => isMe) ??
+    (!incident.team && heroId && incident.hero?.id === heroId
+      ? { participation: "confirme" as const }
+      : undefined);
+  const others = (incident.team?.members.length ?? 0) - 1;
+  const takenBy = me
+    ? me.participation === "invite"
+      ? "Vous êtes invité à intervenir"
+      : "Vous intervenez"
+    : incident.hero
+      ? `Pris en charge par ${incident.hero.alias}${others > 0 ? ` et ${others} autre${others > 1 ? "s" : ""}` : ""}`
       : null;
 
   return (
@@ -50,11 +63,7 @@ export function HeroIncidentCard({ incident, heroId }: { incident: Incident; her
         {takenBy && (
           <div className="flex gap-1">
             <dt className="sr-only">Intervention :</dt>
-            <dd
-              className={incident.hero?.id === heroId ? "font-semibold text-accent" : "font-medium"}
-            >
-              {takenBy}
-            </dd>
+            <dd className={me ? "font-semibold text-accent" : "font-medium"}>{takenBy}</dd>
           </div>
         )}
       </dl>

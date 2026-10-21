@@ -34,6 +34,7 @@ type Incident struct {
 	TypeID            int16
 	TypeCode          string
 	TypeLabel         string
+	Title             string
 	Description       string
 	Status            Status
 	Priority          Priority

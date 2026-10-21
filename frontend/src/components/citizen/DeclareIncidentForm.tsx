@@ -26,9 +26,16 @@ interface DeclareIncidentFormProps {
   types: Array<Pick<IncidentTypeDefinition, "id" | "label">>;
   /** Action de déclaration : citoyen (espace personnel) ou modérateur (back-office). */
   action: DeclareIncidentFormAction;
+  /** Demande « témoin ou victime » (seulement sans l'API, qui ne le connaît pas). */
+  askReporterRole: boolean;
 }
 
-export function DeclareIncidentForm({ villains, types, action }: DeclareIncidentFormProps) {
+export function DeclareIncidentForm({
+  villains,
+  types,
+  action,
+  askReporterRole,
+}: DeclareIncidentFormProps) {
   const [state, formAction] = useActionState(action, idleFormState as FormState<DeclarationField>);
   const formRef = useRef<HTMLFormElement>(null);
   const occurredAtIsoRef = useRef<HTMLInputElement>(null);
@@ -75,14 +82,16 @@ export function DeclareIncidentForm({ villains, types, action }: DeclareIncident
     >
       <input ref={occurredAtIsoRef} type="hidden" name="occurredAtIso" />
 
-      <RadioGroup
-        legend="Vous êtes"
-        name="reporterRole"
-        options={reporterRoleOptions}
-        defaultValue={values.reporterRole}
-        error={errors.reporterRole}
-        required
-      />
+      {askReporterRole && (
+        <RadioGroup
+          legend="Vous êtes"
+          name="reporterRole"
+          options={reporterRoleOptions}
+          defaultValue={values.reporterRole}
+          error={errors.reporterRole}
+          required
+        />
+      )}
 
       <SelectField
         label="Type d'incident"

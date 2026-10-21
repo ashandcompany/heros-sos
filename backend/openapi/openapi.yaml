@@ -2763,10 +2763,14 @@ components:
 
     IncidentPayload:
       type: object
-      required: [typeId, description, location]
+      required: [typeId, title, description, location]
       additionalProperties: false
       properties:
         typeId: { type: integer, format: int32 }
+        title:
+          type: string
+          maxLength: 80
+          description: Titre court, affiché dans les listes.
         description: { type: string }
         citizensRescued:
           { type: integer, format: int32, minimum: 0, default: 0 }
@@ -2793,6 +2797,7 @@ components:
         [
           id,
           typeId,
+          title,
           description,
           status,
           priority,
@@ -2806,6 +2811,9 @@ components:
         typeId: { type: integer, format: int32 }
         typeCode: { type: string }
         typeLabel: { type: string }
+        title:
+          type: string
+          description: Titre court de l'incident ; vide pour un incident déclaré avant son introduction.
         description: { type: string }
         status:
           { type: string, enum: [reported, in_progress, succeeded, failed] }

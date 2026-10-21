@@ -39,6 +39,7 @@ func (e *e2e) createType(a *actor, code, label string, endangersLife bool) typeV
 func validIncident(typeID int16) map[string]any {
 	return map[string]any{
 		"typeId":      typeID,
+		"title":       "Cambriolage de la bijouterie",
 		"description": "Deux individus forcent la porte de la bijouterie.",
 		"location": map[string]any{
 			"address": "12 rue des Lilas", "postalCode": "69001", "city": "Lyon", "country": "FR",
@@ -210,13 +211,13 @@ func TestIncidentDeclaration(t *testing.T) {
 	before := len(e.mailer.Messages())
 	created := citizen.post("/incidents", body)
 	var incident struct {
-		ID, Status, Priority string
+		ID, Title, Status, Priority string
 		TypeID               int16
 		Location             struct{ Address, City string }
 		VillainIDs           []string
 	}
 	created.decode(t, &incident)
-	if created.status != http.StatusCreated || incident.Status != "reported" || incident.Priority != "normal" ||
+	if created.status != http.StatusCreated || incident.Title != "Cambriolage de la bijouterie" || incident.Status != "reported" || incident.Priority != "normal" ||
 		incident.TypeID != incidentType.ID || incident.Location.Address != "12 rue des Lilas" || incident.Location.City != "Lyon" ||
 		len(incident.VillainIDs) != 1 || incident.VillainIDs[0] != villain.ID {
 		t.Fatalf("déclaration : %d %s", created.status, created.body)
@@ -277,14 +278,14 @@ func TestIncidentDeclarationValidation(t *testing.T) {
 	incidentType := e.createType(moderator, "theft", "Vol", false)
 
 	bad := map[string]any{
-		"typeId": 0, "description": "", "citizensRescued": -1,
+		"typeId": 0, "title": strings.Repeat("a", 81), "description": "", "citizensRescued": -1,
 		"location": map[string]string{"address": "", "city": ""}, "occurredAt": "2999-01-01T00:00:00Z",
 		"villainIds": []string{"00000000-0000-0000-0000-000000000000"},
 	}
 	got := citizen.post("/incidents", bad)
 	fields := got.fields()
 	want := map[string]string{
-		"typeId": "invalid", "description": "required",
+		"typeId": "invalid", "title": "too_long", "description": "required",
 		"citizensRescued": "invalid", "location.address": "required", "location.city": "required",
 		"occurredAt": "invalid", "villainIds": "invalid",
 	}

@@ -407,3 +407,33 @@ func TestProductionRulesStillApplyToSecretsFromFiles(t *testing.T) {
 		t.Fatalf("la validation de production doit s'appliquer à une valeur lue depuis un fichier : %v", err)
 	}
 }
+
+// Les paramètres d'argon2 sont convertis vers des types plus étroits (uint32, uint8) : une valeur hors limites
+// doit être refusée, jamais tronquée en silence (300 threads deviendraient 44).
+func TestArgon2SettingsAreBoundedToTheirType(t *testing.T) {
+	tests := map[string]struct {
+		name, value string
+	}{
+		"threads au-delà d'un octet":    {envArgon2Threads, "300"},
+		"mémoire au-delà de 32 bits":    {envArgon2MemoryKiB, "4294967296"},
+		"itérations au-delà de 32 bits": {envArgon2Time, "5000000000"},
+		"threads nuls":                  {envArgon2Threads, "0"},
+	}
+	for label, tc := range tests {
+		t.Run(label, func(t *testing.T) {
+			env := validEnv()
+			env[tc.name] = tc.value
+			_, err := Load(fakeEnv(env))
+			if err == nil || !strings.Contains(err.Error(), tc.name) {
+				t.Errorf("%s=%s devrait être refusé, reçu %v", tc.name, tc.value, err)
+			}
+		})
+	}
+
+	env := validEnv()
+	env[envArgon2Threads] = "255"
+	cfg, err := Load(fakeEnv(env))
+	if err != nil || cfg.Security.Argon2.Threads != 255 {
+		t.Errorf("255 threads (la borne) doivent passer : %d, %v", cfg.Security.Argon2.Threads, err)
+	}
+}

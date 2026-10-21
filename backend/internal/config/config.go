@@ -5,6 +5,7 @@ package config
 import (
 	"errors"
 	"log/slog"
+	"math"
 	"net/netip"
 	"net/url"
 	"os"
@@ -347,9 +348,9 @@ func Load(getenv func(string) string) (Config, error) {
 		},
 		Security: Security{
 			Argon2: Argon2{
-				Time:          uint32(l.positiveInt(envArgon2Time, defaultArgon2Time)),
-				MemoryKiB:     uint32(l.positiveInt(envArgon2MemoryKiB, defaultArgon2MemoryKiB)),
-				Threads:       uint8(l.positiveInt(envArgon2Threads, defaultArgon2Threads)),
+				Time:          uint32(l.boundedInt(envArgon2Time, defaultArgon2Time, math.MaxUint32)),
+				MemoryKiB:     uint32(l.boundedInt(envArgon2MemoryKiB, defaultArgon2MemoryKiB, math.MaxUint32)),
+				Threads:       uint8(l.boundedInt(envArgon2Threads, defaultArgon2Threads, math.MaxUint8)),
 				KeyLength:     defaultArgon2KeyLength,
 				SaltLength:    defaultArgon2SaltLength,
 				MaxConcurrent: l.positiveInt(envArgon2MaxConcurrent, defaultArgon2MaxConcurrent),

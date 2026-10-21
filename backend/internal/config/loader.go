@@ -85,6 +85,21 @@ func (l *loader) positiveInt(name string, fallback int) int {
 	return parsed
 }
 
+// boundedInt lit un entier compris entre 1 et max. La borne protège les conversions vers un type plus étroit
+// (uint8, uint32) : sans elle, une valeur trop grande serait tronquée en silence.
+func (l *loader) boundedInt(name string, fallback, upper int) int {
+	value, ok := l.lookup(name)
+	if !ok {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 || parsed > upper {
+		l.fail("%s : entier entre 1 et %d attendu, reçu %q", name, upper, value)
+		return fallback
+	}
+	return parsed
+}
+
 func (l *loader) boolean(name string, fallback bool) bool {
 	value, ok := l.lookup(name)
 	if !ok {

@@ -9,7 +9,8 @@ branchement. À mettre à jour à chaque fonction branchée.
 > État au 21/10/2026 : **identité (inscription, activation, connexion, session, mot de passe),
 > demandes de super-héros, fiches publiques des super-héros, modération des comptes, compte
 > (profil, photo, changement d'e-mail, newsletter), types d'incident, incidents et interventions
-> (hors écrans publics), vidéothèque et avis sont branchés** sur l'API dès que `API_URL` est
+> (y compris incidents en cours et carte publique), vidéothèque et avis sont branchés** sur l'API
+> dès que `API_URL` est
 > renseignée (tableau ci-dessous). Le blog, le contact et la newsletter publique ont maintenant
 > leurs routes dans le contrat mais ne sont **pas encore branchés**. Le reste fonctionne encore sur
 > des mocks, y compris avec l'API.
@@ -19,8 +20,8 @@ branchement. À mettre à jour à chaque fonction branchée.
 Le contrat décrit aujourd'hui **82 opérations** (plus `/health` et `/ready`) : identité et
 modération des comptes, profil du compte (`/me`, photo, changements d'e-mail), incidents,
 interventions, types d'incident, super-vilains, avis sur les interventions, vidéothèque (films),
-blog (articles), contact et newsletter. Les autres domaines du frontend (incidents publics,
-tableaux de bord, fiches complètes du back-office) n'ont pas encore de contrat.
+blog (articles), contact et newsletter. Les autres domaines du frontend (incidents résolus
+publics, tableaux de bord, fiches complètes du back-office) n'ont pas encore de contrat.
 
 ### ✅ Branché sur l'API
 
@@ -62,16 +63,16 @@ Fonctions de chaque fichier :
 
 ### ⏳ Encore sur les mocks (ou à faire)
 
-| Domaine frontend                   | Fonctions `lib/api/`                                                                                                                                | Contrat OpenAPI                                                                                                     | État    |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------- |
-| Incidents publics (accueil, carte) | `incidents.ts` : `getLatestResolvedIncidents`, `getOngoingIncidents`, `getPublicIncidentMap`, `getResolvedIncidentsByHero`, `getIncidentsByVillain` | ❌ aucun (routes réservées aux comptes connectés)                                                                   | mock    |
-| Fiches complètes super-héros       | `super-heroes.ts` : `getSuperHeroProfiles` (back-office)                                                                                            | ❌ aucun                                                                                                            | mock    |
-| Tableau de bord héros, modération  | `hero-dashboard.ts`, `moderation.ts`                                                                                                                | ❌ aucun (statistiques)                                                                                             | mock    |
-| Blog                               | `blog.ts` : `getPublishedArticles`, `getPublishedArticle`, `getAllArticles`, `getArticle`, `createArticle`, `updateArticle`, `deleteArticle`        | `GET /articles`, `GET /articles/{slug}`, `/admin/articles`, `/admin/articles/{id}`                                  | à faire |
-| Newsletter                         | `newsletter.ts` : `subscribeToNewsletter`                                                                                                           | `POST /newsletter/subscriptions`, `POST /newsletter/subscriptions/confirm`                                          | à faire |
-| Formulaire de contact              | `contact.ts` : `sendContactMessage`                                                                                                                 | `POST /contact/messages`                                                                                            | à faire |
-| Déconnexion de tous les appareils  | aucune (pas d'écran)                                                                                                                                | `POST /auth/logout-all`                                                                                             | à faire |
-| Films des super-vilains            | aucune (pas d'écran)                                                                                                                                | `GET /villains/{villainId}/films`, `POST /admin/villain-films`, `DELETE /admin/villains/{villainId}/films/{filmId}` | à faire |
+| Domaine frontend                  | Fonctions `lib/api/`                                                                                                                         | Contrat OpenAPI                                                                                                     | État    |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------- |
+| Incidents résolus publics         | `incidents.ts` : `getLatestResolvedIncidents`, `getResolvedIncidentsByHero`, `getIncidentsByVillain`                                         | ❌ aucun (`GET /incidents` public ne renvoie pas les résolus, ni filtre héros/vilain)                               | mock    |
+| Fiches complètes super-héros      | `super-heroes.ts` : `getSuperHeroProfiles` (back-office)                                                                                     | ❌ aucun                                                                                                            | mock    |
+| Tableau de bord héros, modération | `hero-dashboard.ts`, `moderation.ts`                                                                                                         | ❌ aucun (statistiques)                                                                                             | mock    |
+| Blog                              | `blog.ts` : `getPublishedArticles`, `getPublishedArticle`, `getAllArticles`, `getArticle`, `createArticle`, `updateArticle`, `deleteArticle` | `GET /articles`, `GET /articles/{slug}`, `/admin/articles`, `/admin/articles/{id}`                                  | à faire |
+| Newsletter                        | `newsletter.ts` : `subscribeToNewsletter`                                                                                                    | `POST /newsletter/subscriptions`, `POST /newsletter/subscriptions/confirm`                                          | à faire |
+| Formulaire de contact             | `contact.ts` : `sendContactMessage`                                                                                                          | `POST /contact/messages`                                                                                            | à faire |
+| Déconnexion de tous les appareils | aucune (pas d'écran)                                                                                                                         | `POST /auth/logout-all`                                                                                             | à faire |
+| Films des super-vilains           | aucune (pas d'écran)                                                                                                                         | `GET /villains/{villainId}/films`, `POST /admin/villain-films`, `DELETE /admin/villains/{villainId}/films/{filmId}` | à faire |
 
 > [!WARNING]
 > Les « Future implémentation » écrites dans les commentaires de `lib/api/` pour les domaines non
@@ -387,13 +388,15 @@ Types dans [src/types/review.ts](../src/types/review.ts) (`HeroReview`, `ReviewR
 Fonctions dans [incidents.ts](../src/lib/api/incidents.ts) (incidents) et
 [interventions.ts](../src/lib/api/interventions.ts) (équipes) ; types dans
 [src/types/incident.ts](../src/types/incident.ts) (`InterventionTeam`, `TeamMember`,
-`InterventionRef`). Toutes les routes demandent une session.
+`InterventionRef`). `GET /incidents` et `GET /incidents/{id}` sont publics ; les autres routes
+demandent une session.
 
 | Écran                                    | Fonction                                                                   | API                                                                                      |
 | ---------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | Déclaration (citoyen, héros, modérateur) | `declareIncident`                                                          | `POST /incidents`, position géocodée par le frontend (`latitude`, `longitude`)           |
 | « Mes incidents », « Mes déclarations »  | `getMyIncidents`                                                           | `GET /incidents?reporterId={moi}`                                                        |
-| Fiche d'un incident (citoyen)            | `getCitizenIncident`                                                       | Cherchée dans `getMyIncidents` : `GET /incidents/{id}` est fermé aux citoyens            |
+| Fiche d'un incident (citoyen)            | `getCitizenIncident`                                                       | `GET /incidents/{id}` ; `isMine` d'après `GET /incidents?reporterId={moi}`               |
+| Incidents en cours, carte publique       | `getOngoingIncidents`, `getPublicIncidentMap`                              | `GET /incidents` **sans session**, toutes les pages ; filtre par ville côté frontend     |
 | Liste, fiche, carte (héros)              | `getHeroIncidents`, `getHeroIncident`, `getIncidentMap`                    | `GET /incidents`, `GET /incidents/{id}`, puis `GET /interventions/{id}` par équipe       |
 | Prise en charge                          | `takeChargeOfIncident`                                                     | `POST /incidents/{incidentId}/interventions` (le héros devient lead)                     |
 | Résultat                                 | `finishIntervention` → `proposeOutcome`                                    | `POST /interventions/{id}/outcome`, puis `GET` pour savoir si elle est close             |
@@ -417,6 +420,11 @@ Fonctions dans [incidents.ts](../src/lib/api/incidents.ts) (incidents) et
 - **Arbitrage** : la réponse de l'API ne dit pas qu'un désaccord a eu lieu (la proposition est
   effacée). Le formulaire d'arbitrage est donc proposé pour toute intervention en cours ; sans
   désaccord, l'API répond `409 intervention_dispute_not_found`, affiché tel quel.
+- **Liste publique sans session** : pour un citoyen connecté, l'API restreint `GET /incidents` à
+  ses propres déclarations (session lue sur toutes les routes). Les écrans publics (incidents en
+  cours, carte) appellent donc l'API **sans jeton**. La liste publique ne contient que les incidents
+  signalés, en cours ou en échec. L'`Incident` de l'API n'a pas de `reporterId` : la fiche du
+  citoyen déduit `isMine` de sa propre liste.
 - **Le citoyen ne voit pas l'équipe** : les interventions lui sont fermées. Sa fiche affiche
   « une équipe intervient » et, une fois l'incident résolu, renvoie vers « Mes interventions »
   pour noter.
@@ -434,12 +442,11 @@ Fonctions dans [incidents.ts](../src/lib/api/incidents.ts) (incidents) et
 | Incidents résolus dans les listes               | `GET /incidents` ne les renvoie qu'à leur déclarant                   | Filtre « Résolus » retiré de l'espace héros |
 | Historique des interventions terminées          | `incident.interventionId` ne désigne que l'intervention en cours      | Section « Interventions précédentes » vide  |
 
-**Absent du contrat, encore sur les mocks avec l'API** (aucune route publique) : derniers
-incidents résolus de l'accueil (`getLatestResolvedIncidents`), incidents en cours de l'espace
-citoyen (`getOngoingIncidents`), carte publique (`getPublicIncidentMap`), interventions d'un héros
-et incidents d'un vilain sur les fiches de l'encyclopédie (`getResolvedIncidentsByHero`,
-`getIncidentsByVillain` : vides pour un vrai héros ou vilain), tableaux de bord
-(`hero-dashboard.ts`, `moderation.ts`).
+**Absent du contrat, encore sur les mocks avec l'API** (la liste publique ne renvoie pas les
+incidents résolus et ne filtre ni par héros ni par vilain) : derniers incidents résolus de
+l'accueil (`getLatestResolvedIncidents`), interventions d'un héros et incidents d'un vilain sur les
+fiches de l'encyclopédie (`getResolvedIncidentsByHero`, `getIncidentsByVillain` : vides pour un
+vrai héros ou vilain), tableaux de bord (`hero-dashboard.ts`, `moderation.ts`).
 
 ### Pagination
 

@@ -104,6 +104,16 @@ func (s *Service) List(ctx context.Context, status VerificationStatus, limit, of
 	return applicants, total, nil
 }
 
+// ListPublic retourne les fiches des héros publics selon l'ordre demandé.
+func (s *Service) ListPublic(ctx context.Context, sort PublicSort, limit, offset int) ([]PublicProfile, int64, error) {
+	return s.repo.ListPublic(ctx, sort, limit, offset)
+}
+
+// FindPublic retourne une fiche uniquement si le compte est actif et le profil approuvé.
+func (s *Service) FindPublic(ctx context.Context, userID uuid.UUID) (*PublicProfile, error) {
+	return s.repo.FindPublic(ctx, userID)
+}
+
 // Approve accepte une demande : le demandeur devient super-héros. Le changement de statut, celui
 // du rôle et la trace d'audit forment une seule transaction.
 func (s *Service) Approve(ctx context.Context, moderatorID, userID uuid.UUID, ip netip.Addr) error {

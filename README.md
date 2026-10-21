@@ -68,7 +68,7 @@ Les commandes, les tests et la configuration sont détaillés dans [le README du
 
 ## État du branchement front ↔ API
 
-Quand `API_URL` est renseignée, **inscription, activation, connexion, session, déconnexion et réinitialisation du mot de passe** passent par l'API. Tout le reste (incidents, fiches héros et vilains, carte, vidéothèque, blog, contact, back-office…) fonctionne encore sur les mocks. Le détail, domaine par domaine, est tenu à jour dans [frontend/docs/backend-contract.md](frontend/docs/backend-contract.md).
+Quand `API_URL` est renseignée, **inscription, activation, connexion, session, déconnexion et réinitialisation du mot de passe** passent par l'API. Tout le reste fonctionne encore sur les mocks côté frontend. Le backend expose désormais `GET /heroes` et `GET /heroes/{heroId}`, mais les fiches héroïques du frontend ne sont pas encore branchées. Le détail, domaine par domaine, est tenu à jour dans [frontend/docs/backend-contract.md](frontend/docs/backend-contract.md).
 
 ## Variables d'environnement du frontend
 

@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
+	"path"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -31,6 +34,45 @@ type profileRecord struct {
 
 func (profileRecord) TableName() string { return tableHeroProfiles }
 
+type publicProfileRow struct {
+	UserID             uuid.UUID `gorm:"column:user_id"`
+	Alias              string    `gorm:"column:alias"`
+	AvatarPath         *string   `gorm:"column:avatar_path"`
+	Bio                string    `gorm:"column:bio"`
+	AverageRating      float64   `gorm:"column:average_rating"`
+	InterventionsCount int64     `gorm:"column:interventions_count"`
+}
+
+func (r publicProfileRow) toPublicProfile() PublicProfile {
+	return PublicProfile{
+		UserID: r.UserID, Alias: r.Alias, AvatarURL: publicAvatarURL(r.AvatarPath), Bio: r.Bio,
+		AverageRating: r.AverageRating, InterventionsCount: r.InterventionsCount,
+	}
+}
+
+func publicAvatarURL(stored *string) *string {
+	if stored == nil {
+		return nil
+	}
+	value := strings.TrimSpace(*stored)
+	if value == "" {
+		return nil
+	}
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return nil
+	}
+	if parsed.IsAbs() {
+		if (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil {
+			return nil
+		}
+	} else if parsed.Host != "" || !strings.HasPrefix(value, "/") || strings.HasPrefix(value, "//") ||
+		strings.Contains(value, `\`) || path.Clean(parsed.Path) != parsed.Path {
+		return nil
+	}
+	return &value
+}
+
 func (r profileRecord) toProfile() Profile {
 	profile := Profile{
 		UserID: r.UserID, Alias: r.Alias, Bio: r.Bio, RequestMessage: r.RequestMessage,
@@ -50,6 +92,10 @@ type Repository interface {
 	Request(ctx context.Context, userID uuid.UUID, alias, bio, message string, now time.Time) error
 	Find(ctx context.Context, userID uuid.UUID) (*Profile, error)
 	List(ctx context.Context, status VerificationStatus, limit, offset int) ([]Profile, int64, error)
+	// ListPublic retourne les profils approuvés des comptes actifs, triés selon l'ordre indiqué.
+	ListPublic(ctx context.Context, sort PublicSort, limit, offset int) ([]PublicProfile, int64, error)
+	// FindPublic retourne un profil uniquement s'il est approuvé et appartient à un compte actif.
+	FindPublic(ctx context.Context, userID uuid.UUID) (*PublicProfile, error)
 	// Review fait passer une demande de « en attente » à approved ou rejected. Il retourne
 	// false si la demande n'était plus en attente : deux modérateurs ne peuvent pas la traiter
 	// tous les deux.
@@ -144,6 +190,63 @@ func (r *gormRepository) List(ctx context.Context, status VerificationStatus, li
 		profiles[i] = rec.toProfile()
 	}
 	return profiles, total, nil
+}
+
+func (r *gormRepository) publicProfiles(ctx context.Context) *gorm.DB {
+	ratings := r.conn(ctx).Table("hero_reviews").
+		Select("hero_id, AVG(rating)::double precision AS average_rating").
+		Where("status = ?", "published").Group("hero_id")
+	interventions := r.conn(ctx).Table("intervention_heroes").
+		Select("hero_id, COUNT(DISTINCT intervention_id) AS interventions_count").
+		Where("participation = ?", "confirmed").Group("hero_id")
+
+	return r.conn(ctx).Table("hero_profiles").
+		Select(`hero_profiles.user_id, hero_profiles.alias, users.avatar_path, hero_profiles.bio,
+			COALESCE(ratings.average_rating, 0) AS average_rating,
+			COALESCE(interventions.interventions_count, 0) AS interventions_count`).
+		Joins("JOIN users ON users.id = hero_profiles.user_id").
+		Joins("LEFT JOIN (?) AS ratings ON ratings.hero_id = hero_profiles.user_id", ratings).
+		Joins("LEFT JOIN (?) AS interventions ON interventions.hero_id = hero_profiles.user_id", interventions).
+		Where("hero_profiles.verification_status = ? AND users.role = ? AND users.status = ?",
+			string(StatusApproved), "hero", "active")
+}
+
+func (r *gormRepository) ListPublic(ctx context.Context, sort PublicSort, limit, offset int) ([]PublicProfile, int64, error) {
+	var total int64
+	if err := r.publicProfiles(ctx).Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("hero : comptage des profils publics : %w", err)
+	}
+	query := r.publicProfiles(ctx)
+	switch sort {
+	case PublicSortAlias:
+		query = query.Order("hero_profiles.alias ASC, hero_profiles.user_id ASC")
+	case PublicSortAverageRating:
+		query = query.Order("average_rating DESC, hero_profiles.alias ASC, hero_profiles.user_id ASC")
+	default:
+		return nil, 0, fmt.Errorf("hero : tri public non pris en charge %q", sort)
+	}
+	var rows []publicProfileRow
+	if err := query.Limit(limit).Offset(offset).Scan(&rows).Error; err != nil {
+		return nil, 0, fmt.Errorf("hero : lecture des profils publics : %w", err)
+	}
+	profiles := make([]PublicProfile, len(rows))
+	for i, row := range rows {
+		profiles[i] = row.toPublicProfile()
+	}
+	return profiles, total, nil
+}
+
+func (r *gormRepository) FindPublic(ctx context.Context, userID uuid.UUID) (*PublicProfile, error) {
+	var row publicProfileRow
+	err := r.publicProfiles(ctx).Where("hero_profiles.user_id = ?", userID).Take(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrProfileNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("hero : lecture du profil public : %w", err)
+	}
+	profile := row.toPublicProfile()
+	return &profile, nil
 }
 
 func (r *gormRepository) Review(ctx context.Context, userID, reviewer uuid.UUID, to VerificationStatus, reason string, now time.Time) (bool, error) {

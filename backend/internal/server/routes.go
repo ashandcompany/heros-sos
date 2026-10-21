@@ -50,6 +50,9 @@ func registerAuthRoutes(router *Router, c *components) {
 
 func registerHeroRoutes(router *Router, c *components) {
 	h := c.heroHandler
+	router.HandleFunc(http.MethodGet, "/heroes", h.PublicList)
+	router.HandleFunc(http.MethodGet, "/heroes/{heroId}", h.PublicGet)
+
 	// Tous les rôles connectés passent : c'est le service qui répond « déjà héros » (409) ou
 	// « compte non éligible » (403, modérateur), avec un code d'erreur explicite.
 	router.Handle(http.MethodPost, "/heroes/requests", c.protected(h.Request))

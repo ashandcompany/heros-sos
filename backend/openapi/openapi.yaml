@@ -712,6 +712,50 @@ paths:
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/InternalError" }
 
+  /heroes:
+    get:
+      tags: [Super-héros]
+      summary: Lister les super-héros publics
+      description: |
+        Liste les profils dont la demande est approuvée et dont le compte est actif. La réponse
+        n'expose aucune identité civile. `power` reprend la description publique (`bio`) du profil;
+        `avatarUrl` n'est renseigné que si `avatar_path` contient une référence publiquement exploitable.
+      operationId: listPublicHeroes
+      parameters:
+        - name: sort
+          in: query
+          description: "Ordre de tri : pseudo croissant par défaut, ou note moyenne décroissante."
+          schema: { type: string, enum: [alias, -averageRating], default: alias }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Une page de profils publics.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicHeroPage" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /heroes/{heroId}:
+    get:
+      tags: [Super-héros]
+      summary: Consulter la fiche publique d'un super-héros
+      description: |
+        Retourne la fiche d'un héros approuvé avec un compte actif. Les données civiles et les
+        chemins de stockage internes ne sont jamais exposés.
+      operationId: getPublicHero
+      parameters:
+        - { $ref: "#/components/parameters/HeroId" }
+      responses:
+        "200":
+          description: Fiche publique du super-héros.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicHero" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
   /heroes/requests:
     post:
       tags: [Super-héros]
@@ -2327,6 +2371,43 @@ components:
             type: string,
             description: "Motif du refus, présent seulement si la demande est `rejected`.",
           }
+
+    PublicHero:
+      type: object
+      required: [id, alias, avatarUrl, power, averageRating, interventionsCount]
+      properties:
+        id: { type: string, format: uuid }
+        alias: { type: string, description: Pseudo public du super-héros. }
+        avatarUrl:
+          {
+            type: string,
+            format: uri-reference,
+            nullable: true,
+            description: "Référence publique de l'avatar; null si aucune référence publique n'est disponible.",
+          }
+        power:
+          {
+            type: string,
+            description: "Description publique du profil (`hero_profiles.bio`), exposée sous le nom attendu par le frontend.",
+          }
+        averageRating: { type: number, format: double, minimum: 0, maximum: 5 }
+        interventionsCount:
+          {
+            type: integer,
+            minimum: 0,
+            description: Nombre d'interventions auxquelles le héros a participé avec le statut confirmed.,
+          }
+
+    PublicHeroPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/PublicHero" }
+        total: { type: integer, minimum: 0 }
+        limit: { type: integer, minimum: 1 }
+        offset: { type: integer, minimum: 0 }
 
     RejectPayload:
       type: object

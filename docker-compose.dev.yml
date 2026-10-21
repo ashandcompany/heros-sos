@@ -3,6 +3,7 @@
 #
 #   make up            démarre la pile        http://localhost:8088  (front + API derrière le proxy)
 #   make down          l'arrête               http://localhost:8025  (Mailpit : les mails envoyés)
+#                                             http://localhost:3001/heros-sos/  (la documentation)
 #
 # Outils facultatifs : `make adminer` ajoute Adminer (http://localhost:8082).
 #
@@ -81,6 +82,93 @@ services:
       retries: 30
       start_period: 60s
 
+  # Site de documentation (Docusaurus) : http://localhost:3001/heros-sos/. Pas de dépendance : il tourne
+  # seul, avec ou sans l'API. Voir docs-site/Dockerfile.
+  docs:
+    build:
+      context: ./docs-site
+      dockerfile: Dockerfile
+      target: dev
+    image: heros-sos/docs:dev
+    environment:
+      # Les événements de fichiers traversent mal les montages Docker Desktop : on interroge à la place.
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+    volumes:
+      # Le code du site est monté et rechargé à chaud…
+      - ./docs-site:/app/docs-site
+      # …mais les dépendances viennent de l'image, où elles sont dans /app/node_modules (un niveau plus
+      # haut : voir docs-site/Dockerfile), et les dossiers générés (cache Docusaurus, pages d'API) restent
+      # dans le conteneur. Ces volumes anonymes masquent ceux de l'hôte (binaires d'un autre système) ;
+      # celui de node_modules démarre vide, il ne recopie pas 1,4 Go. `make up` et `make down` les
+      # suppriment avec le conteneur (rm -v).
+      - /app/docs-site/node_modules
+      - /app/docs-site/.docusaurus
+      - /app/docs-site/docs/api
+      # Ce que le site lit dans backend/ (les trois documents et l'OpenAPI), copié par docs-sync ci-dessous.
+      - docs-source:/app/backend:ro
+    depends_on:
+      docs-sync:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${DOCS_PORT:-3001}:3001"
+    networks:
+      - edge
+    restart: unless-stopped
+    logging: *logging
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3001/heros-sos/"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 90s
+
+  # Recopie, toutes les 2 secondes, les seuls fichiers de backend/ que lit la documentation, dans un
+  # volume que le conteneur `docs` monte en lecture seule. Deux pièges évités :
+  #   - monter ces fichiers un par un dans `docs` casse dès qu'un éditeur enregistre en remplaçant le
+  #     fichier : le conteneur garde l'ancien fichier supprimé et le site perd la page ;
+  #   - monter backend/ en entier donnerait le .env (clés de chiffrement) à `docs`, qui exécute des
+  #     centaines de paquets tiers.
+  # Ce conteneur-ci voit backend/ (en lecture seule) mais n'exécute qu'un script fixe, sans npm.
+  docs-sync:
+    image: alpine:3
+    command:
+      - sh
+      - -c
+      - |
+        mkdir -p /dst/openapi
+        while true; do
+          for f in STACK.md MVP.md TABLES.md openapi/openapi.yaml; do
+            [ -f "/src/$$f" ] || continue
+            cmp -s "/src/$$f" "/dst/$$f" || cp "/src/$$f" "/dst/$$f"
+          done
+          # Le conteneur `docs` tourne en utilisateur non root et doit pouvoir lire, même si un fichier de
+          # l'hôte a des droits restreints (umask 077, fichier créé par un outil…).
+          chmod -R a+rX /dst
+          sleep 2
+        done
+    volumes:
+      - ./backend:/src:ro
+      - docs-source:/dst
+    restart: unless-stopped
+    logging: *logging
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # Aucun besoin de réseau : il ne fait que copier des fichiers.
+    network_mode: none
+    healthcheck:
+      test: ["CMD", "test", "-f", "/dst/openapi/openapi.yaml"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
   mailpit:
     image: axllent/mailpit:latest
     restart: unless-stopped
@@ -136,3 +224,5 @@ networks:
 
 volumes:
   rabbitmq_data:
+  # Copie des documents de backend/ lus par la documentation (voir docs-sync).
+  docs-source:

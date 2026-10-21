@@ -117,27 +117,28 @@ disk-check:
 	fi
 
 .PHONY: up-dev
-up-dev: disk-check ## Démarre la pile de développement (proxy, API, base, Mailpit, RabbitMQ, front)
+up-dev: disk-check ## Démarre la pile de développement (proxy, API, base, Mailpit, RabbitMQ, front, documentation)
 	@test -f .env || { echo "Créez .env d'abord : make env"; exit 1; }
 	@set -a; . ./.env; set +a; \
-	for port in $${PROXY_PORT:-8088} $${API_PORT:-8081} $${MAILPIT_PORT:-8025} $${POSTGRES_PORT:-5432} $${RABBITMQ_PORT:-5672} $${RABBITMQ_UI_PORT:-15672}; do \
+	for port in $${PROXY_PORT:-8088} $${API_PORT:-8081} $${MAILPIT_PORT:-8025} $${POSTGRES_PORT:-5432} $${RABBITMQ_PORT:-5672} $${RABBITMQ_UI_PORT:-15672} $${DOCS_PORT:-3001}; do \
 		if ! $(COMPOSE_DEV) ps --status running -q 2>/dev/null | grep -q . && command -v lsof >/dev/null && lsof -nP -iTCP:$$port -sTCP:LISTEN >/dev/null 2>&1; then \
-			echo "Le port $$port est déjà utilisé sur cette machine. Choisissez-en un autre dans .env (PROXY_PORT, API_PORT, MAILPIT_PORT, POSTGRES_PORT, RABBITMQ_PORT, RABBITMQ_UI_PORT)."; exit 1; \
+			echo "Le port $$port est déjà utilisé sur cette machine. Choisissez-en un autre dans .env (PROXY_PORT, API_PORT, MAILPIT_PORT, POSTGRES_PORT, RABBITMQ_PORT, RABBITMQ_UI_PORT, DOCS_PORT)."; exit 1; \
 		fi; \
 	done
 	@# D'abord construire les images : si le build échoue (disque plein, réseau…), les conteneurs en cours
-	@# ne sont pas touchés. Supprimer web avant aurait laissé l'application cassée.
+	@# ne sont pas touchés. Supprimer web et docs avant aurait laissé l'application cassée.
 	$(COMPOSE_DEV) build
-	@# Le front garde ses node_modules et son cache .next dans des volumes anonymes (voir
-	@# docker-compose.dev.yml). `rm -v` supprime l'ancien conteneur ET ces volumes : sans cela chaque
-	@# démarrage en abandonnerait une copie (~700 Mo) et les dépendances resteraient celles d'avant.
-	$(COMPOSE_DEV) rm -sfv web
+	@# Le front et la documentation gardent leurs node_modules (et le cache .next, les pages d'API) dans
+	@# des volumes anonymes (voir docker-compose.dev.yml). `rm -v` supprime l'ancien conteneur ET ces
+	@# volumes : sans cela chaque démarrage en abandonnerait une copie (~700 Mo) et les dépendances
+	@# resteraient celles d'avant.
+	$(COMPOSE_DEV) rm -sfv web docs
 	$(COMPOSE_DEV) up -d
-	@set -a; . ./.env; set +a; echo "Application : http://localhost:$${PROXY_PORT:-8088}   API : http://localhost:$${PROXY_PORT:-8088}/api/v1/docs   Mails : http://localhost:$${MAILPIT_PORT:-8025}"
+	@set -a; . ./.env; set +a; echo "Application : http://localhost:$${PROXY_PORT:-8088}   API : http://localhost:$${PROXY_PORT:-8088}/api/v1/docs   Mails : http://localhost:$${MAILPIT_PORT:-8025}   Documentation : http://localhost:$${DOCS_PORT:-3001}/heros-sos/"
 
 .PHONY: down-dev
 down-dev: ## Arrête la pile de développement (V=1 supprime aussi les données)
-	$(COMPOSE_DEV) rm -sfv web
+	$(COMPOSE_DEV) rm -sfv web docs
 	$(COMPOSE_DEV) down $(if $(V),-v)
 
 .PHONY: logs-dev

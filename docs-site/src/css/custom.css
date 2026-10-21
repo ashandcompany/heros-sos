@@ -1,0 +1,27 @@
+/*
+ * Couleurs du site, reprises de la charte du front (frontend/src/app/globals.css) :
+ * terre cuite pour la couleur principale. En clair on prend `--color-primary-ink` (assez foncé pour du
+ * texte sur fond blanc), en sombre `--color-primary-hover` (assez clair sur fond sombre).
+ */
+:root {
+  --ifm-color-primary: #a8330a;
+  --ifm-color-primary-dark: #972e09;
+  --ifm-color-primary-darker: #8e2b09;
+  --ifm-color-primary-darkest: #752408;
+  --ifm-color-primary-light: #b93a0b;
+  --ifm-color-primary-lighter: #c23d0c;
+  --ifm-color-primary-lightest: #de4a10;
+  --ifm-code-font-size: 95%;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #dc7d52;
+  --ifm-color-primary-dark: #d86d3d;
+  --ifm-color-primary-darker: #d66532;
+  --ifm-color-primary-darkest: #b7511f;
+  --ifm-color-primary-light: #e08d67;
+  --ifm-color-primary-lighter: #e2956f;
+  --ifm-color-primary-lightest: #e9ae8f;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+}

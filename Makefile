@@ -21,7 +21,7 @@ docker:
 # --- Développement ------------------------------------------------------------------------------------
 
 .PHONY: up
-up: docker ## Démarre tout en dev (crée backend/.env au premier lancement) : http://localhost:8088
+up: docker ## Démarre tout en dev, doc comprise (crée backend/.env au premier lancement) : http://localhost:8088
 	@test -f backend/.env || $(BACKEND) env
 	@$(BACKEND) up-dev
 
@@ -68,6 +68,19 @@ down-prod: docker ## Arrête la pile de production (les données sont conservée
 .PHONY: logs-prod
 logs-prod: docker ## Suit les journaux de la pile de production
 	@$(BACKEND) logs-prod
+
+# --- Documentation ------------------------------------------------------------------------------------
+
+# La documentation tourne dans Docker (service `docs`, voir docs-site/Dockerfile) : aucun Node sur la machine.
+# `make up` la démarre déjà ; cette cible ne lance qu'elle, sans le reste de la pile. Port 3001 (le front en
+# `npm run dev` hors Docker prendrait le 3000).
+.PHONY: docs
+docs: docker ## Démarre seulement la documentation (Docusaurus, rechargée à chaud) : http://localhost:3001/heros-sos/
+	@test -f backend/.env || $(BACKEND) env
+	@$(BACKEND) disk-check
+	@$(COMPOSE_DEV) rm -sfv docs >/dev/null
+	@$(COMPOSE_DEV) up -d --build docs
+	@set -a; . ./backend/.env; set +a; echo "Documentation : http://localhost:$${DOCS_PORT:-3001}/heros-sos/   (journaux : make logs)"
 
 # --- Vérifications ------------------------------------------------------------------------------------
 

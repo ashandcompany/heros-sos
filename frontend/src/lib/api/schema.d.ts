@@ -1055,8 +1055,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Incidents disponibles pour une intervention
-         * @description Liste les incidents signalés, en cours ou échoués, sans identité civile du déclarant.
+         * Liste publique des incidents
+         * @description Accessible sans session. Liste les incidents sans identité civile du déclarant.
          */
         get: operations["listIncidents"];
         put?: never;
@@ -1080,7 +1080,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Détail d'un incident */
+        /**
+         * Détail public d'un incident
+         * @description Accessible sans session.
+         */
         get: operations["getIncident"];
         put?: never;
         post?: never;
@@ -4531,7 +4534,7 @@ export interface operations {
     listIncidents: {
         parameters: {
             query?: {
-                /** @description Identifiant du déclarant; un citoyen ne peut filtrer que sur son propre identifiant. */
+                /** @description Identifiant facultatif du déclarant; un citoyen connecté ne peut filtrer que sur son propre identifiant. */
                 reporterId?: string;
                 /** @description Nombre d'éléments par page (1 à 100, 20 par défaut). */
                 limit?: components["parameters"]["Limit"];
@@ -4553,7 +4556,6 @@ export interface operations {
                     "application/json": components["schemas"]["IncidentPage"];
                 };
             };
-            401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
             500: components["responses"]["InternalError"];
@@ -4615,8 +4617,6 @@ export interface operations {
                     "application/json": components["schemas"]["Incident"];
                 };
             };
-            401: components["responses"]["Unauthenticated"];
-            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };

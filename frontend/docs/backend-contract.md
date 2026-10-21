@@ -73,6 +73,13 @@ Fonctions de chaque fichier :
 > Les « Future implémentation » écrites dans les commentaires de `lib/api/` pour les domaines non
 > couverts sont des **hypothèses** du frontend, pas un contrat. Il faudra les faire valider (ou les
 > remplacer) quand le backend ajoutera ces routes.
+> Les lectures `GET /incidents` et `GET /incidents/{id}` sont publiques (sans session) côté backend.
+> Le domaine incidents du frontend n'est toutefois pas encore branché : ses fonctions lisent les mocks
+> et ne font pas encore ces appels à l'API.
+
+Les « Future implémentation » écrites dans les commentaires de `lib/api/` pour les domaines non
+couverts sont des **hypothèses** du frontend, pas un contrat. Il faudra les faire valider (ou les
+remplacer) quand le backend ajoutera ces routes.
 
 Les deux routes publiques de super-héros sont une exception : `GET /heroes` est paginé et trié par
 pseudo par défaut (ou par note moyenne décroissante), et `GET /heroes/{heroId}` retourne la même

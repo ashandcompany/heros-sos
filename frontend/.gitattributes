@@ -1,0 +1,3 @@
+# Fichier généré : fins de ligne LF sur tous les postes, pour que `npm run api:types:check` compare
+# la même chose sous Windows et en CI.
+src/lib/api/schema.d.ts text eol=lf linguist-generated

@@ -9,7 +9,6 @@ import { SelectField } from "@/components/ui/SelectField";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { TextAreaField } from "@/components/ui/TextAreaField";
 import { TextField } from "@/components/ui/TextField";
-import { incidentTypeLabels } from "@/lib/format";
 import { idleFormState, type FormState } from "@/lib/validation/form-state";
 import {
   declarationFields,
@@ -19,15 +18,17 @@ import {
   TITLE_MAX_LENGTH,
   type DeclarationField,
 } from "@/lib/validation/incident";
-import type { VillainSummary } from "@/types";
+import type { IncidentTypeDefinition, VillainSummary } from "@/types";
 
 interface DeclareIncidentFormProps {
   villains: VillainSummary[];
+  /** Types du référentiel, par libellé. */
+  types: Array<Pick<IncidentTypeDefinition, "id" | "label">>;
   /** Action de déclaration : citoyen (espace personnel) ou modérateur (back-office). */
   action: DeclareIncidentFormAction;
 }
 
-export function DeclareIncidentForm({ villains, action }: DeclareIncidentFormProps) {
+export function DeclareIncidentForm({ villains, types, action }: DeclareIncidentFormProps) {
   const [state, formAction] = useActionState(action, idleFormState as FormState<DeclarationField>);
   const formRef = useRef<HTMLFormElement>(null);
   const occurredAtIsoRef = useRef<HTMLInputElement>(null);
@@ -50,6 +51,19 @@ export function DeclareIncidentForm({ villains, action }: DeclareIncidentFormPro
         date && !Number.isNaN(date.getTime()) ? date.toISOString() : "";
     }
   };
+
+  // Référentiel vide (aucun type créé par la modération) : rien ne peut être déclaré.
+  if (types.length === 0) {
+    return (
+      <p
+        role="status"
+        className="rounded-2xl border border-dashed border-border p-5 text-sm text-muted"
+      >
+        La déclaration d&apos;incident est momentanément indisponible : aucun type d&apos;incident
+        n&apos;a encore été défini par le Bureau.
+      </p>
+    );
+  }
 
   return (
     <form
@@ -80,9 +94,9 @@ export function DeclareIncidentForm({ villains, action }: DeclareIncidentFormPro
         <option value="" disabled>
           Choisir…
         </option>
-        {Object.entries(incidentTypeLabels).map(([value, label]) => (
-          <option key={value} value={value}>
-            {label}
+        {types.map((type) => (
+          <option key={type.id} value={type.id}>
+            {type.label}
           </option>
         ))}
       </SelectField>

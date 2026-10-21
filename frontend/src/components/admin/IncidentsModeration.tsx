@@ -2,12 +2,7 @@ import Link from "next/link";
 import { moderateIncidentAction } from "@/app/actions/admin";
 import { Badge } from "@/components/ui/Badge";
 import { getAllIncidents } from "@/lib/api";
-import {
-  formatDateTime,
-  incidentStatusLabels,
-  incidentTypeLabels,
-  reporterRoleLabels,
-} from "@/lib/format";
+import { formatDateTime, incidentStatusLabels, reporterRoleLabels } from "@/lib/format";
 import { adminIncidentRoute, routes } from "@/lib/routes";
 import { requireAdminSession } from "@/lib/server-session";
 import type { Incident } from "@/types";
@@ -40,7 +35,7 @@ function IncidentModerationCard({ incident }: { incident: Incident }) {
         <div className="flex flex-wrap items-center gap-2">
           <ModerationBadge status={incident.moderation} />
           <Badge>{incidentStatusLabels[incident.status]}</Badge>
-          <Badge>{incidentTypeLabels[incident.type]}</Badge>
+          <Badge>{incident.type.label}</Badge>
         </div>
         <h2 id={titleId} className="mt-3 font-display text-lg font-semibold">
           {incident.title}

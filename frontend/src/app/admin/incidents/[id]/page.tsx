@@ -8,7 +8,7 @@ import { IncidentEditForm } from "@/components/admin/IncidentEditForm";
 import { incidentDecisionLabels } from "@/components/admin/IncidentsModeration";
 import { ModerationBadge } from "@/components/admin/ModerationBadge";
 import { ModerationForm } from "@/components/admin/ModerationForm";
-import { getIncident, getSuperHeroes, getVillains } from "@/lib/api";
+import { getIncident, getIncidentTypes, getSuperHeroes, getVillains } from "@/lib/api";
 import { formatDateTime, reporterRoleLabels } from "@/lib/format";
 import { routes } from "@/lib/routes";
 import { requireAdminSession } from "@/lib/server-session";
@@ -19,10 +19,11 @@ export const metadata: Metadata = { title: "Corriger un incident" };
 async function IncidentEditor({ params }: { params: Promise<{ id: string }> }) {
   const token = await requireAdminSession();
   const { id } = await params;
-  const [incident, villains, heroes] = await Promise.all([
+  const [incident, villains, heroes, types] = await Promise.all([
     getIncident(token, id),
     getVillains(),
     getSuperHeroes(),
+    getIncidentTypes(token),
   ]);
   if (!incident) notFound();
 
@@ -55,6 +56,7 @@ async function IncidentEditor({ params }: { params: Promise<{ id: string }> }) {
             incident={incident}
             villains={villains.map(({ id: villainId, alias }) => ({ id: villainId, alias }))}
             heroes={heroes.map(({ id: heroId, alias }) => ({ id: heroId, alias }))}
+            types={types}
           />
         </section>
 

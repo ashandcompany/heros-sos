@@ -1,7 +1,6 @@
 export {
-  getCitizenAccounts,
+  getEmailChangeRequests,
   getMyAccount,
-  moderateAccount,
   requestEmailChange,
   reviewEmailChange,
   updateMyAvatar,
@@ -19,6 +18,16 @@ export {
   resendActivation,
 } from "./auth";
 export { getMyAvatar, type AvatarData } from "./avatar";
+export {
+  getHeroApplications,
+  getMyHeroRequest,
+  requestHeroStatus,
+  reviewHeroApplication,
+  type HeroReviewDecision,
+} from "./hero-requests";
+export { createIncidentType, getAllIncidentTypes, getIncidentTypes } from "./incident-types";
+export { pagePosition } from "./pagination";
+export { getAccounts, moderateAccount } from "./user-moderation";
 export { asMockDataUser } from "./session-user";
 export {
   createArticle,
@@ -55,23 +64,23 @@ export {
 export { getModerationSummary } from "./moderation";
 export { subscribeToNewsletter } from "./newsletter";
 export {
-  getMyInterventions,
   getHeroPublicReviews,
+  getMyInterventions,
   getMyReputation,
-  getRatingsForModeration,
-  moderateComment,
+  getRepliesForModeration,
+  getReviewsForModeration,
+  moderateReply,
+  moderateReview,
   rateIntervention,
-  replyToRating,
-} from "./ratings";
+  replyToReview,
+} from "./reviews";
 export {
   getFeaturedSuperHeroes,
-  getHeroApplications,
   getMyHeroProfile,
   getSuperHero,
   getSuperHeroes,
   getSuperHeroProfiles,
   requestHeroEmailChange,
-  reviewHeroApplication,
   updateMyHeroAvatar,
   updateMyHeroContact,
 } from "./super-heroes";
@@ -82,6 +91,8 @@ export {
   getHeroVideos,
   getMyVideos,
   getPublishedVideos,
+  heroVideoKey,
   moderateVideo,
+  parseHeroVideoKey,
 } from "./videos";
 export { getVillain, getVillains } from "./villains";

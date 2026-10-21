@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { routes } from "@/lib/routes";
-import { declareIncident, getVillains, rateIntervention } from "@/lib/api";
+import { declareIncident, getIncidentTypes, getVillains, rateIntervention } from "@/lib/api";
 import {
   requireAdminSession,
   requireCitizenSession,
@@ -50,8 +50,11 @@ async function submitDeclaration(
   const occurredAtIso = String(formData.get("occurredAtIso") ?? "");
   const validated = { ...values, occurredAt: occurredAtIso || values.occurredAt };
 
-  const villainIds = (await getVillains()).map(({ id }) => id);
-  const fieldErrors = validateDeclaration(validated, villainIds);
+  const [villains, types] = await Promise.all([getVillains(), getIncidentTypes(token)]);
+  const fieldErrors = validateDeclaration(validated, {
+    villainIds: villains.map(({ id }) => id),
+    typeIds: types.map(({ id }) => id),
+  });
 
   if (hasFieldErrors(fieldErrors)) return { status: "error", fieldErrors, values };
 
@@ -75,7 +78,8 @@ export async function rateInterventionAction(
   formData: FormData,
 ): Promise<FormState<RatingField>> {
   const token = await requireCitizenSession();
-  const incidentId = String(formData.get("incidentId") ?? "");
+  const interventionId = String(formData.get("interventionId") ?? "");
+  const heroId = String(formData.get("heroId") ?? "");
   const rating = Number(formData.get("rating"));
   const comment = String(formData.get("comment") ?? "").trim();
 
@@ -90,17 +94,23 @@ export async function rateInterventionAction(
         : undefined,
   };
 
+  if (!interventionId || !heroId) {
+    return { status: "error", message: "Requête invalide.", fieldErrors: {}, values: { comment } };
+  }
   if (hasFieldErrors(fieldErrors)) {
     return { status: "error", fieldErrors, values: { rating: String(rating || ""), comment } };
   }
 
-  const result = await rateIntervention(token, incidentId, { rating, comment: comment || null });
+  const result = await rateIntervention(token, interventionId, heroId, {
+    rating,
+    comment: comment || null,
+  });
   if (!result.ok) {
     return { status: "error", message: result.error, fieldErrors: {}, values: { comment } };
   }
 
   revalidatePath(routes.profileInterventions);
-  return { status: "success", message: "Merci, votre avis a été enregistré.", fieldErrors: {} };
+  return { status: "success", message: "Merci, votre avis a été publié.", fieldErrors: {} };
 }
 
 /** Signalement par un super-héros, comme un citoyen : il attend la vérification de la modération. */

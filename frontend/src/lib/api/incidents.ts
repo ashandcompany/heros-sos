@@ -2,7 +2,7 @@ import { formatLocation } from "@/lib/format";
 import { geocodeLocation } from "@/lib/geocoding";
 import { incidentsMock } from "@/mocks/incidents";
 import { interventionsMock } from "@/mocks/interventions";
-import { ratingsMock } from "@/mocks/ratings";
+import { reviewsMock } from "@/mocks/reviews";
 import { superHeroesMock, superHeroProfilesMock } from "@/mocks/super-heroes";
 import { villainsMock } from "@/mocks/villains";
 import type {
@@ -24,7 +24,17 @@ import type {
   ResolvedIncident,
 } from "@/types";
 import { mockResponse } from "./config";
+import { getIncidentTypes } from "./incident-types";
 import { userFromToken } from "./session-user";
+
+/** Type du référentiel (API ou mock), réduit à ce qu'embarque un incident ; `undefined` si inconnu. */
+async function findIncidentType(
+  token: string,
+  typeId: number,
+): Promise<Incident["type"] | undefined> {
+  const type = (await getIncidentTypes(token)).find(({ id }) => id === typeId);
+  return type && { code: type.code, label: type.label };
+}
 
 function isResolved(incident: Incident): incident is ResolvedIncident {
   return incident.status === "resolu" && !!incident.resolvedAt && !!incident.hero;
@@ -97,12 +107,14 @@ export async function declareIncident(
 ): Promise<MutationResult> {
   const user = await userFromToken(token, ["citoyen", "super-heros", "admin"]);
   const villain = villainsMock.find(({ id }) => id === declaration.villainId);
+  const type = await findIncidentType(token, declaration.typeId);
+  if (!type) return mockResponse({ ok: false, error: "Type d'incident inconnu." });
   const coordinates = (await geocodeLocation(declaration.location)) ?? undefined;
 
   incidentsMock.push({
     id: `incident-${crypto.randomUUID()}`,
     title: declaration.title,
-    type: declaration.type,
+    type,
     status: "signale",
     moderation: user.role === "admin" ? "valide" : "en-attente",
     location: { ...declaration.location, coordinates },
@@ -164,8 +176,11 @@ export async function updateIncident(
     });
   }
 
+  const type = await findIncidentType(token, update.typeId);
+  if (!type) return mockResponse({ ok: false, error: "Type d'incident inconnu." });
+
   incident.title = update.title;
-  incident.type = update.type;
+  incident.type = type;
   incident.description = update.description;
   // Le lieu change : on le géocode de nouveau (sinon on garde la position connue).
   const moved =
@@ -546,6 +561,6 @@ export async function getCitizenIncident(
     interventions: interventionsMock
       .filter(({ incidentId }) => incidentId === id)
       .sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt)),
-    rating: isMine ? (ratingsMock.find(({ incidentId }) => incidentId === id) ?? null) : null,
+    review: isMine ? (reviewsMock.find(({ incidentId }) => incidentId === id) ?? null) : null,
   });
 }

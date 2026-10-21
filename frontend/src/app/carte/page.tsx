@@ -7,7 +7,7 @@ import { MapLegend } from "@/components/map/MapLegend";
 import { Container } from "@/components/ui/Container";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { getPublicIncidentMap } from "@/lib/api";
-import { formatDateTime, incidentTypeLabels } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
 import { getMapTileConfig } from "@/lib/map";
 
 export const metadata: Metadata = {
@@ -45,7 +45,7 @@ async function PublicIncidentMap() {
                 </span>
                 <span className="font-medium">{incident.title}</span>
                 <span className="text-sm text-muted">
-                  {incidentTypeLabels[incident.type]} · {incident.place} ·{" "}
+                  {incident.type.label} · {incident.place} ·{" "}
                   <time dateTime={incident.reportedAt} className="font-mono">
                     {formatDateTime(incident.reportedAt)}
                   </time>

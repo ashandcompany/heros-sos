@@ -16,7 +16,14 @@ import type {
   SignupResult,
 } from "@/types";
 import { isApiEnabled, mockResponse } from "./config";
-import { ApiError, type ApiUserView, apiFetch, fromApiUser, readSessionCookie } from "./http";
+import {
+  ApiError,
+  type ApiSchema,
+  apiFetch,
+  fromApiUser,
+  getApiSession,
+  readSessionCookie,
+} from "./http";
 
 /*
  * Inscription, activation, connexion, session, déconnexion et mot de passe oublié sont branchés sur
@@ -28,19 +35,6 @@ const MOCK_TOKEN_PREFIX = "mock-token-";
 /** Compte suspendu par la modération (seuls les comptes citoyens sont concernés). */
 const isSuspended = (userId: string) =>
   citizensMock.some(({ id, moderation }) => id === userId && moderation === "rejete");
-
-/** Schéma OpenAPI : LoginResponse */
-interface ApiLoginResponse {
-  user: ApiUserView;
-  csrfToken: string;
-  expiresAt: string;
-}
-
-/** Schéma OpenAPI : MeResponse */
-interface ApiMeResponse {
-  user: ApiUserView;
-  csrfToken: string;
-}
 
 /** Codes d'erreur de `POST /auth/login` → erreurs du frontend. */
 const loginErrorByCode = new Map<string, LoginError>([
@@ -98,7 +92,7 @@ async function loginWithApi({ identifier, password }: LoginCredentials): Promise
     return { ok: false, error: "unavailable" };
   }
 
-  const body = (await response.json()) as ApiLoginResponse;
+  const body = (await response.json()) as ApiSchema<"LoginResponse">;
   return {
     ok: true,
     user: fromApiUser(body.user),
@@ -132,31 +126,16 @@ async function loginWithMocks({ identifier, password }: LoginCredentials): Promi
 }
 
 /**
- * Session de l'API (`GET /auth/me`), ou `null` si elle est absente, expirée ou révoquée (401).
- * Une API injoignable ou en erreur donne aussi `null` : sans réponse fiable, l'utilisateur est
- * traité en visiteur (les espaces protégés restent fermés).
- */
-async function fetchApiSession(token: string): Promise<ApiMeResponse | null> {
-  try {
-    const response = await apiFetch("/auth/me", { sessionToken: token });
-    return (await response.json()) as ApiMeResponse;
-  } catch (error) {
-    if (!(error instanceof ApiError && error.status === 401)) {
-      console.error("Session : appel à l'API en échec", error);
-    }
-    return null;
-  }
-}
-
-/**
  * Utilisateur associé à un jeton de session, ou `null` si le jeton est invalide, expiré
- * ou si le compte a été suspendu entre-temps.
- * API : `GET /auth/me`, avec le jeton dans le cookie de session. Mémorisé le temps d'un rendu
- * (`cache`) : les helpers de session et les fonctions mockées l'appellent plusieurs fois.
+ * ou si le compte a été suspendu entre-temps. Une API injoignable donne aussi `null` : sans
+ * réponse fiable, l'utilisateur est traité en visiteur (les espaces protégés restent fermés).
+ * API : `GET /auth/me` (`getApiSession`), avec le jeton dans le cookie de session. Mémorisé le
+ * temps d'un rendu (`cache`) : les helpers de session et les fonctions mockées l'appellent
+ * plusieurs fois, et les écritures y relisent le jeton CSRF.
  */
 export const getSessionUser = cache(async (token: string): Promise<AuthUser | null> => {
   if (isApiEnabled) {
-    const session = await fetchApiSession(token);
+    const session = await getApiSession(token);
     return session ? fromApiUser(session.user) : null;
   }
 
@@ -176,7 +155,8 @@ export const getSessionUser = cache(async (token: string): Promise<AuthUser | nu
 export async function logout(token: string): Promise<void> {
   if (!isApiEnabled) return;
 
-  const session = await fetchApiSession(token);
+  // Session déjà expirée ou révoquée : rien à révoquer.
+  const session = await getApiSession(token);
   if (!session) return;
 
   try {
@@ -184,6 +164,7 @@ export async function logout(token: string): Promise<void> {
       method: "POST",
       sessionToken: token,
       csrfToken: session.csrfToken,
+      redirectOnUnauthorized: false,
     });
   } catch (error) {
     console.error("Déconnexion : révocation de la session par l'API en échec", error);
@@ -306,12 +287,6 @@ export async function confirmPasswordReset(
   }
 }
 
-/** Schéma OpenAPI : RegisterResponse */
-interface ApiRegisterResponse {
-  user: ApiUserView;
-  activationRequired: true;
-}
-
 /**
  * Crée un compte citoyen en attente d'activation : aucune session n'est ouverte, l'API envoie un
  * mail contenant le lien d'activation (`routes.activation`). Aucun rôle n'est choisi à
@@ -327,7 +302,7 @@ export async function register(payload: SignupPayload): Promise<SignupResult> {
       body: payload,
       headers: await visitorHeaders(),
     });
-    const body = (await response.json()) as ApiRegisterResponse;
+    const body = (await response.json()) as ApiSchema<"RegisterResponse">;
     return { ok: true, user: fromApiUser(body.user) };
   } catch (error) {
     if (error instanceof ApiError) {

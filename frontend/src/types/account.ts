@@ -1,4 +1,5 @@
-import type { Civility, PostalAddress } from "./auth";
+import type { ApiFailure } from "./api";
+import type { Civility, PostalAddress, UserRole } from "./auth";
 import type { ModerationStatus } from "./moderation";
 
 export interface CitizenAddress extends PostalAddress {
@@ -28,6 +29,17 @@ export interface CitizenAccount {
   moderation: ModerationStatus;
 }
 
+/** « Mon compte » : ce que l'API fournit déjà, et le profil complet quand elle l'exposera. */
+export interface MyAccount {
+  firstName: string;
+  email: string;
+  /**
+   * Profil complet (identité, coordonnées, photo, newsletter). `null` avec l'API : seul
+   * `GET /auth/me` existe, le profil viendra de `GET /me` (pas encore dans le contrat).
+   */
+  profile: CitizenAccount | null;
+}
+
 /** Champs modifiables directement par le citoyen (hors photo, email et newsletter). */
 export interface ContactUpdate {
   mobilePhone: string;
@@ -35,3 +47,42 @@ export interface ContactUpdate {
 }
 
 export type MutationResult = { ok: true } | { ok: false; error: string };
+
+/** État d'un compte (`UserSummary.status`) : un compte désactivé ne peut plus se connecter. */
+export type AccountStatus = "en-attente-activation" | "actif" | "desactive";
+
+/** Compte vu par la modération (schéma `UserSummary`), quel que soit son rôle. */
+export interface AccountSummary {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  /** Pseudo, pour un super-héros. */
+  alias: string | null;
+  role: UserRole;
+  status: AccountStatus;
+  /** Date ISO 8601 de vérification par un modérateur (information de confiance), `null` sinon. */
+  verifiedAt: string | null;
+  /** Date ISO 8601 de création du compte. */
+  registeredAt: string;
+}
+
+/** Filtres de la liste des comptes (`GET /admin/users`). */
+export interface AccountFilters {
+  role?: UserRole;
+  status?: AccountStatus;
+  /** Début de l'adresse email, sans tenir compte de la casse. */
+  email?: string;
+}
+
+/** Actions de modération sur un compte : routes `/admin/users/{id}/…`. */
+export type AccountModerationAction = "deactivate" | "reactivate" | "verify";
+
+export type AccountModerationResult =
+  | { ok: true }
+  | {
+      ok: false;
+      /** Compte introuvable, action sur son propre compte, ou compte de modérateur. */
+      error: "not-found" | "self-action" | "protected-account";
+    }
+  | ApiFailure;

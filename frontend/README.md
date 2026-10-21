@@ -10,22 +10,27 @@ npm install
 npm run dev
 ```
 
-| Script                 | Rôle                          |
-| ---------------------- | ----------------------------- |
-| `npm run dev`          | Serveur de développement      |
-| `npm run build`        | Build de production           |
-| `npm run lint`         | ESLint                        |
-| `npm run format`       | Formate le code avec Prettier |
-| `npm run format:check` | Vérifie le formatage (CI)     |
+| Script                    | Rôle                                                                     |
+| ------------------------- | ------------------------------------------------------------------------ |
+| `npm run dev`             | Serveur de développement                                                 |
+| `npm run build`           | Build de production                                                      |
+| `npm run lint`            | ESLint                                                                   |
+| `npm run format`          | Formate le code avec Prettier                                            |
+| `npm run format:check`    | Vérifie le formatage (CI)                                                |
+| `npm run api:types`       | Régénère `src/lib/api/schema.d.ts` depuis `backend/openapi/openapi.yaml` |
+| `npm run api:types:check` | Vérifie que ces types sont à jour (CI)                                   |
 
 Sans configuration, toute l'application tourne sur les mocks (comptes de test dans
 [src/mocks/users.ts](src/mocks/users.ts), ex : `citoyen@heros-sos.fr` / `Citoyen123!`).
 
 ### Avec l'API Go
 
-Inscription, activation, connexion, session, déconnexion et réinitialisation du mot de passe
-passent par l'API dès que `API_URL` est renseignée ;
-le reste reste mocké (voir [docs/backend-contract.md](docs/backend-contract.md)). Les comptes
+Identité (inscription, activation, connexion, session, mot de passe), demandes de super-héros,
+modération des comptes, types d'incident, vidéothèque et avis passent par l'API dès que `API_URL` est
+renseignée ; le reste reste mocké (voir [docs/backend-contract.md](docs/backend-contract.md)).
+La recherche de films IMDb exige une clé OMDb côté API (`HEROS_OMDB_API_KEY` dans
+`backend/.env`). Après une mise à jour du backend, relancer `make up-dev` pour reconstruire
+l'image de l'API (sinon les nouvelles routes répondent 404). Les comptes
 sont alors ceux de l'API : à créer par `POST /auth/register`, puis à activer avec le lien reçu
 par mail (Mailpit, `http://localhost:8025`, avec `make up-dev`).
 
@@ -94,8 +99,8 @@ pour les autres). Le HTML des articles doit être assaini côté API avant tout 
 
 ## Brancher l'API Go
 
-Connexion, session et déconnexion sont branchées ([src/lib/api/auth.ts](src/lib/api/auth.ts)
-sert de modèle). Pour une autre fonction de `src/lib/api/` : appeler `apiFetch()`
+Plusieurs domaines sont déjà branchés ([src/lib/api/auth.ts](src/lib/api/auth.ts) et
+[src/lib/api/videos.ts](src/lib/api/videos.ts) servent de modèles). Pour une autre fonction de `src/lib/api/` : appeler `apiFetch()`
 ([src/lib/api/http.ts](src/lib/api/http.ts)) quand `isApiEnabled`, garder le mock sinon, et
 conserver la signature. Les composants n'ont pas à être modifiés. Checklist complète :
 [docs/backend-contract.md](docs/backend-contract.md#checklist-de-branchement-dune-fonction).

@@ -3,12 +3,7 @@
 import "leaflet/dist/leaflet.css";
 import type { LatLngTuple, Map as LeafletMap } from "leaflet";
 import { useEffect, useRef } from "react";
-import {
-  formatDateTime,
-  incidentPriorityLabels,
-  incidentStatusLabels,
-  incidentTypeLabels,
-} from "@/lib/format";
+import { formatDateTime, incidentPriorityLabels, incidentStatusLabels } from "@/lib/format";
 import type { MapTileConfig } from "@/lib/map";
 import { heroIncidentRoute } from "@/lib/routes";
 import type { IncidentMapData, MapIncident, MapTeam, MapZone } from "@/types";
@@ -78,7 +73,7 @@ const PUBLIC_MAX_ZOOM = 14;
 
 const incidentPopup = (incident: MapIncident, variant: IncidentMapVariant) =>
   popupCard({
-    eyebrow: incidentTypeLabels[incident.type],
+    eyebrow: incident.type.label,
     title: incident.title,
     badges: [
       { label: incidentPriorityLabels[incident.priority], tone: incident.priority },

@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 type VideosSearchParams = Promise<{ heros?: string | string[] }>;
 
 function VideoCard({ video }: { video: HeroVideo }) {
-  const titleId = `film-${video.id}-titre`;
+  const titleId = `film-${video.hero.id}-${video.id}-titre`;
 
   return (
     <article
@@ -34,7 +34,7 @@ function VideoCard({ video }: { video: HeroVideo }) {
           <span className="font-mono text-sm font-normal text-muted"> ({video.year})</span>
         )}
       </h3>
-      <p className="mt-2 text-sm text-pretty text-muted">{video.description}</p>
+      <p className="mt-2 line-clamp-4 text-sm text-pretty text-muted">{video.description}</p>
       <p className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-4 text-sm">
         <span className="text-muted">
           Ajouté le <time dateTime={video.addedAt}>{formatDate(video.addedAt)}</time>
@@ -108,7 +108,7 @@ async function VideosGallery({ searchParams }: { searchParams: VideosSearchParam
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
           {videos.map((video) => (
-            <li key={video.id}>
+            <li key={`${video.hero.id}-${video.id}`}>
               <VideoCard video={video} />
             </li>
           ))}

@@ -1,10 +1,11 @@
 import type { Incident } from "@/types";
+import { mockIncidentType } from "./incident-types";
 
 export const incidentsMock: Incident[] = [
   {
     id: "incident-1",
     title: "Braquage déjoué à la bijouterie du centre",
-    type: "vol",
+    type: mockIncidentType("vol"),
     status: "resolu",
     moderation: "valide",
     location: { city: "Lyon", district: "Presqu'île", coordinates: { lat: 45.764, lng: 4.8357 } },
@@ -19,7 +20,7 @@ export const incidentsMock: Incident[] = [
   {
     id: "incident-2",
     title: "Otages libérés dans une rame de métro",
-    type: "prise-d-otages",
+    type: mockIncidentType("prise-d-otages"),
     status: "resolu",
     moderation: "valide",
     location: {
@@ -35,7 +36,7 @@ export const incidentsMock: Incident[] = [
   {
     id: "incident-3",
     title: "Cambriolage interrompu au musée maritime",
-    type: "cambriolage",
+    type: mockIncidentType("cambriolage"),
     status: "resolu",
     moderation: "valide",
     location: {
@@ -51,7 +52,7 @@ export const incidentsMock: Incident[] = [
   {
     id: "incident-4",
     title: "Sabotage du réseau électrique stoppé",
-    type: "sabotage",
+    type: mockIncidentType("sabotage"),
     status: "resolu",
     moderation: "valide",
     location: { city: "Lille", district: "Euralille", coordinates: { lat: 50.637, lng: 3.075 } },
@@ -63,7 +64,7 @@ export const incidentsMock: Incident[] = [
   {
     id: "incident-5",
     title: "Faux billets saisis sur le marché",
-    type: "vol",
+    type: mockIncidentType("vol"),
     status: "resolu",
     moderation: "valide",
     location: {
@@ -79,7 +80,7 @@ export const incidentsMock: Incident[] = [
   {
     id: "incident-6",
     title: "Usine désaffectée sécurisée après une attaque",
-    type: "agression",
+    type: mockIncidentType("agression"),
     status: "resolu",
     moderation: "valide",
     location: {
@@ -98,7 +99,7 @@ export const incidentsMock: Incident[] = [
   {
     id: "incident-7",
     title: "Enfant retrouvé sain et sauf dans le parc",
-    type: "enlevement",
+    type: mockIncidentType("enlevement"),
     status: "resolu",
     moderation: "valide",
     location: {
@@ -114,7 +115,7 @@ export const incidentsMock: Incident[] = [
   {
     id: "incident-8",
     title: "Vitrine de bijouterie rongée par la rouille",
-    type: "cambriolage",
+    type: mockIncidentType("cambriolage"),
     status: "en-cours",
     moderation: "valide",
     priority: "haute",
@@ -129,7 +130,7 @@ export const incidentsMock: Incident[] = [
   {
     id: "incident-9",
     title: "Vol à l'arraché près de la gare",
-    type: "vol",
+    type: mockIncidentType("vol"),
     status: "signale",
     moderation: "en-attente",
     priority: "normale",
@@ -147,7 +148,7 @@ export const incidentsMock: Incident[] = [
   {
     id: "incident-10",
     title: "Panne générale suspecte dans le métro",
-    type: "sabotage",
+    type: mockIncidentType("sabotage"),
     status: "en-cours",
     moderation: "valide",
     priority: "critique",
@@ -165,7 +166,7 @@ export const incidentsMock: Incident[] = [
   {
     id: "incident-11",
     title: "Dragon géant sur la tour Eiffel",
-    type: "sabotage",
+    type: mockIncidentType("sabotage"),
     status: "signale",
     moderation: "en-attente",
     location: {
@@ -182,7 +183,7 @@ export const incidentsMock: Incident[] = [
   {
     id: "incident-12",
     title: "Fourgon blindé encerclé par une nuée d'oiseaux",
-    type: "vol",
+    type: mockIncidentType("vol"),
     status: "en-cours",
     moderation: "valide",
     priority: "haute",
@@ -201,7 +202,7 @@ export const incidentsMock: Incident[] = [
   {
     id: "incident-13",
     title: "Automobilistes bloqués dans un tunnel plongé dans le noir",
-    type: "sabotage",
+    type: mockIncidentType("sabotage"),
     status: "resolu",
     moderation: "valide",
     priority: "haute",
@@ -217,7 +218,7 @@ export const incidentsMock: Incident[] = [
   {
     id: "incident-14",
     title: "Statues dérobées au musée des Beaux-Arts",
-    type: "cambriolage",
+    type: mockIncidentType("cambriolage"),
     status: "resolu",
     moderation: "valide",
     location: { city: "Lyon", district: "Terreaux", coordinates: { lat: 45.7672, lng: 4.8335 } },

@@ -7,6 +7,7 @@ import { FormMessage } from "@/components/ui/FormMessage";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { TextAreaField } from "@/components/ui/TextAreaField";
 import { idleFormState, type FormState } from "@/lib/validation/form-state";
+import type { SuperHeroSummary } from "@/types";
 
 const STAR_PATH =
   "M10 1.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L10 14.9l-5.2 2.7 1-5.8L1.5 7.7l5.9-.9L10 1.5z";
@@ -64,15 +65,24 @@ function StarRatingInput({ error }: { error?: string }) {
   );
 }
 
-export function RatingForm({ incidentId, heroAlias }: { incidentId: string; heroAlias: string }) {
+/** Note un super-héros d'une intervention ; l'avis est publié dès son envoi. */
+export function RatingForm({
+  interventionId,
+  hero,
+}: {
+  interventionId: string;
+  hero: SuperHeroSummary;
+}) {
   const [state, formAction] = useActionState(
     rateInterventionAction,
     idleFormState as FormState<"rating" | "comment">,
   );
+  const heroAlias = hero.alias;
 
   return (
     <form action={formAction} noValidate className="space-y-4">
-      <input type="hidden" name="incidentId" value={incidentId} />
+      <input type="hidden" name="interventionId" value={interventionId} />
+      <input type="hidden" name="heroId" value={hero.id} />
       <StarRatingInput error={state.fieldErrors.rating} />
       <TextAreaField
         label="Commentaire (facultatif)"

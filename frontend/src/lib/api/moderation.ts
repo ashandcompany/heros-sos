@@ -2,14 +2,30 @@ import { articlesMock } from "@/mocks/articles";
 import { citizensMock } from "@/mocks/citizens";
 import { heroApplicationsMock } from "@/mocks/hero-applications";
 import { incidentsMock } from "@/mocks/incidents";
-import { ratingsMock } from "@/mocks/ratings";
+import { reviewsMock } from "@/mocks/reviews";
 import { videosMock } from "@/mocks/videos";
 import type { ModerationSummary } from "@/types";
-import { mockResponse } from "./config";
+import { isApiEnabled, mockResponse } from "./config";
+import { getHeroApplications } from "./hero-requests";
+import { apiFetch } from "./http";
+import { pageQuery } from "./pagination";
 import { userFromToken } from "./session-user";
+
+/** Nombre d'éléments `pending` d'une liste paginée du back-office (champ `total`). */
+async function countPending(path: string, token: string): Promise<number> {
+  const response = await apiFetch(`${path}${pageQuery({ limit: 1 }, { status: "pending" })}`, {
+    sessionToken: token,
+  });
+  return ((await response.json()) as { total: number }).total;
+}
 
 /**
  * Compteurs du tableau de bord : éléments en attente dans chaque section du back-office.
+ * Avec l'API, les demandes de super-héros (`GET /admin/hero-requests`), les films
+ * (`GET /admin/hero-films`) et les réponses des héros à vérifier
+ * (`GET /admin/hero-review-replies`) sont comptés par le `total` de leur liste ; les comptes à
+ * contrôler et les changements d'email n'ont pas d'équivalent (`null` : tuile masquée) ; les
+ * autres compteurs restent mockés.
  * Future implémentation : `GET ${API_URL}/admin/moderation/summary`
  */
 export async function getModerationSummary(token: string): Promise<ModerationSummary> {
@@ -17,15 +33,34 @@ export async function getModerationSummary(token: string): Promise<ModerationSum
   const pending = <T extends { moderation: string }>(items: T[]) =>
     items.filter(({ moderation }) => moderation === "en-attente").length;
 
-  return mockResponse({
+  const mocked = {
     incidents: pending(incidentsMock),
+    draftArticles: articlesMock.filter(({ status }) => status === "brouillon").length,
+  };
+
+  if (isApiEnabled) {
+    const [applications, videos, comments] = await Promise.all([
+      getHeroApplications(token, { status: "en-attente", limit: 1 }),
+      countPending("/admin/hero-films", token),
+      countPending("/admin/hero-review-replies", token),
+    ]);
+    return {
+      ...mocked,
+      heroApplications: applications.total,
+      videos,
+      comments,
+      accounts: null,
+      emailChanges: null,
+    };
+  }
+
+  return mockResponse({
+    ...mocked,
+    videos: pending(videosMock),
+    // Les avis sont publiés dès leur envoi : seules les réponses modifiées attendent un modérateur.
+    comments: reviewsMock.filter(({ reply }) => reply?.status === "en-attente").length,
     accounts: pending(citizensMock),
     emailChanges: citizensMock.filter(({ pendingEmail }) => pendingEmail).length,
     heroApplications: heroApplicationsMock.filter(({ status }) => status === "en-attente").length,
-    videos: pending(videosMock),
-    comments: ratingsMock.filter(
-      ({ comment, commentModeration }) => comment && commentModeration === "en-attente",
-    ).length,
-    draftArticles: articlesMock.filter(({ status }) => status === "brouillon").length,
   });
 }

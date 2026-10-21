@@ -5,6 +5,8 @@ on:
     branches: [develop]
     paths:
       - "frontend/**"
+      # Le contrat de l'API génère les types du frontend (`npm run api:types`).
+      - "backend/openapi/openapi.yaml"
       - ".github/workflows/frontend-ci.yml"
 
 concurrency:
@@ -42,6 +44,10 @@ jobs:
 
       - name: Check formatting
         run: npx prettier --check .
+
+      # Types de l'API à jour avec backend/openapi/openapi.yaml (sinon : `npm run api:types`).
+      - name: Check API types
+        run: npm run api:types:check
 
       - name: Build
         run: npm run build

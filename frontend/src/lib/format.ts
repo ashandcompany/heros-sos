@@ -1,12 +1,13 @@
 import type {
+  AccountStatus,
   IncidentLocation,
   IncidentPriority,
   IncidentStatus,
-  IncidentType,
   InterventionOutcome,
   ModerationStatus,
   ReporterRole,
   ThreatLevel,
+  UserRole,
   VillainStatus,
 } from "@/types";
 
@@ -34,14 +35,11 @@ export function formatLocation({ city, district }: IncidentLocation): string {
   return district ? `${city} · ${district}` : city;
 }
 
-export const incidentTypeLabels: Record<IncidentType, string> = {
-  vol: "Vol",
-  cambriolage: "Cambriolage",
-  "prise-d-otages": "Prise d'otages",
-  agression: "Agression",
-  sabotage: "Sabotage",
-  enlevement: "Enlèvement",
-};
+/** Délai avant de réessayer (`Retry-After`), arrondi à la minute supérieure : « 2 minutes ». */
+export function formatRetryDelay(retryAfterSeconds: number | undefined): string {
+  const minutes = Math.ceil((retryAfterSeconds ?? 60) / 60);
+  return `${minutes} minute${minutes > 1 ? "s" : ""}`;
+}
 
 const integerFormatter = new Intl.NumberFormat("fr-FR");
 
@@ -128,3 +126,18 @@ export const moderationStatusLabels: Record<ModerationStatus, string> = {
 
 export const isModerationStatus = (value: string): value is ModerationStatus =>
   value in moderationStatusLabels;
+
+export const userRoleLabels: Record<UserRole, string> = {
+  citoyen: "Citoyen",
+  "super-heros": "Super-héros",
+  admin: "Modérateur",
+};
+
+export const accountStatusLabels: Record<AccountStatus, string> = {
+  "en-attente-activation": "Non activé",
+  actif: "Actif",
+  desactive: "Désactivé",
+};
+
+export const isAccountStatus = (value: string): value is AccountStatus =>
+  value in accountStatusLabels;

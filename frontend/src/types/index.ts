@@ -1,10 +1,12 @@
 export type * from "./account";
+export type * from "./api";
 export type * from "./auth";
 export type * from "./blog";
 export type * from "./contact";
 export type * from "./incident";
 export type * from "./moderation";
 export type * from "./newsletter";
+export type * from "./review";
 export type * from "./super-hero";
 export type * from "./video";
 export type * from "./villain";

@@ -1,11 +1,6 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
-import {
-  formatDateTime,
-  incidentStatusLabels,
-  incidentTypeLabels,
-  reporterRoleLabels,
-} from "@/lib/format";
+import { formatDateTime, incidentStatusLabels, reporterRoleLabels } from "@/lib/format";
 import { citizenIncidentRoute } from "@/lib/routes";
 import type { Incident, IncidentStatus } from "@/types";
 
@@ -28,7 +23,7 @@ export function IncidentListItem({ incident, detailed = false }: IncidentListIte
     <article className="relative border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-4 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary hover:border-muted sm:p-5">
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone={statusTone[incident.status]}>{incidentStatusLabels[incident.status]}</Badge>
-        <Badge>{incidentTypeLabels[incident.type]}</Badge>
+        <Badge>{incident.type.label}</Badge>
         {detailed && incident.moderation === "rejete" && (
           <Badge tone="danger">Rejeté par la modération</Badge>
         )}

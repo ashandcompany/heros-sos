@@ -130,12 +130,19 @@ fournit le jeton à transmettre à `lib/api/`, et c'est la vraie vérification d
 
 [http.ts](../src/lib/api/http.ts) est le seul client de l'API :
 
-| Élément             | Rôle                                                                                                             |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `apiFetch(path, …)` | Appel JSON avec `sessionToken` (envoyé dans le cookie attendu par l'API), `csrfToken`, délai de 10 s, sans cache |
-| `ApiError`          | Erreur levée pour une réponse non 2xx : `status`, `code` stable de l'API, `retryAfterSeconds`                    |
-| `readSessionCookie` | Extrait le jeton du `Set-Cookie` de l'API (connexion)                                                            |
-| `fromApiUser`       | Convertit `UserView` vers `AuthUser` : seul endroit où les rôles de l'API (`citizen`, `hero`…) apparaissent      |
+| Élément             | Rôle                                                                                                                                                       |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apiFetch(path, …)` | Appel JSON avec `sessionToken` (envoyé dans le cookie attendu par l'API), délai de 10 s, sans cache. Ajoute seul le jeton CSRF aux écritures authentifiées |
+| `ApiError`          | Erreur levée pour une réponse non 2xx : `status`, `code` stable de l'API, `retryAfterSeconds`, `fields`                                                    |
+| `toApiFailure`      | Dans un `catch`, traduit 403, 413, 415, 429 et API indisponible en `ApiFailure` ; relance la redirection d'une session expirée (401 → `/connexion`)        |
+| `getApiSession`     | `GET /auth/me` (compte et jeton CSRF), mémorisé le temps d'un rendu : un seul appel par page ou action, quel que soit le nombre de lectures et d'écritures |
+| `ApiSchema<"Nom">`  | Type d'un schéma de l'OpenAPI, généré dans [schema.d.ts](../src/lib/api/schema.d.ts) par `npm run api:types`                                               |
+| `readSessionCookie` | Extrait le jeton du `Set-Cookie` de l'API (connexion)                                                                                                      |
+| `fromApiUser`       | Convertit `UserView` vers `AuthUser` : seul endroit où les rôles de l'API (`citizen`, `hero`…) apparaissent                                                |
+
+Listes paginées : [pagination.ts](../src/lib/api/pagination.ts) (`pageQuery`, `fromApiPage`,
+`toMockPage` pour les mocks, `pagePosition` pour l'affichage), type `Page<T>` dans
+[src/types/api.ts](../src/types/api.ts).
 
 Le contrat d'API est décrit dans [backend/openapi/openapi.yaml](../../backend/openapi/openapi.yaml) ;
 ce qui est branché et ce qui reste à faire, dans [backend-contract.md](./backend-contract.md).

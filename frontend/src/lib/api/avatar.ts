@@ -23,7 +23,7 @@ export async function getMyAvatar(token: string): Promise<AvatarData | null> {
     const user = await getSessionUser(token);
     if (user?.role === "citoyen") {
       const account = await getMyAccount(token);
-      return { name: account.firstName, src: account.avatarUrl };
+      return { name: account.firstName, src: account.profile?.avatarUrl ?? null };
     }
     if (user?.role === "super-heros") {
       const profile = await getMyHeroProfile(token);

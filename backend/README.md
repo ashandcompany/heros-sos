@@ -8,14 +8,17 @@ personnelles, mails.
 
 Prérequis : Go (voir `go.mod`), Docker, `openssl`.
 
-**Toute l'application dans Docker** (proxy, front, API, PostgreSQL 18, Mailpit, RabbitMQ) :
+**Toute l'application dans Docker** (proxy, front, API, PostgreSQL 18, Mailpit, RabbitMQ, documentation) :
 
 ```bash
-cd backend
-make env             # crée .env avec des secrets aléatoires
-make up-dev          # http://localhost:8088 (front + API) · /api/v1/docs (Swagger) · :8025 (mails reçus)
-make moderator-dev EMAIL=modo@example.org FIRST=Nick LAST=Fury BIRTH=1950-12-04
+# Depuis la RACINE du dépôt : les fichiers docker-compose*.yml y sont, le back, le front et la doc démarrent ensemble.
+make up              # crée backend/.env au premier lancement, puis http://localhost:8088 (front + API)
+                     # · /api/v1/docs (Swagger) · :8025 (mails reçus) · :3001/heros-sos/ (documentation)
+make moderator EMAIL=modo@example.org FIRST=Nick LAST=Fury BIRTH=1950-12-04
 ```
+
+`make help` liste les raccourcis de la racine ; ils délèguent à `backend/Makefile`, dont les cibles
+(`make up-dev`, `make moderator-dev`…) restent utilisables depuis `backend/`.
 
 **API seule, lancée depuis Go** (le plus rapide pour travailler sur le backend) :
 
@@ -67,9 +70,13 @@ Ce qui protège de la régression :
 ## Documentation interactive (Swagger UI)
 
 En développement, l'API sert sa propre documentation, générée à partir du contrat
-`openapi/openapi.yaml` : **http://localhost:8088/api/v1/docs** avec `make up-dev`, ou
-http://localhost:8080/api/v1/docs avec `make run`. On y lit chaque route, ses champs et ses erreurs,
-et on peut l'essayer (« Try it out »).
+`openapi/openapi.yaml` : **http://localhost:8088/api/v1/docs** avec `make up` (ou `make up-dev` depuis
+`backend/`), ou http://localhost:8080/api/v1/docs avec `make run`. On y lit chaque route, ses champs et
+ses erreurs, et on peut l'essayer (« Try it out »).
+
+Le même contrat est aussi rendu dans le site de documentation du projet, sans bouton d'essai : une page
+par route, à http://localhost:3001/heros-sos/api/heros-sos-api (voir [docs-site/README.md](../docs-site/README.md)).
+Les documents de conception (`MVP.md`, `STACK.md`, `TABLES.md`) y sont lus sur place.
 
 - **Une écriture authentifiée** demande une session et le jeton CSRF : appeler `POST /auth/login`
   (le cookie est posé par le navigateur), copier le `csrfToken` de la réponse dans « Authorize »
@@ -182,13 +189,17 @@ Envoyer un mail : dépendre de l'interface `mail.Mailer` (la file asynchrone l'i
 
 ## Environnements Docker
 
+Les fichiers Compose sont **à la racine du dépôt** (et non dans `backend/`), pour lancer le back et le
+front ensemble. Leurs chemins partent de la racine ; l'environnement de l'API (`.env`, `.env.production`)
+et les secrets restent dans `backend/`, et le Makefile les passe à Compose (`--env-file`).
+
 Un fichier de base (`docker-compose.yml`) décrit ce qui est commun ; `docker-compose.dev.yml` et
 `docker-compose.prod.yml` s'y ajoutent. Chaque environnement est un projet Compose distinct
 (`heros-sos-dev`, `heros-sos-prod`) : leurs conteneurs et leurs volumes ne se mélangent jamais.
 
-|                  | Développement (`make up-dev`)                                                                          | Production (`make up-prod`)                                                                               |
+|                  | Développement (`make up`)                                                                          | Production (`make up-prod`)                                                                               |
 | ---------------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| Ports publiés    | proxy `8088`, API `8081`, Mailpit `8025`, PostgreSQL `5432`, RabbitMQ — **sur `127.0.0.1` uniquement** | **proxy seul** : 80 et 443                                                                                |
+| Ports publiés    | proxy `8088`, API `8081`, Mailpit `8025`, PostgreSQL `5432`, RabbitMQ, documentation `3001` — **sur `127.0.0.1` uniquement** | **proxy seul** : 80 et 443                                                                                |
 | Front            | serveur de développement Next.js, code monté et rechargé à chaud                                       | image de production (sortie `standalone` de Next.js, `node server.js`), sans dépendances de développement |
 | TLS              | non (HTTP)                                                                                             | automatique (Let's Encrypt, via Caddy)                                                                    |
 | Secrets          | mots de passe publics de `.env.example`                                                                | fichiers dans `secrets/`, montés en `/run/secrets`                                                        |
@@ -205,10 +216,11 @@ serveur (`cmd/api`, `internal/server/probe.go`), délai réglable par `HEROS_HEA
 **Premier déploiement en production**
 
 ```bash
+cd backend
 cp .env.production.example .env.production   # DOMAIN, ACME_EMAIL, SMTP… (aucun secret ici)
 make secrets                                  # génère secrets/ (ne remplace jamais un secret existant)
-make up-prod
-make moderator-prod EMAIL=… FIRST=… LAST=… BIRTH=AAAA-MM-JJ
+make up-prod                                  # (aussi disponible depuis la racine : make secrets, make up-prod)
+make moderator-prod EMAIL=… FIRST=… LAST=… BIRTH=AAAA-MM-JJ   # seulement depuis backend/
 ```
 
 `secrets/` et `.env.production` ne sont jamais versionnés. Les secrets ne passent pas par
@@ -230,8 +242,13 @@ la clé est obligatoire en production. **`secrets/crypto_keys` se sauvegarde hor
 - `make compose-check` valide la syntaxe des deux fichiers Compose, sans aucune configuration
   préalable (`.env`, `.env.production` ni `secrets/` n'ont besoin d'exister). À lancer après toute
   modification des fichiers Compose : le CI ne le fait pas encore.
-- Les variables des conteneurs (`POSTGRES_*`, `RABBITMQ_*`, ports, adresses) sont documentées dans
-  `.env.example` et `.env.production.example`.
+- **Journaux** : chaque conteneur écrit sur sa sortie standard, que `make logs-dev` ou
+  `make logs-prod` suit. Ils tournent pour **tous** les services : au plus `LOG_MAX_FILE` fichiers de
+  `LOG_MAX_SIZE` par conteneur (3 × 10 Mo par défaut), faute de quoi Docker les garde indéfiniment.
+  L'API écrit en texte en développement et en JSON en production, au niveau `HEROS_LOG_LEVEL` ; le
+  proxy journalise chaque requête en JSON.
+- Les variables des conteneurs (`POSTGRES_*`, `RABBITMQ_*`, `LOG_MAX_*`, ports, adresses) sont
+  documentées dans `.env.example` et `.env.production.example`.
 
 **RabbitMQ n'est pas encore utilisé par le code.** Le service est démarré (en développement, et en
 production avec `--profile rabbitmq`) pour être prêt, mais aucun paquet Go ne s'y connecte : les

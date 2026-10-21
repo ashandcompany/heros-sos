@@ -25,9 +25,12 @@ Sans configuration, toute l'application tourne sur les mocks (comptes de test da
 
 ### Avec l'API Go
 
-Inscription, activation, connexion, session, déconnexion et réinitialisation du mot de passe
-passent par l'API dès que `API_URL` est renseignée ;
-le reste reste mocké (voir [docs/backend-contract.md](docs/backend-contract.md)). Les comptes
+Identité (inscription, activation, connexion, session, mot de passe), demandes de super-héros,
+modération des comptes, types d'incident et vidéothèque passent par l'API dès que `API_URL` est
+renseignée ; le reste reste mocké (voir [docs/backend-contract.md](docs/backend-contract.md)).
+La recherche de films IMDb exige une clé OMDb côté API (`HEROS_OMDB_API_KEY` dans
+`backend/.env`). Après une mise à jour du backend, relancer `make up-dev` pour reconstruire
+l'image de l'API (sinon les nouvelles routes répondent 404). Les comptes
 sont alors ceux de l'API : à créer par `POST /auth/register`, puis à activer avec le lien reçu
 par mail (Mailpit, `http://localhost:8025`, avec `make up-dev`).
 
@@ -96,8 +99,8 @@ pour les autres). Le HTML des articles doit être assaini côté API avant tout 
 
 ## Brancher l'API Go
 
-Connexion, session et déconnexion sont branchées ([src/lib/api/auth.ts](src/lib/api/auth.ts)
-sert de modèle). Pour une autre fonction de `src/lib/api/` : appeler `apiFetch()`
+Plusieurs domaines sont déjà branchés ([src/lib/api/auth.ts](src/lib/api/auth.ts) et
+[src/lib/api/videos.ts](src/lib/api/videos.ts) servent de modèles). Pour une autre fonction de `src/lib/api/` : appeler `apiFetch()`
 ([src/lib/api/http.ts](src/lib/api/http.ts)) quand `isApiEnabled`, garder le mock sinon, et
 conserver la signature. Les composants n'ont pas à être modifiés. Checklist complète :
 [docs/backend-contract.md](docs/backend-contract.md#checklist-de-branchement-dune-fonction).

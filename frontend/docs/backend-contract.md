@@ -5,34 +5,38 @@ Le contrat de l'API Go est [backend/openapi/openapi.yaml](../../backend/openapi/
 dit **où le frontend actuel s'écarte de ce contrat** et ce qu'il faut changer au moment du
 branchement. À mettre à jour à chaque fonction branchée.
 
-> État au 20/10/2026 : **inscription, activation, connexion, session, déconnexion et
-> réinitialisation du mot de passe sont branchées** sur l'API dès que `API_URL` est renseignée.
-> Tout le reste fonctionne encore sur des mocks, y compris avec l'API.
+> État au 21/10/2026 : **identité (inscription, activation, connexion, session, mot de passe),
+> demandes de super-héros, modération des comptes, types d'incident et vidéothèque sont branchés**
+> sur l'API dès que `API_URL` est renseignée (tableau ci-dessous). Le reste fonctionne encore sur
+> des mocks, y compris avec l'API.
 
 ## 1. Couverture : ce qui est dans le contrat, et le reste
 
-Le contrat décrit aujourd'hui **40 opérations** : identité et modération des comptes, mais aussi
-incidents, interventions, types d'incident et super-vilains (plus `/health` et `/ready`). Les
-autres domaines du frontend n'ont pas encore de contrat.
+Le contrat décrit aujourd'hui **60 opérations** (plus `/health` et `/ready`) : identité et
+modération des comptes, incidents, interventions, types d'incident, super-vilains, avis sur les
+interventions et vidéothèque (films). Les autres domaines du frontend n'ont pas encore de
+contrat.
 
-| Domaine frontend                      | Fonctions `lib/api/`                                                                                         | Contrat OpenAPI                                                            | État       |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- | ---------- |
-| Connexion, session, déconnexion       | `login`, `getSessionUser`, `logout`                                                                          | `/auth/login`, `/auth/me`, `/auth/logout`                                  | ✅ branché |
-| Inscription                           | `register`                                                                                                   | `/auth/register`                                                           | ✅ branché |
-| Activation du compte                  | `activateAccount`, `resendActivation`                                                                        | `/auth/activate`, `/auth/resend-activation`                                | ✅ branché |
-| Mot de passe oublié (demande)         | `requestPasswordReset`                                                                                       | `/auth/password-reset`                                                     | ✅ branché |
-| Nouveau mot de passe (jeton)          | `confirmPasswordReset`                                                                                       | `/auth/password-reset/confirm`                                             | ✅ branché |
-| Demande de statut super-héros         | `hero-requests.ts` (`requestHeroStatus`, `getMyHeroRequest`, `getHeroApplications`, `reviewHeroApplication`) | `/heroes/requests`, `/heroes/requests/me`, `/admin/hero-requests/*`        | ✅ branché |
-| Comptes (désactivation, vérification) | `user-moderation.ts` (`getAccounts`, `moderateAccount`)                                                      | `/admin/users`, `/admin/users/{id}/deactivate`, `…/reactivate`, `…/verify` | ✅ branché |
-| Incidents, interventions              | `lib/api/incidents.ts`                                                                                       | `/incidents/*`, `/interventions/*` (§ 3)                                   | mock       |
-| Types d'incident                      | `incident-types.ts` (`getIncidentTypes`, `getAllIncidentTypes`, `createIncidentType`)                        | `/intervention-types`, `/admin/intervention-types`                         | ✅ branché |
-| Notes et avis                         | `ratings.ts`                                                                                                 | ❌ aucun                                                                   | mock       |
-| Super-vilains                         | `villains.ts`                                                                                                | `/villains` (liste, création, modification)                                | mock       |
-| Fiches super-héros                    | `super-heroes.ts` (profils)                                                                                  | ❌ aucun                                                                   | mock       |
-| Vidéothèque, blog, newsletter         | `videos.ts`, `blog.ts`, `newsletter.ts`                                                                      | ❌ aucun                                                                   | mock       |
-| Formulaire de contact                 | `sendContactMessage` (`contact.ts`)                                                                          | ❌ aucun                                                                   | mock       |
-| Profil, changements d'email           | `account.ts`, `super-heroes.ts` (`updateMy…`)                                                                | partiel : `GET /auth/me` (prénom, email)                                   | partiel    |
-| Tableau de bord héros, modération     | `hero-dashboard.ts`, `moderation.ts`                                                                         | Partiel : `/admin/interventions/{id}/decision`                             | mock       |
+| Domaine frontend                      | Fonctions `lib/api/`                                                                                                                                                              | Contrat OpenAPI                                                                                                               | État       |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| Connexion, session, déconnexion       | `login`, `getSessionUser`, `logout`                                                                                                                                               | `/auth/login`, `/auth/me`, `/auth/logout`                                                                                     | ✅ branché |
+| Inscription                           | `register`                                                                                                                                                                        | `/auth/register`                                                                                                              | ✅ branché |
+| Activation du compte                  | `activateAccount`, `resendActivation`                                                                                                                                             | `/auth/activate`, `/auth/resend-activation`                                                                                   | ✅ branché |
+| Mot de passe oublié (demande)         | `requestPasswordReset`                                                                                                                                                            | `/auth/password-reset`                                                                                                        | ✅ branché |
+| Nouveau mot de passe (jeton)          | `confirmPasswordReset`                                                                                                                                                            | `/auth/password-reset/confirm`                                                                                                | ✅ branché |
+| Demande de statut super-héros         | `hero-requests.ts` (`requestHeroStatus`, `getMyHeroRequest`, `getHeroApplications`, `reviewHeroApplication`)                                                                      | `/heroes/requests`, `/heroes/requests/me`, `/admin/hero-requests/*`                                                           | ✅ branché |
+| Comptes (désactivation, vérification) | `user-moderation.ts` (`getAccounts`, `moderateAccount`)                                                                                                                           | `/admin/users`, `/admin/users/{id}/deactivate`, `…/reactivate`, `…/verify`                                                    | ✅ branché |
+| Incidents, interventions              | `lib/api/incidents.ts`                                                                                                                                                            | `/incidents/*`, `/interventions/*` (§ 3)                                                                                      | mock       |
+| Types d'incident                      | `incident-types.ts` (`getIncidentTypes`, `getAllIncidentTypes`, `createIncidentType`)                                                                                             | `/intervention-types`, `/admin/intervention-types`                                                                            | ✅ branché |
+| Notes et avis                         | `ratings.ts`                                                                                                                                                                      | `/me/interventions`, `/interventions/{id}/reviews`, `/hero/reviews*`, `/heroes/{heroId}/reviews`, `/admin/hero-review*` (§ 3) | mock       |
+| Super-vilains                         | `villains.ts`                                                                                                                                                                     | `/villains` (liste, création, modification), `/villains/{id}/films`                                                           | mock       |
+| Fiches super-héros                    | `super-heroes.ts` (profils)                                                                                                                                                       | ❌ aucun                                                                                                                      | mock       |
+| Vidéothèque (films)                   | `videos.ts` (`getMyVideos`, `addMyVideo`, `deleteMyVideo`, `getHeroVideos`, `moderateVideo`, `deleteVideo`, `getPublishedVideos`), `imdb.ts` (`searchImdbTitles`, `getImdbTitle`) | `/films`, `/heroes/{heroId}/films`, `/hero/films*`, `/admin/hero-films*`, `/imdb/titles*` (§ 3)                               | ✅ branché |
+| Films des super-vilains               | aucune (pas d'écran)                                                                                                                                                              | `/villains/{id}/films`, `/admin/villain-films`, `/admin/villains/{id}/films/{filmId}`                                         | à faire    |
+| Blog, newsletter                      | `blog.ts`, `newsletter.ts`                                                                                                                                                        | ❌ aucun                                                                                                                      | mock       |
+| Formulaire de contact                 | `sendContactMessage` (`contact.ts`)                                                                                                                                               | ❌ aucun                                                                                                                      | mock       |
+| Profil, changements d'email           | `account.ts`, `super-heroes.ts` (`updateMy…`)                                                                                                                                     | partiel : `GET /auth/me` (prénom, email)                                                                                      | partiel    |
+| Tableau de bord héros, modération     | `hero-dashboard.ts`, `moderation.ts`                                                                                                                                              | Partiel : `/admin/interventions/{id}/decision`                                                                                | mock       |
 
 Les « Future implémentation » écrites dans les commentaires de `lib/api/` pour les domaines non
 couverts sont des **hypothèses** du frontend, pas un contrat. Il faudra les faire valider (ou les
@@ -177,6 +181,50 @@ chaque modification de `lib/validation/`.
   son `id` (`typeId`). Le référentiel est **vide** dans une base neuve : tant qu'un modérateur n'a
   pas créé de type (`/admin/types-incident`), la déclaration d'incident est indisponible.
 
+### Vidéothèque : choix du branchement
+
+- **Un film, plusieurs héros** : l'API stocke chaque film une fois et le rattache à un ou
+  plusieurs héros. Elle renvoie **une entrée par rattachement** (`Film.hero`) : `HeroVideo.id` est
+  l'identifiant du film, et un même `id` peut revenir pour deux héros dans `/films`. Les listes
+  prennent donc `hero.id` + `id` comme clé React.
+- **Modération par couple (héros, film)** : `POST /admin/hero-films/{heroId}/{filmId}/approve` ou
+  `…/reject`, `DELETE /admin/hero-films/{heroId}/{filmId}`. Les formulaires du back-office ne
+  transmettant qu'un `id`, ils envoient la clé `heroId/filmId` (`heroVideoKey`), relue par les
+  actions avec `parseHeroVideoKey`.
+- **Statuts** : `pending | approved | rejected` ↔ `ModerationStatus`. L'API ne sait pas remettre
+  un film en attente : `moderateVideo(…, "en-attente")` est refusé (l'écran ne le propose pas).
+  Les listes publiques ne renvoient pas `moderation` : leurs films sont considérés `valide`.
+- **Conversion** : `plot` → `description`, `releaseYear` → `year`. Sans `videoUrl`, un film du
+  catalogue pointe vers sa fiche `https://www.imdb.com/title/{imdbId}/`.
+- **Pagination** : les écrans n'étant pas paginés, les fonctions lisent toutes les pages
+  (100 films par appel) et renvoient un tableau trié du plus récent au plus ancien.
+- **Catalogue IMDb** : la recherche passe par l'API (OMDb), la clé reste côté serveur
+  (`HEROS_OMDB_API_KEY` dans `backend/.env`, voir `.env.example`). Sans clé valide, l'API répond
+  `502 catalog_unavailable` : `searchImdbTitles` renvoie `{ ok: false, error: "catalog-unavailable" }`
+  et l'écran affiche un message au lieu des résultats. Recherche limitée à 100 caractères.
+- **Erreurs** :
+
+  | Code API (statut)                   | Message affiché                           |
+  | ----------------------------------- | ----------------------------------------- |
+  | `film_already_linked` (409)         | Ce film est déjà dans votre vidéothèque   |
+  | `film_not_pending` (409)            | Ce film a déjà été modéré                 |
+  | `film_not_found`, `not_found` (404) | Film introuvable                          |
+  | `catalog_unavailable` (502)         | Catalogue IMDb momentanément indisponible |
+  | autre                               | `apiFailureMessage(toApiFailure(…))`      |
+
+- **Pas encore branché** : films des super-vilains (aucun écran), ajout direct d'un film à un
+  héros par un modérateur (`POST /admin/hero-films`), vidéos libres sans IMDb
+  (`title`, `description`, `videoUrl` dans `FilmInput`).
+
+### Avis sur les interventions : modèle différent
+
+Le contrat existe, mais `ratings.ts` a été écrit avant lui : un avis porte sur une
+**intervention** (`/interventions/{interventionId}/reviews`), plus sur un `incidentId` ; la
+réponse du héros se désigne par `reviewId` (`PUT /hero/reviews/{reviewId}/reply`) ; la
+modération porte sur le commentaire du citoyen **et** sur la réponse du héros
+(`/admin/hero-reviews`, `/admin/hero-review-replies`, en `PATCH`). Les types
+`InterventionRating`, `RateableIntervention`… sont à réaligner au branchement.
+
 ### Incidents, interventions et super-vilains : modèles différents
 
 Le contrat existe désormais, mais les « Future implémentation » de `lib/api/` ont été écrites
@@ -209,6 +257,10 @@ leur faire renvoyer un `Page<T>` ([src/types/api.ts](../src/types/api.ts)), avec
 | `fromApiPage`  | Page de l'API → `Page<T>`, avec la conversion de chaque élément                               |
 | `toMockPage`   | Découpe une liste mockée comme l'API, pour garder la même signature avec et sans backend      |
 | `pagePosition` | Page courante et nombre de pages, pour le composant de pagination des écrans d'administration |
+
+Exception : quand l'écran affiche toute la liste (formulaires, vidéothèque), la fonction lit
+toutes les pages avec `limit: MAX_PAGE_SIZE` et renvoie un tableau (`getIncidentTypes`,
+`fetchAllFilms` dans `videos.ts`).
 
 ### Variable d'environnement
 

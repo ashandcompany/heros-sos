@@ -8,7 +8,7 @@ import { IncidentEditForm } from "@/components/admin/IncidentEditForm";
 import { incidentDecisionLabels } from "@/components/admin/IncidentsModeration";
 import { ModerationBadge } from "@/components/admin/ModerationBadge";
 import { ModerationForm } from "@/components/admin/ModerationForm";
-import { getIncident, getIncidentTypes, getSuperHeroes, getVillains } from "@/lib/api";
+import { getIncident, getIncidentHeroes, getIncidentTypes, getVillains } from "@/lib/api";
 import { formatDateTime, reporterRoleLabels } from "@/lib/format";
 import { routes } from "@/lib/routes";
 import { requireAdminSession } from "@/lib/server-session";
@@ -22,7 +22,7 @@ async function IncidentEditor({ params }: { params: Promise<{ id: string }> }) {
   const [incident, villains, heroes, types] = await Promise.all([
     getIncident(token, id),
     getVillains(),
-    getSuperHeroes(),
+    getIncidentHeroes(),
     getIncidentTypes(token),
   ]);
   if (!incident) notFound();

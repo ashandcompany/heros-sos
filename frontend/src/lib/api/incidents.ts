@@ -564,3 +564,16 @@ export async function getCitizenIncident(
     review: isMine ? (reviewsMock.find(({ incidentId }) => incidentId === id) ?? null) : null,
   });
 }
+
+/**
+ * Super-héros qu'on peut affecter à un incident (correction par la modération), triés par pseudo.
+ * Les incidents étant mockés, leurs héros sont ceux des mocks : la liste publique de l'API
+ * (`getSuperHeroes`) n'a pas les mêmes identifiants. À remplacer en branchant les incidents.
+ */
+export async function getIncidentHeroes(): Promise<Array<{ id: string; alias: string }>> {
+  return mockResponse(
+    superHeroesMock
+      .map(({ id, alias }) => ({ id, alias }))
+      .sort((a, b) => a.alias.localeCompare(b.alias, "fr")),
+  );
+}

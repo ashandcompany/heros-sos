@@ -9,8 +9,8 @@ import {
   createIncidentType,
   createVillain,
   deleteVideo,
+  getIncidentHeroes,
   getIncidentTypes,
-  getSuperHeroes,
   getVillains,
   moderateAccount,
   moderateReply,
@@ -124,7 +124,7 @@ export async function updateIncidentAction(
 
   const [villains, heroes, types] = await Promise.all([
     getVillains(),
-    getSuperHeroes(),
+    getIncidentHeroes(),
     getIncidentTypes(token),
   ]);
   const fieldErrors = validateIncidentEdit(values, {

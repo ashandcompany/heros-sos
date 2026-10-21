@@ -1,19 +1,45 @@
+import { cache } from "react";
 import { superHeroesMock, superHeroProfilesMock } from "@/mocks/super-heroes";
 import { accountsMock } from "@/mocks/users";
 import type { MutationResult, PostalAddress, SuperHero, SuperHeroProfile } from "@/types";
-import { mockResponse } from "./config";
+import { isApiEnabled, mockResponse } from "./config";
+import { ApiError, type ApiSchema, apiFetch } from "./http";
+import { MAX_PAGE_SIZE, pageQuery } from "./pagination";
 import { userFromToken } from "./session-user";
+
+/*
+ * Fiches publiques des super-héros (accueil, encyclopédie) : `GET /heroes` et `GET /heroes/{heroId}`,
+ * publics. Seuls les héros approuvés au compte actif y figurent ; `power` est la description
+ * publique du profil. Les fiches complètes (back-office, espace héros) restent mockées.
+ */
+
+function fromApiHero(hero: ApiSchema<"PublicHero">): SuperHero {
+  return {
+    id: hero.id,
+    alias: hero.alias,
+    avatarUrl: hero.avatarUrl,
+    power: hero.power,
+    averageRating: hero.averageRating,
+    interventionsCount: hero.interventionsCount,
+  };
+}
+
+const byAlias = (a: SuperHero, b: SuperHero) => a.alias.localeCompare(b.alias, "fr");
 
 /**
  * Super-héros mis en avant sur l'accueil (les mieux notés).
- * Future implémentation : `GET ${API_URL}/heroes?sort=-averageRating&limit=${limit}`
+ * API : `GET /heroes?sort=-averageRating&limit=…`.
  */
 export async function getFeaturedSuperHeroes(limit = 8): Promise<SuperHero[]> {
-  const featured = [...superHeroesMock]
-    .sort((a, b) => b.averageRating - a.averageRating)
-    .slice(0, limit);
+  if (!isApiEnabled) {
+    const featured = [...superHeroesMock]
+      .sort((a, b) => b.averageRating - a.averageRating)
+      .slice(0, limit);
+    return mockResponse(featured);
+  }
 
-  return mockResponse(featured);
+  const response = await apiFetch(`/heroes${pageQuery({ limit }, { sort: "-averageRating" })}`);
+  return ((await response.json()) as ApiSchema<"PublicHeroPage">).items.map(fromApiHero);
 }
 
 /**
@@ -28,10 +54,18 @@ export async function getSuperHeroProfiles(sessionToken: string): Promise<SuperH
 
 /**
  * Tous les super-héros (profil public), triés par pseudo, pour l'encyclopédie.
- * Future implémentation : `GET ${API_URL}/heroes?sort=alias`
+ * API : `GET /heroes` (tri par pseudo par défaut), page après page (100 héros au plus par page).
  */
 export async function getSuperHeroes(): Promise<SuperHero[]> {
-  return mockResponse([...superHeroesMock].sort((a, b) => a.alias.localeCompare(b.alias, "fr")));
+  if (!isApiEnabled) return mockResponse([...superHeroesMock].sort(byAlias));
+
+  const heroes: SuperHero[] = [];
+  for (let offset = 0; ; offset += MAX_PAGE_SIZE) {
+    const response = await apiFetch(`/heroes${pageQuery({ limit: MAX_PAGE_SIZE, offset })}`);
+    const page = (await response.json()) as ApiSchema<"PublicHeroPage">;
+    heroes.push(...page.items.map(fromApiHero));
+    if (page.items.length === 0 || heroes.length >= page.total) return heroes.sort(byAlias);
+  }
 }
 
 /* ---------- Espace super-héros (rôle super-heros) ---------- */
@@ -98,7 +132,19 @@ export async function requestHeroEmailChange(
   return mockResponse({ ok: true });
 }
 
-/** Profil public d'un super-héros. Future implémentation : `GET ${API_URL}/heroes/${id}` (404 → `null`). */
-export async function getSuperHero(id: string): Promise<SuperHero | null> {
-  return mockResponse(superHeroesMock.find((hero) => hero.id === id) ?? null);
-}
+/**
+ * Profil public d'un super-héros, `null` s'il n'existe pas ou n'est pas public. Mémorisé le temps
+ * d'un rendu (métadonnées et page le relisent).
+ * API : `GET /heroes/{heroId}` (404, y compris pour un identifiant mal formé → `null`).
+ */
+export const getSuperHero = cache(async (id: string): Promise<SuperHero | null> => {
+  if (!isApiEnabled) return mockResponse(superHeroesMock.find((hero) => hero.id === id) ?? null);
+
+  try {
+    const response = await apiFetch(`/heroes/${encodeURIComponent(id)}`);
+    return fromApiHero((await response.json()) as ApiSchema<"PublicHero">);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null;
+    throw error;
+  }
+});

@@ -6,7 +6,8 @@ dit **où le frontend actuel s'écarte de ce contrat** et ce qu'il faut changer 
 branchement. À mettre à jour à chaque fonction branchée.
 
 > État au 21/10/2026 : **identité (inscription, activation, connexion, session, mot de passe),
-> demandes de super-héros, modération des comptes, types d'incident, vidéothèque et avis sont branchés**
+> demandes de super-héros, fiches publiques des super-héros, modération des comptes, types
+> d'incident, vidéothèque et avis sont branchés**
 > sur l'API dès que `API_URL` est renseignée (tableau ci-dessous). Le reste fonctionne encore sur
 > des mocks, y compris avec l'API.
 
@@ -30,7 +31,8 @@ contrat.
 | Types d'incident                      | `incident-types.ts` (`getIncidentTypes`, `getAllIncidentTypes`, `createIncidentType`)                                                                                                                        | `/intervention-types`, `/admin/intervention-types`                                                                            | ✅ branché |
 | Notes et avis                         | `reviews.ts` (`getMyInterventions`, `rateIntervention`, `getMyReputation`, `replyToReview`, `getHeroPublicReviews`, `getReviewsForModeration`, `moderateReview`, `getRepliesForModeration`, `moderateReply`) | `/me/interventions`, `/interventions/{id}/reviews`, `/hero/reviews*`, `/heroes/{heroId}/reviews`, `/admin/hero-review*` (§ 3) | ✅ branché |
 | Super-vilains                         | `villains.ts` (`getVillains`, `getVillainsPage`, `getVillain`, `createVillain`, `updateVillain`)                                                                                                             | `GET /villains`, `GET /villains/{id}` (publics), `POST /villains`, `PATCH /villains/{id}`                                     | ✅ branché |
-| Fiches super-héros                    | `super-heroes.ts` (profils)                                                                                                                                                                                  | ❌ aucun                                                                                                                      | mock       |
+| Fiches publiques super-héros          | `super-heroes.ts` (`getSuperHeroes`, `getFeaturedSuperHeroes`, `getSuperHero`)                                                                                                                               | `GET /heroes`, `GET /heroes/{heroId}` (publics)                                                                               | ✅ branché |
+| Fiches complètes super-héros          | `super-heroes.ts` (`getSuperHeroProfiles`, `getMyHeroProfile`, `updateMyHero…`, `requestHeroEmailChange`)                                                                                                    | ❌ aucun                                                                                                                      | mock       |
 | Vidéothèque (films)                   | `videos.ts` (`getMyVideos`, `addMyVideo`, `deleteMyVideo`, `getHeroVideos`, `moderateVideo`, `deleteVideo`, `getPublishedVideos`), `imdb.ts` (`searchImdbTitles`, `getImdbTitle`)                            | `/films`, `/heroes/{heroId}/films`, `/hero/films*`, `/admin/hero-films*`, `/imdb/titles*` (§ 3)                               | ✅ branché |
 | Films des super-vilains               | aucune (pas d'écran)                                                                                                                                                                                         | `/villains/{id}/films`, `/admin/villain-films`, `/admin/villains/{id}/films/{filmId}`                                         | à faire    |
 | Blog, newsletter                      | `blog.ts`, `newsletter.ts`                                                                                                                                                                                   | ❌ aucun                                                                                                                      | mock       |
@@ -47,8 +49,8 @@ pseudo par défaut (ou par note moyenne décroissante), et `GET /heroes/{heroId}
 fiche. Les profils doivent être approuvés et le compte actif. Pour rester compatible avec les
 cartes du frontend, `hero_profiles.bio` est exposé sous le nom `power`; `avatarUrl` n'est renseigné
 que si `users.avatar_path` contient une URL ou un chemin relatif publiquement exploitable. Aucune
-donnée d'identité civile n'est exposée. Ces routes n'impliquent pas encore que `getSuperHeroes` et
-`getSuperHero` soient branchées : elles continuent d'utiliser les mocks.
+donnée d'identité civile n'est exposée. Elles sont branchées (voir « Fiches publiques : choix du
+branchement », § 3).
 
 ## 2. Ce qui est branché : la session
 
@@ -190,6 +192,25 @@ chaque modification de `lib/validation/`.
   son `id` (`typeId`). Le référentiel est **vide** dans une base neuve : tant qu'un modérateur n'a
   pas créé de type (`/admin/types-incident`), la déclaration d'incident est indisponible.
 
+### Fiches publiques des super-héros : choix du branchement
+
+- **Écrans** : accueil (`getFeaturedSuperHeroes` → `GET /heroes?sort=-averageRating&limit=8`),
+  encyclopédie (`getSuperHeroes` lit toutes les pages, tri par pseudo) et fiche
+  `/encyclopedie/super-heros/{id}` (`getSuperHero`, mémorisée le temps d'un rendu). Un héros
+  inconnu, non approuvé ou désactivé répond 404 (`null`, page introuvable), y compris pour un
+  ancien identifiant mock (`hero-1`).
+- **Note et interventions** : `averageRating` et `interventionsCount` viennent de l'API (moyenne des
+  avis publiés, interventions confirmées).
+- **Fiche publique, sections encore mockées** : « Dernières interventions réussies » et « Vilains
+  neutralisés » (`getResolvedIncidentsByHero`) restent vides pour un vrai héros tant que les
+  incidents ne sont pas branchés. Avis et films viennent déjà de l'API.
+- **Incidents mockés** : la correction d'un incident par la modération (`/admin/incidents/{id}`,
+  `updateIncidentAction`) prend ses héros dans `getIncidentHeroes` (mocks), pas dans
+  `getSuperHeroes` : les incidents mockés référencent les identifiants mock. À supprimer en
+  branchant les incidents.
+- **Pas encore branché** : fiches complètes (back-office `getSuperHeroProfiles`, espace héros
+  `getMyHeroProfile`, coordonnées, photo, changement d'email), faute de routes.
+
 ### Vidéothèque : choix du branchement
 
 - **Un film, plusieurs héros** : l'API stocke chaque film une fois et le rattache à un ou
@@ -223,7 +244,7 @@ chaque modification de `lib/validation/`.
 
 - **Ajout par un modérateur** (`/admin/videotheque`, section « Ajouter un film à un
   super-héros ») : `POST /admin/hero-films` avec `{ heroId, imdbId }`, film publié aussitôt
-  (`addHeroVideo`). Les fiches super-héros étant mockées, la liste des héros vient des comptes
+  (`addHeroVideo`). Les fiches complètes des super-héros étant mockées, la liste des héros vient des comptes
   (`GET /admin/users?role=hero&status=active`, `getHeroesForVideos`) : seuls leurs identifiants
   sont valides pour l'API.
 - **Pas encore branché** : films des super-vilains (aucun écran), vidéos libres sans IMDb
@@ -259,13 +280,10 @@ Types dans [src/types/review.ts](../src/types/review.ts) (`HeroReview`, `ReviewR
   `GET /incidents/{id}` pour afficher « type · ville » (une requête par incident, `null` en cas
   d'échec) ; l'espace héros et le back-office affichent la date de l'avis.
 - **Fiche publique** : `GET /heroes/{heroId}/reviews` ne renvoie pas de `total` : les pages sont
-  lues jusqu'à une page incomplète. Un héros inconnu de l'API (404, ou identifiant mock en 422,
-  tant que les fiches super-héros sont mockées) n'a aucun avis, comme pour ses films.
+  lues jusqu'à une page incomplète. Un héros inconnu de l'API (404, ou identifiant mal formé en 422) n'a aucun avis, comme pour ses films.
 - **Héros déclarant** : un héros qui a signalé un incident note les héros intervenus depuis
   `/heros/noter` (même `InterventionsList`, avec `role="super-heros"`). Il ne s'y voit jamais
   lui-même : l'API l'exclut de `/me/interventions`.
-- **Pas encore branché** : la note moyenne des fiches publiques (`averageRating` de l'API, les
-  fiches restant mockées).
 - **Erreurs** :
 
   | Code API (statut)                     | Message affiché                                            |

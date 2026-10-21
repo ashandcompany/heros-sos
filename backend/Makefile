@@ -100,8 +100,24 @@ tidy: ## Nettoie go.mod et go.sum
 COMPOSE_DEV  = docker compose -p heros-sos-dev --env-file .env -f ../docker-compose.yml -f ../docker-compose.dev.yml
 COMPOSE_PROD = docker compose -p heros-sos-prod --env-file .env.production -f ../docker-compose.yml -f ../docker-compose.prod.yml
 
+# Le disque de la machine virtuelle de Docker (Docker Desktop) se remplit vite : images, cache de build,
+# volumes. Faute de place, un build échoue et un conteneur peut redémarrer en boucle (ENOSPC) : on vérifie
+# donc l'espace libre AVANT de toucher aux conteneurs.
+DISK_MIN_MB ?= 1536
+.PHONY: disk-check
+disk-check:
+	@free=$$(docker run --rm alpine:3 df -k / 2>/dev/null | awk 'NR==2 {print int($$4/1024)}'); \
+	if [ -z "$$free" ] || { [ "$$free" -lt $(DISK_MIN_MB) ] && [ -z "$(FORCE)" ]; }; then \
+		echo "Le disque de Docker est presque plein : $${free:-0} Mo libres, $(DISK_MIN_MB) Mo au moins sont nécessaires."; \
+		echo "Sinon un build échoue, ou un conteneur ne peut plus écrire et redémarre en boucle."; \
+		echo "  - libérer le cache de build (sans danger) : docker builder prune -a -f"; \
+		echo "  - agrandir le disque, durablement         : Docker Desktop > Settings > Resources > Virtual disk limit"; \
+		echo "  - continuer malgré tout                   : FORCE=1 make up"; \
+		exit 1; \
+	fi
+
 .PHONY: up-dev
-up-dev: ## Démarre la pile de développement (proxy, API, base, Mailpit, RabbitMQ, front)
+up-dev: disk-check ## Démarre la pile de développement (proxy, API, base, Mailpit, RabbitMQ, front)
 	@test -f .env || { echo "Créez .env d'abord : make env"; exit 1; }
 	@set -a; . ./.env; set +a; \
 	for port in $${PROXY_PORT:-8088} $${API_PORT:-8081} $${MAILPIT_PORT:-8025} $${POSTGRES_PORT:-5432} $${RABBITMQ_PORT:-5672} $${RABBITMQ_UI_PORT:-15672}; do \
@@ -109,11 +125,14 @@ up-dev: ## Démarre la pile de développement (proxy, API, base, Mailpit, Rabbit
 			echo "Le port $$port est déjà utilisé sur cette machine. Choisissez-en un autre dans .env (PROXY_PORT, API_PORT, MAILPIT_PORT, POSTGRES_PORT, RABBITMQ_PORT, RABBITMQ_UI_PORT)."; exit 1; \
 		fi; \
 	done
+	@# D'abord construire les images : si le build échoue (disque plein, réseau…), les conteneurs en cours
+	@# ne sont pas touchés. Supprimer web avant aurait laissé l'application cassée.
+	$(COMPOSE_DEV) build
 	@# Le front garde ses node_modules et son cache .next dans des volumes anonymes (voir
 	@# docker-compose.dev.yml). `rm -v` supprime l'ancien conteneur ET ces volumes : sans cela chaque
 	@# démarrage en abandonnerait une copie (~700 Mo) et les dépendances resteraient celles d'avant.
 	$(COMPOSE_DEV) rm -sfv web
-	$(COMPOSE_DEV) up -d --build
+	$(COMPOSE_DEV) up -d
 	@set -a; . ./.env; set +a; echo "Application : http://localhost:$${PROXY_PORT:-8088}   API : http://localhost:$${PROXY_PORT:-8088}/api/v1/docs   Mails : http://localhost:$${MAILPIT_PORT:-8025}"
 
 .PHONY: down-dev

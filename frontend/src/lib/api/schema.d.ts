@@ -493,6 +493,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/heroes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Annuaire des super-héros
+         * @description Réservé aux modérateurs. Liste les super-héros approuvés par pseudo, avec ce que seule la
+         *     modération voit : identité civile, coordonnées, adresse email, état du compte et demande de
+         *     changement d'adresse en attente. **Ces données sont confidentielles** : la liste publique
+         *     (`GET /heroes`) n'en expose aucune. Un héros dont le compte est désactivé reste listé
+         *     (`accountStatus`).
+         *
+         *     `averageRating` et `interventionsCount` se calculent comme sur la liste publique ;
+         *     `lastInterventionAt` est le début de la dernière intervention à laquelle le héros a participé
+         *     (`null` s'il n'a jamais participé).
+         */
+        get: operations["listAdminHeroes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/hero-requests": {
         parameters: {
             query?: never;
@@ -1620,6 +1648,69 @@ export interface components {
         };
         PublicHeroPage: {
             items: components["schemas"]["PublicHero"][];
+            total: number;
+            limit: number;
+            offset: number;
+        };
+        /** @description Un super-héros vu par un modérateur. Confidentiel. */
+        AdminHero: {
+            /** Format: uuid */
+            id: string;
+            /** @description Pseudo public du super-héros. */
+            alias: string;
+            /**
+             * Format: uri-reference
+             * @description Adresse de la photo (`GET /avatars/{name}`) ; `null` tant qu'aucune photo n'a été envoyée.
+             */
+            avatarUrl: string | null;
+            /** @description Description publique du profil (`hero_profiles.bio`). */
+            power: string;
+            /** Format: double */
+            averageRating: number;
+            /** @description Nombre d'interventions auxquelles le héros a participé avec le statut confirmed. */
+            interventionsCount: number;
+            /** @enum {string} */
+            civility: "madame" | "monsieur" | "non-precise";
+            /** @description Prénom. */
+            firstName: string;
+            /** @description Nom de famille. */
+            lastName: string;
+            /**
+             * Format: date
+             * @description Date de naissance (AAAA-MM-JJ).
+             */
+            birthDate: string;
+            /**
+             * Format: email
+             * @description Adresse de connexion.
+             */
+            email: string;
+            /**
+             * Format: email
+             * @description Nouvelle adresse demandée, en attente de décision d'un modérateur. Absente sinon.
+             */
+            pendingEmail?: string;
+            /** @description Numéro de portable, sans séparateurs. */
+            mobilePhone: string;
+            address: components["schemas"]["AccountAddress"];
+            /**
+             * @description État du compte.
+             * @enum {string}
+             */
+            accountStatus: "pending_activation" | "active" | "deactivated";
+            /**
+             * Format: date-time
+             * @description Date de création du compte.
+             */
+            createdAt: string;
+            /**
+             * Format: date-time
+             * @description Début de la dernière intervention à laquelle le héros a participé ; `null` s'il n'a jamais participé.
+             */
+            lastInterventionAt: string | null;
+        };
+        AdminHeroPage: {
+            items: components["schemas"]["AdminHero"][];
             total: number;
             limit: number;
             offset: number;
@@ -3159,6 +3250,35 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listAdminHeroes: {
+        parameters: {
+            query?: {
+                /** @description Nombre d'éléments par page (1 à 100, 20 par défaut). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Nombre d'éléments à sauter. */
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Une page de super-héros. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminHeroPage"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
             500: components["responses"]["InternalError"];
         };
     };

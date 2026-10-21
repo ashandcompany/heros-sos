@@ -48,6 +48,24 @@ type publicProfileRow struct {
 // toPublicProfile est une conversion : si PublicProfile et la ligne lue divergent, la compilation échoue.
 func (r publicProfileRow) toPublicProfile() PublicProfile { return PublicProfile(r) }
 
+// directoryRow : le profil est un champ exporté (et non un type embarqué anonyme), sans quoi GORM
+// l'ignorerait.
+type directoryRow struct {
+	Profile            publicProfileRow `gorm:"embedded"`
+	Email              string           `gorm:"column:email"`
+	AccountStatus      string           `gorm:"column:account_status"`
+	PendingEmail       string           `gorm:"column:pending_email"`
+	RegisteredAt       time.Time        `gorm:"column:registered_at"`
+	LastInterventionAt *time.Time       `gorm:"column:last_intervention_at"`
+}
+
+func (r directoryRow) toDirectoryEntry() DirectoryEntry {
+	return DirectoryEntry{
+		PublicProfile: r.Profile.toPublicProfile(), Email: r.Email, AccountStatus: user.Status(r.AccountStatus),
+		PendingEmail: r.PendingEmail, RegisteredAt: r.RegisteredAt, LastInterventionAt: r.LastInterventionAt,
+	}
+}
+
 // resolveAvatarURL transforme la valeur stockée dans users.avatar_path en adresse publique, ou nil si
 // elle n'en est pas une. Deux formes existent : le nom d'une photo envoyée par PUT /me/avatar, servie
 // sous avatarURLPrefix, et une adresse déjà publique (URL http(s) ou chemin absolu sur le site).
@@ -102,6 +120,9 @@ type Repository interface {
 	ListPublic(ctx context.Context, sort PublicSort, limit, offset int) ([]PublicProfile, int64, error)
 	// FindPublic retourne un profil uniquement s'il est approuvé et appartient à un compte actif.
 	FindPublic(ctx context.Context, userID uuid.UUID) (*PublicProfile, error)
+	// ListDirectory retourne les super-héros approuvés, quel que soit l'état de leur compte, par pseudo.
+	// Il ne contient que ce qui se lit en SQL : l'identité civile, chiffrée, s'ajoute ensuite.
+	ListDirectory(ctx context.Context, limit, offset int) ([]DirectoryEntry, int64, error)
 	// Review fait passer une demande de « en attente » à approved ou rejected. Il retourne
 	// false si la demande n'était plus en attente : deux modérateurs ne peuvent pas la traiter
 	// tous les deux.
@@ -213,8 +234,17 @@ const (
 	publicColumns = `hero_profiles.user_id, hero_profiles.alias, users.avatar_path, hero_profiles.bio`
 	publicFrom    = `FROM hero_profiles JOIN users ON users.id = hero_profiles.user_id`
 	// publicWhere : les héros dont le profil est approuvé et le compte actif, les seuls visibles du public.
-	publicWhere  = `WHERE hero_profiles.verification_status = 'approved' AND users.role = 'hero' AND users.status = 'active'`
-	orderByAlias = `hero_profiles.alias, hero_profiles.user_id`
+	publicWhere      = `WHERE hero_profiles.verification_status = 'approved' AND users.role = 'hero' AND users.status = 'active'`
+	directoryColumns = publicColumns + `,
+		users.email, users.status AS account_status, users.created_at AS registered_at,
+		COALESCE(pending_change.new_email, '') AS pending_email`
+	directoryFrom = publicFrom + `
+		LEFT JOIN email_change_requests AS pending_change
+			ON pending_change.user_id = hero_profiles.user_id AND pending_change.status = 'pending'`
+	// directoryWhere : tous les héros approuvés, quel que soit l'état de leur compte (un compte désactivé
+	// reste dans l'annuaire des modérateurs).
+	directoryWhere = `WHERE hero_profiles.verification_status = 'approved' AND users.role = 'hero'`
+	orderByAlias   = `hero_profiles.alias, hero_profiles.user_id`
 
 	ratingsOfPage = `
 		LEFT JOIN (
@@ -238,6 +268,17 @@ const (
 			WHERE participation = 'confirmed' AND hero_id IN (SELECT user_id FROM page)
 			GROUP BY hero_id
 		) AS interventions ON interventions.hero_id = page.user_id`
+	// interventionsWithLastOfPage ajoute la date de la dernière intervention (annuaire des modérateurs).
+	interventionsWithLastOfPage = `
+		LEFT JOIN (
+			SELECT intervention_heroes.hero_id, COUNT(*) AS interventions_count,
+				MAX(interventions.started_at) AS last_intervention_at
+			FROM intervention_heroes
+			JOIN interventions ON interventions.id = intervention_heroes.intervention_id
+			WHERE intervention_heroes.participation = 'confirmed'
+				AND intervention_heroes.hero_id IN (SELECT user_id FROM page)
+			GROUP BY intervention_heroes.hero_id
+		) AS interventions ON interventions.hero_id = page.user_id`
 
 	ratingColumn        = `COALESCE(ratings.average_rating, 0) AS average_rating`
 	interventionsColumn = `COALESCE(interventions.interventions_count, 0) AS interventions_count`
@@ -259,15 +300,27 @@ var (
 	publicByRatingSQL = listQuery(publicColumns+", "+ratingColumn, publicFrom+ratingsOfAll,
 		publicWhere+" ORDER BY average_rating DESC, "+orderByAlias+" LIMIT ? OFFSET ?",
 		interventionsColumn, interventionsOfPage, "ORDER BY page.average_rating DESC, page.alias, page.user_id")
+	directoryByAliasSQL = listQuery(directoryColumns, directoryFrom, directoryWhere+" ORDER BY "+orderByAlias+" LIMIT ? OFFSET ?",
+		ratingColumn+", "+interventionsColumn+", interventions.last_intervention_at",
+		ratingsOfPage+interventionsWithLastOfPage, "ORDER BY page.alias, page.user_id")
 )
 
-// countPublic compte sans les statistiques : elles ne changent pas le nombre de lignes.
+// countPublic et countDirectory comptent sans les statistiques : elles ne changent pas le nombre de lignes.
 func (r *gormRepository) countPublic(ctx context.Context) (int64, error) {
 	var total int64
 	err := r.conn(ctx).Table(tableHeroProfiles).
 		Joins("JOIN users ON users.id = hero_profiles.user_id").
 		Where("hero_profiles.verification_status = ? AND users.role = ? AND users.status = ?",
 			string(StatusApproved), string(user.RoleHero), string(user.StatusActive)).
+		Count(&total).Error
+	return total, err
+}
+
+func (r *gormRepository) countDirectory(ctx context.Context) (int64, error) {
+	var total int64
+	err := r.conn(ctx).Table(tableHeroProfiles).
+		Joins("JOIN users ON users.id = hero_profiles.user_id").
+		Where("hero_profiles.verification_status = ? AND users.role = ?", string(StatusApproved), string(user.RoleHero)).
 		Count(&total).Error
 	return total, err
 }
@@ -307,6 +360,22 @@ func (r *gormRepository) FindPublic(ctx context.Context, userID uuid.UUID) (*Pub
 	}
 	profile := rows[0].toPublicProfile()
 	return &profile, nil
+}
+
+func (r *gormRepository) ListDirectory(ctx context.Context, limit, offset int) ([]DirectoryEntry, int64, error) {
+	total, err := r.countDirectory(ctx)
+	if err != nil {
+		return nil, 0, fmt.Errorf("hero : comptage de l'annuaire : %w", err)
+	}
+	var rows []directoryRow
+	if err := r.conn(ctx).Raw(directoryByAliasSQL, limit, offset).Scan(&rows).Error; err != nil {
+		return nil, 0, fmt.Errorf("hero : lecture de l'annuaire : %w", err)
+	}
+	entries := make([]DirectoryEntry, len(rows))
+	for i := range rows {
+		entries[i] = rows[i].toDirectoryEntry()
+	}
+	return entries, total, nil
 }
 
 func (r *gormRepository) Review(ctx context.Context, userID, reviewer uuid.UUID, to VerificationStatus, reason string, now time.Time) (bool, error) {

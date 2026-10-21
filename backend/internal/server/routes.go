@@ -60,6 +60,7 @@ func registerHeroRoutes(router *Router, c *components) {
 	router.Handle(http.MethodPost, "/heroes/requests", c.protected(h.Request))
 	router.Handle(http.MethodGet, "/heroes/requests/me", c.protected(h.Mine))
 
+	router.Handle(http.MethodGet, "/admin/heroes", c.protected(h.AdminList, user.RoleModerator))
 	router.Handle(http.MethodGet, "/admin/hero-requests", c.protected(h.List, user.RoleModerator))
 	router.Handle(http.MethodPost, "/admin/hero-requests/{userId}/approve", c.protected(h.Approve, user.RoleModerator))
 	router.Handle(http.MethodPost, "/admin/hero-requests/{userId}/reject", c.protected(h.Reject, user.RoleModerator))

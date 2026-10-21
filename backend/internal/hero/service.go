@@ -112,6 +112,35 @@ func (s *Service) List(ctx context.Context, status VerificationStatus, limit, of
 	return applicants, total, nil
 }
 
+// ListDirectory retourne l'annuaire des super-héros pour les modérateurs, par pseudo, avec leur identité
+// civile, lue en une seule requête pour toute la page.
+func (s *Service) ListDirectory(ctx context.Context, limit, offset int) ([]DirectoryView, int64, error) {
+	entries, total, err := s.repo.ListDirectory(ctx, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	ids := make([]uuid.UUID, len(entries))
+	for i := range entries {
+		ids[i] = entries[i].UserID
+	}
+	accounts, err := s.users.FindByIDs(ctx, ids)
+	if err != nil {
+		return nil, 0, fmt.Errorf("hero : comptes des héros : %w", err)
+	}
+	views := make([]DirectoryView, len(entries))
+	for i, entry := range entries {
+		account, ok := accounts[entry.UserID]
+		if !ok {
+			return nil, 0, fmt.Errorf("hero : compte du héros %s : %w", entry.UserID, user.ErrNotFound)
+		}
+		views[i] = DirectoryView{
+			DirectoryEntry: entry, Civility: account.Civility, FirstName: account.FirstName,
+			LastName: account.LastName, BirthDate: account.BirthDate, Phone: account.Phone, Address: account.Address,
+		}
+	}
+	return views, total, nil
+}
+
 // ListPublic retourne les fiches des héros publics selon l'ordre demandé.
 func (s *Service) ListPublic(ctx context.Context, sort PublicSort, limit, offset int) ([]PublicProfile, int64, error) {
 	return s.repo.ListPublic(ctx, sort, limit, offset)

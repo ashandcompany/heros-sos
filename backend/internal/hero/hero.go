@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/ashandcompany/heros-sos/backend/internal/user"
 )
 
 // VerificationStatus est l'état d'une demande.
@@ -83,4 +85,31 @@ type PublicProfile struct {
 	Bio                string
 	AverageRating      float64
 	InterventionsCount int64
+}
+
+// DirectoryEntry est un super-héros dans l'annuaire des modérateurs : la fiche publique, plus ce que
+// seule la modération voit (état du compte, adresse email, demande de changement d'adresse).
+type DirectoryEntry struct {
+	PublicProfile
+	Email         string
+	AccountStatus user.Status
+	// PendingEmail est l'adresse demandée et pas encore décidée par un modérateur (vide sinon).
+	PendingEmail string
+	// RegisteredAt est la date de création du compte.
+	RegisteredAt time.Time
+	// LastInterventionAt est le début de la dernière intervention à laquelle le héros a participé
+	// (nil s'il n'a jamais participé).
+	LastInterventionAt *time.Time
+}
+
+// DirectoryView est une entrée de l'annuaire avec l'identité civile du héros. Celle-ci est chiffrée
+// en base : elle est lue fiche par fiche, jamais en SQL.
+type DirectoryView struct {
+	DirectoryEntry
+	Civility  string
+	FirstName string
+	LastName  string
+	BirthDate time.Time
+	Phone     string
+	Address   user.Address
 }

@@ -889,6 +889,64 @@ paths:
                       message: Aucune demande trouvée.
         "500": { $ref: "#/components/responses/InternalError" }
 
+  /admin/heroes:
+    get:
+      tags: [Modération]
+      summary: Annuaire des super-héros
+      description: |
+        Réservé aux modérateurs. Liste les super-héros approuvés par pseudo, avec ce que seule la
+        modération voit : identité civile, coordonnées, adresse email, état du compte et demande de
+        changement d'adresse en attente. **Ces données sont confidentielles** : la liste publique
+        (`GET /heroes`) n'en expose aucune. Un héros dont le compte est désactivé reste listé
+        (`accountStatus`).
+
+        `averageRating` et `interventionsCount` se calculent comme sur la liste publique ;
+        `lastInterventionAt` est le début de la dernière intervention à laquelle le héros a participé
+        (`null` s'il n'a jamais participé).
+      operationId: listAdminHeroes
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Une page de super-héros.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminHeroPage" }
+              examples:
+                un-heros:
+                  summary: Un super-héros actif
+                  value:
+                    items:
+                      - id: 7d0e4a52-9c3b-4f18-b6a1-5e2f8c9d1a37
+                        alias: Captain America
+                        avatarUrl: /api/v1/avatars/3f2a8c1e-5b7d-4e90-8a16-2c4d9e7f0b53.jpg
+                        power: Un super-soldat au bouclier indestructible.
+                        averageRating: 4.5
+                        interventionsCount: 12
+                        civility: monsieur
+                        firstName: Steve
+                        lastName: Rogers
+                        birthDate: "1990-07-04"
+                        email: steve.rogers@example.org
+                        mobilePhone: "+33612345678"
+                        address:
+                          street: 569 Leaman Place
+                          postalCode: "11201"
+                          city: Brooklyn
+                          country: US
+                        accountStatus: active
+                        createdAt: "2026-10-19T12:00:00Z"
+                        lastInterventionAt: "2026-10-20T08:30:00Z"
+                    total: 1
+                    limit: 20
+                    offset: 0
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
   /admin/hero-requests:
     get:
       tags: [Modération]
@@ -2967,6 +3025,73 @@ components:
         items:
           type: array
           items: { $ref: "#/components/schemas/PublicHero" }
+        total: { type: integer, minimum: 0 }
+        limit: { type: integer, minimum: 1 }
+        offset: { type: integer, minimum: 0 }
+
+    AdminHero:
+      type: object
+      description: Un super-héros vu par un modérateur. Confidentiel.
+      required:
+        [
+          id,
+          alias,
+          avatarUrl,
+          power,
+          averageRating,
+          interventionsCount,
+          civility,
+          firstName,
+          lastName,
+          birthDate,
+          email,
+          mobilePhone,
+          address,
+          accountStatus,
+          createdAt,
+          lastInterventionAt,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        alias: { type: string, description: Pseudo public du super-héros. }
+        avatarUrl:
+          type: string
+          format: uri-reference
+          nullable: true
+          description: "Adresse de la photo (`GET /avatars/{name}`) ; `null` tant qu'aucune photo n'a été envoyée."
+        power: { type: string, description: "Description publique du profil (`hero_profiles.bio`)." }
+        averageRating: { type: number, format: double, minimum: 0, maximum: 5 }
+        interventionsCount:
+          { type: integer, minimum: 0, description: "Nombre d'interventions auxquelles le héros a participé avec le statut confirmed." }
+        civility: { type: string, enum: [madame, monsieur, non-precise] }
+        firstName: { type: string, description: Prénom. }
+        lastName: { type: string, description: Nom de famille. }
+        birthDate: { type: string, format: date, description: "Date de naissance (AAAA-MM-JJ)." }
+        email: { type: string, format: email, description: Adresse de connexion. }
+        pendingEmail:
+          type: string
+          format: email
+          description: Nouvelle adresse demandée, en attente de décision d'un modérateur. Absente sinon.
+        mobilePhone: { type: string, description: "Numéro de portable, sans séparateurs." }
+        address: { $ref: "#/components/schemas/AccountAddress" }
+        accountStatus:
+          type: string
+          enum: [pending_activation, active, deactivated]
+          description: État du compte.
+        createdAt: { type: string, format: date-time, description: Date de création du compte. }
+        lastInterventionAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Début de la dernière intervention à laquelle le héros a participé ; `null` s'il n'a jamais participé.
+
+    AdminHeroPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/AdminHero" }
         total: { type: integer, minimum: 0 }
         limit: { type: integer, minimum: 1 }
         offset: { type: integer, minimum: 0 }

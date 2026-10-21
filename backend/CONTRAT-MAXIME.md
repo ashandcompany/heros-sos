@@ -1,6 +1,6 @@
 # Contrat backend de Maxime (Dev A) : ce qui est fait, ce qui reste
 
-État au 21/10/2026, branche `feat/account-security` (20 commits, **pas encore poussée** ni fusionnée dans `develop`).
+État au 21/10/2026, branche `feat/account-security` (poussée sur GitHub, **pas encore fusionnée** dans `develop`).
 La source de vérité des routes est [openapi/openapi.yaml](openapi/openapi.yaml) : les tests échouent si une route
 diverge du fichier. Ce document n'en recopie pas le détail ; il dit **qui livre quoi**, **où en est chaque domaine** et
 **ce qui reste avant une vraie mise en ligne**.
@@ -9,12 +9,12 @@ Légende : ✅ fait, testé et dans le contrat · 🟡 fait mais à finir ou à 
 
 ## 1. Périmètre
 
-Le contrat compte **83 opérations** (plus `/health` et `/ready`). Elles se répartissent ainsi :
+Le contrat compte **90 opérations** (plus `/health` et `/ready`). Elles se répartissent ainsi :
 
 | Responsable | Domaines (tags OpenAPI) | Opérations |
 | --- | --- | --- |
 | **Maxime (Dev A)** | Authentification (14), Compte (7), Contact et newsletter (4), Super-héros : demandes et liste publique (4), Modération : comptes, demandes de héros, changements d'email, annuaire (11) | **40** |
-| Dev B | Incidents (11), Réputation (9), Films (15), Vilains (4), Types d'intervention (3), arbitrage d'une intervention (1) | 43 |
+| Dev B | Incidents (11), Réputation (9), Films (15), Vilains (4), Types d'intervention (3), Blog (7), arbitrage d'une intervention (1) | 50 |
 | Socle commun | Santé (`/health`, `/ready`) | 2 |
 
 Code de Dev A : `auth`, `totp`, `user`, `account`, `hero`, `moderation`, `newsletter`, `contact`, `signedlink`, `mail`,
@@ -82,9 +82,11 @@ Colonne « Front » : l'écran appelle bien la route quand `API_URL` est renseig
 
 ### 3.1 Pour livrer ce qui est fait
 
-- [ ] **Fusionner `feat/account-security` dans `develop`.** `develop` a reçu la PR blog (#26) : conflits attendus sur
-  `openapi.yaml`, `server.go`, `routes.go`, `audit.go` et `schema.d.ts` (à régénérer). L'index sur
-  `intervention_heroes` touche une table de Dev B : à lui signaler.
+- [ ] **Fusionner `develop` dans `feat/account-security`, puis ouvrir la PR.** La PR blog (#26) et les deux
+  correctifs de tests de Maxime (#28) sont déjà dans la branche. `develop` a encore 17 commits d'avance (travail
+  d'Emma surtout) : conflits sur 9 fichiers, tous de documentation ou de front (`docs-ci.yml`,
+  `docker-compose.dev.yml`, `docs-site/*`, `frontend/docs/*`, `super-heroes.ts`, `server-session.ts`). Plus aucun
+  conflit côté backend. L'index sur `intervention_heroes` touche une table de Dev B : à lui signaler.
 - [ ] Ouvrir la PR et la faire relire (Dev B pour le contrat et la migration, Emma pour le front).
 - [ ] Vérifier les pseudos de `.github/CODEOWNERS` (déduits de l'historique).
 - [ ] Activer GitHub Pages si le site doit être publié (réglages décrits dans `docs-site/README.md`). Le dépôt est
@@ -109,7 +111,7 @@ Colonne « Front » : l'écran appelle bien la route quand `API_URL` est renseig
 
 - [ ] Brancher les fiches publiques (`getSuperHero`, `getSuperHeroes`, mis en avant) sur `GET /heroes`.
 - [ ] Supprimer les mocks une fois tous les domaines branchés : `asMockDataUser`, `userFromToken`,
-  `MOCK_SESSION_MAX_AGE`. Il reste sur mocks : incidents et interventions, blog (l'API est dans `develop`), tableau de
+  `MOCK_SESSION_MAX_AGE`. Il reste sur mocks : incidents et interventions, blog (l'API est dans la branche, 7 opérations), tableau de
   bord héros, résumé de modération.
 - [ ] Jouer le scénario de démonstration de bout en bout (voir `MVP.md`).
 - [ ] Durcissement puis déploiement (rien n'est déployé ; aucune mise en ligne sans feu vert explicite).
@@ -119,7 +121,7 @@ Colonne « Front » : l'écran appelle bien la route quand `API_URL` est renseig
 | Point | Détail |
 | --- | --- |
 | CI | `make golangci` n'est pas dans la CI ; la CI ne construit pas les images Docker ni ne vérifie les fichiers Compose. |
-| Code de Dev B | 8 remarques de `make golangci` (`film`, `intervention`, `incident`, `interventiontype`, `villain`) et 4 fichiers mal formatés (`incident/handler.go`, `reputation/service.go`, `villain/handler.go`, `server/incident_test.go`). Corrections d'une ligne. |
+| Code de Dev B | 8 remarques de `make golangci` (`film`, `intervention`, `incident`, `interventiontype`, `villain`) et 6 fichiers mal formatés (`incident/handler.go`, `reputation/service.go`, `villain/handler.go`, `server/incident_test.go`, `blog/handler.go`, `blog/blog_test.go`). Corrections d'une ligne. |
 | Fonctions longues | `config.Load` (119 lignes) et `server.NewWithDB` (49 instructions) : non découpées, car les deux développeurs les modifient (conflits). |
 | Note moyenne des héros | Le tri par note relit tous les avis (10 ms à 60 000 avis). Au-delà de 100 000, stocker la moyenne sur `hero_profiles`. |
 | OpenAPI | Découpage en `auth.yaml` et `incidents.yaml` : optionnel, à faire entre deux PR de Dev B. |

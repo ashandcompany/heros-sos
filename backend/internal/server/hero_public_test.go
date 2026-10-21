@@ -42,7 +42,10 @@ func TestPublicHeroListingAndDetail(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := e.db.Exec("UPDATE users SET status = 'deactivated' WHERE id = ?", inactive.userID()).Error; err != nil {
+	// La session d'un compte désactivé est refusée : on garde son identifiant avant de le désactiver.
+	inactiveID := inactive.userID()
+	pendingID := pending.userID()
+	if err := e.db.Exec("UPDATE users SET status = 'deactivated' WHERE id = ?", inactiveID).Error; err != nil {
 		t.Fatal(err)
 	}
 
@@ -142,7 +145,7 @@ func TestPublicHeroListingAndDetail(t *testing.T) {
 			hiddenReviewDetail.status, betaDetail, hiddenReviewDetail.body)
 	}
 
-	for _, heroID := range []string{pending.userID(), inactive.userID()} {
+	for _, heroID := range []string{pendingID, inactiveID} {
 		if got := anonymous.get("/heroes/" + heroID); got.status != http.StatusNotFound {
 			t.Errorf("profil non public %s : %d %s", heroID, got.status, got.body)
 		}

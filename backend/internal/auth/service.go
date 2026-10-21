@@ -106,16 +106,7 @@ func (s *Service) validateRegistration(in RegisterInput, now time.Time) (*user.U
 	u.Phone, code = validation.Phone(in.Phone)
 	fields.Add("mobilePhone", code)
 
-	u.Address.Street, code = validation.RequiredText(in.Address.Street, validation.MaxStreetLength)
-	fields.Add("address.street", code)
-	u.Address.Complement, code = validation.OptionalText(in.Address.Complement, validation.MaxAddressComplementLength)
-	fields.Add("address.complement", code)
-	u.Address.City, code = validation.RequiredText(in.Address.City, validation.MaxCityLength)
-	fields.Add("address.city", code)
-	u.Address.Country, code = validation.Country(in.Address.Country)
-	fields.Add("address.country", code)
-	u.Address.PostalCode, code = validation.PostalCode(in.Address.PostalCode, u.Address.Country)
-	fields.Add("address.postalCode", code)
+	u.Address = user.Address(fields.Address("address", validation.Address(in.Address)))
 
 	fields.Add("password", validation.Password(in.Password, s.passwordPolicy()))
 	return u, fields.Err()

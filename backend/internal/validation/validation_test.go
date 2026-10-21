@@ -241,3 +241,44 @@ func TestCollector(t *testing.T) {
 		t.Errorf("Error() = %q, attendu %q", got, want)
 	}
 }
+
+func TestCollectorAddressNormalizesAndPrefixesFieldNames(t *testing.T) {
+	var collector Collector
+	got := collector.Address("address", Address{
+		Street: "  10 rue de Rivoli ", Complement: " Bâtiment B ", PostalCode: " 75004 ", City: " Paris ", Country: " fr ",
+	})
+	if collector.Err() != nil {
+		t.Fatalf("adresse valide refusée : %v", collector.Err())
+	}
+	want := Address{Street: "10 rue de Rivoli", Complement: "Bâtiment B", PostalCode: "75004", City: "Paris", Country: "FR"}
+	if got != want {
+		t.Errorf("adresse normalisée = %+v, attendu %+v", got, want)
+	}
+
+	collector = Collector{}
+	collector.Address("shipping", Address{
+		Street: " ", Complement: strings.Repeat("c", MaxAddressComplementLength+1), PostalCode: "7500", City: strings.Repeat("v", MaxCityLength+1), Country: "FR",
+	})
+	var validationErr *Error
+	if err := collector.Err(); !errors.As(err, &validationErr) {
+		t.Fatalf("Err() = %v, attendu *Error", err)
+	}
+	for field, code := range map[string]string{
+		"shipping.street": CodeRequired, "shipping.complement": CodeTooLong,
+		"shipping.postalCode": CodeInvalid, "shipping.city": CodeTooLong,
+	} {
+		if validationErr.Fields[field] != code {
+			t.Errorf("%s = %q, attendu %q (champs : %v)", field, validationErr.Fields[field], code, validationErr.Fields)
+		}
+	}
+	if _, wrong := validationErr.Fields["shipping.country"]; wrong {
+		t.Errorf("le pays est valide : %v", validationErr.Fields)
+	}
+
+	// Le code postal dépend du pays : en France cinq chiffres, ailleurs la forme est libre.
+	collector = Collector{}
+	collector.Address("address", Address{Street: "1 Baker Street", PostalCode: "NW1 6XE", City: "Londres", Country: "GB"})
+	if collector.Err() != nil {
+		t.Errorf("code postal britannique : %v", collector.Err())
+	}
+}

@@ -13,10 +13,13 @@ import (
 	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 
+	"github.com/ashandcompany/heros-sos/backend/internal/account"
 	"github.com/ashandcompany/heros-sos/backend/internal/audit"
 	"github.com/ashandcompany/heros-sos/backend/internal/auth"
+	"github.com/ashandcompany/heros-sos/backend/internal/avatar"
 	"github.com/ashandcompany/heros-sos/backend/internal/clock"
 	"github.com/ashandcompany/heros-sos/backend/internal/config"
+	"github.com/ashandcompany/heros-sos/backend/internal/contact"
 	"github.com/ashandcompany/heros-sos/backend/internal/crypto"
 	"github.com/ashandcompany/heros-sos/backend/internal/database"
 	"github.com/ashandcompany/heros-sos/backend/internal/film"
@@ -27,7 +30,9 @@ import (
 	"github.com/ashandcompany/heros-sos/backend/internal/interventiontype"
 	"github.com/ashandcompany/heros-sos/backend/internal/mail"
 	"github.com/ashandcompany/heros-sos/backend/internal/moderation"
+	"github.com/ashandcompany/heros-sos/backend/internal/newsletter"
 	"github.com/ashandcompany/heros-sos/backend/internal/reputation"
+	"github.com/ashandcompany/heros-sos/backend/internal/signedlink"
 	"github.com/ashandcompany/heros-sos/backend/internal/user"
 	"github.com/ashandcompany/heros-sos/backend/internal/villain"
 )
@@ -55,6 +60,12 @@ type components struct {
 	reputationHandler   *reputation.Handler
 	villainHandler      *villain.Handler
 	typeHandler         *interventiontype.Handler
+
+	accountHandler    *account.Handler
+	avatarHandler     *avatar.Handler
+	contactHandler    *contact.Handler
+	newsletterHandler *newsletter.Handler
+	newsletterService *newsletter.Service
 }
 
 // Server est l'application prête à servir.
@@ -112,6 +123,15 @@ func NewWithDB(cfg config.Config, logger *slog.Logger, db *gorm.DB, opts ...Opti
 	}
 
 	sealer, err := crypto.NewSealer(cfg.Crypto.Keys, cfg.Crypto.ActiveKeyID)
+	if err != nil {
+		return nil, err
+	}
+	// Avant la file de mails : une erreur ici ne doit pas laisser de goroutines d'envoi derrière elle.
+	links, err := signedlink.NewSigner(cfg.Crypto.Keys, cfg.Crypto.ActiveKeyID)
+	if err != nil {
+		return nil, err
+	}
+	avatars, err := avatar.NewDiskStore(cfg.Avatar.Dir)
 	if err != nil {
 		return nil, err
 	}
@@ -181,6 +201,27 @@ func NewWithDB(cfg config.Config, logger *slog.Logger, db *gorm.DB, opts ...Opti
 	c.reputationHandler = reputation.NewHandler(reputation.NewService(reputation.ServiceDeps{
 		Repo: reputation.NewRepository(db), Audit: c.audit, Tx: c.tx, Clock: c.clock,
 	}), logger, cfg.HTTP)
+	c.newsletterService = newsletter.NewService(newsletter.ServiceDeps{
+		Repo: newsletter.NewRepository(db), Links: links, Mailer: mailService, App: cfg.App,
+		ConfirmTTL: cfg.Security.Tokens.NewsletterConfirmTTL, Clock: c.clock, Logger: logger,
+	})
+	c.newsletterHandler = newsletter.NewHandler(newsletter.HandlerDeps{
+		Service: c.newsletterService, Logger: logger, HTTP: cfg.HTTP, Limits: cfg.Security.RateLimits, Clock: c.clock,
+	})
+	c.accountHandler = account.NewHandler(account.HandlerDeps{
+		Service: account.NewService(account.ServiceDeps{
+			Users: c.users, Heroes: heroProfiles, Changes: account.NewEmailChangeRepository(db),
+			Newsletter: c.newsletterService, Avatars: avatars, Audit: c.audit, Tx: c.tx, Clock: c.clock,
+			AvatarMaxDimension: cfg.Avatar.MaxDimension, Logger: logger,
+		}),
+		Logger: logger, HTTP: cfg.HTTP, Limits: cfg.Security.RateLimits, Clock: c.clock,
+		Avatar: cfg.Avatar, AvatarURLPrefix: APIPrefix + avatarRoutePrefix,
+	})
+	c.avatarHandler = avatar.NewHandler(avatars, logger)
+	c.contactHandler = contact.NewHandler(contact.HandlerDeps{
+		Service: contact.NewService(mailService, cfg.Mail.ContactRecipient),
+		Logger:  logger, HTTP: cfg.HTTP, Limits: cfg.Security.RateLimits, Clock: c.clock,
+	})
 	router := newRouter()
 	registerRoutes(router, c)
 
@@ -300,6 +341,15 @@ func (s *Server) cleanup(ctx context.Context) {
 	c := s.components
 	c.authHandler.SweepLimiters()
 	c.incidentHandler.SweepLimiters()
+	c.accountHandler.SweepLimiters()
+	c.newsletterHandler.SweepLimiters()
+	c.contactHandler.SweepLimiters()
+	// Une adresse jamais confirmée n'est pas conservée plus longtemps qu'un jeton périmé.
+	if purged, err := c.newsletterService.PurgeStale(ctx, s.cfg.Jobs.TokenRetention); err != nil {
+		s.logger.ErrorContext(ctx, "purge des abonnements non confirmés en échec", "error", err)
+	} else if purged > 0 {
+		s.logger.InfoContext(ctx, "abonnements non confirmés purgés", "abonnements_supprimes", purged)
+	}
 	sessions, tokens, err := c.authService.Cleanup(ctx, s.cfg.Jobs.SessionRetention, s.cfg.Jobs.TokenRetention)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "nettoyage périodique en échec", "error", err)

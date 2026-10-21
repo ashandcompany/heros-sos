@@ -103,6 +103,12 @@ internal/
   user/                 comptes ; chiffrement des données personnelles dans le dépôt
   hero/                 demande du statut de super-héros
   moderation/           actions des modérateurs sur les comptes
+  account/              profil de l'utilisateur connecté : coordonnées, photo, changement d'adresse
+                        email validé par un modérateur, préférence de newsletter
+  avatar/               photos de profil : contrôle et ré-encodage de l'image, stockage disque, service
+  newsletter/           abonnements (double opt-in par lien signé, préférence d'un compte)
+  contact/              formulaire de contact : message transmis à l'équipe par mail
+  signedlink/           liens signés Ed25519 (sans jeton en base), clé dérivée des clés de chiffrement
   crypto/               cascade AES-256-GCM puis XChaCha20-Poly1305 (clé de 512 bits)
   mail/                 construction MIME, SMTP, file d'envoi asynchrone, modèles
   apidocs/              documentation interactive (Swagger UI embarqué), hors production
@@ -162,6 +168,16 @@ Envoyer un mail : dépendre de l'interface `mail.Mailer` (la file asynchrone l'i
   (lien reçu par mail, route `HEROS_ACTIVATION_PATH` du frontend, jeton dans `?token=`) puis se
   connecter.
 - **Rôles** : `citizen`, `hero`, `moderator` (le frontend actuel utilise `citoyen` et `super-heros`).
+- **Profil** : `GET` et `PATCH /me` valent pour tous les rôles (un super-héros est un compte avec un
+  bloc `hero` en plus : pas de routes `/hero/me` à part). `PUT /me/avatar` reçoit **l'image brute**
+  (`Content-Type: image/jpeg|png|webp`, ni JSON ni multipart) et répond l'`avatarUrl`, un chemin
+  absolu sur la même origine (`/api/v1/avatars/<uuid>.jpg`, public, qui change à chaque envoi).
+  L'adresse email change par `POST /me/email-change-requests`, validée par un modérateur
+  (`/admin/email-change-requests`) : tant qu'elle ne l'est pas, `pendingEmail` la montre.
+- **Newsletter et contact** (publics, sans session, limités par IP) : `POST /newsletter/subscriptions`
+  envoie un lien de confirmation vers la page `HEROS_NEWSLETTER_CONFIRM_PATH` du frontend (jeton dans
+  `?token=`, à poster sur `/newsletter/subscriptions/confirm`) ; `POST /contact/messages` écrit à
+  l'équipe (`HEROS_CONTACT_RECIPIENT`), jamais au visiteur.
 - **2FA** : prévue en version 2 ; une session est complète dès la connexion.
 
 ## Environnements Docker
@@ -234,4 +250,15 @@ la même interface `mail.Mailer`.
 - Les mails en file sont perdus si le processus est tué brutalement (un worker RabbitMQ les rendra
   durables sans changer le code appelant : seul `mail.Mailer` est connu des autres paquets).
 - Sauvegarder `HEROS_CRYPTO_KEYS` séparément de la base ; pour une rotation, ajouter une clé puis
-  changer `HEROS_CRYPTO_ACTIVE_KEY_ID` (les anciennes valeurs restent lisibles).
+  changer `HEROS_CRYPTO_ACTIVE_KEY_ID` (les anciennes valeurs restent lisibles). La clé qui signe les
+  liens de confirmation de la newsletter en est dérivée : les liens déjà envoyés restent valables
+  tant que leur clé est configurée.
+- **Photos de profil** : le seul endroit où l'API écrit sur le disque, dans le volume `avatars`
+  (`HEROS_AVATAR_DIR`, fixé par l'image). À sauvegarder avec la base : une photo référencée par un
+  compte mais absente du volume répond 404. Un envoi interrompu au mauvais moment peut laisser un
+  fichier orphelin, sans effet visible.
+- **Formulaire de contact** : le mail est la seule trace du message, et la file d'envoi est interne
+  au processus (voir plus haut). Régler `HEROS_CONTACT_RECIPIENT` sur la boîte de l'équipe.
+- **Newsletter** : seul l'abonnement existe, pas encore l'envoi. Avant le premier envoi, il faudra un
+  lien de désabonnement dans chaque message (le consentement, lui, est daté dans
+  `newsletter_subscriptions.confirmed_at`).

@@ -33,9 +33,9 @@ info:
 
     | Rôle | Qui | Ce qu'il peut faire |
     |---|---|---|
-    | `citizen` | tout compte activé | demander le statut de super-héros et suivre sa demande |
+    | `citizen` | tout compte activé | demander le statut de super-héros et suivre sa demande ; gérer son profil (`/me`) |
     | `hero` | citoyen accepté par un modérateur | idem ; une nouvelle demande répond `already_hero` |
-    | `moderator` | créé en ligne de commande | décider des demandes, lister, désactiver, réactiver et vérifier les comptes |
+    | `moderator` | créé en ligne de commande | décider des demandes, lister, désactiver, réactiver et vérifier les comptes ; valider les changements d'adresse email |
 
     ## Pagination
 
@@ -75,18 +75,22 @@ info:
     | `hero_request_not_eligible` | 403 | compte qui ne peut pas faire de demande (modérateur) |
     | `not_found` | 404 | ressource ou route introuvable |
     | `hero_request_not_found` | 404 | aucune demande déposée par l'utilisateur |
-    | `email_already_used` | 409 | adresse email déjà inscrite |
+    | `email_change_not_found` | 404 | demande de changement d'adresse inconnue, ou remplacée par son titulaire |
+    | `email_already_used` | 409 | adresse email déjà inscrite (inscription, changement d'adresse) |
+    | `email_unchanged` | 409 | la nouvelle adresse demandée est déjà celle du compte |
+    | `email_change_not_pending` | 409 | demande de changement d'adresse déjà traitée |
     | `hero_request_pending` | 409 | demande déjà en attente |
     | `already_hero` | 409 | utilisateur déjà super-héros |
     | `alias_already_used` | 409 | pseudo déjà pris |
     | `hero_request_not_pending` | 409 | demande déjà traitée |
     | `self_action_forbidden` | 409 | action interdite sur son propre compte |
     | `payload_too_large` | 413 | corps de requête trop volumineux |
-    | `unsupported_media_type` | 415 | corps qui n'est pas en `application/json` |
+    | `unsupported_media_type` | 415 | corps qui n'est pas en `application/json` (ou, pour `PUT /me/avatar`, pas une image JPEG, PNG ou WebP) |
     | `validation_failed` | 422 | données invalides ; `fields` détaille chaque champ |
     | `rate_limited` | 429 | trop de requêtes ; `Retry-After` indique le délai |
     | `account_locked` | 429 | compte verrouillé après plusieurs échecs ; `Retry-After` indique le délai |
     | `internal_error` | 500 | erreur interne, sans détail |
+    | `contact_delivery_unavailable` | 503 | message de contact non confié au service d'envoi : réessayer |
   contact:
     name: Équipe Heros-SOS
     url: https://github.com/ashandcompany/heros-sos
@@ -114,6 +118,10 @@ tags:
     description: Notes des citoyens après intervention, réponses des héros et modération des avis.
   - name: Films
     description: Catalogue OMDb, vidéothèques des héros, associations des vilains et modération.
+  - name: Compte
+    description: "Profil de l'utilisateur connecté (citoyen ou super-héros) : coordonnées, photo, changement d'adresse email soumis à un modérateur, préférence de newsletter."
+  - name: Contact et newsletter
+    description: "Formulaires publics qui passent par le Mailer, sans session : message à l'équipe et abonnement à la newsletter (double opt-in)."
 
 paths:
   /me/interventions:
@@ -1923,6 +1931,528 @@ paths:
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/InternalError" }
 
+  /me:
+    get:
+      tags: [Compte]
+      summary: Mon profil
+      description: |
+        Retourne le profil complet de l'utilisateur connecté, quel que soit son rôle : identité,
+        coordonnées, photo, abonnement à la newsletter et, pour un super-héros, son pseudo public et sa
+        description (`hero`). Un super-héros n'a pas de profil à part : c'est le même compte, avec
+        `role: hero`.
+
+        `pendingEmail` n'est présent que pendant l'examen d'une demande de changement d'adresse. Un
+        compte créé hors inscription (un modérateur) peut avoir un téléphone et une adresse vides.
+      operationId: getMyAccount
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Le profil de l'utilisateur connecté.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+              examples:
+                citoyen:
+                  summary: Un citoyen avec une demande de changement d'adresse en attente
+                  value:
+                    id: 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
+                    role: citizen
+                    civility: madame
+                    firstName: Natasha
+                    lastName: Romanoff
+                    birthDate: "1984-11-22"
+                    email: natasha.romanoff@example.org
+                    pendingEmail: natasha.r@example.org
+                    mobilePhone: "0612345678"
+                    address:
+                      street: 10 rue de Rivoli
+                      complement: Bâtiment B, 3e étage
+                      postalCode: "75004"
+                      city: Paris
+                      country: FR
+                    avatarUrl: /api/v1/avatars/3f2a8c1e-5b7d-4e90-8a16-2c4d9e7f0b53.jpg
+                    newsletterSubscribed: true
+                    createdAt: "2026-10-19T12:00:00Z"
+                super-heros:
+                  summary: Un super-héros
+                  value:
+                    id: 7d0e4a52-9c3b-4f18-b6a1-5e2f8c9d1a37
+                    role: hero
+                    civility: monsieur
+                    firstName: Steve
+                    lastName: Rogers
+                    birthDate: "1990-07-04"
+                    email: steve.rogers@example.org
+                    mobilePhone: "+33612345678"
+                    address:
+                      street: 569 Leaman Place
+                      postalCode: "11201"
+                      city: Brooklyn
+                      country: US
+                    newsletterSubscribed: false
+                    createdAt: "2026-10-19T12:00:00Z"
+                    hero:
+                      alias: Captain America
+                      bio: Un super-soldat au bouclier indestructible.
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    patch:
+      tags: [Compte]
+      summary: Modifier mes coordonnées
+      description: |
+        Remplace le téléphone et/ou l'adresse postale, selon les règles de l'inscription. Un champ
+        absent n'est pas modifié. `address` est remplacée en bloc, sauf `complement` : absent ou
+        `null`, le complément actuel est conservé ; chaîne vide, il est effacé. Le formulaire du profil
+        d'un super-héros, qui n'a pas de complément, ne l'efface donc pas.
+
+        Retourne le profil à jour. Le nom, la date de naissance et l'adresse email ne se modifient pas
+        ici (l'adresse email passe par `POST /me/email-change-requests`).
+      operationId: updateMyContact
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ContactUpdateRequest" }
+            examples:
+              adresse-et-telephone:
+                summary: Nouveau téléphone et nouvelle adresse
+                value:
+                  mobilePhone: 06 98 76 54 32
+                  address:
+                    street: 12 rue des Archives
+                    complement: Interphone Dupont
+                    postalCode: "75003"
+                    city: Paris
+                    country: FR
+              telephone-seul:
+                summary: Le téléphone seulement
+                value:
+                  mobilePhone: "+33698765432"
+      responses:
+        "200":
+          description: Coordonnées modifiées ; le profil à jour.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /me/avatar:
+    put:
+      tags: [Compte]
+      summary: Changer ma photo de profil
+      description: |
+        Le corps de la requête est **l'image elle-même** (ni JSON, ni multipart), avec son type dans
+        `Content-Type` : `image/jpeg`, `image/png` ou `image/webp`. Limites : 2 Mio (`413`) et
+        1024 × 1024 pixels (`422`, champ `avatar` : `too_large`).
+
+        L'image est décodée puis ré-encodée en JPEG : un fichier qui n'est pas une vraie image est
+        refusé (`422`, `avatar` : `invalid`), et les métadonnées (EXIF, position GPS) sont effacées.
+        L'adresse de la photo (`avatarUrl`) change à chaque envoi : un navigateur peut la garder
+        indéfiniment en cache. La photo d'un super-héros est publique (encyclopédie).
+      operationId: updateMyAvatar
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          image/jpeg: { schema: { type: string, format: binary } }
+          image/png: { schema: { type: string, format: binary } }
+          image/webp: { schema: { type: string, format: binary } }
+      responses:
+        "200":
+          description: Photo remplacée.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AvatarResponse" }
+              examples:
+                nouvelle-photo:
+                  summary: L'adresse de la nouvelle photo
+                  value:
+                    avatarUrl: /api/v1/avatars/3f2a8c1e-5b7d-4e90-8a16-2c4d9e7f0b53.jpg
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415":
+          description: Le `Content-Type` n'est ni `image/jpeg`, ni `image/png`, ni `image/webp` (`unsupported_media_type`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                pas-une-image:
+                  summary: Type de contenu refusé
+                  value:
+                    error:
+                      code: unsupported_media_type
+                      message: Le corps de la requête doit être une image JPEG, PNG ou WebP.
+        "422":
+          description: |
+            Image refusée (`validation_failed`) : `avatar` vaut `required` (corps vide), `invalid` (ce
+            n'est pas une image JPEG, PNG ou WebP lisible) ou `too_large` (plus de 1024 pixels de côté).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                image-trop-grande:
+                  summary: Image de plus de 1024 pixels
+                  value:
+                    error:
+                      code: validation_failed
+                      message: Certaines informations sont invalides.
+                      fields:
+                        avatar: too_large
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /avatars/{name}:
+    get:
+      tags: [Compte]
+      summary: Photo de profil
+      description: |
+        Sert une photo de profil. La route est publique : les photos des super-héros sont visibles de
+        tous. L'adresse d'une photo (`avatarUrl`) contient un identifiant aléatoire et change à chaque
+        envoi ; le contenu d'une adresse ne change jamais, d'où le cache d'un an (`immutable`).
+      operationId: getAvatar
+      parameters:
+        - name: name
+          in: path
+          required: true
+          description: Nom du fichier, tel que donné par `avatarUrl`.
+          schema: { type: string }
+          example: 3f2a8c1e-5b7d-4e90-8a16-2c4d9e7f0b53.jpg
+      responses:
+        "200":
+          description: La photo, en JPEG.
+          headers:
+            Cache-Control:
+              description: Mise en cache d'un an, sans revalidation.
+              schema: { type: string, example: "public, max-age=31536000, immutable" }
+          content:
+            image/jpeg: { schema: { type: string, format: binary } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /me/email-change-requests:
+    post:
+      tags: [Compte]
+      summary: Demander un changement d'adresse email
+      description: |
+        Dépose une demande qu'un modérateur doit valider : l'adresse de connexion ne change qu'à ce
+        moment-là, et d'ici là `GET /me` la montre dans `pendingEmail`. Une nouvelle demande remplace la
+        précédente tant qu'elle n'est pas traitée.
+
+        Réservé aux citoyens et aux super-héros : le compte d'un modérateur se gère hors ligne.
+        L'adresse est vérifiée une seconde fois à la validation : si quelqu'un l'a prise entre-temps, le
+        modérateur reçoit `email_already_used` et doit refuser la demande.
+      operationId: requestMyEmailChange
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmailChangeRequestPayload" }
+            examples:
+              nouvelle-adresse:
+                summary: La nouvelle adresse souhaitée
+                value:
+                  email: natasha.r@example.org
+      responses:
+        "201":
+          description: Demande déposée, en attente de validation.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EmailChangeRequestStatus" }
+              examples:
+                en-attente:
+                  summary: Demande déposée
+                  value:
+                    newEmail: natasha.r@example.org
+                    status: pending
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: L'adresse est déjà prise par un autre compte (`email_already_used`) ou c'est déjà celle de ce compte (`email_unchanged`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                adresse-prise:
+                  summary: Adresse déjà utilisée
+                  value:
+                    error:
+                      code: email_already_used
+                      message: Cette adresse email est déjà utilisée.
+                adresse-inchangee:
+                  summary: C'est déjà l'adresse du compte
+                  value:
+                    error:
+                      code: email_unchanged
+                      message: C'est déjà l'adresse email de ce compte.
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /me/newsletter:
+    put:
+      tags: [Compte]
+      summary: Recevoir ou non la newsletter
+      description: |
+        Abonne ou désabonne le titulaire du compte. Il n'y a pas de mail de confirmation : l'adresse du
+        compte a déjà été vérifiée à l'activation (contrairement à `POST /newsletter/subscriptions`).
+        L'opération est idempotente. `newsletterSubscribed` de `GET /me` donne l'état courant.
+      operationId: setMyNewsletterPreference
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewsletterPreferencePayload" }
+            examples:
+              abonner:
+                summary: S'abonner
+                value:
+                  subscribed: true
+      responses:
+        "204": { description: Préférence enregistrée. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/email-change-requests:
+    get:
+      tags: [Modération]
+      summary: Demandes de changement d'adresse email
+      description: |
+        Réservé aux modérateurs. Les demandes les plus anciennes viennent d'abord. Chaque demande porte
+        l'identité du demandeur et son adresse actuelle, pour décider sans autre appel.
+      operationId: listEmailChangeRequests
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: status
+          in: query
+          description: Ne garde que les demandes dans cet état. Sans valeur, toutes les demandes sont listées.
+          schema: { type: string, enum: [pending, approved, rejected] }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Une page de demandes.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EmailChangeRequestPage" }
+              examples:
+                une-demande:
+                  summary: Une demande en attente
+                  value:
+                    items:
+                      - id: 5c1d7e92-3a40-4b86-9f0e-6d8a2b4c1e75
+                        userId: 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
+                        firstName: Natasha
+                        lastName: Romanoff
+                        currentEmail: natasha.romanoff@example.org
+                        newEmail: natasha.r@example.org
+                        status: pending
+                        createdAt: "2026-10-21T09:15:00Z"
+                    total: 1
+                    limit: 20
+                    offset: 0
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/email-change-requests/{id}/approve:
+    post:
+      tags: [Modération]
+      summary: Accepter un changement d'adresse
+      description: |
+        Réservé aux modérateurs. L'adresse de connexion du compte devient la nouvelle adresse, et son
+        abonnement à la newsletter la suit. Si l'adresse a été prise entre-temps, rien n'est modifié :
+        `email_already_used`, et la demande reste à refuser. Une demande remplacée par son titulaire
+        change d'identifiant : l'ancien identifiant répond `email_change_not_found`, pour qu'un
+        modérateur ne valide jamais une adresse qu'il n'a pas vue.
+      operationId: approveEmailChangeRequest
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/EmailChangeRequestId" }
+      responses:
+        "204": { description: "Demande acceptée, adresse changée." }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/EmailChangeNotFound" }
+        "409":
+          description: La demande a déjà été traitée (`email_change_not_pending`), ou l'adresse est maintenant prise (`email_already_used`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                deja-traitee:
+                  summary: Demande déjà traitée
+                  value:
+                    error:
+                      code: email_change_not_pending
+                      message: Cette demande a déjà été traitée.
+                adresse-prise:
+                  summary: L'adresse a été prise entre-temps
+                  value:
+                    error:
+                      code: email_already_used
+                      message: Cette adresse email est déjà utilisée.
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/email-change-requests/{id}/reject:
+    post:
+      tags: [Modération]
+      summary: Refuser un changement d'adresse
+      description: Réservé aux modérateurs. L'adresse du compte ne change pas ; le titulaire peut déposer une nouvelle demande.
+      operationId: rejectEmailChangeRequest
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/EmailChangeRequestId" }
+      responses:
+        "204": { description: Demande refusée. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/EmailChangeNotFound" }
+        "409":
+          description: La demande a déjà été traitée (`email_change_not_pending`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                deja-traitee:
+                  summary: Demande déjà traitée
+                  value:
+                    error:
+                      code: email_change_not_pending
+                      message: Cette demande a déjà été traitée.
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /contact/messages:
+    post:
+      tags: [Contact et newsletter]
+      summary: Écrire à l'équipe
+      description: |
+        Formulaire de contact, ouvert à tous. Le message est transmis par mail à l'équipe (adresse
+        `HEROS_CONTACT_RECIPIENT`), avec l'adresse du visiteur en réponse : le visiteur ne reçoit
+        jamais de mail de cette route. Rien n'est conservé en base.
+
+        Limité par adresse IP. `503` (`contact_delivery_unavailable`) si le message n'a pas pu être
+        confié au service d'envoi : il n'est alors pas parti, et le visiteur peut réessayer.
+      operationId: sendContactMessage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ContactMessageRequest" }
+            examples:
+              question:
+                summary: Une question sur le service
+                value:
+                  name: Natasha Romanoff
+                  email: natasha.romanoff@example.org
+                  subject: question
+                  message: Bonjour, comment puis-je devenir super-héros sur la plateforme ?
+      responses:
+        "202": { description: Message accepté pour envoi. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503":
+          description: Le message n'a pas pu être envoyé (`contact_delivery_unavailable`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                envoi-impossible:
+                  summary: File d'envoi saturée ou fermée
+                  value:
+                    error:
+                      code: contact_delivery_unavailable
+                      message: Le message n'a pas pu être envoyé. Veuillez réessayer plus tard.
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /newsletter/subscriptions:
+    post:
+      tags: [Contact et newsletter]
+      summary: S'abonner à la newsletter
+      description: |
+        Abonnement d'un visiteur, en deux temps (double opt-in) : cette route enregistre la demande et
+        envoie un lien de confirmation à l'adresse ; aucune newsletter n'est envoyée avant le clic
+        (`POST /newsletter/subscriptions/confirm`). Le lien est signé et valable 48 h par défaut.
+
+        La réponse est la même pour toute adresse valide, inconnue, en attente ou déjà abonnée : elle ne
+        révèle rien (une adresse déjà abonnée ne reçoit pas de mail de plus). Une adresse qui s'était
+        désabonnée doit confirmer de nouveau. Limité par IP et par adresse, pour que le formulaire ne
+        serve pas à inonder la boîte de quelqu'un d'autre.
+      operationId: subscribeToNewsletter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewsletterSubscriptionRequest" }
+            examples:
+              visiteur:
+                summary: Un visiteur
+                value:
+                  email: natasha.romanoff@example.org
+      responses:
+        "202": { description: Demande prise en compte ; un lien de confirmation est envoyé si l'adresse n'était pas déjà abonnée. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /newsletter/subscriptions/confirm:
+    post:
+      tags: [Contact et newsletter]
+      summary: Confirmer l'abonnement à la newsletter
+      description: |
+        Valide l'abonnement avec le jeton du lien reçu par mail ; la date de confirmation est la preuve de
+        consentement. Cliquer deux fois sur le lien réussit les deux fois. Un lien falsifié, expiré, ou
+        devenu sans objet (l'abonné s'est retiré entre-temps) répond `invalid_token`.
+      operationId: confirmNewsletterSubscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TokenRequest" }
+            examples:
+              lien-recu:
+                summary: Le jeton du lien reçu par mail (à remplacer)
+                value:
+                  token: collez-ici-le-jeton-du-lien-recu-par-mail
+      responses:
+        "204": { description: Abonnement confirmé. }
+        "400": { $ref: "#/components/responses/BadRequestOrInvalidToken" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
 components:
   securitySchemes:
     sessionCookie:
@@ -1974,6 +2504,13 @@ components:
       description: Identifiant de l'utilisateur (champ `id` de la liste des comptes).
       schema: { type: string, format: uuid }
       example: 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
+    EmailChangeRequestId:
+      name: id
+      in: path
+      required: true
+      description: Identifiant de la demande de changement d'adresse (champ `id` de la liste des demandes).
+      schema: { type: string, format: uuid }
+      example: 5c1d7e92-3a40-4b86-9f0e-6d8a2b4c1e75
     Limit:
       name: limit
       in: query
@@ -2072,6 +2609,18 @@ components:
                 error:
                   code: not_found
                   message: Utilisateur introuvable.
+    EmailChangeNotFound:
+      description: Aucune demande de changement d'adresse ne porte cet identifiant (`email_change_not_found`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            demande-introuvable:
+              summary: Demande introuvable, ou remplacée par son titulaire
+              value:
+                error:
+                  code: email_change_not_found
+                  message: Demande de changement d'adresse introuvable.
     PayloadTooLarge:
       description: Corps de requête trop volumineux (`payload_too_large`).
       content:
@@ -2170,7 +2719,7 @@ components:
               description: Message destiné à l'affichage.
             fields:
               type: object
-              description: Pour les erreurs de validation, champ → code (`required`, `invalid`, `too_short`, `too_long`, `weak`).
+              description: Pour les erreurs de validation, champ → code (`required`, `invalid`, `too_short`, `too_long`, `weak`, et `too_large` pour une photo).
               additionalProperties: { type: string }
 
     UserView:
@@ -3021,3 +3570,182 @@ components:
       additionalProperties: false
       properties:
         approved: { type: boolean }
+
+    Account:
+      type: object
+      required:
+        [
+          id,
+          role,
+          civility,
+          firstName,
+          lastName,
+          birthDate,
+          email,
+          mobilePhone,
+          address,
+          newsletterSubscribed,
+          createdAt,
+        ]
+      properties:
+        id: { type: string, format: uuid, description: Identifiant du compte. }
+        role:
+          {
+            type: string,
+            enum: [citizen, hero, moderator],
+            description: Rôle du compte.,
+          }
+        civility:
+          { type: string, enum: [madame, monsieur, non-precise], description: Civilité. }
+        firstName: { type: string, description: Prénom. }
+        lastName: { type: string, description: Nom de famille. }
+        birthDate:
+          { type: string, format: date, description: "Date de naissance (AAAA-MM-JJ)." }
+        email: { type: string, format: email, description: Adresse de connexion. }
+        pendingEmail:
+          type: string
+          format: email
+          description: Nouvelle adresse demandée, en attente de validation par un modérateur. Absente sinon.
+        mobilePhone:
+          type: string
+          description: Numéro de portable, sans séparateurs. Vide pour un compte créé hors inscription.
+        address: { $ref: "#/components/schemas/AccountAddress" }
+        avatarUrl:
+          type: string
+          description: |
+            Adresse de la photo de profil, chemin absolu sur la même origine que l'API
+            (`GET /avatars/{name}`). Absente tant qu'aucune photo n'a été envoyée.
+        newsletterSubscribed:
+          type: boolean
+          description: Vrai si l'adresse du compte reçoit la newsletter.
+        createdAt: { type: string, format: date-time, description: Date de création du compte. }
+        hero:
+          { $ref: "#/components/schemas/AccountHero" }
+
+    AccountAddress:
+      type: object
+      required: [street, postalCode, city, country]
+      properties:
+        street: { type: string, description: Numéro et nom de la voie. }
+        complement: { type: string, description: "Complément d'adresse, absent s'il n'y en a pas." }
+        postalCode: { type: string, description: Code postal. }
+        city: { type: string, description: Commune. }
+        country: { type: string, description: Code pays ISO 3166-1 alpha-2., example: FR }
+
+    AccountHero:
+      type: object
+      description: Profil public d'un super-héros. Présent seulement quand `role` vaut `hero`.
+      required: [alias, bio]
+      properties:
+        alias: { type: string, description: Pseudo public. }
+        bio: { type: string, description: Description publique. }
+
+    ContactUpdateRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        mobilePhone:
+          type: string
+          description: Portable français (06 ou 07) ou international (+33…) ; espaces, points et tirets sont ignorés.
+        address: { $ref: "#/components/schemas/AddressUpdate" }
+
+    AddressUpdate:
+      type: object
+      required: [street, postalCode, city, country]
+      additionalProperties: false
+      properties:
+        street: { type: string, maxLength: 200, description: Numéro et nom de la voie. }
+        complement:
+          type: string
+          nullable: true
+          maxLength: 200
+          description: "Complément d'adresse. Absent ou `null` : le complément actuel est conservé. Chaîne vide : il est effacé."
+        postalCode: { type: string, description: Code postal (cinq chiffres pour la France). }
+        city: { type: string, maxLength: 100, description: Commune. }
+        country: { type: string, description: "Code pays ISO 3166-1 alpha-2, en majuscules.", example: FR }
+
+    AvatarResponse:
+      type: object
+      required: [avatarUrl]
+      properties:
+        avatarUrl:
+          type: string
+          description: Adresse de la nouvelle photo (chemin absolu sur la même origine que l'API).
+
+    EmailChangeRequestPayload:
+      type: object
+      required: [email]
+      additionalProperties: false
+      properties:
+        email: { type: string, format: email, description: Nouvelle adresse souhaitée. }
+
+    EmailChangeRequestStatus:
+      type: object
+      required: [newEmail, status]
+      properties:
+        newEmail: { type: string, format: email, description: "La nouvelle adresse, normalisée en minuscules." }
+        status: { type: string, enum: [pending, approved, rejected], description: État de la demande. }
+
+    NewsletterPreferencePayload:
+      type: object
+      required: [subscribed]
+      additionalProperties: false
+      properties:
+        subscribed: { type: boolean, description: "Vrai pour recevoir la newsletter, faux pour s'en retirer." }
+
+    EmailChangeRequestItem:
+      type: object
+      required: [id, userId, firstName, lastName, currentEmail, newEmail, status, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identifiant de la demande (paramètre `id` des routes de décision). Il change quand le titulaire remplace sa demande.
+        userId: { type: string, format: uuid, description: Identifiant du compte concerné. }
+        firstName: { type: string, description: Prénom du demandeur. }
+        lastName: { type: string, description: Nom du demandeur. }
+        currentEmail: { type: string, format: email, description: Adresse actuelle du compte. }
+        newEmail: { type: string, format: email, description: Adresse demandée. }
+        status: { type: string, enum: [pending, approved, rejected], description: État de la demande. }
+        createdAt: { type: string, format: date-time, description: Date de dépôt de la demande. }
+        reviewedAt: { type: string, format: date-time, description: "Date de la décision, absente tant que la demande est en attente." }
+
+    EmailChangeRequestPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/EmailChangeRequestItem" }
+        total:
+          {
+            type: integer,
+            description: "Nombre total de demandes correspondant au filtre, toutes pages confondues.",
+          }
+        limit: { type: integer, description: Taille de page appliquée. }
+        offset: { type: integer, description: Nombre d'éléments sautés. }
+
+    ContactMessageRequest:
+      type: object
+      required: [name, email, subject, message]
+      additionalProperties: false
+      properties:
+        name: { type: string, maxLength: 80, description: Nom du visiteur. }
+        email: { type: string, format: email, description: Adresse où l'équipe répondra. }
+        subject:
+          type: string
+          enum: [question, compte, donnees, partenariat, autre]
+          description: "Objet de la demande : question sur le service, problème de compte, données personnelles, presse ou partenariat, autre."
+        message:
+          type: string
+          minLength: 20
+          maxLength: 2000
+          description: Le message. Les retours à la ligne sont conservés.
+
+    NewsletterSubscriptionRequest:
+      type: object
+      required: [email]
+      additionalProperties: false
+      properties:
+        email: { type: string, format: email, description: Adresse à abonner. }

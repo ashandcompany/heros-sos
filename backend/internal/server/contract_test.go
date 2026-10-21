@@ -19,6 +19,13 @@ import (
 
 const specPath = "../../openapi/openapi.yaml"
 
+// Les photos de profil circulent en image brute : sans décodeur, le validateur refuserait ces corps.
+func init() {
+	for _, mediaType := range []string{"image/jpeg", "image/png", "image/webp"} {
+		openapi3filter.RegisterBodyDecoder(mediaType, openapi3filter.FileBodyDecoder)
+	}
+}
+
 // contract est le contrat OpenAPI chargé une seule fois pour tous les tests du paquet.
 type contract struct {
 	doc    *openapi3.T

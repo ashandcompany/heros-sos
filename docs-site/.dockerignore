@@ -1,0 +1,13 @@
+# Contexte de build de l'image de développement : seuls package.json et package-lock.json servent
+# (le code est monté par Compose). Tout le reste, node_modules en tête (binaires d'un autre système et
+# plus d'un Go), reste hors du contexte.
+node_modules
+build
+.docusaurus
+docs/api
+.git
+.gitignore
+.DS_Store
+npm-debug.log*
+Dockerfile
+.dockerignore

@@ -1,0 +1,28 @@
+package server
+
+import (
+	"net/http"
+
+	"github.com/ashandcompany/heros-sos/backend/internal/user"
+)
+
+// avatarRoutePrefix précède le nom d'une photo de profil dans son adresse publique.
+const avatarRoutePrefix = "/avatars/"
+
+func registerAccountRoutes(router *Router, c *components) {
+	h := c.accountHandler
+	// Tous les rôles connectés ont un profil, sauf le changement d'adresse : celui d'un modérateur se
+	// gère hors ligne, comme son compte (personne ne pourrait valider sa demande).
+	router.Handle(http.MethodGet, "/me", c.protected(h.Get))
+	router.Handle(http.MethodPatch, "/me", c.protected(h.UpdateContact))
+	router.Handle(http.MethodPut, "/me/avatar", c.protected(h.UpdateAvatar))
+	router.Handle(http.MethodPost, "/me/email-change-requests", c.protected(h.RequestEmailChange, user.RoleCitizen, user.RoleHero))
+	router.Handle(http.MethodPut, "/me/newsletter", c.protected(h.SetNewsletter))
+
+	// Publique, comme les photos des héros dans l'encyclopédie (voir avatar.Handler).
+	router.HandleFunc(http.MethodGet, avatarRoutePrefix+"{name}", c.avatarHandler.Serve)
+
+	router.Handle(http.MethodGet, "/admin/email-change-requests", c.protected(h.ListEmailChanges, user.RoleModerator))
+	router.Handle(http.MethodPost, "/admin/email-change-requests/{id}/approve", c.protected(h.ApproveEmailChange, user.RoleModerator))
+	router.Handle(http.MethodPost, "/admin/email-change-requests/{id}/reject", c.protected(h.RejectEmailChange, user.RoleModerator))
+}

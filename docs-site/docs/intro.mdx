@@ -1,0 +1,46 @@
+---
+slug: /
+title: Heros-SOS
+sidebar_label: Présentation
+---
+
+import Link from "@docusaurus/Link";
+
+Heros-SOS met en relation des citoyens qui signalent un incident et des super-héros qui le prennent en
+charge, sous la surveillance de modérateurs. Ce site rassemble la documentation technique du projet.
+
+## Ce que contient le site
+
+| Section                                      | Contenu                                                                                                 |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| <Link to="/architecture">Architecture</Link> | Qui parle à qui (proxy, front, API, base, services externes) et le déroulé d'une connexion, en schémas. |
+| <Link to="/backend/MVP">MVP</Link>           | Le périmètre de la première version, le scénario de démonstration et ce qui est reporté.                |
+| <Link to="/backend/STACK">Stack</Link>       | Les choix techniques du backend : Go, PostgreSQL, Docker, OpenAPI, sécurité, sessions.                  |
+| <Link to="/backend/TABLES">Tables</Link>     | Le schéma de la base de données, table par table.                                                       |
+| <Link to="/api/heros-sos-api">API</Link>     | Le contrat de l'API REST, une page par opération, avec les schémas et des exemples.                     |
+
+## Une seule source
+
+Rien n'est recopié dans ce site, pour qu'il ne dérive jamais de ce qui est réellement livré :
+
+- **MVP, Stack et Tables** sont lus sur place dans `backend/MVP.md`, `backend/STACK.md` et
+  `backend/TABLES.md`. Modifier un de ces fichiers met le site à jour, et ils restent lisibles sur GitHub.
+- **L'API** est générée à chaque build depuis `backend/openapi/openapi.yaml`, le fichier que les tests du
+  backend vérifient route par route (« spec d'abord »). Les pages générées ne sont pas versionnées.
+- **Cette page** et la configuration du site sont dans `docs-site/`.
+
+## Travailler sur la documentation
+
+Ce site tourne dans Docker : `make up`, depuis la racine du dépôt, le démarre avec le reste de la pile (ou
+`make docs` pour lui seul), sur http://localhost:3001/heros-sos/. Les modifications de `docs-site/` et des
+documents de `backend/` sont rechargées à chaud. Sans Docker, depuis `docs-site/` :
+
+```bash
+npm ci          # une seule fois
+npm start       # http://localhost:3001/heros-sos/ ; régénère les pages d'API puis recharge à chaud
+npm run build   # ce que vérifie le CI : un lien cassé fait échouer le build
+```
+
+Pour ajouter une page du site, créer un fichier dans `docs-site/docs/` puis l'ajouter à
+`docs-site/sidebars.ts`. Pour un document de conception du backend, l'ajouter à `include` dans
+`docusaurus.config.ts` et à `sidebarsBackend.ts`.

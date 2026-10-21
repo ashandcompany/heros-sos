@@ -63,6 +63,11 @@ func newE2E(t *testing.T, overrides map[string]string) *e2e {
 		"HEROS_RATE_LOGIN_PER_IDENTIFIER":     "10000/1h",
 		"HEROS_RATE_PASSWORD_RESET_PER_IP":    "10000/1h",
 		"HEROS_RATE_PASSWORD_RESET_PER_EMAIL": "10000/1h",
+		"HEROS_RATE_CONTACT_PER_IP":           "10000/1h",
+		"HEROS_RATE_NEWSLETTER_PER_IP":        "10000/1h",
+		"HEROS_RATE_NEWSLETTER_PER_EMAIL":     "10000/1h",
+		"HEROS_RATE_EMAIL_CHANGE_PER_USER":    "10000/1h",
+		"HEROS_RATE_AVATAR_PER_USER":          "10000/1h",
 	}
 	for name, value := range overrides {
 		env[name] = value

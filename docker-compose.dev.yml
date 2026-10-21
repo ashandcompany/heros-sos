@@ -1,0 +1,228 @@
+# Développement : tout est joignable depuis la machine, et seulement depuis elle (les ports sont liés à
+# 127.0.0.1). Les mots de passe sont ceux, publics, de .env.example : ne jamais les réutiliser ailleurs.
+#
+#   make up            démarre la pile        http://localhost:8088  (front + API derrière le proxy)
+#   make down          l'arrête               http://localhost:8025  (Mailpit : les mails envoyés)
+#                                             http://localhost:3001/heros-sos/  (la documentation)
+#
+# Outils facultatifs : `make adminer` ajoute Adminer (http://localhost:8082).
+#
+# Lancé depuis la racine du dépôt : les chemins sont relatifs à la racine, et l'environnement de l'API
+# est lu dans backend/.env (le Makefile le passe aussi à Compose pour les ${…} de ce fichier).
+
+# Même rotation que docker-compose.yml (api, db et proxy la reçoivent de là) pour les services ajoutés ici.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: ${LOG_MAX_SIZE:-10m}
+    max-file: ${LOG_MAX_FILE:-3}
+
+services:
+  api:
+    env_file:
+      - backend/.env
+    environment:
+      HEROS_ENV: development
+      HEROS_DATABASE_URL: postgres://${POSTGRES_USER:-heros}:${POSTGRES_PASSWORD:-heros}@db:5432/${POSTGRES_DB:-herossos}?sslmode=disable
+      # En développement l'API applique elle-même les migrations ; en production, une tâche dédiée.
+      HEROS_AUTO_MIGRATE: "true"
+      # Les mails partent vers Mailpit : c'est le vrai chemin SMTP, sans rien envoyer dehors.
+      HEROS_MAIL_DRIVER: smtp
+      HEROS_SMTP_HOST: mailpit
+      HEROS_SMTP_PORT: "1025"
+      HEROS_SMTP_TLS_MODE: none
+      # Le navigateur arrive par le proxy ; le front lancé hors Docker (npm run dev) reste accepté.
+      HEROS_ALLOWED_ORIGINS: http://localhost:${PROXY_PORT:-8088},http://localhost:3000
+      HEROS_PUBLIC_BASE_URL: http://localhost:${PROXY_PORT:-8088}
+    ports:
+      # Accès direct à l'API (curl, outils), sans passer par le proxy.
+      - "127.0.0.1:${API_PORT:-8081}:8080"
+
+  db:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-heros}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+
+  proxy:
+    ports:
+      - "127.0.0.1:${PROXY_PORT:-8088}:80"
+
+  web:
+    # Étape `dev` de frontend/Dockerfile : les dépendances sont dans l'image (installées une fois,
+    # mises en cache), le serveur de développement Next.js démarre aussitôt.
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: dev
+    image: heros-sos/web:dev
+    environment:
+      # Les événements de fichiers traversent mal les montages Docker Desktop : on interroge à la place.
+      WATCHPACK_POLLING: "true"
+      # Le serveur Next appelle l'API directement sur le réseau `edge`, sans repasser par le proxy.
+      # Prioritaire sur un API_URL de frontend/.env.local (Next ne remplace pas une variable déjà définie).
+      API_URL: http://api:8080/api/v1
+    volumes:
+      # Le code de ./frontend est monté et rechargé à chaud…
+      - ./frontend:/app
+      # …mais les dépendances viennent de l'image, pas de l'hôte (binaires natifs d'un autre système) :
+      # ces volumes anonymes masquent les dossiers de l'hôte. `make up` et `make down`
+      # les suppriment avec le conteneur (rm -v) : ils suivent ainsi les changements de dépendances.
+      - /app/node_modules
+      - /app/.next
+    networks:
+      edge:
+        ipv4_address: ${WEB_IP:-172.30.0.3}
+    restart: unless-stopped
+    logging: *logging
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  # Site de documentation (Docusaurus) : http://localhost:3001/heros-sos/. Pas de dépendance : il tourne
+  # seul, avec ou sans l'API. Voir docs-site/Dockerfile.
+  docs:
+    build:
+      context: ./docs-site
+      dockerfile: Dockerfile
+      target: dev
+    image: heros-sos/docs:dev
+    environment:
+      # Les événements de fichiers traversent mal les montages Docker Desktop : on interroge à la place.
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+    volumes:
+      # Le code du site est monté et rechargé à chaud…
+      - ./docs-site:/app/docs-site
+      # …mais les dépendances viennent de l'image, où elles sont dans /app/node_modules (un niveau plus
+      # haut : voir docs-site/Dockerfile), et les dossiers générés (cache Docusaurus, pages d'API) restent
+      # dans le conteneur. Ces volumes anonymes masquent ceux de l'hôte (binaires d'un autre système) ;
+      # celui de node_modules démarre vide, il ne recopie pas 1,4 Go. `make up` et `make down` les
+      # suppriment avec le conteneur (rm -v).
+      - /app/docs-site/node_modules
+      - /app/docs-site/.docusaurus
+      - /app/docs-site/docs/api
+      # Ce que le site lit dans backend/ (les trois documents et l'OpenAPI), copié par docs-sync ci-dessous.
+      - docs-source:/app/backend:ro
+    depends_on:
+      docs-sync:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${DOCS_PORT:-3001}:3001"
+    networks:
+      - edge
+    restart: unless-stopped
+    logging: *logging
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3001/heros-sos/"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 90s
+
+  # Recopie, toutes les 2 secondes, les seuls fichiers de backend/ que lit la documentation, dans un
+  # volume que le conteneur `docs` monte en lecture seule. Deux pièges évités :
+  #   - monter ces fichiers un par un dans `docs` casse dès qu'un éditeur enregistre en remplaçant le
+  #     fichier : le conteneur garde l'ancien fichier supprimé et le site perd la page ;
+  #   - monter backend/ en entier donnerait le .env (clés de chiffrement) à `docs`, qui exécute des
+  #     centaines de paquets tiers.
+  # Ce conteneur-ci voit backend/ (en lecture seule) mais n'exécute qu'un script fixe, sans npm.
+  docs-sync:
+    image: alpine:3
+    command:
+      - sh
+      - -c
+      - |
+        mkdir -p /dst/openapi
+        while true; do
+          for f in STACK.md MVP.md TABLES.md openapi/openapi.yaml; do
+            [ -f "/src/$$f" ] || continue
+            cmp -s "/src/$$f" "/dst/$$f" || cp "/src/$$f" "/dst/$$f"
+          done
+          # Le conteneur `docs` tourne en utilisateur non root et doit pouvoir lire, même si un fichier de
+          # l'hôte a des droits restreints (umask 077, fichier créé par un outil…).
+          chmod -R a+rX /dst
+          sleep 2
+        done
+    volumes:
+      - ./backend:/src:ro
+      - docs-source:/dst
+    restart: unless-stopped
+    logging: *logging
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # Aucun besoin de réseau : il ne fait que copier des fichiers.
+    network_mode: none
+    healthcheck:
+      test: ["CMD", "test", "-f", "/dst/openapi/openapi.yaml"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    logging: *logging
+    ports:
+      - "127.0.0.1:${MAILPIT_PORT:-8025}:8025"
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # La file de mails actuelle est interne à l'API ; RabbitMQ est prêt pour le futur worker de mails.
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-heros}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-heros}
+    ports:
+      - "127.0.0.1:${RABBITMQ_PORT:-5672}:5672"
+      - "127.0.0.1:${RABBITMQ_UI_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  adminer:
+    image: adminer:5
+    profiles: ["tools"]
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    ports:
+      - "127.0.0.1:${ADMINER_PORT:-8082}:8080"
+    networks:
+      - backend
+
+networks:
+  backend:
+    # Le réseau `backend` est fermé en production ; en développement les ports publiés ont besoin
+    # d'une passerelle vers l'hôte.
+    internal: false
+
+volumes:
+  rabbitmq_data:
+  # Copie des documents de backend/ lus par la documentation (voir docs-sync).
+  docs-source:

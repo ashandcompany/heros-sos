@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 
 # Front Next.js : un seul fichier, plusieurs cibles.
-#   dev      rechargement à chaud           backend/docker-compose.dev.yml  (target: dev)
-#   runtime  production, dernière étape     backend/docker-compose.prod.yml (cible par défaut)
+#   dev      rechargement à chaud           docker-compose.dev.yml  (target: dev)
+#   runtime  production, dernière étape     docker-compose.prod.yml (cible par défaut)
 #
 # Node 24 : version de développement du projet (voir README) et version LTS en cours. Node 20, utilisé
 # dans d'autres projets de l'équipe, n'est plus maintenu depuis avril 2026.
@@ -37,7 +37,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Aucune variable à figer au build : l'URL de l'API (API_URL) est lue par le serveur au démarrage
-# (environment dans backend/docker-compose.*.yml), la même image sert donc partout.
+# (environment dans docker-compose.*.yml, à la racine), la même image sert donc partout.
 # `next/font/google` télécharge les polices pendant la compilation : le build a besoin d'internet.
 RUN npm run build
 

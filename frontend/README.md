@@ -32,13 +32,14 @@ La recherche de films IMDb exige une clé OMDb côté API (`HEROS_OMDB_API_KEY` 
 `backend/.env`). Après une mise à jour du backend, relancer `make up-dev` pour reconstruire
 l'image de l'API (sinon les nouvelles routes répondent 404). Les comptes
 sont alors ceux de l'API : à créer par `POST /auth/register`, puis à activer avec le lien reçu
-par mail (Mailpit, `http://localhost:8025`, avec `make up-dev`).
+par mail (Mailpit, `http://localhost:8025`, avec `make up`).
 
-- **Tout dans Docker** (recommandé) : depuis `backend/`, `make env` puis `make up-dev`.
-  Front et API derrière le même proxy : <http://localhost:8088>. `API_URL` est déjà fixée dans
-  `backend/docker-compose.dev.yml` ; le code du front est monté et rechargé à chaud.
-- **Front sur la machine** : lancer l'API (`make up-dev`, ou `go run` dans `backend/`), puis
-  renseigner `API_URL` dans `.env.local` (`http://localhost:8081/api/v1` avec `make up-dev`) et
+- **Tout dans Docker** (recommandé) : depuis la racine du dépôt, `make up` (crée `backend/.env` au
+  premier lancement). Front et API derrière le même proxy : <http://localhost:8088>. `API_URL` est
+  déjà fixée dans `docker-compose.dev.yml` (à la racine) ; le code du front est monté et rechargé à
+  chaud.
+- **Front sur la machine** : lancer l'API (`make up` à la racine, ou `go run` dans `backend/`), puis
+  renseigner `API_URL` dans `.env.local` (`http://localhost:8081/api/v1` avec `make up`) et
   relancer `npm run dev`.
 
 ## Organisation
@@ -62,7 +63,7 @@ démarrage : redémarrer `npm run dev` après modification.
 
 - `API_URL` est lue **par le serveur, au démarrage** : elle n'est jamais envoyée au navigateur et
   n'est pas figée au build (la même image Docker sert dans tous les environnements). Dans la pile
-  Docker, elle vaut `http://api:8080/api/v1` (réseau interne, voir `backend/docker-compose.*.yml`).
+  Docker, elle vaut `http://api:8080/api/v1` (réseau interne, voir `docker-compose.*.yml` à la racine).
 - Le nom du cookie de session doit être celui de l'API : `session` en développement,
   `__Host-session` en production. Côté backend, c'est `HEROS_COOKIE_SECURE` (vrai par défaut en
   production) : un front en mode production face à une API de développement fait échouer la

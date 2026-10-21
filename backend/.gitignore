@@ -1,4 +1,6 @@
 .env
-docker-compose.override.yml
 .env.production
 secrets/
+
+# Photos de profil écrites par `make run` (HEROS_AVATAR_DIR, par défaut data/avatars).
+data/

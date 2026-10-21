@@ -1,6 +1,6 @@
-# Production. À utiliser avec docker-compose.yml, via `make up-prod` :
+# Production. À utiliser avec docker-compose.yml, via `make up-prod`, depuis la racine du dépôt :
 #
-#   docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.prod.yml up -d
+#   docker compose --env-file backend/.env.production -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
 # Principes :
 #   - un seul point d'entrée : le reverse proxy (80/443, TLS automatique) ; la base, l'API et le front
@@ -10,12 +10,20 @@
 #   - les migrations sont une tâche dédiée qui doit réussir avant le démarrage de l'API ;
 #   - ressources bornées, journaux tournants, systèmes de fichiers en lecture seule, sans capacités.
 #
-# Prérequis : `.env.production` (voir .env.production.example) et `secrets/` (voir `make secrets`).
+# Prérequis : `backend/.env.production` (voir backend/.env.production.example) et `backend/secrets/`
+# (voir `make secrets`). Les chemins de ce fichier sont relatifs à la racine du dépôt.
+
+# Même rotation que docker-compose.yml (api, db et proxy la reçoivent de là) pour les services ajoutés ici.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: ${LOG_MAX_SIZE:-10m}
+    max-file: ${LOG_MAX_FILE:-3}
 
 x-api-config: &api-config
   image: heros-sos/api:${APP_VERSION:-dev}
   env_file:
-    - .env.production
+    - backend/.env.production
   environment: &api-environment
     HEROS_ENV: production
     HEROS_AUTO_MIGRATE: "false"
@@ -41,6 +49,7 @@ services:
     <<: *api-config
     command: ["-migrate"]
     restart: "no"
+    logging: *logging
     depends_on:
       db:
         condition: service_healthy
@@ -87,7 +96,7 @@ services:
 
   web:
     build:
-      context: ../frontend
+      context: ./frontend
       dockerfile: Dockerfile
       # Cible `runtime` (dernière étape) : image de production sans dépendances de développement.
     image: heros-sos/web:${APP_VERSION:-dev}
@@ -104,11 +113,7 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging
     mem_limit: 512m
     cpus: 1.0
     pids_limit: 256
@@ -125,6 +130,7 @@ services:
     image: rabbitmq:4-management-alpine
     profiles: ["rabbitmq"]
     restart: unless-stopped
+    logging: *logging
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-heros}
       RABBITMQ_DEFAULT_PASS_FILE: /run/secrets/rabbitmq_password
@@ -143,22 +149,22 @@ services:
       timeout: 10s
       retries: 10
 
-# Fichiers générés par `make secrets` (le dossier secrets/ n'est jamais versionné).
+# Fichiers générés par `make secrets` (le dossier backend/secrets/ n'est jamais versionné).
 secrets:
   database_url:
-    file: ./secrets/database_url
+    file: ./backend/secrets/database_url
   postgres_password:
-    file: ./secrets/postgres_password
+    file: ./backend/secrets/postgres_password
   crypto_keys:
-    file: ./secrets/crypto_keys
+    file: ./backend/secrets/crypto_keys
   csrf_secret:
-    file: ./secrets/csrf_secret
+    file: ./backend/secrets/csrf_secret
   smtp_password:
-    file: ./secrets/smtp_password
+    file: ./backend/secrets/smtp_password
   omdb_api_key:
-    file: ./secrets/omdb_api_key
+    file: ./backend/secrets/omdb_api_key
   rabbitmq_password:
-    file: ./secrets/rabbitmq_password
+    file: ./backend/secrets/rabbitmq_password
 
 volumes:
   rabbitmq_data:

@@ -107,6 +107,9 @@ func TestMessageValidationBlocksHeaderInjection(t *testing.T) {
 		"destinataire vide":                  {To: "", Subject: "ok", Text: "x"},
 		"sujet vide":                         {To: "a@b.co", Subject: "  ", Text: "x"},
 		"contenu vide":                       {To: "a@b.co", Subject: "ok"},
+		"saut de ligne dans la réponse":      {To: "a@b.co", ReplyTo: "v@b.co\r\nBcc: espion@evil.example", Subject: "ok", Text: "x"},
+		"nom d'affichage dans la réponse":    {To: "a@b.co", ReplyTo: "Pirate <v@b.co>", Subject: "ok", Text: "x"},
+		"réponse invalide":                   {To: "a@b.co", ReplyTo: "pas-un-email", Subject: "ok", Text: "x"},
 	}
 	for name, message := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -114,6 +117,30 @@ func TestMessageValidationBlocksHeaderInjection(t *testing.T) {
 				t.Fatalf("erreur = %v, attendu ErrInvalidMessage", err)
 			}
 		})
+	}
+}
+
+func TestBuildAddsReplyToOnlyWhenGiven(t *testing.T) {
+	withReply := testMessage()
+	withReply.ReplyTo = "visiteur@example.org"
+	raw, err := build(testSender, withReply, testNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := mail.ReadMessage(strings.NewReader(string(raw)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replyTo, _ := parsed.Header.AddressList("Reply-To"); len(replyTo) != 1 || replyTo[0].Address != "visiteur@example.org" {
+		t.Errorf("Reply-To = %v", replyTo)
+	}
+
+	raw, err = build(testSender, testMessage(), testNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "Reply-To") {
+		t.Error("sans adresse de réponse, aucun en-tête Reply-To ne doit être écrit")
 	}
 }
 
@@ -604,6 +631,61 @@ func TestServiceEscapesUserControlledValuesInHTML(t *testing.T) {
 	}
 	if !strings.Contains(message.HTML, "&lt;script&gt;") {
 		t.Errorf("prénom échappé absent :\n%s", message.HTML)
+	}
+}
+
+func TestServiceRendersContactMessageForTheTeam(t *testing.T) {
+	recorder := NewRecorder()
+	service, _ := NewService(recorder, "Heros-SOS", config.Tokens{})
+
+	err := service.SendContactMessage(context.Background(), "bureau@heros-sos.example", ContactMessage{
+		SenderName: `Eve <script>alert(1)</script>`, SenderEmail: "eve@example.org",
+		Subject: "Problème avec mon compte", Body: "Bonjour,\nje n'arrive plus à me connecter. <b>Merci</b>",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	message, _ := recorder.Last()
+
+	if message.To != "bureau@heros-sos.example" || message.ReplyTo != "eve@example.org" {
+		t.Errorf("destinataire = %q, réponse = %q", message.To, message.ReplyTo)
+	}
+	if message.Subject != "[Heros-SOS] Message de contact : Problème avec mon compte" {
+		t.Errorf("sujet = %q", message.Subject)
+	}
+	// Le nom et le texte, saisis par le visiteur, restent hors du sujet.
+	if strings.Contains(message.Subject, "Eve") || strings.Contains(message.Subject, "connecter") {
+		t.Errorf("le sujet ne doit pas contenir de saisie libre : %q", message.Subject)
+	}
+	if !strings.Contains(message.Text, "je n'arrive plus à me connecter") || !strings.Contains(message.Text, "eve@example.org") {
+		t.Errorf("texte = %q", message.Text)
+	}
+	for _, injected := range []string{"<script>", "<b>"} {
+		if strings.Contains(message.HTML, injected) {
+			t.Errorf("%s doit être échappé dans le HTML :\n%s", injected, message.HTML)
+		}
+	}
+	if !strings.Contains(message.HTML, "&lt;b&gt;Merci&lt;/b&gt;") {
+		t.Errorf("le corps échappé manque du HTML :\n%s", message.HTML)
+	}
+}
+
+func TestServiceRendersNewsletterConfirmation(t *testing.T) {
+	recorder := NewRecorder()
+	service, _ := NewService(recorder, "Heros-SOS", config.Tokens{NewsletterConfirmTTL: 48 * time.Hour})
+
+	const link = "https://heros-sos.example/newsletter/confirmation?token=abc"
+	if err := service.SendNewsletterConfirmation(context.Background(), "eve@example.org", link); err != nil {
+		t.Fatal(err)
+	}
+	message, _ := recorder.Last()
+	if message.To != "eve@example.org" || message.ReplyTo != "" || message.Subject != "Confirmez votre abonnement à la newsletter Heros-SOS" {
+		t.Errorf("message = %+v", message)
+	}
+	for name, content := range map[string]string{"texte": message.Text, "HTML": message.HTML} {
+		if !strings.Contains(content, link) || !strings.Contains(content, "48 heures") {
+			t.Errorf("%s : le lien ou la durée de validité manque :\n%s", name, content)
+		}
 	}
 }
 

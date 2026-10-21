@@ -315,7 +315,7 @@ Fonctions dans [incidents.ts](../src/lib/api/incidents.ts) (incidents) et
 | Back-office : liste, fiche, arbitrage    | `getAllIncidents`, `getIncident`, `arbitrateIntervention`                  | `GET /incidents`, `GET /incidents/{id}`, `POST /admin/interventions/{id}/decision`       |
 
 - **Titre** : ajouté au contrat (`title`, obligatoire, 80 caractères au plus ; migration
-  `20261021120000_add_incident_title`). Un incident plus ancien a un titre vide : le frontend
+  `20261021130000_add_incident_title`). Un incident plus ancien a un titre vide : le frontend
   affiche « type · ville ».
 - **Statuts** : `reported` → `signale`, `in_progress` → `en-cours`, `succeeded` → `resolu`,
   `failed` → `signale` (un incident en échec redevient disponible). Priorités : `high` → `haute`,

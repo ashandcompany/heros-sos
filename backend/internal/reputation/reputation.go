@@ -14,6 +14,7 @@ const (
 	MaxReplyLength   = 500
 
 	ReviewPublished = "published"
+	ReviewPending   = "pending"
 	ReviewHidden    = "hidden"
 	ReplyPending    = "pending"
 	ReplyPublished  = "published"
@@ -101,6 +102,7 @@ type Repository interface {
 	ListModerationReviews(ctx context.Context, status string, page Page) ([]Review, int64, error)
 	ListModerationReplies(ctx context.Context, status string, page Page) ([]ModerationReply, int64, error)
 	SaveReply(ctx context.Context, reviewID, heroID uuid.UUID, content string, now time.Time) error
+	UpdateReview(ctx context.Context, reviewID, citizenID uuid.UUID, rating int16, comment *string, status string, now time.Time) error
 	SetReviewStatus(ctx context.Context, reviewID, moderatorID uuid.UUID, status string, now time.Time) error
 	SetReplyStatus(ctx context.Context, reviewID, moderatorID uuid.UUID, status string, now time.Time) error
 }

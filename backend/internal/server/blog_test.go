@@ -8,14 +8,14 @@ import (
 )
 
 type articleView struct {
-	ID          string  `json:"id"`
-	Title       string  `json:"title"`
-	Slug        string  `json:"slug"`
-	Excerpt     string  `json:"excerpt"`
-	Content     string  `json:"content"`
-	Status      string  `json:"status"`
-	AuthorName  string  `json:"authorName"`
-	PublishedAt *string `json:"publishedAt"`
+	ID          string     `json:"id"`
+	Title       string     `json:"title"`
+	Slug        string     `json:"slug"`
+	Excerpt     string     `json:"excerpt"`
+	Content     string     `json:"content"`
+	Status      string     `json:"status"`
+	AuthorName  string     `json:"authorName"`
+	PublishedAt *time.Time `json:"publishedAt"`
 }
 
 type articlePage struct {
@@ -136,7 +136,7 @@ func TestBlogPublishingLifecycle(t *testing.T) {
 	if got := anonymous.get("/articles/titre-modifie"); got.status != http.StatusNotFound {
 		t.Fatalf("dépublié : %d", got.status)
 	}
-	if _, republished := put("Encore un autre titre", "publie"); republished.PublishedAt == nil || *republished.PublishedAt != firstDate {
+	if _, republished := put("Encore un autre titre", "publie"); republished.PublishedAt == nil || !republished.PublishedAt.Equal(firstDate) {
 		t.Fatalf("la date de première publication doit être conservée : %+v", republished)
 	}
 

@@ -14,8 +14,12 @@ import (
 type Principal struct {
 	UserID uuid.UUID
 	Role   user.Role
-	// MFAVerified indique que la double authentification a été validée pour cette session.
+	// MFAVerified indique que la session est complète : la double authentification a été validée, ou elle
+	// n'est ni activée ni exigée pour ce compte. Une session qui ne l'est pas (code à saisir, ou activation
+	// obligatoire pas encore faite) ne donne accès qu'à la 2FA et à la déconnexion (voir Protected).
 	MFAVerified bool
+	// MFAEnrolled indique que le compte a activé la 2FA.
+	MFAEnrolled bool
 }
 
 // IsModerator indique si l'utilisateur est modérateur.

@@ -12,6 +12,7 @@ import (
 	"github.com/ashandcompany/heros-sos/backend/internal/config"
 	"github.com/ashandcompany/heros-sos/backend/internal/httpx"
 	"github.com/ashandcompany/heros-sos/backend/internal/user"
+	"github.com/ashandcompany/heros-sos/backend/internal/validation"
 )
 
 // Codes d'erreur de l'API des demandes de super-héros.
@@ -29,11 +30,14 @@ type Handler struct {
 	service *Service
 	logger  *slog.Logger
 	http    config.HTTP
+	// avatarURLPrefix précède le nom d'une photo de profil dans son adresse publique.
+	avatarURLPrefix string
 }
 
-// NewHandler crée les handlers.
-func NewHandler(service *Service, logger *slog.Logger, httpConfig config.HTTP) *Handler {
-	return &Handler{service: service, logger: logger, http: httpConfig}
+// NewHandler crée les handlers. avatarURLPrefix est le début de l'adresse publique d'une photo, avant son
+// nom de fichier (par exemple « /api/v1/avatars/ »).
+func NewHandler(service *Service, logger *slog.Logger, httpConfig config.HTTP, avatarURLPrefix string) *Handler {
+	return &Handler{service: service, logger: logger, http: httpConfig, avatarURLPrefix: avatarURLPrefix}
 }
 
 type requestPayload struct {
@@ -76,10 +80,55 @@ type PublicProfileResponse struct {
 	InterventionsCount int64     `json:"interventionsCount"`
 }
 
-func newPublicProfileResponse(profile PublicProfile) PublicProfileResponse {
+func (h *Handler) newPublicProfileResponse(profile PublicProfile) PublicProfileResponse {
 	return PublicProfileResponse{
-		ID: profile.UserID, Alias: profile.Alias, AvatarURL: profile.AvatarURL, Power: profile.Bio,
-		AverageRating: profile.AverageRating, InterventionsCount: profile.InterventionsCount,
+		ID: profile.UserID, Alias: profile.Alias, AvatarURL: resolveAvatarURL(h.avatarURLPrefix, profile.AvatarPath),
+		Power: profile.Bio, AverageRating: profile.AverageRating, InterventionsCount: profile.InterventionsCount,
+	}
+}
+
+// AdminHeroResponse est un super-héros vu par un modérateur : sa fiche publique, son identité civile et
+// ses coordonnées. Ces données sont confidentielles et ne figurent jamais dans une route publique.
+type AdminHeroResponse struct {
+	ID                 uuid.UUID       `json:"id"`
+	Alias              string          `json:"alias"`
+	AvatarURL          *string         `json:"avatarUrl"`
+	Power              string          `json:"power"`
+	AverageRating      float64         `json:"averageRating"`
+	InterventionsCount int64           `json:"interventionsCount"`
+	Civility           string          `json:"civility"`
+	FirstName          string          `json:"firstName"`
+	LastName           string          `json:"lastName"`
+	BirthDate          string          `json:"birthDate"`
+	Email              string          `json:"email"`
+	PendingEmail       string          `json:"pendingEmail,omitempty"`
+	MobilePhone        string          `json:"mobilePhone"`
+	Address            addressResponse `json:"address"`
+	AccountStatus      string          `json:"accountStatus"`
+	CreatedAt          time.Time       `json:"createdAt"`
+	LastInterventionAt *time.Time      `json:"lastInterventionAt"`
+}
+
+type addressResponse struct {
+	Street     string `json:"street"`
+	Complement string `json:"complement,omitempty"`
+	PostalCode string `json:"postalCode"`
+	City       string `json:"city"`
+	Country    string `json:"country"`
+}
+
+func (h *Handler) newAdminHeroResponse(view DirectoryView) AdminHeroResponse {
+	return AdminHeroResponse{
+		ID: view.UserID, Alias: view.Alias, AvatarURL: resolveAvatarURL(h.avatarURLPrefix, view.AvatarPath),
+		Power: view.Bio, AverageRating: view.AverageRating, InterventionsCount: view.InterventionsCount,
+		Civility: view.Civility, FirstName: view.FirstName, LastName: view.LastName,
+		BirthDate: validation.FormatBirthDate(view.BirthDate), Email: view.Email, PendingEmail: view.PendingEmail,
+		MobilePhone: view.Phone, AccountStatus: string(view.AccountStatus), CreatedAt: view.RegisteredAt,
+		LastInterventionAt: view.LastInterventionAt,
+		Address: addressResponse{
+			Street: view.Address.Street, Complement: view.Address.Complement, PostalCode: view.Address.PostalCode,
+			City: view.Address.City, Country: view.Address.Country,
+		},
 	}
 }
 
@@ -108,7 +157,7 @@ func (h *Handler) PublicList(w http.ResponseWriter, r *http.Request) {
 	}
 	items := make([]PublicProfileResponse, len(profiles))
 	for i, profile := range profiles {
-		items[i] = newPublicProfileResponse(profile)
+		items[i] = h.newPublicProfileResponse(profile)
 	}
 	httpx.WriteJSON(w, http.StatusOK, httpx.NewPageResponse(items, total, page))
 }
@@ -125,7 +174,26 @@ func (h *Handler) PublicGet(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, newPublicProfileResponse(*profile))
+	httpx.WriteJSON(w, http.StatusOK, h.newPublicProfileResponse(*profile))
+}
+
+// AdminList traite GET /admin/heroes (modérateur) : l'annuaire des super-héros.
+func (h *Handler) AdminList(w http.ResponseWriter, r *http.Request) {
+	page, err := httpx.ParsePage(r)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	views, total, err := h.service.ListDirectory(r.Context(), page.Limit, page.Offset)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	items := make([]AdminHeroResponse, len(views))
+	for i, view := range views {
+		items[i] = h.newAdminHeroResponse(view)
+	}
+	httpx.WriteJSON(w, http.StatusOK, httpx.NewPageResponse(items, total, page))
 }
 
 // Request traite POST /heroes/requests (citoyen connecté).

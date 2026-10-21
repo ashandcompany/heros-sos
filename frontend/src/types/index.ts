@@ -4,6 +4,7 @@ export type * from "./auth";
 export type * from "./blog";
 export type * from "./contact";
 export type * from "./incident";
+export type * from "./mfa";
 export type * from "./moderation";
 export type * from "./newsletter";
 export type * from "./review";

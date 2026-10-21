@@ -385,6 +385,133 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/mfa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * État de la double authentification
+         * @description Où en est la double authentification de la session, et combien de codes de secours restent. Une
+         *     session **limitée** (`verification_required`, `enrollment_required`) peut l'appeler.
+         */
+        get: operations["getMfaStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/mfa/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Commencer l'activation de la double authentification
+         * @description Réservé aux modérateurs. Tire un secret TOTP et le rend, pour le configurer dans une application
+         *     d'authentification (Google Authenticator, Aegis, 1Password…) : `otpauthUrl` s'ouvre dans l'application
+         *     (lien ou QR code), `secret` se saisit à la main. La double authentification n'est active qu'une fois
+         *     confirmée par un premier code (`POST /auth/mfa/enable`) ; recommencer remplace le secret d'une
+         *     activation non confirmée. Une double authentification **déjà activée** ne se réinitialise pas par
+         *     l'API (`mfa_already_enabled`) : un compte piraté ne doit pas pouvoir remplacer sa propre protection ;
+         *     l'exploitation la réinitialise (`make resetmfa-dev`).
+         *
+         *     Une session **limitée** peut l'appeler.
+         */
+        post: operations["setupMfa"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/mfa/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Activer la double authentification
+         * @description Réservé aux modérateurs. Le premier code de l'application confirme l'activation. La réponse donne
+         *     **les codes de secours, montrés cette seule fois** (à garder hors ligne : chacun remplace un code TOTP
+         *     une fois), et ouvre une **session complète avec un nouveau cookie et un nouveau jeton CSRF** : les
+         *     autres sessions du compte sont fermées, celles ouvertes avant n'ayant jamais passé le second facteur.
+         *
+         *     Un code faux compte comme un échec de connexion (verrouillage progressif du compte).
+         *
+         *     Une session **limitée** peut l'appeler.
+         */
+        post: operations["enableMfa"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/mfa/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Valider la double authentification
+         * @description Pour un compte qui a activé la double authentification, la session ouverte par `POST /auth/login`
+         *     est **limitée** (`mfa: verification_required`) : elle ne donne accès qu'à cette route, à l'état de la
+         *     session et à la déconnexion (toute autre route répond `mfa_required`). Un code de l'application
+         *     (`code`), ou à défaut un code de secours (`recoveryCode`, à usage unique), ouvre une **session
+         *     complète avec un nouveau cookie et un nouveau jeton CSRF**.
+         *
+         *     Un code TOTP ne sert qu'une fois. Un code faux compte comme un échec de connexion : après quelques-uns,
+         *     le compte est verrouillé avec un délai croissant (`account_locked`, 429) et ses sessions sont fermées.
+         *     Le mot de passe seul ne remet pas ce compteur à zéro, pour qu'on ne puisse pas alterner connexion et
+         *     devinette.
+         */
+        post: operations["verifyMfa"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/mfa/recovery-codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Régénérer les codes de secours
+         * @description Réservé aux modérateurs, avec une **session complète**. Remplace tous les codes de secours (utilisés
+         *     ou non) par de nouveaux, montrés cette seule fois. Demande le code TOTP courant : une session volée ne
+         *     suffit pas à s'en procurer.
+         */
+        post: operations["regenerateMfaRecoveryCodes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/password-reset": {
         parameters: {
             query?: never;
@@ -505,6 +632,34 @@ export interface paths {
          *     n'a été déposée.
          */
         get: operations["myHeroRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/heroes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Annuaire des super-héros
+         * @description Réservé aux modérateurs. Liste les super-héros approuvés par pseudo, avec ce que seule la
+         *     modération voit : identité civile, coordonnées, adresse email, état du compte et demande de
+         *     changement d'adresse en attente. **Ces données sont confidentielles** : la liste publique
+         *     (`GET /heroes`) n'en expose aucune. Un héros dont le compte est désactivé reste listé
+         *     (`accountStatus`).
+         *
+         *     `averageRating` et `interventionsCount` se calculent comme sur la liste publique ;
+         *     `lastInterventionAt` est le début de la dernière intervention à laquelle le héros a participé
+         *     (`null` s'il n'a jamais participé).
+         */
+        get: operations["listAdminHeroes"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1383,15 +1538,42 @@ export interface paths {
         put?: never;
         /**
          * Demander un changement d'adresse email
-         * @description Dépose une demande qu'un modérateur doit valider : l'adresse de connexion ne change qu'à ce
-         *     moment-là, et d'ici là `GET /me` la montre dans `pendingEmail`. Une nouvelle demande remplace la
-         *     précédente tant qu'elle n'est pas traitée.
+         * @description Dépose une demande qui aboutit en deux temps : **le titulaire de la nouvelle adresse la
+         *     confirme** par le lien qui lui est envoyé (`POST /email-change-requests/confirm`), puis **un
+         *     modérateur l'accepte**. L'adresse de connexion ne change qu'à ce moment-là ; d'ici là `GET /me`
+         *     la montre dans `pendingEmail` (`pendingEmailConfirmed` dit si le lien a été utilisé). Une nouvelle
+         *     demande remplace la précédente tant qu'elle n'est pas traitée, ce qui invalide l'ancien lien et
+         *     renvoie un mail.
          *
          *     Réservé aux citoyens et aux super-héros : le compte d'un modérateur se gère hors ligne.
          *     L'adresse est vérifiée une seconde fois à la validation : si quelqu'un l'a prise entre-temps, le
          *     modérateur reçoit `email_already_used` et doit refuser la demande.
          */
         post: operations["requestMyEmailChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/email-change-requests/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirmer une nouvelle adresse email
+         * @description Route publique : le lien reçu à la nouvelle adresse s'ouvre souvent sur un autre appareil que
+         *     celui de la demande, et il se prouve par sa signature. Elle confirme que le titulaire de
+         *     l'adresse y a accès ; elle **ne change pas** l'adresse du compte, qui reste décidée par un
+         *     modérateur. Cliquer deux fois sur le lien réussit les deux fois. Un lien falsifié, expiré, ou
+         *     devenu sans objet (demande remplacée par son titulaire, ou refusée) répond `invalid_token`.
+         */
+        post: operations["confirmEmailChange"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1453,8 +1635,10 @@ export interface paths {
         /**
          * Accepter un changement d'adresse
          * @description Réservé aux modérateurs. L'adresse de connexion du compte devient la nouvelle adresse, et son
-         *     abonnement à la newsletter la suit. Si l'adresse a été prise entre-temps, rien n'est modifié :
-         *     `email_already_used`, et la demande reste à refuser. Une demande remplacée par son titulaire
+         *     abonnement à la newsletter la suit. **Seule une demande dont l'adresse est confirmée** (`confirmedAt`)
+         *     peut être acceptée : sinon `email_change_not_confirmed`, et il ne reste qu'à la refuser ou à
+         *     attendre. La nouvelle adresse et l'ancienne en sont ensuite prévenues par mail. Si l'adresse a été
+         *     prise entre-temps, rien n'est modifié : `email_already_used`, et la demande reste à refuser. Une demande remplacée par son titulaire
          *     change d'identifiant : l'ancien identifiant répond `email_change_not_found`, pour qu'un
          *     modérateur ne valide jamais une adresse qu'il n'a pas vue.
          */
@@ -1476,7 +1660,7 @@ export interface paths {
         put?: never;
         /**
          * Refuser un changement d'adresse
-         * @description Réservé aux modérateurs. L'adresse du compte ne change pas ; le titulaire peut déposer une nouvelle demande.
+         * @description Réservé aux modérateurs. L'adresse du compte ne change pas, son titulaire en est prévenu par mail et peut déposer une nouvelle demande. Une demande dont l'adresse n'est pas confirmée peut être refusée.
          */
         post: operations["rejectEmailChangeRequest"];
         delete?: never;
@@ -1553,6 +1737,32 @@ export interface paths {
          *     devenu sans objet (l'abonné s'est retiré entre-temps) répond `invalid_token`.
          */
         post: operations["confirmNewsletterSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/newsletter/subscriptions/unsubscribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Se désabonner de la newsletter
+         * @description Route publique : chaque newsletter porte un lien de désinscription, qui s'ouvre sans connexion.
+         *     Il désigne l'abonnement (jamais l'adresse) et n'expire pas : le lien d'une ancienne newsletter
+         *     reste utilisable. Cliquer deux fois sur le lien réussit les deux fois. Un lien falsifié, ou fabriqué
+         *     pour une autre action (confirmation), répond `invalid_token`.
+         *
+         *     La désinscription garde la ligne de l'abonné : se réabonner depuis le pied de page redemande un
+         *     consentement (`POST /newsletter/subscriptions`, puis confirmation par lien).
+         */
+        post: operations["unsubscribeFromNewsletter"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1672,6 +1882,57 @@ export interface components {
             /** @description Prolonge la session (sans effet pour un modérateur). */
             rememberMe?: boolean;
         };
+        /**
+         * @description Où en est la double authentification de la session :
+         *
+         *     - `verified` : activée et validée, la session est complète ;
+         *     - `verification_required` : activée, le code reste à saisir (`POST /auth/mfa/verify`) ; la session est **limitée** ;
+         *     - `enrollment_required` : obligatoire pour ce compte (modérateur en production) et pas encore activée (`POST /auth/mfa/setup`, puis `enable`) ; la session est **limitée** ;
+         *     - `not_enrolled` : ni activée ni obligatoire, la session est complète.
+         *
+         *     Une session limitée ne donne accès qu'à `/auth/me`, `/auth/mfa*`, `/auth/logout` et `/auth/logout-all` : toute autre route répond `mfa_required` (403).
+         * @enum {string}
+         */
+        MfaStatus: "verified" | "verification_required" | "enrollment_required" | "not_enrolled";
+        MfaStatusResponse: {
+            status: components["schemas"]["MfaStatus"];
+            /** @description Nombre de codes de secours qui n'ont pas servi (0 sans double authentification). */
+            recoveryCodesRemaining: number;
+        };
+        MfaSetupResponse: {
+            /** @description Le secret TOTP en base32, à saisir à la main dans l'application. */
+            secret: string;
+            /** @description Adresse `otpauth://` que lisent les applications d'authentification (lien ou QR code). */
+            otpauthUrl: string;
+        };
+        MfaCodeRequest: {
+            /** @description Le code à 6 chiffres de l'application d'authentification (les espaces sont ignorés). */
+            code: string;
+        };
+        /** @description Un code de l'application, ou à défaut un code de secours (à usage unique). */
+        MfaVerifyRequest: {
+            /** @description Le code à 6 chiffres de l'application d'authentification. */
+            code?: string;
+            /** @description Un code de secours (la casse, les tirets et les espaces sont ignorés). */
+            recoveryCode?: string;
+        };
+        MfaEnabledResponse: {
+            user: components["schemas"]["UserView"];
+            /** @description Jeton CSRF de la nouvelle session. */
+            csrfToken: string;
+            /**
+             * Format: date-time
+             * @description Fin de la session (inchangée par l'activation).
+             */
+            expiresAt: string;
+            mfa: components["schemas"]["MfaStatus"];
+            /** @description Les codes de secours, montrés cette seule fois. */
+            recoveryCodes: string[];
+        };
+        RecoveryCodesResponse: {
+            /** @description Les nouveaux codes de secours, montrés cette seule fois. */
+            recoveryCodes: string[];
+        };
         LoginResponse: {
             user: components["schemas"]["UserView"];
             /** @description À renvoyer dans `X-CSRF-Token` sur les écritures authentifiées. */
@@ -1681,11 +1942,13 @@ export interface components {
              * @description Durée de vie maximale de la session.
              */
             expiresAt: string;
+            mfa: components["schemas"]["MfaStatus"];
         };
         MeResponse: {
             user: components["schemas"]["UserView"];
             /** @description Jeton CSRF à jour, à renvoyer dans `X-CSRF-Token` sur les écritures authentifiées. */
             csrfToken: string;
+            mfa: components["schemas"]["MfaStatus"];
         };
         PasswordResetConfirmRequest: {
             /** @description Jeton du lien de réinitialisation reçu par mail. */
@@ -1734,6 +1997,69 @@ export interface components {
         };
         PublicHeroPage: {
             items: components["schemas"]["PublicHero"][];
+            total: number;
+            limit: number;
+            offset: number;
+        };
+        /** @description Un super-héros vu par un modérateur. Confidentiel. */
+        AdminHero: {
+            /** Format: uuid */
+            id: string;
+            /** @description Pseudo public du super-héros. */
+            alias: string;
+            /**
+             * Format: uri-reference
+             * @description Adresse de la photo (`GET /avatars/{name}`) ; `null` tant qu'aucune photo n'a été envoyée.
+             */
+            avatarUrl: string | null;
+            /** @description Description publique du profil (`hero_profiles.bio`). */
+            power: string;
+            /** Format: double */
+            averageRating: number;
+            /** @description Nombre d'interventions auxquelles le héros a participé avec le statut confirmed. */
+            interventionsCount: number;
+            /** @enum {string} */
+            civility: "madame" | "monsieur" | "non-precise";
+            /** @description Prénom. */
+            firstName: string;
+            /** @description Nom de famille. */
+            lastName: string;
+            /**
+             * Format: date
+             * @description Date de naissance (AAAA-MM-JJ).
+             */
+            birthDate: string;
+            /**
+             * Format: email
+             * @description Adresse de connexion.
+             */
+            email: string;
+            /**
+             * Format: email
+             * @description Nouvelle adresse demandée, en attente de décision d'un modérateur. Absente sinon.
+             */
+            pendingEmail?: string;
+            /** @description Numéro de portable, sans séparateurs. */
+            mobilePhone: string;
+            address: components["schemas"]["AccountAddress"];
+            /**
+             * @description État du compte.
+             * @enum {string}
+             */
+            accountStatus: "pending_activation" | "active" | "deactivated";
+            /**
+             * Format: date-time
+             * @description Date de création du compte.
+             */
+            createdAt: string;
+            /**
+             * Format: date-time
+             * @description Début de la dernière intervention à laquelle le héros a participé ; `null` s'il n'a jamais participé.
+             */
+            lastInterventionAt: string | null;
+        };
+        AdminHeroPage: {
+            items: components["schemas"]["AdminHero"][];
             total: number;
             limit: number;
             offset: number;
@@ -2284,6 +2610,8 @@ export interface components {
              * @description Nouvelle adresse demandée, en attente de validation par un modérateur. Absente sinon.
              */
             pendingEmail?: string;
+            /** @description Présent (vrai) quand le titulaire de `pendingEmail` l'a confirmée par le lien reçu. Absent tant que ce n'est pas fait, et sans demande en attente. */
+            pendingEmailConfirmed?: boolean;
             /** @description Numéro de portable, sans séparateurs. Vide pour un compte créé hors inscription. */
             mobilePhone: string;
             address: components["schemas"]["AccountAddress"];
@@ -2407,6 +2735,11 @@ export interface components {
             createdAt: string;
             /**
              * Format: date-time
+             * @description Date à laquelle le titulaire de la nouvelle adresse l'a confirmée par le lien reçu. Absente tant qu'elle ne l'est pas : un modérateur ne peut alors que refuser la demande.
+             */
+            confirmedAt?: string;
+            /**
+             * Format: date-time
              * @description Date de la décision, absente tant que la demande est en attente.
              */
             reviewedAt?: string;
@@ -2474,7 +2807,8 @@ export interface components {
         };
         /**
          * @description Refusé : origine non autorisée (`origin_not_allowed`), jeton CSRF absent ou invalide
-         *     (`csrf_invalid`), ou rôle insuffisant (`forbidden`, `protected_account`).
+         *     (`csrf_invalid`), rôle insuffisant (`forbidden`, `protected_account`), ou **session limitée**
+         *     (`mfa_required` : la double authentification doit d'abord être validée ou activée, voir `GET /auth/mfa`).
          */
         Forbidden: {
             headers: {
@@ -3168,6 +3502,214 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getMfaStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description L'état de la double authentification. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfaStatusResponse"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    setupMfa: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Le secret à configurer. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfaSetupResponse"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description La double authentification est déjà activée (`mfa_already_enabled`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    enableMfa: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MfaCodeRequest"];
+            };
+        };
+        responses: {
+            /** @description Double authentification activée ; session complète. */
+            200: {
+                headers: {
+                    /** @description Le nouveau cookie de session (le précédent est révoqué). */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfaEnabledResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description La double authentification est déjà activée (`mfa_already_enabled`), ou son activation n'a pas été commencée (`mfa_not_set_up`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            /** @description Code absent (`required`) ou faux, périmé ou déjà utilisé (`invalid`). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    verifyMfa: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MfaVerifyRequest"];
+            };
+        };
+        responses: {
+            /** @description Session complète. */
+            200: {
+                headers: {
+                    /** @description Le nouveau cookie de session (le précédent est révoqué). */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description La double authentification n'est pas activée pour ce compte (`mfa_not_set_up`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            /** @description Aucun code (`required`), ou code faux, périmé, déjà utilisé (`invalid`). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    regenerateMfaRecoveryCodes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MfaCodeRequest"];
+            };
+        };
+        responses: {
+            /** @description Les nouveaux codes de secours. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoveryCodesResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description La double authentification n'est pas activée (`mfa_not_set_up`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            /** @description Code absent (`required`) ou faux (`invalid`). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -3349,6 +3891,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             /** @description Aucune demande (`hero_request_not_found`). */
             404: {
                 headers: {
@@ -3358,6 +3901,35 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listAdminHeroes: {
+        parameters: {
+            query?: {
+                /** @description Nombre d'éléments par page (1 à 100, 20 par défaut). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Nombre d'éléments à sauter. */
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Une page de super-héros. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminHeroPage"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -3629,6 +4201,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
             500: components["responses"]["InternalError"];
         };
@@ -5052,6 +5625,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
@@ -5213,6 +5787,33 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
+    confirmEmailChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Nouvelle adresse confirmée. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequestOrInvalidToken"];
+            403: components["responses"]["Forbidden"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            500: components["responses"]["InternalError"];
+        };
+    };
     setMyNewsletterPreference: {
         parameters: {
             query?: never;
@@ -5299,7 +5900,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["EmailChangeNotFound"];
-            /** @description La demande a déjà été traitée (`email_change_not_pending`), ou l'adresse est maintenant prise (`email_already_used`). */
+            /** @description La demande a déjà été traitée (`email_change_not_pending`), son adresse n'est pas confirmée (`email_change_not_confirmed`), ou l'adresse est maintenant prise (`email_already_used`). */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -5429,6 +6030,33 @@ export interface operations {
         };
         responses: {
             /** @description Abonnement confirmé. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequestOrInvalidToken"];
+            403: components["responses"]["Forbidden"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    unsubscribeFromNewsletter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Abonné retiré de la newsletter. */
             204: {
                 headers: {
                     [name: string]: unknown;

@@ -45,15 +45,23 @@ func NewError(status int, code, message string) *Error {
 	return &Error{Status: status, Code: code, Message: message}
 }
 
-// Erreurs prédéfinies les plus courantes.
+// BadRequest est une erreur 400 : requête mal formée.
 func BadRequest(message string) *Error {
 	return NewError(http.StatusBadRequest, CodeBadRequest, message)
 }
+
+// Unauthenticated est une erreur 401 : aucune session valide.
 func Unauthenticated() *Error {
 	return NewError(http.StatusUnauthorized, CodeUnauthenticated, "Authentification requise.")
 }
+
+// Forbidden est une erreur 403 : session valide, droits insuffisants.
 func Forbidden(message string) *Error { return NewError(http.StatusForbidden, CodeForbidden, message) }
-func NotFound(message string) *Error  { return NewError(http.StatusNotFound, CodeNotFound, message) }
+
+// NotFound est une erreur 404.
+func NotFound(message string) *Error { return NewError(http.StatusNotFound, CodeNotFound, message) }
+
+// Conflict est une erreur 409 portant un code métier précis.
 func Conflict(code, message string) *Error {
 	return NewError(http.StatusConflict, code, message)
 }

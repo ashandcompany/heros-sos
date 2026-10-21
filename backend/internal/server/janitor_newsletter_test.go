@@ -2,7 +2,6 @@ package server_test
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"testing"
 	"time"
@@ -21,7 +20,7 @@ func TestJanitorPurgesUnconfirmedNewsletterRequests(t *testing.T) {
 	cfg := testutil.Config(t, map[string]string{
 		"HEROS_HTTP_ADDR": freeAddress(t), "HEROS_CLEANUP_INTERVAL": "50ms", "HEROS_TOKEN_RETENTION": "1h",
 	})
-	app, err := server.NewWithDB(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), db)
+	app, err := server.NewWithDB(cfg, slog.New(slog.DiscardHandler), db)
 	if err != nil {
 		t.Fatal(err)
 	}

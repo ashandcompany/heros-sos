@@ -4,8 +4,10 @@ import { citizensMock } from "@/mocks/citizens";
 import type {
   AvatarUpdateResult,
   CitizenAccount,
+  CitizenAddress,
   ContactUpdate,
   ContactUpdateResult,
+  EmailChangeConfirmationResult,
   EmailChangeRequest,
   EmailChangeResult,
   EmailChangeReviewResult,
@@ -18,37 +20,10 @@ import { MAX_PAGE_SIZE, pageQuery } from "./pagination";
 import { userFromToken } from "./session-user";
 
 /*
- * Compte de l'utilisateur connecté : `GET /me`, `PATCH /me`, `PUT /me/avatar`,
- * `POST /me/email-change-requests`, `PUT /me/newsletter`. Un super-héros utilise les mêmes routes
- * que le citoyen (même compte, `role: hero`) : les fonctions de son espace (`super-heroes.ts`)
- * délèguent à celles-ci avec l'API.
+ * Profil, photo, adresse email et newsletter du compte connecté, et décision de la modération sur
+ * les changements d'adresse. `/me` vaut pour tous les rôles : un super-héros est un compte avec un
+ * bloc `hero` en plus. Ses fonctions (`super-heroes.ts`) réutilisent donc les appels ci-dessous.
  */
-
-/**
- * Profil brut du compte connecté. Mémorisé le temps d'un rendu : la page de profil et la photo de
- * la barre de navigation ne déclenchent qu'un seul `GET /me`.
- */
-export const getApiAccount = cache(async (token: string): Promise<ApiSchema<"Account">> => {
-  const response = await apiFetch("/me", { sessionToken: token });
-  return (await response.json()) as ApiSchema<"Account">;
-});
-
-function fromApiAccount(account: ApiSchema<"Account">): MyAccount {
-  return {
-    id: account.id,
-    civility: account.civility,
-    firstName: account.firstName,
-    lastName: account.lastName,
-    birthDate: account.birthDate,
-    email: account.email,
-    pendingEmail: account.pendingEmail ?? null,
-    mobilePhone: account.mobilePhone,
-    address: { ...account.address, complement: account.address.complement ?? null },
-    avatarUrl: account.avatarUrl ?? null,
-    newsletterSubscribed: account.newsletterSubscribed,
-    registeredAt: account.createdAt,
-  };
-}
 
 async function findMyAccount(token: string): Promise<CitizenAccount> {
   const user = await userFromToken(token, "citoyen");
@@ -57,16 +32,51 @@ async function findMyAccount(token: string): Promise<CitizenAccount> {
   return account;
 }
 
-/** Compte du citoyen connecté. API : `GET /me`. */
-export async function getMyAccount(token: string): Promise<MyAccount> {
-  if (isApiEnabled) return fromApiAccount(await getApiAccount(token));
-  return mockResponse(await findMyAccount(token));
+/**
+ * Profil du compte connecté, quel que soit son rôle (`GET /me`). Mémorisé le temps d'un rendu :
+ * la page et la barre de navigation (photo) le lisent chacune.
+ */
+export const fetchMyAccount = cache(async (token: string): Promise<ApiSchema<"Account">> => {
+  const response = await apiFetch("/me", { sessionToken: token });
+  return (await response.json()) as ApiSchema<"Account">;
+});
+
+function fromApiAddress({ complement, ...address }: ApiSchema<"AccountAddress">): CitizenAddress {
+  return { ...address, complement: complement ?? null };
 }
 
 /**
- * Remplace le téléphone et l'adresse. `address.complement` à `null` conserve le complément actuel,
- * une chaîne vide l'efface.
- * API : `PATCH /me` avec `{ mobilePhone, address }`.
+ * Compte du citoyen connecté.
+ * API : `GET /me`. Mock : le profil complet.
+ */
+export async function getMyAccount(token: string): Promise<MyAccount> {
+  if (!isApiEnabled) {
+    // Sans API, aucun mail n'est envoyé : une demande est confirmée d'emblée, pour que la modération puisse la traiter.
+    const account = await findMyAccount(token);
+    return mockResponse({ ...account, pendingEmailConfirmed: account.pendingEmail !== null });
+  }
+
+  const account = await fetchMyAccount(token);
+  return {
+    id: account.id,
+    civility: account.civility,
+    firstName: account.firstName,
+    lastName: account.lastName,
+    birthDate: account.birthDate,
+    email: account.email,
+    pendingEmail: account.pendingEmail ?? null,
+    pendingEmailConfirmed: account.pendingEmailConfirmed ?? false,
+    mobilePhone: account.mobilePhone,
+    address: fromApiAddress(account.address),
+    avatarUrl: account.avatarUrl ?? null,
+    newsletterSubscribed: account.newsletterSubscribed,
+    registeredAt: account.createdAt,
+  };
+}
+
+/**
+ * Modifie le téléphone et l'adresse (`PATCH /me`). Pour l'API, un complément absent ou `null`
+ * conserve l'actuel : un citoyen qui vide le champ envoie donc une chaîne vide.
  */
 export async function updateMyContact(
   token: string,
@@ -74,18 +84,24 @@ export async function updateMyContact(
 ): Promise<ContactUpdateResult> {
   if (!isApiEnabled) {
     const account = await findMyAccount(token);
-    const complement = update.address.complement ?? account.address.complement;
     account.mobilePhone = update.mobilePhone;
-    account.address = { ...update.address, complement: complement || null };
+    account.address = update.address;
     return mockResponse({ ok: true });
   }
 
+  return patchMyContact(token, {
+    mobilePhone: update.mobilePhone,
+    address: { ...update.address, complement: update.address.complement ?? "" },
+  });
+}
+
+/** `PATCH /me`, pour un citoyen comme pour un super-héros. */
+export async function patchMyContact(
+  token: string,
+  body: ApiSchema<"ContactUpdateRequest">,
+): Promise<ContactUpdateResult> {
   try {
-    await apiFetch("/me", {
-      method: "PATCH",
-      sessionToken: token,
-      body: update satisfies ApiSchema<"ContactUpdateRequest">,
-    });
+    await apiFetch("/me", { method: "PATCH", sessionToken: token, body });
     return { ok: true };
   } catch (error) {
     if (error instanceof ApiError && error.code === "validation_failed") {
@@ -96,33 +112,30 @@ export async function updateMyContact(
 }
 
 /**
- * Remplace la photo de profil (publique pour un super-héros). L'API ré-encode l'image en JPEG et
- * lui donne une nouvelle adresse à chaque envoi.
- * API : `PUT /me/avatar`, l'image brute en corps (ni JSON, ni multipart) avec son `Content-Type`.
- * Mock : l'image est gardée en mémoire sous forme de data URL.
+ * Remplace la photo de profil.
+ * API : `PUT /me/avatar`, le corps est l'image elle-même (voir `putMyAvatar`). Le mock garde
+ * l'image en mémoire sous forme de data URL.
  */
 export async function updateMyAvatar(token: string, file: File): Promise<AvatarUpdateResult> {
-  if (!isApiEnabled) {
-    const account = await findMyAccount(token);
-    account.avatarUrl = await toDataUrl(file);
-    return mockResponse({ ok: true });
-  }
+  if (isApiEnabled) return putMyAvatar(token, file);
 
-  return putAvatar(token, file);
+  const account = await findMyAccount(token);
+  const base64 = Buffer.from(await file.arrayBuffer()).toString("base64");
+  account.avatarUrl = `data:${file.type};base64,${base64}`;
+  return mockResponse({ ok: true });
 }
 
-/** `PUT /me/avatar`, commun au citoyen et au super-héros. */
-export async function putAvatar(token: string, file: File): Promise<AvatarUpdateResult> {
+/**
+ * `PUT /me/avatar`, pour un citoyen comme pour un super-héros. Le corps est l'image brute (ni JSON,
+ * ni multipart), JPEG, PNG ou WebP : l'API la décode, la ré-encode en JPEG et efface ses métadonnées.
+ */
+export async function putMyAvatar(token: string, file: File): Promise<AvatarUpdateResult> {
   try {
-    await apiFetch("/me/avatar", {
-      method: "PUT",
-      sessionToken: token,
-      rawBody: file,
-      headers: { "Content-Type": file.type },
-    });
+    await apiFetch("/me/avatar", { method: "PUT", sessionToken: token, file });
     return { ok: true };
   } catch (error) {
     if (error instanceof ApiError && error.code === "validation_failed") {
+      // `avatar` : `required` (corps vide), `invalid` (pas une image lisible) ou `too_large`.
       return {
         ok: false,
         error: error.fields.avatar === "too_large" ? "image-too-large" : "invalid-image",
@@ -132,33 +145,32 @@ export async function putAvatar(token: string, file: File): Promise<AvatarUpdate
   }
 }
 
-/** Mock : l'image sous forme de data URL. */
-export async function toDataUrl(file: File): Promise<string> {
-  const base64 = Buffer.from(await file.arrayBuffer()).toString("base64");
-  return `data:${file.type};base64,${base64}`;
+/**
+ * Demande de changement d'email : l'adresse n'est remplacée qu'après validation par la modération.
+ * API : `POST /me/email-change-requests` avec `{ email }` (voir `postMyEmailChange`).
+ */
+export async function requestEmailChange(token: string, email: string): Promise<EmailChangeResult> {
+  if (isApiEnabled) return postMyEmailChange(token, email);
+
+  const account = await findMyAccount(token);
+  const normalized = email.toLowerCase();
+
+  if (normalized === account.email) {
+    return mockResponse({ ok: false, error: "email-unchanged" });
+  }
+  if (accountsMock.some((existing) => existing.email === normalized)) {
+    return mockResponse({ ok: false, error: "email-already-used" });
+  }
+
+  account.pendingEmail = normalized;
+  return mockResponse({ ok: true });
 }
 
 /**
- * Demande de changement d'email : l'adresse n'est remplacée qu'après validation par la modération.
- * Une nouvelle demande remplace la précédente.
- * API : `POST /me/email-change-requests` avec `{ email }`.
+ * `POST /me/email-change-requests`, pour un citoyen comme pour un super-héros. Une nouvelle
+ * demande remplace la précédente tant qu'elle n'est pas traitée.
  */
-export async function requestEmailChange(token: string, email: string): Promise<EmailChangeResult> {
-  if (!isApiEnabled) {
-    const account = await findMyAccount(token);
-    const result = checkEmailChangeWithMocks(account.email, email);
-    if (result.ok) account.pendingEmail = email.toLowerCase();
-    return mockResponse(result);
-  }
-
-  return postEmailChangeRequest(token, email);
-}
-
-/** `POST /me/email-change-requests`, commun au citoyen et au super-héros. */
-export async function postEmailChangeRequest(
-  token: string,
-  email: string,
-): Promise<EmailChangeResult> {
+export async function postMyEmailChange(token: string, email: string): Promise<EmailChangeResult> {
   try {
     await apiFetch("/me/email-change-requests", {
       method: "POST",
@@ -168,25 +180,23 @@ export async function postEmailChangeRequest(
     return { ok: true };
   } catch (error) {
     if (error instanceof ApiError) {
-      if (error.code === "email_unchanged") return { ok: false, error: "email-unchanged" };
-      if (error.code === "email_already_used") return { ok: false, error: "email-already-used" };
-      if (error.code === "validation_failed") return { ok: false, error: "invalid-email" };
+      switch (error.code) {
+        case "email_already_used":
+          return { ok: false, error: "email-already-used" };
+        case "email_unchanged":
+          return { ok: false, error: "email-unchanged" };
+        case "validation_failed":
+          return { ok: false, error: "invalid-email" };
+      }
     }
-    return toApiFailure(error, "Demande de changement d'email");
+    return toApiFailure(error, "Changement d'adresse email");
   }
 }
 
-/** Mock : mêmes refus que l'API (adresse inchangée, ou déjà prise par un autre compte). */
-export function checkEmailChangeWithMocks(currentEmail: string, email: string): EmailChangeResult {
-  const normalized = email.toLowerCase();
-  if (normalized === currentEmail) return { ok: false, error: "email-unchanged" };
-  if (accountsMock.some((existing) => existing.email === normalized)) {
-    return { ok: false, error: "email-already-used" };
-  }
-  return { ok: true };
-}
-
-/** API : `PUT /me/newsletter` avec `{ subscribed }` (idempotent, sans mail de confirmation). */
+/**
+ * Abonne ou désabonne le titulaire du compte, sans mail de confirmation (son adresse a été vérifiée
+ * à l'activation). API : `PUT /me/newsletter` avec `{ subscribed }`, idempotent.
+ */
 export async function updateNewsletterPreference(
   token: string,
   subscribed: boolean,
@@ -209,23 +219,49 @@ export async function updateNewsletterPreference(
   }
 }
 
+/**
+ * Confirme la nouvelle adresse d'un compte avec le lien reçu à cette adresse : son titulaire y a bien accès.
+ * Cela ne change pas l'adresse du compte, qui reste décidée par la modération. Le lien s'ouvre souvent sur
+ * un autre appareil que celui de la demande : aucune session n'est exigée. Cliquer deux fois réussit.
+ * API : `POST /email-change-requests/confirm` avec `{ token }`. Mock : tout jeton non vide est accepté.
+ */
+export async function confirmEmailChange(token: string): Promise<EmailChangeConfirmationResult> {
+  if (!isApiEnabled) {
+    return mockResponse(token ? { ok: true } : { ok: false, error: "invalid-token" });
+  }
+
+  try {
+    await apiFetch("/email-change-requests/confirm", {
+      method: "POST",
+      body: { token } satisfies ApiSchema<"TokenRequest">,
+    });
+    return { ok: true };
+  } catch (error) {
+    // Lien invalide (`invalid_token`) ou mal formé (`bad_request`) : même réponse pour le visiteur.
+    if (error instanceof ApiError && error.status === 400) {
+      return { ok: false, error: "invalid-token" };
+    }
+    return toApiFailure(error, "Confirmation de la nouvelle adresse email");
+  }
+}
+
 /* ---------- Back-office (rôle admin) ---------- */
 
 function fromApiEmailChange(item: ApiSchema<"EmailChangeRequestItem">): EmailChangeRequest {
   return {
     id: item.id,
-    userId: item.userId,
     firstName: item.firstName,
     lastName: item.lastName,
     currentEmail: item.currentEmail,
     newEmail: item.newEmail,
-    submittedAt: item.createdAt,
+    confirmed: item.confirmedAt !== undefined,
   };
 }
 
 /**
- * Changements d'adresse email en attente de validation, les plus anciens d'abord.
- * API : `GET /admin/email-change-requests?status=pending`, page après page.
+ * Changements d'adresse email en attente de validation (citoyens et super-héros), les plus anciens
+ * d'abord. Mock : l'identifiant d'une demande est celui du citoyen.
+ * API : `GET /admin/email-change-requests?status=pending`, page après page (100 au plus par page).
  */
 export async function getEmailChangeRequests(token: string): Promise<EmailChangeRequest[]> {
   if (!isApiEnabled) {
@@ -236,12 +272,11 @@ export async function getEmailChangeRequests(token: string): Promise<EmailChange
           ? [
               {
                 id: account.id,
-                userId: account.id,
                 firstName: account.firstName,
                 lastName: account.lastName,
                 currentEmail: account.email,
                 newEmail: account.pendingEmail,
-                submittedAt: account.registeredAt,
+                confirmed: true,
               },
             ]
           : [],
@@ -251,10 +286,10 @@ export async function getEmailChangeRequests(token: string): Promise<EmailChange
 
   const requests: EmailChangeRequest[] = [];
   for (let offset = 0; ; offset += MAX_PAGE_SIZE) {
-    const query = pageQuery({ limit: MAX_PAGE_SIZE, offset }, { status: "pending" });
-    const response = await apiFetch(`/admin/email-change-requests${query}`, {
-      sessionToken: token,
-    });
+    const response = await apiFetch(
+      `/admin/email-change-requests${pageQuery({ limit: MAX_PAGE_SIZE, offset }, { status: "pending" })}`,
+      { sessionToken: token },
+    );
     const page = (await response.json()) as ApiSchema<"EmailChangeRequestPage">;
     requests.push(...page.items.map(fromApiEmailChange));
     if (page.items.length === 0 || requests.length >= page.total) return requests;
@@ -262,8 +297,10 @@ export async function getEmailChangeRequests(token: string): Promise<EmailChange
 }
 
 /**
- * Accepte ou refuse un changement d'adresse email (identifiant de la demande).
- * API : `POST /admin/email-change-requests/{id}/approve`, ou `…/reject`.
+ * Accepte ou refuse le changement d'adresse email d'une demande. Une demande remplacée par son
+ * titulaire change d'identifiant : l'ancien répond « introuvable », pour qu'un modérateur ne valide
+ * jamais une adresse qu'il n'a pas vue.
+ * API : `POST /admin/email-change-requests/{id}/approve` ou `…/reject`.
  */
 export async function reviewEmailChange(
   token: string,
@@ -280,12 +317,18 @@ export async function reviewEmailChange(
     return { ok: true };
   } catch (error) {
     if (error instanceof ApiError) {
-      if (error.status === 404) return { ok: false, error: "not-found" };
-      if (error.code === "email_change_not_pending")
-        return { ok: false, error: "already-reviewed" };
-      if (error.code === "email_already_used") return { ok: false, error: "email-already-used" };
+      switch (error.code) {
+        case "email_change_not_found":
+          return { ok: false, error: "not-found" };
+        case "email_change_not_pending":
+          return { ok: false, error: "already-reviewed" };
+        case "email_change_not_confirmed":
+          return { ok: false, error: "not-confirmed" };
+        case "email_already_used":
+          return { ok: false, error: "email-already-used" };
+      }
     }
-    return toApiFailure(error, "Décision sur un changement d'email");
+    return toApiFailure(error, "Décision sur un changement d'adresse email");
   }
 }
 

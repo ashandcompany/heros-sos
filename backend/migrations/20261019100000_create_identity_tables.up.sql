@@ -1,4 +1,4 @@
--- Comptes, sessions, jetons à usage unique et journal d'audit (voir backend/TABLES.md).
+-- Comptes, sessions, jetons à usage unique et journal d'audit (voir backend/tables/comptes.md et backend/tables/technique.md).
 -- Les colonnes bytea marquées « chiffré » contiennent des valeurs produites par internal/crypto.
 
 CREATE EXTENSION IF NOT EXISTS citext;

@@ -4,7 +4,16 @@ import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
 import apiSidebar from './docs/api/sidebar';
 
 const sidebars: SidebarsConfig = {
-  docSidebar: ['intro', 'architecture'],
+  docSidebar: [
+    'intro',
+    {
+      type: 'category',
+      label: 'Architecture',
+      link: {type: 'doc', id: 'architecture'},
+      items: ['architecture/connexion'],
+    },
+    'fonctionnement',
+  ],
   apiSidebar,
 };
 

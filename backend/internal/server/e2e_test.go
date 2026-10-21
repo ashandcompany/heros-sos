@@ -77,7 +77,7 @@ func newE2E(t *testing.T, overrides map[string]string) *e2e {
 	clk := clock.NewFake(startTime)
 	recorder := mail.NewRecorder()
 
-	app, err := server.NewWithDB(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), db,
+	app, err := server.NewWithDB(cfg, slog.New(slog.DiscardHandler), db,
 		server.WithClock(clk), server.WithMailer(recorder))
 	if err != nil {
 		t.Fatal(err)

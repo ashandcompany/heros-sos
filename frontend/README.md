@@ -25,10 +25,14 @@ Sans configuration, toute l'application tourne sur les mocks (comptes de test da
 
 ### Avec l'API Go
 
-Identité (inscription, activation, connexion, session, mot de passe), demandes de super-héros,
-modération des comptes, compte, types d'incident, incidents et interventions, vidéothèque, avis,
-blog, contact et newsletter passent par l'API dès que `API_URL` est renseignée ; le reste reste
-mocké (voir [docs/backend-contract.md](docs/backend-contract.md)).
+Identité (inscription, activation, connexion avec « Rester connecté », session, déconnexion de tous les
+appareils, mot de passe, double authentification des modérateurs), demandes de super-héros,
+modération des comptes, annuaire admin des super-héros, types d'incident, incidents et interventions,
+vidéothèque, avis, blog, films des super-vilains, profil et photo, changements d'adresse email (confirmés
+par un lien), contact et newsletter (confirmation et désinscription par lien) passent par l'API dès que
+`API_URL` est renseignée ; le reste reste mocké (voir [docs/backend-contract.md](docs/backend-contract.md)).
+Les photos de profil sont servies par l'API sous `/api/v1/avatars/…` : elles ne s'affichent que derrière le
+reverse proxy (`make up`, <http://localhost:8088>), pas avec `npm run dev` seul sur le port 3000.
 La recherche de films IMDb exige une clé OMDb côté API (`HEROS_OMDB_API_KEY` dans
 `backend/.env`). Après une mise à jour du backend, relancer `make up-dev` pour reconstruire
 l'image de l'API (sinon les nouvelles routes répondent 404). Les comptes
@@ -95,9 +99,26 @@ Espace `/admin`, réservé au rôle `admin` (compte mock : `admin@heros-sos.fr` 
 | `/admin/videotheque`  | Publier / refuser / supprimer les films des vidéothèques         |
 | `/admin/commentaires` | Publier / masquer les commentaires des évaluations               |
 | `/admin/blog`         | Créer, modifier, supprimer les articles (éditeur riche Tiptap)   |
+| `/admin/securite`     | Double authentification : codes de secours, déconnexion partout  |
 
 Les listes à modérer affichent par défaut les éléments en attente (`?statut=valide|rejete|tous`
 pour les autres). Le HTML des articles doit être assaini côté API avant tout affichage public.
+
+Avec l'API, un modérateur doit activer sa double authentification (TOTP) : obligatoire en production,
+facultative en développement. Tant qu'il n'a pas saisi son code, sa session est limitée et il est envoyé à
+`/connexion/verification` ou `/connexion/double-authentification` (voir
+[docs/backend-contract.md](docs/backend-contract.md#double-authentification-et-session-limitée)).
+
+## Pages ouvertes depuis un mail
+
+Les liens reçus par mail mènent à des pages publiques où le jeton (`?token=`) n'est utilisé qu'au clic sur un
+bouton, car les scanners de mails ouvrent les liens sans cliquer :
+
+| Page                             | Lien                                                  |
+| -------------------------------- | ----------------------------------------------------- |
+| `/newsletter/confirmation`       | Confirmation de l'abonnement (double opt-in)          |
+| `/newsletter/desinscription`     | Désinscription, présente dans chaque newsletter       |
+| `/changement-email/confirmation` | Confirmation de la nouvelle adresse par son titulaire |
 
 ## Brancher l'API Go
 

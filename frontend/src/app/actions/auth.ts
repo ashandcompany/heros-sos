@@ -2,9 +2,10 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { login, logout, logoutEverywhere } from "@/lib/api";
+import { login, logout, logoutAll } from "@/lib/api";
 import { SESSION_COOKIE, sessionCookieAttributes } from "@/lib/cookies";
 import { formatRetryDelay } from "@/lib/format";
+import { setSessionCookie } from "@/lib/server-session";
 import { accountHomeByRole, routes } from "@/lib/routes";
 import { apiFailureMessage, type FormState } from "@/lib/validation/form-state";
 import type { LoginResult } from "@/types";
@@ -53,11 +54,11 @@ export async function loginAction(
   }
 
   // Le cookie de l'API est recopié vers le navigateur avec la même durée de vie que la session.
-  (await cookies()).set(SESSION_COOKIE, result.token, {
-    ...sessionCookieAttributes,
-    expires: new Date(result.expiresAt),
-  });
+  await setSessionCookie(result.token, result.expiresAt);
 
+  // Un modérateur n'a pas fini : sa session est limitée jusqu'à la saisie du code (ou l'activation de la 2FA).
+  if (result.mfa === "verification-required") redirect(routes.loginVerification);
+  if (result.mfa === "enrollment-required") redirect(routes.loginTwoFactorSetup);
   redirect(accountHomeByRole[result.user.role]);
 }
 
@@ -89,17 +90,20 @@ export async function logoutAction(): Promise<void> {
 }
 
 /**
- * Ferme toutes les sessions du compte (appareil perdu, mot de passe partagé…), celle-ci comprise,
- * puis renvoie vers la connexion. En cas d'échec, la session courante reste ouverte.
+ * « Me déconnecter partout » : ferme toutes les sessions du compte puis efface le cookie de ce
+ * navigateur. Si l'API échoue, la session reste ouverte et l'erreur est affichée : la personne ne doit
+ * pas croire ses autres appareils déconnectés.
  */
-export async function logoutEverywhereAction(): Promise<FormState> {
+export async function logoutAllAction(): Promise<FormState> {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
+  if (!token) redirect(routes.login);
 
-  if (token) {
-    const result = await logoutEverywhere(token);
-    if (!result.ok) return { status: "error", message: apiFailureMessage(result), fieldErrors: {} };
+  const result = await logoutAll(token);
+  if (!result.ok) {
+    return { status: "error", message: apiFailureMessage(result), fieldErrors: {} };
   }
+
   cookieStore.delete({ name: SESSION_COOKIE, ...sessionCookieAttributes });
-  redirect(routes.login);
+  redirect(routes.home);
 }

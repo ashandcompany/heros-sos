@@ -257,6 +257,7 @@ async function reviewHeroApplicationWithMocks(
     address: null,
     registeredAt: new Date().toISOString(),
     lastInterventionAt: null,
+    accountStatus: "actif",
   });
   accountsMock.push({
     user: { id: hero.id, displayName: application.alias, role: "super-heros" },

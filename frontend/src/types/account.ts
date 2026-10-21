@@ -7,8 +7,8 @@ export interface CitizenAddress extends PostalAddress {
   complement: string | null;
 }
 
-/** « Mon compte » : profil du compte connecté (`GET /me`). */
-export interface MyAccount {
+/** Compte d'un citoyen, tel qu'affiché dans « Mon compte ». */
+export interface CitizenAccount {
   id: string;
   civility: Civility;
   firstName: string;
@@ -25,69 +25,81 @@ export interface MyAccount {
   newsletterSubscribed: boolean;
   /** Date ISO 8601 de l'inscription. */
   registeredAt: string;
-}
-
-/** Compte d'un citoyen dans les mocks : son profil et son contrôle par la modération. */
-export interface CitizenAccount extends MyAccount {
   /** Contrôle du compte par la modération : `rejete` = compte suspendu (connexion impossible). */
   moderation: ModerationStatus;
 }
 
-/** Champs modifiables directement par le titulaire du compte (hors photo, email et newsletter). */
+/**
+ * « Mon compte » : le profil du citoyen connecté (`GET /me`). Son contrôle par la modération n'en fait pas
+ * partie ; `pendingEmailConfirmed` dit si le titulaire de la nouvelle adresse a cliqué sur le lien reçu.
+ */
+export type MyAccount = Omit<CitizenAccount, "moderation"> & { pendingEmailConfirmed: boolean };
+
+/** Champs modifiables directement par le citoyen (hors photo, email et newsletter). */
 export interface ContactUpdate {
   mobilePhone: string;
-  /**
-   * `complement` : `null` conserve le complément actuel (formulaire sans ce champ, comme celui
-   * d'un super-héros), une chaîne vide l'efface.
-   */
   address: CitizenAddress;
 }
 
-export type ContactUpdateResult =
-  | { ok: true }
-  /** Refus de l'API (422) : champ (`mobilePhone`, `address.city`…) → code (`invalid`…). */
-  | { ok: false; error: "invalid-fields"; fields: Record<string, string> }
-  | ApiFailure;
+export type MutationResult = { ok: true } | { ok: false; error: string };
+
+/** Champs refusés par l'API (422) : champ (`mobilePhone`, `address.city`…) → code (`invalid`…). */
+type InvalidFields = { ok: false; error: "invalid-fields"; fields: Record<string, string> };
+
+export type ContactUpdateResult = { ok: true } | InvalidFields | ApiFailure;
 
 export type AvatarUpdateResult =
   | { ok: true }
-  /** Fichier illisible (`invalid`) ou de plus de 1024 pixels de côté (`too_large`). */
-  | { ok: false; error: "invalid-image" | "image-too-large" }
+  | {
+      ok: false;
+      /** Ce n'est pas une image JPEG, PNG ou WebP lisible, ou elle dépasse 1024 pixels de côté. */
+      error: "invalid-image" | "image-too-large";
+    }
   | ApiFailure;
 
 export type EmailChangeResult =
   | { ok: true }
-  | { ok: false; error: "email-unchanged" | "email-already-used" | "invalid-email" }
+  | {
+      ok: false;
+      /** Adresse mal formée, déjà prise par un autre compte, ou déjà celle de ce compte. */
+      error: "invalid-email" | "email-already-used" | "email-unchanged";
+    }
   | ApiFailure;
 
 export type NewsletterPreferenceResult = { ok: true } | ApiFailure;
 
-/** Demande de changement d'adresse email, vue par la modération (`EmailChangeRequestItem`). */
+/** Demande de changement d'adresse email en attente, vue par la modération (`EmailChangeRequestItem`). */
 export interface EmailChangeRequest {
-  /** Identifiant de la demande : il change quand le titulaire la remplace par une nouvelle. */
+  /** Identifiant de la demande (routes de décision) : il change quand le titulaire la remplace. */
   id: string;
-  userId: string;
   firstName: string;
   lastName: string;
   currentEmail: string;
   newEmail: string;
-  /** Date ISO 8601 de dépôt. */
-  submittedAt: string;
+  /**
+   * Le titulaire de la nouvelle adresse l'a confirmée par le lien reçu. Tant qu'elle ne l'est pas, la demande
+   * ne peut pas être acceptée, seulement refusée.
+   */
+  confirmed: boolean;
 }
+
+export type EmailChangeConfirmationResult =
+  | { ok: true }
+  /** Lien falsifié, expiré, ou devenu sans objet (demande remplacée ou refusée). */
+  | { ok: false; error: "invalid-token" }
+  | ApiFailure;
 
 export type EmailChangeReviewResult =
   | { ok: true }
   | {
       ok: false;
       /**
-       * Demande introuvable (ou remplacée par son titulaire), déjà traitée, ou adresse prise
-       * entre-temps par un autre compte (la demande est alors à refuser).
+       * Demande introuvable (remplacée par son titulaire), déjà traitée, adresse pas encore confirmée par son
+       * titulaire, ou prise entre-temps (elle ne peut plus qu'être refusée).
        */
-      error: "not-found" | "already-reviewed" | "email-already-used";
+      error: "not-found" | "already-reviewed" | "not-confirmed" | "email-already-used";
     }
   | ApiFailure;
-
-export type MutationResult = { ok: true } | { ok: false; error: string };
 
 /** État d'un compte (`UserSummary.status`) : un compte désactivé ne peut plus se connecter. */
 export type AccountStatus = "en-attente-activation" | "actif" | "desactive";

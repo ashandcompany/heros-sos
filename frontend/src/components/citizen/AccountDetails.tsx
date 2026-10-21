@@ -4,7 +4,27 @@ import { getMyAccount } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { requireCitizenSession } from "@/lib/server-session";
 import { civilityOptions } from "@/lib/validation/signup";
-import { AvatarForm, ContactForm, EmailChangeForm, NewsletterSettingsForm } from "./AccountForms";
+import type { MyAccount } from "@/types";
+import {
+  AvatarForm,
+  ContactForm,
+  EmailChangeForm,
+  LogoutAllForm,
+  NewsletterSettingsForm,
+} from "./AccountForms";
+
+/** Panneau « Sessions » : même texte pour tous les rôles (citoyen, héros, modérateur). */
+export function SessionsPanel() {
+  return (
+    <Panel
+      id="sessions-title"
+      title="Sessions"
+      description="Ferme toutes vos sessions ouvertes, sur tous vos appareils, celle-ci comprise. Utile si vous avez oublié de vous déconnecter d'un ordinateur partagé ou si vous pensez que quelqu'un d'autre a accès à votre compte."
+    >
+      <LogoutAllForm />
+    </Panel>
+  );
+}
 
 export function Panel({
   id,
@@ -35,6 +55,10 @@ export function Panel({
 export async function AccountDetails() {
   const token = await requireCitizenSession();
   const account = await getMyAccount(token);
+  return <AccountPanels account={account} />;
+}
+
+function AccountPanels({ account }: { account: MyAccount }) {
   const civility = civilityOptions.find(({ value }) => value === account.civility)?.label;
   const fullName = `${account.firstName} ${account.lastName}`;
 
@@ -86,8 +110,18 @@ export async function AccountDetails() {
           <p className="mb-4 font-medium break-all">{account.email}</p>
           {account.pendingEmail && (
             <p className="mb-6 rounded-xl border border-rating/40 bg-rating/10 px-4 py-3 text-sm">
-              <span className="font-semibold text-rating">En attente de modération :</span>{" "}
+              <span className="font-semibold text-rating">
+                {account.pendingEmailConfirmed
+                  ? "En attente de modération :"
+                  : "En attente de confirmation :"}
+              </span>{" "}
               <span className="break-all">{account.pendingEmail}</span>
+              {!account.pendingEmailConfirmed && (
+                <span className="mt-1 block text-muted">
+                  Ouvrez le lien du mail envoyé à cette adresse. Pas reçu ? Renvoyez la demande
+                  ci-dessous.
+                </span>
+              )}
             </p>
           )}
           <EmailChangeForm />
@@ -96,6 +130,8 @@ export async function AccountDetails() {
         <Panel id="newsletter-settings-title" title="Newsletter">
           <NewsletterSettingsForm subscribed={account.newsletterSubscribed} />
         </Panel>
+
+        <SessionsPanel />
       </div>
     </div>
   );

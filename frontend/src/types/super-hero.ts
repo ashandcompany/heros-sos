@@ -1,4 +1,5 @@
 import type { ApiFailure } from "./api";
+import type { AccountStatus } from "./account";
 import type { Civility, PostalAddress } from "./auth";
 import type { Incident, IncidentType } from "./incident";
 import type { ModerationStatus } from "./moderation";
@@ -96,25 +97,21 @@ export interface SuperHeroProfile extends SuperHero {
   registeredAt: string;
   /** Date ISO 8601 de la dernière intervention, `null` si aucune. */
   lastInterventionAt: string | null;
+  /** État du compte : un héros désactivé reste dans l'annuaire, mais ne peut plus se connecter. */
+  accountStatus: AccountStatus;
 }
 
-/** « Mon profil » d'un super-héros : son compte (`GET /me`) et son profil public. */
-export type MyHeroProfile = Pick<
+/**
+ * « Mon profil » : la fiche du super-héros connecté (`GET /me`). Sans les statistiques (note
+ * moyenne, interventions) que `/me` ne fournit pas : `power` y est la description publique (`bio`).
+ */
+export type MyHeroProfile = Omit<
   SuperHeroProfile,
-  | "id"
-  | "alias"
-  | "avatarUrl"
-  | "power"
-  | "firstName"
-  | "lastName"
-  | "civility"
-  | "birthDate"
-  | "email"
-  | "pendingEmail"
-  | "mobilePhone"
-  | "address"
-  | "registeredAt"
->;
+  "averageRating" | "interventionsCount" | "lastInterventionAt" | "accountStatus"
+> & {
+  /** Le titulaire de `pendingEmail` a confirmé cette nouvelle adresse par le lien reçu. */
+  pendingEmailConfirmed: boolean;
+};
 
 /** Tableau de bord professionnel d'un super-héros. */
 export interface HeroDashboard {

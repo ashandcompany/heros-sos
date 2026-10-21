@@ -160,3 +160,19 @@ func TestConnIsSafeForConcurrentTransactions(t *testing.T) {
 		t.Fatalf("lignes = %d, attendu %d", got, workers)
 	}
 }
+
+// Ces index existent parce qu'une requête les réclame (mesure à l'appui) : les listes de héros agrègent les
+// interventions de quelques héros, et le nettoyage des sessions cherche les sessions révoquées.
+func TestMigrationsCreateTheLookupIndexes(t *testing.T) {
+	db := testutil.NewDB(t)
+
+	var present []string
+	err := db.Raw(`SELECT indexname FROM pg_indexes WHERE schemaname = current_schema() AND indexname IN ?`,
+		[]string{"intervention_heroes_hero_id_idx", "sessions_revoked_at_idx"}).Scan(&present).Error
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(present) != 2 {
+		t.Errorf("index présents : %v, attendus intervention_heroes_hero_id_idx et sessions_revoked_at_idx", present)
+	}
+}

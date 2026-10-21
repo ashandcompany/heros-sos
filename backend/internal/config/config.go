@@ -5,6 +5,7 @@ package config
 import (
 	"errors"
 	"log/slog"
+	"math"
 	"net/netip"
 	"net/url"
 	"os"
@@ -15,6 +16,7 @@ import (
 // en production.
 type Environment string
 
+// Environnements connus ; la production active des contrôles de démarrage plus stricts.
 const (
 	EnvironmentDevelopment Environment = "development"
 	EnvironmentProduction  Environment = "production"
@@ -24,6 +26,7 @@ const (
 // MailDriver choisit comment les mails sont envoyés.
 type MailDriver string
 
+// Pilotes d'envoi de mails.
 const (
 	MailDriverLog  MailDriver = "log"  // écrit les mails dans les logs (développement uniquement)
 	MailDriverSMTP MailDriver = "smtp" // envoie via un serveur SMTP
@@ -32,6 +35,7 @@ const (
 // TLSMode décrit le chiffrement de la connexion SMTP.
 type TLSMode string
 
+// Modes de chiffrement de la connexion SMTP.
 const (
 	TLSModeNone     TLSMode = "none"     // aucun chiffrement (Mailpit en développement)
 	TLSModeStartTLS TLSMode = "starttls" // connexion en clair puis passage en TLS
@@ -181,6 +185,7 @@ type RateLimits struct {
 	NewsletterPerEmail    RateRule
 	EmailChangePerUser    RateRule
 	AvatarPerUser         RateRule
+	MFAVerifyPerUser      RateRule
 	MaxTrackedKeys        int
 }
 
@@ -191,6 +196,21 @@ type Tokens struct {
 	// NewsletterConfirmTTL est la validité du lien de confirmation d'un abonnement (signé, sans
 	// jeton en base).
 	NewsletterConfirmTTL time.Duration
+	// EmailChangeConfirmTTL est la validité du lien envoyé à la nouvelle adresse d'un compte pour la
+	// confirmer (signé, sans jeton en base).
+	EmailChangeConfirmTTL time.Duration
+}
+
+// MFA regroupe les réglages de la double authentification (TOTP).
+type MFA struct {
+	// ModeratorRequired impose aux modérateurs d'activer la 2FA : sans elle, leur session ne donne accès
+	// qu'à l'activation. Vrai par défaut en production, où il ne peut pas être désactivé ; faux en
+	// développement pour ne pas gêner une démonstration.
+	ModeratorRequired bool
+	// Issuer est le nom du service affiché dans l'application d'authentification.
+	Issuer string
+	// RecoveryCodes est le nombre de codes de secours remis à l'activation.
+	RecoveryCodes int
 }
 
 // Security regroupe les réglages de sécurité.
@@ -201,6 +221,7 @@ type Security struct {
 	RateLimits RateLimits
 	Tokens     Tokens
 	CSRFSecret []byte
+	MFA        MFA
 }
 
 // Crypto regroupe les clés maîtresses du chiffrement des données personnelles.
@@ -244,6 +265,11 @@ type App struct {
 	PasswordResetPath string
 	// NewsletterConfirmPath est la page du frontend qui confirme un abonnement (`?token=…`).
 	NewsletterConfirmPath string
+	// NewsletterUnsubscribePath est la page du frontend qui désabonne de la newsletter (`?token=…`).
+	NewsletterUnsubscribePath string
+	// EmailChangeConfirmPath est la page du frontend qui confirme la nouvelle adresse d'un compte
+	// (`?token=…`).
+	EmailChangeConfirmPath string
 }
 
 // ActivationLink construit le lien d'activation de compte envoyé par mail.
@@ -259,6 +285,16 @@ func (a App) PasswordResetLink(token string) string {
 // NewsletterConfirmLink construit le lien de confirmation d'un abonnement à la newsletter.
 func (a App) NewsletterConfirmLink(token string) string {
 	return a.link(a.NewsletterConfirmPath, token)
+}
+
+// NewsletterUnsubscribeLink construit le lien de désinscription que porte chaque newsletter.
+func (a App) NewsletterUnsubscribeLink(token string) string {
+	return a.link(a.NewsletterUnsubscribePath, token)
+}
+
+// EmailChangeConfirmLink construit le lien qui confirme la nouvelle adresse d'un compte.
+func (a App) EmailChangeConfirmLink(token string) string {
+	return a.link(a.EmailChangeConfirmPath, token)
 }
 
 // HeroReviewLink construit le lien de notation d'un héros après une intervention.
@@ -278,7 +314,10 @@ func (a App) link(path, token string) string {
 
 // Jobs regroupe les réglages des tâches de fond.
 type Jobs struct {
-	CleanupInterval  time.Duration
+	CleanupInterval time.Duration
+	// CleanupTimeout borne un passage du nettoyage : une requête bloquée ne doit pas immobiliser la tâche, ni
+	// garder une connexion du pool indéfiniment.
+	CleanupTimeout   time.Duration
 	SessionRetention time.Duration
 	TokenRetention   time.Duration
 }
@@ -344,9 +383,9 @@ func Load(getenv func(string) string) (Config, error) {
 		},
 		Security: Security{
 			Argon2: Argon2{
-				Time:          uint32(l.positiveInt(envArgon2Time, defaultArgon2Time)),
-				MemoryKiB:     uint32(l.positiveInt(envArgon2MemoryKiB, defaultArgon2MemoryKiB)),
-				Threads:       uint8(l.positiveInt(envArgon2Threads, defaultArgon2Threads)),
+				Time:          uint32(l.boundedInt(envArgon2Time, defaultArgon2Time, math.MaxUint32)),
+				MemoryKiB:     uint32(l.boundedInt(envArgon2MemoryKiB, defaultArgon2MemoryKiB, math.MaxUint32)),
+				Threads:       uint8(l.boundedInt(envArgon2Threads, defaultArgon2Threads, math.MaxUint8)),
 				KeyLength:     defaultArgon2KeyLength,
 				SaltLength:    defaultArgon2SaltLength,
 				MaxConcurrent: l.positiveInt(envArgon2MaxConcurrent, defaultArgon2MaxConcurrent),
@@ -372,15 +411,22 @@ func Load(getenv func(string) string) (Config, error) {
 				NewsletterPerEmail:    l.rateRule(envRateNewsletterPerEmail, defaultRateNewsletterPerEmail),
 				EmailChangePerUser:    l.rateRule(envRateEmailChangePerUser, defaultRateEmailChangePerUser),
 				AvatarPerUser:         l.rateRule(envRateAvatarPerUser, defaultRateAvatarPerUser),
+				MFAVerifyPerUser:      l.rateRule(envRateMFAVerifyPerUser, defaultRateMFAVerifyPerUser),
 				MaxTrackedKeys:        l.positiveInt(envMaxTrackedRateKeys, defaultMaxTrackedRateKeys),
 			},
 			Tokens: Tokens{
 				ActivationTTL:    l.duration(envActivationTokenTTL, defaultActivationTokenTTL),
 				PasswordResetTTL: l.duration(envPasswordResetTokenTTL, defaultPasswordResetTokenTTL),
 
-				NewsletterConfirmTTL: l.duration(envNewsletterConfirmTTL, defaultNewsletterConfirmTTL),
+				NewsletterConfirmTTL:  l.duration(envNewsletterConfirmTTL, defaultNewsletterConfirmTTL),
+				EmailChangeConfirmTTL: l.duration(envEmailChangeConfirmTTL, defaultEmailChangeConfirmTTL),
 			},
 			CSRFSecret: l.base64Secret(envCSRFSecret),
+			MFA: MFA{
+				ModeratorRequired: l.boolean(envMFAModeratorRequired, production),
+				Issuer:            l.text(envMFAIssuer, defaultMFAIssuer),
+				RecoveryCodes:     defaultMFARecoveryCodes,
+			},
 		},
 		Crypto: Crypto{
 			Keys:        cryptoKeys,
@@ -400,6 +446,7 @@ func Load(getenv func(string) string) (Config, error) {
 		App: l.app(),
 		Jobs: Jobs{
 			CleanupInterval:  l.duration(envCleanupInterval, defaultCleanupInterval),
+			CleanupTimeout:   l.duration(envCleanupTimeout, defaultCleanupTimeout),
 			SessionRetention: l.duration(envSessionRetention, defaultSessionRetention),
 			TokenRetention:   l.duration(envTokenRetention, defaultTokenRetention),
 		},
@@ -460,6 +507,8 @@ func (l *loader) app() App {
 		ActivationPath:    l.text(envActivationPath, defaultActivationPath),
 		PasswordResetPath: l.text(envPasswordResetPath, defaultPasswordResetPath),
 
-		NewsletterConfirmPath: l.text(envNewsletterConfirmPath, defaultNewsletterConfirmPath),
+		NewsletterConfirmPath:     l.text(envNewsletterConfirmPath, defaultNewsletterConfirmPath),
+		NewsletterUnsubscribePath: l.text(envNewsletterUnsubscribePath, defaultNewsletterUnsubscribePath),
+		EmailChangeConfirmPath:    l.text(envEmailChangeConfirmPath, defaultEmailChangeConfirmPath),
 	}
 }

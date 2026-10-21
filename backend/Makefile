@@ -81,6 +81,10 @@ lint: ## Vérifie le formatage et lance go vet
 	@test -z "$$(gofmt -l .)" || { echo "Fichiers mal formatés :"; gofmt -l .; exit 1; }
 	go vet ./...
 
+.PHONY: golangci
+golangci: ## Analyse plus poussée (conventions Go, erreurs courantes) : voir .golangci.yml
+	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2 run ./...
+
 .PHONY: vuln
 vuln: ## Cherche les vulnérabilités connues atteignables dans le code
 	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
@@ -151,6 +155,10 @@ logs-dev: ## Suit les journaux de la pile de développement
 moderator-dev: ## Crée un modérateur dans la pile de développement : EMAIL=… FIRST=… LAST=… BIRTH=AAAA-MM-JJ
 	$(call create_moderator,$(COMPOSE_DEV))
 
+.PHONY: resetmfa-dev
+resetmfa-dev: ## Réinitialise la 2FA d'un compte (appareil perdu) dans la pile de développement : EMAIL=…
+	$(call reset_mfa,$(COMPOSE_DEV))
+
 .PHONY: secrets
 secrets: ## Génère secrets/ pour la production (ne remplace JAMAIS un secret existant)
 	@set -e; [ -f .env.production ] && { set -a; . ./.env.production; set +a; } || true; \
@@ -185,6 +193,10 @@ logs-prod: ## Suit les journaux de la pile de production
 moderator-prod: ## Crée un modérateur en production : EMAIL=… FIRST=… LAST=… BIRTH=AAAA-MM-JJ
 	$(call create_moderator,$(COMPOSE_PROD))
 
+.PHONY: resetmfa-prod
+resetmfa-prod: ## Réinitialise la 2FA d'un compte (appareil perdu) en production : EMAIL=… (vérifier l'identité d'abord)
+	$(call reset_mfa,$(COMPOSE_PROD))
+
 .PHONY: compose-check
 compose-check: ## Valide la syntaxe des fichiers Compose (développement et production), sur un clone neuf aussi
 	@# Les fichiers manquants (.env, .env.production, secrets/) sont créés le temps du contrôle, puis supprimés.
@@ -195,6 +207,13 @@ compose-check: ## Valide la syntaxe des fichiers Compose (développement et prod
 	trap 'rm -rf $$created' EXIT; \
 	$(COMPOSE_DEV) config -q && echo "développement : valide"; \
 	$(COMPOSE_PROD) config -q && echo "production : valide"
+
+# Lance la commande resetmfa (incluse dans l'image) : elle supprime la double authentification d'un compte et ferme
+# ses sessions. L'API ne le permet jamais, pour qu'un compte piraté ne puisse pas retirer sa propre protection.
+define reset_mfa
+	@test -n "$(EMAIL)" || { echo "EMAIL est obligatoire"; exit 1; }
+	$(1) run --rm --entrypoint /resetmfa api -email "$(EMAIL)"
+endef
 
 # Lance la commande createmoderator (incluse dans l'image) ; le mot de passe est demandé, jamais passé en argument.
 define create_moderator

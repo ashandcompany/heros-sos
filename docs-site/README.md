@@ -3,13 +3,14 @@
 Site de documentation technique, construit avec [Docusaurus](https://docusaurus.io/). Il a son propre
 `package.json` et ne dépend ni du front Next.js (`frontend/`) ni du backend Go (`backend/`).
 
-| Section      | Source                                                                                |
-| ------------ | ------------------------------------------------------------------------------------- |
-| Accueil      | `docs-site/docs/intro.mdx`                                                            |
-| Architecture | `docs-site/docs/architecture.md` (schémas Mermaid)                                    |
-| Backend      | `backend/MVP.md`, `backend/STACK.md`, `backend/TABLES.md` (lus sur place, non copiés) |
-| Frontend     | `frontend/README.md`, `frontend/docs/*.md` (lus sur place, non copiés)                |
-| API          | `backend/openapi/openapi.yaml` (pages générées, non versionnées)                      |
+| Section        | Source                                                                                                                         |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Accueil        | `docs-site/docs/intro.mdx`                                                                                                     |
+| Architecture   | `docs-site/docs/architecture.md` et `architecture/` (schémas Mermaid)                                                          |
+| Fonctionnement | `docs-site/docs/fonctionnement.md`                                                                                             |
+| Backend        | `backend/MVP.md`, `backend/STACK.md` et `backend/stack/`, `backend/TABLES.md` et `backend/tables/` (lus sur place, non copiés) |
+| Frontend       | `frontend/README.md`, `frontend/docs/*.md` (lus sur place, non copiés)                                                         |
+| API            | `backend/openapi/openapi.yaml` (pages générées, non versionnées)                                                               |
 
 ## Commandes
 
@@ -17,9 +18,9 @@ Le site tourne **dans Docker** (service `docs`, image `docs-site/Dockerfile`) : 
 machine. `make up` le démarre avec le reste de la pile ; `make docs` ne démarre que lui. Le code de `docs-site/` est
 monté dans le conteneur et rechargé à chaud : http://localhost:3001/heros-sos/ (3001 : le 3000 est celui du front).
 
-Le conteneur ne lit de `backend/` que `STACK.md`, `MVP.md`, `TABLES.md` et `openapi/openapi.yaml`, et de
-`frontend/` que `README.md` et `docs/*.md`, recopiés par un petit service `docs-sync` : jamais `backend/` ni
-`frontend/` en entier, qui contiennent les `.env`.
+Le conteneur ne lit de `backend/` que `STACK.md`, `stack/*.md`, `MVP.md`, `TABLES.md`, `tables/*.md` et
+`openapi/openapi.yaml`, et de `frontend/` que `README.md` et `docs/*.md`, recopiés par un petit service
+`docs-sync` : jamais `backend/` ni `frontend/` en entier, qui contiennent les `.env`.
 
 Les documents du frontend restent écrits pour GitHub. Deux plugins remark (`src/remark/`) les adaptent au
 site : `github-alerts` rend les alertes `> [!NOTE]`, `> [!WARNING]`… en encadrés Docusaurus, et `repo-links`
@@ -35,7 +36,7 @@ npm run serve     # sert le build local
 npm run typecheck # vérifie les types de la configuration
 ```
 
-Les blocs ` ```mermaid ` des pages (schémas d'architecture, schémas des tables de `backend/TABLES.md`) sont
+Les blocs ` ```mermaid ` des pages (schémas d'architecture, schémas des tables de `backend/tables/`) sont
 rendus en diagrammes ; GitHub les rend aussi. Un schéma de plus de 10 à 12 éléments devient illisible : mieux
 vaut en faire plusieurs, par domaine.
 
@@ -45,5 +46,16 @@ vaut en faire plusieurs, par domaine.
 ## Intégration continue et déploiement
 
 Le workflow `.github/workflows/docs-ci.yml` construit le site à chaque pull request qui touche
-`docs-site/`, les documents du backend ou l'OpenAPI. Il ne publie rien : l'hébergement du site n'est pas
-encore décidé (GitHub Pages est préparé dans `docusaurus.config.ts` : `url`, `baseUrl`).
+`docs-site/`, les documents du backend ou l'OpenAPI. Il ne publie rien.
+
+Le site se publie sur **GitHub Pages** (<https://ashandcompany.github.io/heros-sos/>, réglé par `url` et `baseUrl`
+dans `docusaurus.config.ts`) avec `.github/workflows/docs-deploy.yml` : mêmes chemins et mêmes étapes que la CI,
+à chaque push sur `develop` (ou à la demande, *Run workflow*). Le workflow ne publie rien tant que le dépôt n'est
+pas réglé, une fois pour toutes :
+
+1. *Settings → Pages → Source* : **GitHub Actions**.
+2. *Settings → Environments → github-pages → Deployment branches* : autoriser `develop` (par défaut, seule la
+   branche principale peut déployer).
+
+Le dépôt est public : le site l'est aussi. Les revues de code sont demandées par `.github/CODEOWNERS`, qui
+y inscrit `docs-site/`.

@@ -8,6 +8,7 @@ import {
   updateContactAction,
   updateNewsletterAction,
 } from "@/app/actions/account";
+import { logoutAllAction } from "@/app/actions/auth";
 import { AddressField } from "@/components/ui/AddressField";
 import { buttonClasses } from "@/components/ui/ButtonLink";
 import { FormMessage } from "@/components/ui/FormMessage";
@@ -239,7 +240,7 @@ export function EmailChangeForm({
     <form action={formAction} noValidate className="space-y-4">
       <TextField
         label="Nouvelle adresse email"
-        hint="Elle remplacera l'adresse actuelle après validation par la modération."
+        hint="Un lien de confirmation y sera envoyé. Elle remplacera l'adresse actuelle une fois confirmée, puis validée par la modération."
         name="email"
         type="email"
         inputMode="email"
@@ -285,6 +286,20 @@ export function NewsletterSettingsForm({ subscribed }: { subscribed: boolean }) 
       <FormMessage state={state} />
       <SubmitButton variant="secondary" pendingLabel="Enregistrement…">
         Enregistrer ma préférence
+      </SubmitButton>
+    </form>
+  );
+}
+
+/** « Me déconnecter partout » : ferme toutes les sessions du compte, celle-ci comprise. */
+export function LogoutAllForm() {
+  const [state, formAction] = useActionState(logoutAllAction, idleFormState);
+
+  return (
+    <form action={formAction} className="space-y-4">
+      <FormMessage state={state} />
+      <SubmitButton variant="secondary" pendingLabel="Déconnexion…">
+        Me déconnecter partout
       </SubmitButton>
     </form>
   );

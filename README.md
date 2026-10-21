@@ -37,6 +37,7 @@ Les fichiers `docker-compose*.yml` sont à la racine : un seul endroit pour lanc
 | `make docs` | Démarre seulement la documentation (sans le reste de la pile). |
 | `make adminer` | Ajoute Adminer, un client SQL. |
 | `make moderator EMAIL=… FIRST=… LAST=… BIRTH=AAAA-MM-JJ` | Crée un modérateur (mot de passe demandé, jamais passé en argument). |
+| `make resetmfa EMAIL=…` | Réinitialise la double authentification d'un compte qui a perdu son appareil (vérifier son identité d'abord). |
 | `make reset` | Arrête la pile **et supprime ses données** (base, photos, RabbitMQ), après confirmation. |
 | `make secrets`, `make up-prod`, `make down-prod`, `make logs-prod` | Production : voir [le README du backend](backend/README.md#environnements-docker). |
 | `make check` | Valide la syntaxe des fichiers Compose (développement et production). |
@@ -83,7 +84,7 @@ make migrate
 make run        # API sur http://localhost:8080/api/v1
 ```
 
-Les commandes, les tests et la configuration sont détaillés dans [le README du backend](backend/README.md) (`make help` liste toutes les cibles). Les documents de conception du backend sont `backend/MVP.md` (périmètre), `backend/STACK.md` (choix techniques) et `backend/TABLES.md` (schéma de la base).
+Les commandes, les tests et la configuration sont détaillés dans [le README du backend](backend/README.md) (`make help` liste toutes les cibles). Les documents de conception du backend sont `backend/MVP.md` (périmètre), `backend/STACK.md` (choix techniques, une page par sujet dans `backend/stack/`) et `backend/TABLES.md` (schéma de la base, une page par domaine dans `backend/tables/`).
 
 ## Documentation technique
 
@@ -144,6 +145,8 @@ Documentation détaillée dans `frontend/docs/` : [architecture](frontend/docs/a
 - **Frontend** (`frontend-ci.yml`) : installation, audit des dépendances, vérification Prettier, build.
 - **Backend** (`backend-ci.yml`) : vérification de `go.mod`/`go.sum`, recherche de vulnérabilités (`govulncheck`), tests avec PostgreSQL, build.
 - **Documentation** (`docs-ci.yml`) : build du site `docs-site/` ; un lien cassé ou un OpenAPI illisible fait échouer le job. Rien n'est publié.
+- **Publication de la documentation** (`docs-deploy.yml`) : mêmes étapes, puis déploiement sur GitHub Pages à chaque push sur `develop`. Il reste inactif tant que Pages n'est pas activé dans les réglages du dépôt : voir [docs-site/README.md](docs-site/README.md#intégration-continue-et-déploiement).
+- **Relecteurs** : `.github/CODEOWNERS` désigne qui relire selon les fichiers touchés (frontend, backend, CI et Docker, `docs-site/`).
 
 La CI ne construit pas encore les images Docker et ne vérifie pas les fichiers Compose : lancer `make check` (syntaxe Compose) avant de pousser une modification de `docker-compose*.yml`.
 

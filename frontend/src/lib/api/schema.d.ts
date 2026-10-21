@@ -407,6 +407,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/heroes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lister les super-héros publics
+         * @description Liste les profils dont la demande est approuvée et dont le compte est actif. La réponse
+         *     n'expose aucune identité civile. `power` reprend la description publique (`bio`) du profil;
+         *     `avatarUrl` n'est renseigné que si `avatar_path` contient une référence publiquement exploitable.
+         */
+        get: operations["listPublicHeroes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/heroes/{heroId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Consulter la fiche publique d'un super-héros
+         * @description Retourne la fiche d'un héros approuvé avec un compte actif. Les données civiles et les
+         *     chemins de stockage internes ne sont jamais exposés.
+         */
+        get: operations["getPublicHero"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/heroes/requests": {
         parameters: {
             query?: never;
@@ -1281,6 +1324,29 @@ export interface components {
             alias: string;
             /** @description Motif du refus, présent seulement si la demande est `rejected`. */
             rejectionReason?: string;
+        };
+        PublicHero: {
+            /** Format: uuid */
+            id: string;
+            /** @description Pseudo public du super-héros. */
+            alias: string;
+            /**
+             * Format: uri-reference
+             * @description Référence publique de l'avatar; null si aucune référence publique n'est disponible.
+             */
+            avatarUrl: string | null;
+            /** @description Description publique du profil (`hero_profiles.bio`), exposée sous le nom attendu par le frontend. */
+            power: string;
+            /** Format: double */
+            averageRating: number;
+            /** @description Nombre d'interventions auxquelles le héros a participé avec le statut confirmed. */
+            interventionsCount: number;
+        };
+        PublicHeroPage: {
+            items: components["schemas"]["PublicHero"][];
+            total: number;
+            limit: number;
+            offset: number;
         };
         RejectPayload: {
             /** @description Motif du refus, retourné au demandeur. */
@@ -2468,6 +2534,60 @@ export interface operations {
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listPublicHeroes: {
+        parameters: {
+            query?: {
+                /** @description Ordre de tri : pseudo croissant par défaut, ou note moyenne décroissante. */
+                sort?: "alias" | "-averageRating";
+                /** @description Nombre d'éléments par page (1 à 100, 20 par défaut). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Nombre d'éléments à sauter. */
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Une page de profils publics. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicHeroPage"];
+                };
+            };
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getPublicHero: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant du super-héros. */
+                heroId: components["parameters"]["HeroId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Fiche publique du super-héros. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicHero"];
+                };
+            };
+            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
     };

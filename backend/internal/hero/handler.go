@@ -66,6 +66,68 @@ type ApplicantResponse struct {
 	LastName       string    `json:"lastName"`
 }
 
+// PublicProfileResponse est la fiche publique consommée par les cartes de super-héros.
+type PublicProfileResponse struct {
+	ID                 uuid.UUID `json:"id"`
+	Alias              string    `json:"alias"`
+	AvatarURL          *string   `json:"avatarUrl"`
+	Power              string    `json:"power"`
+	AverageRating      float64   `json:"averageRating"`
+	InterventionsCount int64     `json:"interventionsCount"`
+}
+
+func newPublicProfileResponse(profile PublicProfile) PublicProfileResponse {
+	return PublicProfileResponse{
+		ID: profile.UserID, Alias: profile.Alias, AvatarURL: profile.AvatarURL, Power: profile.Bio,
+		AverageRating: profile.AverageRating, InterventionsCount: profile.InterventionsCount,
+	}
+}
+
+// PublicList traite GET /heroes?sort=&limit=&offset=.
+func (h *Handler) PublicList(w http.ResponseWriter, r *http.Request) {
+	sort := PublicSort(r.URL.Query().Get("sort"))
+	if sort == "" {
+		sort = PublicSortAlias
+	}
+	if !sort.Valid() {
+		h.fail(w, r, &httpx.Error{
+			Status: http.StatusUnprocessableEntity, Code: httpx.CodeValidationFailed,
+			Message: "Certains paramètres sont invalides.", Fields: map[string]string{"sort": "invalid"},
+		})
+		return
+	}
+	page, err := httpx.ParsePage(r)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	profiles, total, err := h.service.ListPublic(r.Context(), sort, page.Limit, page.Offset)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	items := make([]PublicProfileResponse, len(profiles))
+	for i, profile := range profiles {
+		items[i] = newPublicProfileResponse(profile)
+	}
+	httpx.WriteJSON(w, http.StatusOK, httpx.NewPageResponse(items, total, page))
+}
+
+// PublicGet traite GET /heroes/{heroId}.
+func (h *Handler) PublicGet(w http.ResponseWriter, r *http.Request) {
+	heroID, err := uuid.Parse(r.PathValue("heroId"))
+	if err != nil {
+		h.fail(w, r, httpx.NotFound("Super-héros introuvable."))
+		return
+	}
+	profile, err := h.service.FindPublic(r.Context(), heroID)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, newPublicProfileResponse(*profile))
+}
+
 // Request traite POST /heroes/requests (citoyen connecté).
 func (h *Handler) Request(w http.ResponseWriter, r *http.Request) {
 	principal, _ := auth.PrincipalFrom(r.Context())
@@ -178,6 +240,8 @@ func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error) {
 
 func toHTTPError(err error) error {
 	switch {
+	case errors.Is(err, ErrProfileNotFound):
+		return httpx.NotFound("Super-héros introuvable.")
 	case errors.Is(err, ErrNotFound):
 		return httpx.NewError(http.StatusNotFound, CodeRequestMissing, "Aucune demande trouvée.")
 	case errors.Is(err, ErrAlreadyPending):

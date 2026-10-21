@@ -39,7 +39,7 @@ Colonne « Front » : l'écran appelle bien la route quand `API_URL` est renseig
 | Newsletter | `POST /newsletter/subscriptions`, `/confirm`, **`/unsubscribe`** ; `PUT /me/newsletter` | ✅ | ✅ |
 | Contact | `POST /contact/messages` | ✅ | ✅ |
 | Demande du statut de héros | `POST /heroes/requests`, `GET /heroes/requests/me` | ✅ | ✅ |
-| Liste et fiche publiques des héros | `GET /heroes`, `GET /heroes/{heroId}` | ✅ | 🟡 écrans encore sur mocks |
+| Liste et fiche publiques des héros | `GET /heroes`, `GET /heroes/{heroId}` | ✅ | ✅ (branché par Emma) |
 | Modération des comptes | `GET /admin/users` ; `POST /admin/users/{id}/deactivate`, `/reactivate`, `/verify` | ✅ | ✅ |
 | Modération des demandes de héros | `GET /admin/hero-requests` ; `POST …/{userId}/approve`, `/reject` | ✅ | ✅ |
 | Modération des changements d'email | `GET /admin/email-change-requests` ; `POST …/{id}/approve`, `/reject` | ✅ | ✅ |
@@ -82,11 +82,10 @@ Colonne « Front » : l'écran appelle bien la route quand `API_URL` est renseig
 
 ### 3.1 Pour livrer ce qui est fait
 
-- [ ] **Fusionner `develop` dans `feat/account-security`, puis ouvrir la PR.** La PR blog (#26) et les deux
-  correctifs de tests de Maxime (#28) sont déjà dans la branche. `develop` a encore 17 commits d'avance (travail
-  d'Emma surtout) : conflits sur 9 fichiers, tous de documentation ou de front (`docs-ci.yml`,
-  `docker-compose.dev.yml`, `docs-site/*`, `frontend/docs/*`, `super-heroes.ts`, `server-session.ts`). Plus aucun
-  conflit côté backend. L'index sur `intervention_heroes` touche une table de Dev B : à lui signaler.
+- [x] **`develop` est fusionné dans `feat/account-security`** (PR blog #26, correctifs de tests #28, incidents et
+  arbitrage, pages publiques des héros, documentation du front). Les tests du backend, le build du front et celui du
+  site de documentation passent sur le résultat. L'index sur `intervention_heroes` touche une table de Dev B : à
+  lui signaler.
 - [ ] Ouvrir la PR et la faire relire (Dev B pour le contrat et la migration, Emma pour le front).
 - [ ] Vérifier les pseudos de `.github/CODEOWNERS` (déduits de l'historique).
 - [ ] Activer GitHub Pages si le site doit être publié (réglages décrits dans `docs-site/README.md`). Le dépôt est
@@ -109,10 +108,10 @@ Colonne « Front » : l'écran appelle bien la route quand `API_URL` est renseig
 
 ### 3.3 Avec Emma (phase 3)
 
-- [ ] Brancher les fiches publiques (`getSuperHero`, `getSuperHeroes`, mis en avant) sur `GET /heroes`.
-- [ ] Supprimer les mocks une fois tous les domaines branchés : `asMockDataUser`, `userFromToken`,
-  `MOCK_SESSION_MAX_AGE`. Il reste sur mocks : incidents et interventions, blog (l'API est dans la branche, 7 opérations), tableau de
-  bord héros, résumé de modération.
+- [x] Fiches publiques des héros branchées sur `GET /heroes` (Emma) ; `asMockDataUser` est supprimé.
+- [ ] Supprimer le reste des mocks une fois tous les domaines branchés : `userFromToken` et
+  `MOCK_SESSION_MAX_AGE`. Il reste sur mocks : incidents publics (accueil, carte), blog (l'API existe, 7
+  opérations), tableau de bord héros, résumé de modération, et les films des super-vilains (pas d'écran).
 - [ ] Jouer le scénario de démonstration de bout en bout (voir `MVP.md`).
 - [ ] Durcissement puis déploiement (rien n'est déployé ; aucune mise en ligne sans feu vert explicite).
 

@@ -11,6 +11,7 @@ const incident: ApiSchema<"Incident"> = {
   description: "Un individu masqué menace les clients.",
   status: "in_progress",
   priority: "high",
+  moderation: "approved",
   citizensRescued: 0,
   location: { address: "1 place de la Bourse", city: "Lyon", latitude: 45.76, longitude: 4.83 },
   occurredAt: null,

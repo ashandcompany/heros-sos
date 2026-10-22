@@ -76,6 +76,7 @@ const fromApiStatus: Record<ApiIncident["status"], IncidentStatus> = {
 };
 
 const fromApiPriority: Record<ApiIncident["priority"], IncidentPriority> = {
+  critical: "critique",
   high: "haute",
   normal: "normale",
   low: "basse",
@@ -161,7 +162,7 @@ async function fetchIncident(token: string, id: string): Promise<ApiIncident | n
 }
 
 /** Incidents et leur équipe en cours (`GET /interventions/{id}`, en parallèle). */
-async function withTeams(
+export async function withTeams(
   token: string,
   incidents: ApiIncident[],
   meId: string | null,

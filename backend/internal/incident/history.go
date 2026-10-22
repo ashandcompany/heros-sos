@@ -82,7 +82,7 @@ func (r *gormRepository) ListResolvedByHero(ctx context.Context, heroID uuid.UUI
 			Joins("JOIN interventions ON interventions.incident_id = incidents.id AND interventions.status = 'succeeded'").
 			Joins(`JOIN intervention_heroes ON intervention_heroes.intervention_id = interventions.id
 				AND intervention_heroes.participation = 'confirmed' AND intervention_heroes.hero_id = ?`, heroID).
-			Where("incidents.status = 'succeeded'")
+			Where("incidents.status = 'succeeded' AND incidents.moderation = ?", ModerationApproved)
 	}
 	var total int64
 	if err := query().Count(&total).Error; err != nil {
@@ -105,7 +105,8 @@ func (r *gormRepository) ListByVillain(ctx context.Context, villainID uuid.UUID,
 	query := func() *gorm.DB {
 		return r.conn(ctx).Table(tableIncidents).
 			Joins("JOIN incident_types ON incident_types.id = incidents.type_id").
-			Joins("JOIN incident_villains ON incident_villains.incident_id = incidents.id AND incident_villains.villain_id = ?", villainID)
+			Joins("JOIN incident_villains ON incident_villains.incident_id = incidents.id AND incident_villains.villain_id = ?", villainID).
+			Where("incidents.moderation = ?", ModerationApproved)
 	}
 	var total int64
 	if err := query().Count(&total).Error; err != nil {

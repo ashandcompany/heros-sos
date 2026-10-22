@@ -138,8 +138,8 @@ Un `401` de l'API sur un appel authentifié (session expirée ou révoquée) red
   démarre donc toujours sans backend.
 - Chaque fonction branchée indique en commentaire la route appelée (« API :
   `GET /admin/moderation/summary` »). Une fonction encore mockée pour un domaine sans contrat
-  documente la route supposée (« Future implémentation : `GET ${API_URL}/hero/dashboard` ») : une
-  hypothèse à faire valider par le backend.
+  documenterait la route supposée (« Future implémentation : `GET ${API_URL}/…` ») : une
+  hypothèse à faire valider par le backend. Il n'en reste plus : tous les domaines sont branchés.
 - Les mutations renvoient un résultat typé plutôt que de lever une exception :
   `{ ok: true, … } | { ok: false, error }` (ex : `LoginResult`). Les actions transforment `error`
   en message affiché.

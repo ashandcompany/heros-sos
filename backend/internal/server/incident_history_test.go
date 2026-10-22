@@ -54,6 +54,11 @@ func TestPublicIncidentHistoryOfHeroesAndVillains(t *testing.T) {
 		if got.status != http.StatusCreated {
 			t.Fatalf("déclaration : %d %s", got.status, got.body)
 		}
+		if approved := moderator.request(http.MethodPut, "/admin/incidents/"+incident.ID+"/moderation", map[string]string{
+			"decision": "approved",
+		}); approved.status != http.StatusNoContent {
+			t.Fatalf("approbation : %d %s", approved.status, approved.body)
+		}
 		return incident.ID
 	}
 

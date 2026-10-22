@@ -122,8 +122,8 @@ Colonne « Front » : l'écran appelle bien la route quand `API_URL` est renseig
 
 | Point | Détail |
 | --- | --- |
-| CI | `make golangci` n'est pas dans la CI ; la CI ne construit pas les images Docker ni ne vérifie les fichiers Compose. |
-| Code de Dev B | 8 remarques de `make golangci` (`film`, `intervention`, `incident`, `interventiontype`, `villain`) et 6 fichiers mal formatés (`incident/handler.go`, `reputation/service.go`, `villain/handler.go`, `server/incident_test.go`, `blog/handler.go`, `blog/blog_test.go`). Corrections d'une ligne. |
+| CI | `make golangci` est dans la CI, **sur les remarques nouvelles seulement** (`--new-from-merge-base`) : celles de la ligne suivante ne la font pas échouer. À retirer quand elles seront corrigées (retirer `GOLANGCI_FLAGS` du workflow). La CI ne lance ni `gofmt` ni `go vet` (`make lint`), ne construit pas les images Docker et ne vérifie pas les fichiers Compose. |
+| Code de Dev B | 10 remarques de `make golangci` (`film` 4, `blog` 2, `incident`, `intervention`, `interventiontype`, `villain` 1 chacun) et 4 fichiers mal formatés (`blog/handler.go`, `blog/blog_test.go`, `villain/handler.go`, `server/incident_test.go`). Corrections d'une ligne : `make fmt`, puis `make golangci` pour la liste. |
 | Fonctions longues | `config.Load` (119 lignes) et `server.NewWithDB` (49 instructions) : non découpées, car les deux développeurs les modifient (conflits). |
 | Note moyenne des héros | Le tri par note relit tous les avis (10 ms à 60 000 avis). Au-delà de 100 000, stocker la moyenne sur `hero_profiles`. |
 | OpenAPI | Découpage en `auth.yaml` et `incidents.yaml` : optionnel, à faire entre deux PR de Dev B. |
@@ -139,7 +139,7 @@ proximité (`hero_locations`), encyclopédie Marvel.
 ```bash
 cd backend
 make test                 # go test ./... -race -count=1 (PostgreSQL requis : make db-start)
-make check                # formatage, vet, tests, govulncheck : ce que vérifie la CI
+make check                # formatage, vet, tests, govulncheck (la CI lance les tests et govulncheck, pas le formatage ni vet)
 make golangci             # analyses supplémentaires (voir .golangci.yml)
 make resetmfa EMAIL=…     # exploitation : retirer la 2FA d'un compte
 ```

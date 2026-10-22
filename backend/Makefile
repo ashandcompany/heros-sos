@@ -81,9 +81,13 @@ lint: ## Vérifie le formatage et lance go vet
 	@test -z "$$(gofmt -l .)" || { echo "Fichiers mal formatés :"; gofmt -l .; exit 1; }
 	go vet ./...
 
+# Options de golangci-lint en plus. Le CI y met --new-from-merge-base=origin/develop : seules les remarques
+# qu'une PR introduit la font échouer, celles qui existent déjà n'arrêtent pas les autres développeurs.
+GOLANGCI_FLAGS ?=
+
 .PHONY: golangci
 golangci: ## Analyse plus poussée (conventions Go, erreurs courantes) : voir .golangci.yml
-	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2 run ./...
+	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2 run $(GOLANGCI_FLAGS) ./...
 
 .PHONY: vuln
 vuln: ## Cherche les vulnérabilités connues atteignables dans le code

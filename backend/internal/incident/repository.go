@@ -114,6 +114,10 @@ type ListFilter struct {
 	HeroIDs      []uuid.UUID
 	VillainIDs   []uuid.UUID
 	ApprovedOnly bool
+	// ActiveHeroID ne garde que l'incident sur lequel ce héros intervient en ce moment : sa participation
+	// confirmée à l'intervention en cours (un héros n'en a jamais plus d'une). Contrairement à HeroIDs, les
+	// interventions terminées ne comptent pas. Critère interne, non exposé par l'API.
+	ActiveHeroID *uuid.UUID
 }
 
 type gormRepository struct {
@@ -326,6 +330,12 @@ func (r *gormRepository) List(ctx context.Context, filter ListFilter, limit, off
 		query = query.Where(`EXISTS (SELECT 1 FROM interventions i
 			JOIN intervention_heroes ih ON ih.intervention_id = i.id
 			WHERE i.incident_id = incidents.id AND ih.hero_id IN ?)`, filter.HeroIDs)
+	}
+	if filter.ActiveHeroID != nil {
+		query = query.Where(`EXISTS (SELECT 1 FROM interventions i
+			JOIN intervention_heroes ih ON ih.intervention_id = i.id
+			WHERE i.incident_id = incidents.id AND i.status = 'in_progress'
+			AND ih.hero_id = ? AND ih.participation = 'confirmed' AND ih.is_active)`, *filter.ActiveHeroID)
 	}
 	if len(filter.VillainIDs) > 0 {
 		query = query.Where(`EXISTS (SELECT 1 FROM incident_villains iv

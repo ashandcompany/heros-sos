@@ -64,6 +64,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/hero/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tableau de bord du héros connecté
+         * @description Réservé aux super-héros. Statistiques de toute la plateforme (interventions terminées, incidents par type, citoyens secourus, vilains identifiés et emprisonnés), statistiques personnelles du héros (interventions réussies et échouées, avis publiés, films, vilains les plus affrontés), l'incident sur lequel il intervient en ce moment et les derniers incidents non résolus. Calculé à la demande, en lecture seule. Seuls les incidents approuvés par la modération sont comptés et listés, comme dans `GET /incidents` pour un héros.
+         */
+        get: operations["getHeroDashboard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/hero/reviews": {
         parameters: {
             query?: never;
@@ -2748,6 +2768,59 @@ export interface components {
             limit: number;
             offset: number;
         };
+        HeroDashboard: {
+            /** @description Statistiques de toute la plateforme. */
+            global: {
+                /** @description Interventions terminées (réussies ou échouées) : une par équipe, pas une par héros. */
+                interventions: number;
+                /** @description Tous les types du catalogue, y compris ceux sans incident, du plus fréquent au moins fréquent. */
+                incidentsByType: components["schemas"]["HeroDashboardTypeCount"][];
+                /** @description Citoyens secourus : somme des incidents réussis, une seule fois par incident. */
+                rescuedCitizens: number;
+                /** @description Vilains connus de la plateforme. */
+                villainsIdentified: number;
+                /** @description Vilains dont le statut est `emprisonne`. */
+                villainsImprisoned: number;
+            };
+            /** @description Statistiques du héros connecté. */
+            personal: {
+                /** @description Interventions terminées auxquelles le héros a participé (participation confirmée). */
+                interventions: number;
+                successfulInterventions: number;
+                failedInterventions: number;
+                /**
+                 * Format: double
+                 * @description Moyenne des avis publiés; 0 sans avis.
+                 */
+                averageRating: number;
+                /** @description Nombre d'avis publiés. */
+                ratingsCount: number;
+                /** @description Films liés au héros, tous statuts de modération confondus. */
+                videos: number;
+                /** @description Films approuvés par la modération. */
+                publishedVideos: number;
+                /** @description Vilains les plus souvent affrontés, du plus fréquent au moins fréquent. */
+                mainEnemies: components["schemas"]["HeroDashboardEnemy"][];
+            };
+            /** @description Incidents sur lesquels le héros intervient en ce moment (au plus un en pratique). */
+            myOngoingIncidents: components["schemas"]["Incident"][];
+            /** @description Derniers incidents non résolus (signalés, en cours ou échoués : un incident échoué peut être repris), tous héros confondus, du plus récent au plus ancien. */
+            recentIncidents: components["schemas"]["Incident"][];
+        };
+        HeroDashboardTypeCount: {
+            type: {
+                code: string;
+                label: string;
+            };
+            count: number;
+        };
+        HeroDashboardEnemy: {
+            /** Format: uuid */
+            id: string;
+            alias: string;
+            /** @description Nombre d'incidents où le héros a affronté ce vilain. */
+            encounters: number;
+        };
         HeroReputation: {
             /** Format: double */
             averageRating: number;
@@ -3293,6 +3366,29 @@ export interface operations {
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getHeroDashboard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Le tableau de bord. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HeroDashboard"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };

@@ -1,7 +1,9 @@
 // Package newsletter gère les abonnements à la newsletter : l'abonnement d'un visiteur depuis le pied
 // de page (double opt-in par lien signé), la préférence d'un titulaire de compte, et la purge des
-// demandes jamais confirmées. L'envoi de la newsletter elle-même n'existe pas encore : quand il existera,
-// il passera par mail.Service.SendNewsletter, qui refuse tout numéro sans lien de désinscription
+// demandes jamais confirmées. Il porte aussi les numéros rédigés par la modération (table newsletters) :
+// brouillon tant que sent_at est vide, en lecture seule une fois envoyé. L'envoi date le numéro de façon
+// atomique puis dépose un mail par abonné confirmé dans la file d'envoi, en arrière-plan, via
+// mail.Service.SendNewsletter, qui refuse tout numéro sans lien de désinscription
 // (Service.UnsubscribeLink).
 //
 // Un abonnement est une ligne par adresse (newsletter_subscriptions) :

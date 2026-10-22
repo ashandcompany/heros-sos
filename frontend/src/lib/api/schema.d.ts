@@ -2029,6 +2029,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/newsletters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Numéros de la newsletter (modérateur)
+         * @description Brouillons et numéros envoyés, les plus récents d'abord. Le corps n'est pas inclus.
+         */
+        get: operations["listNewsletters"];
+        put?: never;
+        /**
+         * Enregistrer un brouillon de newsletter
+         * @description Le destinataire est un compte précis (`recipientUserId`) ou, s'il est absent, tous les abonnés
+         *     confirmés. Le HTML est assaini à l'enregistrement.
+         */
+        post: operations["createNewsletter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/newsletters/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Consulter un numéro de la newsletter (modérateur) */
+        get: operations["getNewsletter"];
+        /**
+         * Modifier un brouillon
+         * @description Un numéro déjà envoyé est en lecture seule (`newsletter_already_sent`).
+         */
+        put: operations["updateNewsletter"];
+        post?: never;
+        /**
+         * Supprimer un brouillon
+         * @description Un numéro déjà envoyé ne peut pas être supprimé (`newsletter_already_sent`).
+         */
+        delete: operations["deleteNewsletter"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/newsletters/{id}/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Envoyer un numéro
+         * @description Envoie le brouillon aux abonnés confirmés (`status = subscribed`), ou au seul compte désigné s'il
+         *     est abonné. Le numéro est daté « envoyé » avant les mails, de façon atomique : il ne part qu'une
+         *     fois. Les mails sont déposés en arrière-plan dans la file d'envoi, chacun avec le lien de
+         *     désinscription de son destinataire ; la réponse `202` n'attend pas leur remise. Sans aucun
+         *     destinataire abonné, `422` (`no_subscribed_recipient`) et le numéro reste un brouillon.
+         */
+        post: operations["sendNewsletter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2540,6 +2614,43 @@ export interface components {
             total: number;
             limit: number;
             offset: number;
+        };
+        NewsletterPayload: {
+            subject: string;
+            /** @description HTML (balises de l'éditeur uniquement, le reste est retiré), 200 000 octets au plus. */
+            body: string;
+            /**
+             * Format: uuid
+             * @description Compte destinataire. Absent ou nul pour tous les abonnés confirmés.
+             */
+            recipientUserId?: string | null;
+        };
+        NewsletterSummary: {
+            /** Format: uuid */
+            id: string;
+            subject: string;
+            /** Format: uuid */
+            recipientUserId: string | null;
+            /** @description Un numéro envoyé est en lecture seule. */
+            sent: boolean;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            sentAt: string | null;
+        };
+        Newsletter: components["schemas"]["NewsletterSummary"] & {
+            /** @description HTML assaini. */
+            body: string;
+        };
+        NewsletterSummaryPage: {
+            items: components["schemas"]["NewsletterSummary"][];
+            total: number;
+            limit: number;
+            offset: number;
+        };
+        NewsletterSendResult: {
+            /** @description Nombre de mails confiés à la file d'envoi. */
+            recipients: number;
         };
         VillainPage: {
             items: components["schemas"]["Villain"][];
@@ -3352,6 +3463,15 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description Le numéro a déjà été envoyé (`newsletter_already_sent`), il est en lecture seule. */
+        NewsletterAlreadySent: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
     };
     parameters: {
         /** @description Identifiant du super-héros. */
@@ -3360,6 +3480,8 @@ export interface components {
         VillainId: string;
         /** @description Identifiant de l'article. */
         ArticleId: string;
+        /** @description Identifiant du numéro de la newsletter. */
+        NewsletterId: string;
         /** @description Identifiant d'URL de l'article. */
         ArticleSlug: string;
         /** @description Identifiant du film. */
@@ -7137,6 +7259,184 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listNewsletters: {
+        parameters: {
+            query?: {
+                /** @description Nombre d'éléments par page (1 à 100, 20 par défaut). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Nombre d'éléments à sauter. */
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Une page de numéros. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsletterSummaryPage"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createNewsletter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewsletterPayload"];
+            };
+        };
+        responses: {
+            /** @description Brouillon créé. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Newsletter"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getNewsletter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant du numéro de la newsletter. */
+                id: components["parameters"]["NewsletterId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Le numéro. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Newsletter"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateNewsletter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant du numéro de la newsletter. */
+                id: components["parameters"]["NewsletterId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewsletterPayload"];
+            };
+        };
+        responses: {
+            /** @description Brouillon modifié. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Newsletter"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["NewsletterAlreadySent"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteNewsletter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant du numéro de la newsletter. */
+                id: components["parameters"]["NewsletterId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Brouillon supprimé. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["NewsletterAlreadySent"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    sendNewsletter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant du numéro de la newsletter. */
+                id: components["parameters"]["NewsletterId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Envoi pris en charge. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsletterSendResult"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["NewsletterAlreadySent"];
+            422: components["responses"]["ValidationFailed"];
             500: components["responses"]["InternalError"];
         };
     };

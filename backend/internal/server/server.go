@@ -165,7 +165,7 @@ func NewWithDB(cfg config.Config, logger *slog.Logger, db *gorm.DB, opts ...Opti
 	if err != nil {
 		return nil, err
 	}
-	mailService, err := mail.NewService(mailer, cfg.Mail.FromName, cfg.Security.Tokens)
+	mailService, err := mail.NewService(mailer, cfg.Mail.FromName, cfg.Security.Tokens, mail.WithLogoURL(cfg.App.MailLogoURL()))
 	if err != nil {
 		return nil, err
 	}
@@ -240,7 +240,8 @@ func NewWithDB(cfg config.Config, logger *slog.Logger, db *gorm.DB, opts ...Opti
 		Repo: reputation.NewRepository(db), Audit: c.audit, Tx: c.tx, Clock: c.clock,
 	}), logger, cfg.HTTP)
 	c.newsletterService = newsletter.NewService(newsletter.ServiceDeps{
-		Repo: newsletter.NewRepository(db), Links: links, Mailer: mailService, App: cfg.App,
+		Repo: newsletter.NewRepository(db), Issues: newsletter.NewIssueRepository(db), Audit: c.audit, Tx: c.tx,
+		Links: links, Mailer: mailService, App: cfg.App,
 		ConfirmTTL: cfg.Security.Tokens.NewsletterConfirmTTL, Clock: c.clock, Logger: logger,
 	})
 	c.newsletterHandler = newsletter.NewHandler(newsletter.HandlerDeps{

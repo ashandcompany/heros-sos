@@ -29,18 +29,22 @@ func (r *gormRepository) conn(ctx context.Context) *gorm.DB { return database.Co
 
 // Les statistiques ne comptent que les incidents approuvés par la modération : un incident en attente ou rejeté
 // n'existe pas pour les héros (ils ne le voient pas dans leurs listes), même si une intervention y est liée.
+//
+// Les citoyens secourus et les incidents par type se lisent dans les compteurs incident_stats (tenus à jour par des
+// triggers, migration create_read_counters) : les recalculer parcourait toute la table des incidents. Le nombre
+// d'interventions terminées n'a pas de compteur : il parcourt les interventions, ce que le cache du service absorbe.
 const globalSQL = `SELECT
 	(SELECT COUNT(*) FROM interventions n JOIN incidents i ON i.id = n.incident_id
 		WHERE n.status IN ('succeeded', 'failed') AND i.moderation = 'approved') AS interventions,
-	(SELECT COALESCE(SUM(citizens_rescued), 0) FROM incidents
+	(SELECT COALESCE(SUM(citizens_rescued), 0) FROM incident_stats
 		WHERE status = 'succeeded' AND moderation = 'approved') AS rescued_citizens,
 	(SELECT COUNT(*) FROM villains) AS villains_identified,
 	(SELECT COUNT(*) FROM villains WHERE status = 'emprisonne') AS villains_imprisoned`
 
 // incidentsByTypeSQL part du catalogue pour que les types sans incident apparaissent avec un compte de zéro.
-const incidentsByTypeSQL = `SELECT t.code, t.label, COUNT(i.id) AS count
+const incidentsByTypeSQL = `SELECT t.code, t.label, COALESCE(SUM(s.incidents), 0) AS count
 FROM incident_types t
-LEFT JOIN incidents i ON i.type_id = t.id AND i.moderation = 'approved'
+LEFT JOIN incident_stats s ON s.type_id = t.id AND s.moderation = 'approved'
 GROUP BY t.id, t.code, t.label
 ORDER BY count DESC, t.label`
 

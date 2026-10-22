@@ -81,6 +81,7 @@ type Config struct {
 	App         App
 	Jobs        Jobs
 	Events      Events
+	Dashboard   Dashboard
 }
 
 // OMDb regroupe les réglages du catalogue de films.
@@ -353,6 +354,14 @@ type Events struct {
 	StreamBuffer int
 }
 
+// Dashboard regroupe les réglages du tableau de bord des héros.
+type Dashboard struct {
+	// StatsTTL est la fraîcheur des statistiques (globales, et celles de chaque héros) : au-delà, la dernière valeur
+	// est encore servie sur-le-champ pendant qu'une nouvelle est calculée en arrière-plan, car ces agrégats parcourent
+	// de très grosses tables. Zéro désactive ce cache : chaque appel recalcule.
+	StatsTTL time.Duration
+}
+
 // IsProduction indique si l'application tourne en production.
 func (c Config) IsProduction() bool {
 	return c.Environment == EnvironmentProduction
@@ -492,6 +501,7 @@ func Load(getenv func(string) string) (Config, error) {
 			StreamMaxAge:      l.duration(envEventsStreamMaxAge, defaultEventsStreamMaxAge),
 			StreamBuffer:      l.positiveInt(envEventsStreamBuffer, defaultEventsStreamBuffer),
 		},
+		Dashboard: Dashboard{StatsTTL: l.durationOrZero(envDashboardStatsTTL, defaultDashboardStatsTTL)},
 	}
 
 	l.errs = append(l.errs, cfg.validate())

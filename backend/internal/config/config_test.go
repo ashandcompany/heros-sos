@@ -535,6 +535,28 @@ func TestLogFormatDefaultsToJSONInProductionAndTextElsewhere(t *testing.T) {
 	}
 }
 
+func TestDashboardStatsTTLHasADefaultAndMayBeZero(t *testing.T) {
+	cfg, err := Load(fakeEnv(validEnv()))
+	if err != nil || cfg.Dashboard.StatsTTL != defaultDashboardStatsTTL {
+		t.Fatalf("défaut : %v, %v", cfg.Dashboard.StatsTTL, err)
+	}
+	for value, want := range map[string]time.Duration{"0": 0, "5m": 5 * time.Minute} {
+		env := validEnv()
+		env[envDashboardStatsTTL] = value
+		cfg, err := Load(fakeEnv(env))
+		if err != nil || cfg.Dashboard.StatsTTL != want {
+			t.Errorf("%s = %q : %v, %v", envDashboardStatsTTL, value, cfg.Dashboard.StatsTTL, err)
+		}
+	}
+	for _, value := range []string{"-1s", "bientôt"} {
+		env := validEnv()
+		env[envDashboardStatsTTL] = value
+		if _, err := Load(fakeEnv(env)); err == nil || !strings.Contains(err.Error(), envDashboardStatsTTL) {
+			t.Errorf("%s = %q doit être refusé : %v", envDashboardStatsTTL, value, err)
+		}
+	}
+}
+
 func TestEventSettingsHaveDefaultsAndMustBePositive(t *testing.T) {
 	cfg, err := Load(fakeEnv(validEnv()))
 	if err != nil {

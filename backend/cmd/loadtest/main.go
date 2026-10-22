@@ -3,6 +3,7 @@
 //	go run ./cmd/loadtest                                  tous les scénarios publics, 20 s chacun
 //	go run ./cmd/loadtest -scenarios list,heroes -p95 350ms
 //	LOADTEST_PASSWORD=… go run ./cmd/loadtest -identifier jane.foster@heros-sos.local
+//	LOADTEST_PASSWORD=… go run ./cmd/loadtest -identifier tony.stark@heros-sos.local -dashboard
 //
 // Le scénario « mes incidents » demande un compte citoyen (-identifier et LOADTEST_PASSWORD) : le mot de
 // passe se lit dans l'environnement, jamais dans un argument. Une API à l'arrêt, ou une base vide de
@@ -46,7 +47,8 @@ func run(ctx context.Context) error {
 	p95 := flag.Duration("p95", 350*time.Millisecond, "seuil du p95 par scénario")
 	maxErrors := flag.Float64("max-errors", 0.01, "part maximale de requêtes en erreur (0 à 1)")
 	only := flag.String("scenarios", "", "scénarios à jouer, séparés par des virgules (tous par défaut)")
-	identifier := flag.String("identifier", "", "email du citoyen pour le scénario « mes incidents »")
+	identifier := flag.String("identifier", "", "email du compte connecté pour les scénarios « mine » et « dashboard »")
+	dashboard := flag.Bool("dashboard", false, "joue aussi le tableau de bord des héros (-identifier doit être un héros)")
 	origin := flag.String("origin", "http://localhost:3000", "origine envoyée à la connexion (HEROS_ALLOWED_ORIGINS)")
 	flag.Parse()
 
@@ -85,6 +87,9 @@ func run(ctx context.Context) error {
 		if targets.ReporterID, err = loadtest.Login(ctx, authenticated, base, *origin, *identifier, password); err != nil {
 			return err
 		}
+		targets.Dashboard = *dashboard
+	} else if *dashboard {
+		return errors.New("-dashboard demande un héros connecté : donnez -identifier")
 	}
 
 	scenarios, err := selectScenarios(loadtest.Scenarios(targets), *only)

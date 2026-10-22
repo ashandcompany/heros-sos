@@ -111,6 +111,9 @@ const (
 	defaultEventsMaxStreamsPerUser = 5
 	defaultEventsStreamMaxAge      = 10 * time.Minute
 	defaultEventsStreamBuffer      = 64
+
+	// defaultDashboardStatsTTL est la fraîcheur des statistiques du tableau de bord des héros.
+	defaultDashboardStatsTTL = 30 * time.Second
 )
 
 // Règles de limitation de débit par défaut (maximum de requêtes par fenêtre).

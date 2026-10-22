@@ -270,3 +270,49 @@ func TestHeroDashboardAggregatesPlatformAndHeroStatistics(t *testing.T) {
 		}
 	})
 }
+
+// Les statistiques du tableau de bord (agrégats sur de grosses tables) sont mises en cache : figées pendant la
+// fraîcheur demandée, puis recalculées en arrière-plan sans jamais faire attendre l'affichage. Les deux listes
+// d'incidents, lues dans des index, restent à jour.
+func TestHeroDashboardStatisticsAreCachedAndRefreshedInTheBackground(t *testing.T) {
+	e := newE2E(t, map[string]string{"HEROS_DASHBOARD_STATS_TTL": "30s"})
+	reporter := e.signUpAndLogin("reporter@example.org")
+	moderator := e.newModerator("fury@shield.example")
+	hero := e.approvedHero(moderator, "hero@example.org", "Lumen")
+	theft := e.createType(moderator, "theft", "Vol", false)
+	incidentID := e.declareIncidentOfType(reporter, moderator, theft.ID)
+
+	before := e.dashboardOf(hero)
+	if before.Personal.SuccessfulInterventions != 0 || before.Global.Interventions != 0 || len(before.RecentIncidents) != 1 {
+		t.Fatalf("départ : %+v", before)
+	}
+
+	started := e.startIntervention(hero, incidentID)
+	e.mustPost(hero, "/interventions/"+started.ID+"/outcome", map[string]string{"status": "succeeded"}, http.StatusNoContent)
+
+	// Dans le délai : les listes voient déjà l'intervention terminée, les statistiques sont celles du premier calcul.
+	cached := e.dashboardOf(hero)
+	if len(cached.RecentIncidents) != 0 || len(cached.MyOngoingIncidents) != 0 {
+		t.Errorf("les listes doivent être à jour : %+v", cached)
+	}
+	if cached.Personal.SuccessfulInterventions != 0 || cached.Global.Interventions != 0 {
+		t.Errorf("les statistiques sont servies depuis le cache pendant sa fraîcheur : %+v %+v", cached.Personal, cached.Global)
+	}
+
+	// Passé le délai : la valeur périmée est encore servie, et une nouvelle se calcule en arrière-plan.
+	e.clock.Advance(31 * time.Second)
+	if stale := e.dashboardOf(hero); stale.Personal.SuccessfulInterventions != 0 {
+		t.Errorf("une valeur périmée est servie sans attendre le recalcul : %+v", stale.Personal)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		fresh := e.dashboardOf(hero)
+		if fresh.Personal.SuccessfulInterventions == 1 && fresh.Global.Interventions == 1 && fresh.Global.RescuedCitizens == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("les statistiques ne se rafraîchissent pas : %+v %+v", fresh.Personal, fresh.Global)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}

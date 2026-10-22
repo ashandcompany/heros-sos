@@ -111,6 +111,26 @@ func TestScenariosSkipWhatTheTargetsCannotServe(t *testing.T) {
 	}
 }
 
+func TestTheDashboardScenarioNeedsAHeroSession(t *testing.T) {
+	for _, scenario := range Scenarios(Targets{HeroID: "h", VillainID: "v"}) {
+		if scenario.Name == "dashboard" {
+			t.Fatal("« dashboard » ne doit être joué que sur demande")
+		}
+	}
+	var found bool
+	for _, scenario := range Scenarios(Targets{ReporterID: "r", Dashboard: true}) {
+		if scenario.Name == "dashboard" {
+			found = true
+			if !scenario.Authenticated || scenario.Path(1) != "/hero/dashboard" {
+				t.Errorf("« dashboard » : Authenticated = %v, chemin %s", scenario.Authenticated, scenario.Path(1))
+			}
+		}
+	}
+	if !found {
+		t.Error("« dashboard » absent alors qu'il est demandé")
+	}
+}
+
 func TestRunUsesTheSessionClientOnlyForAuthenticatedScenarios(t *testing.T) {
 	var anonymous, withSession atomic.Int64
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -219,8 +219,9 @@ func NewWithDB(cfg config.Config, logger *slog.Logger, db *gorm.DB, opts ...Opti
 		Service: incidentService,
 		Logger:  logger, HTTP: cfg.HTTP, Limits: cfg.Security.RateLimits, Clock: c.clock,
 	})
-	c.dashboardHandler = herodashboard.NewHandler(
-		herodashboard.NewService(herodashboard.NewRepository(db), incidentService), logger)
+	c.dashboardHandler = herodashboard.NewHandler(herodashboard.NewService(
+		herodashboard.NewRepository(db), incidentService,
+		herodashboard.Options{StatsTTL: cfg.Dashboard.StatsTTL, Clock: c.clock, Logger: logger}), logger)
 	c.interventionHandler = intervention.NewHandler(intervention.NewService(intervention.ServiceDeps{
 		Repo: intervention.NewRepository(db), Users: c.users, Heroes: heroProfiles,
 		Audit: c.audit, Events: c.events, Tx: c.tx, Clock: c.clock, App: cfg.App, Notifier: mailService, Logger: logger,

@@ -72,6 +72,20 @@ func (l *loader) duration(name string, fallback time.Duration) time.Duration {
 	return parsed
 }
 
+// durationOrZero lit une durée qui peut être nulle (le réglage désactive alors la fonction).
+func (l *loader) durationOrZero(name string, fallback time.Duration) time.Duration {
+	value, ok := l.lookup(name)
+	if !ok {
+		return fallback
+	}
+	parsed, err := time.ParseDuration(value)
+	if err != nil || parsed < 0 {
+		l.fail("%s : durée invalide %q (exemples : 30s, 5m ; 0 désactive)", name, value)
+		return fallback
+	}
+	return parsed
+}
+
 func (l *loader) positiveInt(name string, fallback int) int {
 	value, ok := l.lookup(name)
 	if !ok {

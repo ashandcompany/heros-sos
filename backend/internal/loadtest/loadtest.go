@@ -142,6 +142,8 @@ type Targets struct {
 	HeroID, VillainID string
 	// ReporterID est le compte connecté : sans lui, le scénario « mes incidents » est ignoré.
 	ReporterID string
+	// Dashboard ajoute le tableau de bord des héros (GET /hero/dashboard) : le compte connecté doit être un héros.
+	Dashboard bool
 }
 
 // Scenarios retourne les scénarios applicables aux cibles données, dans l'ordre de présentation.
@@ -160,6 +162,9 @@ func Scenarios(targets Targets) []Scenario {
 	}
 	if targets.ReporterID != "" {
 		scenarios = append(scenarios, authenticated("mine", "/incidents?limit=20&reporterId="+url.QueryEscape(targets.ReporterID)))
+	}
+	if targets.Dashboard {
+		scenarios = append(scenarios, authenticated("dashboard", "/hero/dashboard"))
 	}
 	if targets.HeroID != "" {
 		scenarios = append(scenarios,

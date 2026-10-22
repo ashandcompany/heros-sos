@@ -122,6 +122,8 @@ const (
 	envEventsMaxStreamsPerUser = "HEROS_EVENTS_MAX_STREAMS_PER_USER"
 	envEventsStreamMaxAge      = "HEROS_EVENTS_STREAM_MAX_AGE"
 	envEventsStreamBuffer      = "HEROS_EVENTS_STREAM_BUFFER"
+
+	envDashboardStatsTTL = "HEROS_DASHBOARD_STATS_TTL"
 )
 
 // EnvVarNames retourne la liste de toutes les variables d'environnement reconnues.
@@ -158,5 +160,6 @@ func EnvVarNames() []string {
 		envCleanupInterval, envCleanupTimeout, envSessionRetention, envTokenRetention, envCommandRetention,
 		envEventsPollInterval, envEventsBatchSize, envEventsHeartbeat,
 		envEventsMaxStreamsPerUser, envEventsStreamMaxAge, envEventsStreamBuffer,
+		envDashboardStatsTTL,
 	}
 }

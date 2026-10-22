@@ -1,9 +1,13 @@
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans, Jost, Special_Elite } from "next/font/google";
 import Script from "next/script";
+import { Suspense } from "react";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SkipLink } from "@/components/layout/SkipLink";
+import { OfflineProvider } from "@/components/offline/OfflineProvider";
+import { OutboxStatus } from "@/components/offline/OutboxStatus";
+import { SessionIdentity } from "@/components/offline/SessionIdentity";
 import { themeColors, themeInitScript } from "@/lib/theme";
 import "./globals.css";
 import "./retro.css";
@@ -68,12 +72,19 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           strategy="beforeInteractive"
           dangerouslySetInnerHTML={{ __html: themeInitScript }}
         />
-        <SkipLink />
-        <SiteHeader />
-        <main id="contenu" tabIndex={-1} className="flex-1 focus:outline-none">
-          {children}
-        </main>
-        <SiteFooter />
+        <OfflineProvider>
+          <SkipLink />
+          <SiteHeader />
+          <main id="contenu" tabIndex={-1} className="flex-1 focus:outline-none">
+            {children}
+          </main>
+          <SiteFooter />
+          <OutboxStatus />
+          {/* Lit la session (cookies) : rendu en streaming, sans bloquer la page. */}
+          <Suspense fallback={null}>
+            <SessionIdentity />
+          </Suspense>
+        </OfflineProvider>
       </body>
     </html>
   );

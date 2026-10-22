@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 
 	"github.com/ashandcompany/heros-sos/backend/internal/httpx"
 	"github.com/ashandcompany/heros-sos/backend/internal/villain"
@@ -73,54 +72,71 @@ func (r *gormRepository) PublicHeroExists(ctx context.Context, heroID uuid.UUID)
 	return exists, nil
 }
 
-// ListResolvedByHero retourne les incidents résolus par une intervention à laquelle le héros a
-// participé, les plus récemment résolus d'abord.
+// Les deux requêtes de page des historiques, en constantes : le test des plans d'exécution (plans_test.go) les
+// explique telles quelles, pour qu'un index supprimé ou une réécriture qui reparcourt la table ne passe pas
+// inaperçu. Paramètres : l'identifiant, la taille de la page, le décalage.
+const (
+	resolvedByHeroSQL = `WITH page AS (
+			SELECT intervention_id, resolved_at FROM intervention_heroes
+			WHERE hero_id = ? AND resolved_at IS NOT NULL
+			ORDER BY resolved_at DESC, intervention_id DESC
+			LIMIT ? OFFSET ?)
+		SELECT ` + summaryColumns + `, page.resolved_at AS resolved_at, interventions.id AS intervention_id
+		FROM page
+		JOIN interventions ON interventions.id = page.intervention_id
+		JOIN incidents ON incidents.id = interventions.incident_id
+		JOIN incident_types ON incident_types.id = incidents.type_id
+		ORDER BY page.resolved_at DESC, page.intervention_id DESC`
+
+	byVillainSQL = `WITH page AS (
+			SELECT incident_id, incident_created_at FROM incident_villains
+			WHERE villain_id = ? AND incident_approved
+			ORDER BY incident_created_at DESC, incident_id DESC
+			LIMIT ? OFFSET ?)
+		SELECT ` + summaryColumns + `,
+			CASE WHEN incidents.status = 'succeeded' THEN latest.ended_at END AS resolved_at,
+			latest.id AS intervention_id
+		FROM page
+		JOIN incidents ON incidents.id = page.incident_id
+		JOIN incident_types ON incident_types.id = incidents.type_id
+		LEFT JOIN LATERAL (
+			SELECT id, ended_at FROM interventions WHERE interventions.incident_id = incidents.id
+			ORDER BY started_at DESC NULLS LAST, id DESC LIMIT 1) AS latest ON TRUE
+		ORDER BY page.incident_created_at DESC, page.incident_id DESC`
+)
+
+// ListResolvedByHero retourne les incidents approuvés résolus par une intervention à laquelle le héros a
+// participé, les plus récemment résolus d'abord (resolved_at n'est renseigné que pour un incident approuvé). L'index (hero_id, resolved_at DESC, intervention_id DESC) donne la page sans
+// aucun tri : seules les interventions de la page sont jointes à leurs incidents. Le total est le compteur
+// hero_stats (voir la migration create_read_counters).
 func (r *gormRepository) ListResolvedByHero(ctx context.Context, heroID uuid.UUID, limit, offset int) ([]Summary, int64, error) {
-	query := func() *gorm.DB {
-		return r.conn(ctx).Table(tableIncidents).
-			Joins("JOIN incident_types ON incident_types.id = incidents.type_id").
-			Joins("JOIN interventions ON interventions.incident_id = incidents.id AND interventions.status = 'succeeded'").
-			Joins(`JOIN intervention_heroes ON intervention_heroes.intervention_id = interventions.id
-				AND intervention_heroes.participation = 'confirmed' AND intervention_heroes.hero_id = ?`, heroID).
-			Where("incidents.status = 'succeeded' AND incidents.moderation = ?", ModerationApproved)
-	}
 	var total int64
-	if err := query().Count(&total).Error; err != nil {
+	err := r.conn(ctx).Table("hero_stats").Select("COALESCE(SUM(resolved), 0)").Where("hero_id = ?", heroID).Scan(&total).Error
+	if err != nil {
 		return nil, 0, fmt.Errorf("incident : comptage des incidents résolus : %w", err)
 	}
 	var rows []summaryRow
-	if err := query().
-		Select(summaryColumns + ", interventions.ended_at AS resolved_at, interventions.id AS intervention_id").
-		Order("interventions.ended_at DESC NULLS LAST, incidents.id DESC").
-		Limit(limit).Offset(offset).Scan(&rows).Error; err != nil {
+	err = r.conn(ctx).Raw(resolvedByHeroSQL, heroID, limit, offset).Scan(&rows).Error
+	if err != nil {
 		return nil, 0, fmt.Errorf("incident : liste des incidents résolus : %w", err)
 	}
 	items, err := r.hydrateSummaries(ctx, rows)
 	return items, total, err
 }
 
-// ListByVillain retourne les incidents auxquels le vilain est associé, quel que soit leur état, les
-// plus récents d'abord. Le lead est celui de la dernière intervention.
+// ListByVillain retourne les incidents approuvés auxquels le vilain est associé, quel que soit leur état, les plus
+// récents d'abord. Le lead est celui de la dernière intervention. La page est choisie dans l'index
+// (villain_id, incident_created_at DESC, incident_id DESC) avant toute jointure : sans cela, la jointure latérale
+// vers la dernière intervention était calculée pour tous les incidents du vilain, pas pour les 20 affichés.
 func (r *gormRepository) ListByVillain(ctx context.Context, villainID uuid.UUID, limit, offset int) ([]Summary, int64, error) {
-	query := func() *gorm.DB {
-		return r.conn(ctx).Table(tableIncidents).
-			Joins("JOIN incident_types ON incident_types.id = incidents.type_id").
-			Joins("JOIN incident_villains ON incident_villains.incident_id = incidents.id AND incident_villains.villain_id = ?", villainID).
-			Where("incidents.moderation = ?", ModerationApproved)
-	}
 	var total int64
-	if err := query().Count(&total).Error; err != nil {
+	err := r.conn(ctx).Table("villain_stats").Select("COALESCE(SUM(incidents), 0)").Where("villain_id = ?", villainID).Scan(&total).Error
+	if err != nil {
 		return nil, 0, fmt.Errorf("incident : comptage des incidents du vilain : %w", err)
 	}
 	var rows []summaryRow
-	if err := query().
-		Joins(`LEFT JOIN LATERAL (
-			SELECT id, ended_at FROM interventions WHERE interventions.incident_id = incidents.id
-			ORDER BY started_at DESC NULLS LAST, id DESC LIMIT 1) AS latest ON TRUE`).
-		Select(summaryColumns + `, CASE WHEN incidents.status = 'succeeded' THEN latest.ended_at END AS resolved_at,
-			latest.id AS intervention_id`).
-		Order("incidents.created_at DESC, incidents.id DESC").
-		Limit(limit).Offset(offset).Scan(&rows).Error; err != nil {
+	err = r.conn(ctx).Raw(byVillainSQL, villainID, limit, offset).Scan(&rows).Error
+	if err != nil {
 		return nil, 0, fmt.Errorf("incident : liste des incidents du vilain : %w", err)
 	}
 	items, err := r.hydrateSummaries(ctx, rows)

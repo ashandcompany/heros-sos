@@ -1,0 +1,1 @@
+DROP INDEX incidents_approved_resolved_idx;

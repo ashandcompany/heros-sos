@@ -23,11 +23,13 @@ import (
 	"github.com/ashandcompany/heros-sos/backend/internal/contact"
 	"github.com/ashandcompany/heros-sos/backend/internal/crypto"
 	"github.com/ashandcompany/heros-sos/backend/internal/database"
+	"github.com/ashandcompany/heros-sos/backend/internal/events"
 	"github.com/ashandcompany/heros-sos/backend/internal/film"
 	"github.com/ashandcompany/heros-sos/backend/internal/hero"
 	"github.com/ashandcompany/heros-sos/backend/internal/herodashboard"
 	"github.com/ashandcompany/heros-sos/backend/internal/herolocation"
 	"github.com/ashandcompany/heros-sos/backend/internal/httpx"
+	"github.com/ashandcompany/heros-sos/backend/internal/idempotency"
 	"github.com/ashandcompany/heros-sos/backend/internal/incident"
 	"github.com/ashandcompany/heros-sos/backend/internal/intervention"
 	"github.com/ashandcompany/heros-sos/backend/internal/interventiontype"
@@ -35,6 +37,7 @@ import (
 	"github.com/ashandcompany/heros-sos/backend/internal/moderation"
 	"github.com/ashandcompany/heros-sos/backend/internal/newsletter"
 	"github.com/ashandcompany/heros-sos/backend/internal/ratelimit"
+	"github.com/ashandcompany/heros-sos/backend/internal/realtime"
 	"github.com/ashandcompany/heros-sos/backend/internal/reputation"
 	"github.com/ashandcompany/heros-sos/backend/internal/signedlink"
 	"github.com/ashandcompany/heros-sos/backend/internal/user"
@@ -43,14 +46,22 @@ import (
 
 // components regroupe les dépendances partagées par les fonctions d'enregistrement des routes.
 type components struct {
-	cfg    config.Config
-	logger *slog.Logger
-	db     *gorm.DB
-	clock  clock.Clock
-	tx     database.Transactor
-	users  user.Repository
-	audit  audit.Recorder
-	mailer mail.Mailer
+	cfg     config.Config
+	logger  *slog.Logger
+	db      *gorm.DB
+	clock   clock.Clock
+	tx      database.Transactor
+	users   user.Repository
+	audit   audit.Recorder
+	events  *events.Store
+	shipper *events.Shipper
+	// idempotent rend une route d'écriture rejouable sans risque (voir le paquet idempotency).
+	idempotent *idempotency.Middleware
+	// hub, tailer et streamEvents diffusent le journal aux flux temps réel (voir le paquet realtime).
+	hub          *realtime.Hub
+	tailer       *realtime.Tailer
+	streamEvents *realtime.Handler
+	mailer       mail.Mailer
 
 	health              healthHandler
 	blogHandler         *blog.Handler
@@ -163,6 +174,7 @@ func NewWithDB(cfg config.Config, logger *slog.Logger, db *gorm.DB, opts ...Opti
 		tx:     database.NewTransactor(db),
 		users:  user.NewRepository(db, sealer),
 		audit:  audit.NewStore(db, settings.clock),
+		events: events.NewStore(db, settings.clock),
 		health: healthHandler{db: db, pingTimeout: cfg.Database.PingTimeout},
 	}
 
@@ -209,17 +221,18 @@ func NewWithDB(cfg config.Config, logger *slog.Logger, db *gorm.DB, opts ...Opti
 		ratelimit.New(limits.HeroLocationPerUser, limits.MaxTrackedKeys, c.clock))
 	incidentService := incident.NewService(incident.ServiceDeps{
 		Repo: incident.NewRepository(db), Types: types, Villains: villains, Users: c.users, Heroes: c.locationService,
-		Notifier: mailService, Audit: c.audit, Tx: c.tx, Clock: c.clock, Logger: logger,
+		Notifier: mailService, Audit: c.audit, Events: c.events, Tx: c.tx, Clock: c.clock, Logger: logger,
 	})
 	c.incidentHandler = incident.NewHandler(incident.HandlerDeps{
 		Service: incidentService,
 		Logger:  logger, HTTP: cfg.HTTP, Limits: cfg.Security.RateLimits, Clock: c.clock,
 	})
-	c.dashboardHandler = herodashboard.NewHandler(
-		herodashboard.NewService(herodashboard.NewRepository(db), incidentService), logger)
+	c.dashboardHandler = herodashboard.NewHandler(herodashboard.NewService(
+		herodashboard.NewRepository(db), incidentService,
+		herodashboard.Options{StatsTTL: cfg.Dashboard.StatsTTL, Clock: c.clock, Logger: logger}), logger)
 	c.interventionHandler = intervention.NewHandler(intervention.NewService(intervention.ServiceDeps{
 		Repo: intervention.NewRepository(db), Users: c.users, Heroes: heroProfiles,
-		Audit: c.audit, Tx: c.tx, Clock: c.clock, App: cfg.App, Notifier: mailService, Logger: logger,
+		Audit: c.audit, Events: c.events, Tx: c.tx, Clock: c.clock, App: cfg.App, Notifier: mailService, Logger: logger,
 	}), logger, cfg.HTTP)
 	c.reputationHandler = reputation.NewHandler(reputation.NewService(reputation.ServiceDeps{
 		Repo: reputation.NewRepository(db), Audit: c.audit, Tx: c.tx, Clock: c.clock,
@@ -247,6 +260,13 @@ func NewWithDB(cfg config.Config, logger *slog.Logger, db *gorm.DB, opts ...Opti
 	c.contactHandler = contact.NewHandler(contact.HandlerDeps{
 		Service: contact.NewService(mailService, cfg.Mail.ContactRecipient),
 		Logger:  logger, HTTP: cfg.HTTP, Limits: cfg.Security.RateLimits, Clock: c.clock,
+	})
+	c.shipper = events.NewShipper(c.events, db, logger, cfg.Events)
+	c.hub = realtime.NewHub(cfg.Events.StreamBuffer, cfg.Events.MaxStreamsPerUser)
+	c.tailer = realtime.NewTailer(c.events, db, c.hub, logger, cfg.Events)
+	c.streamEvents = realtime.NewHandler(c.hub, c.events, db, logger, cfg.Events, cfg.HTTP)
+	c.idempotent = idempotency.New(idempotency.Deps{
+		DB: db, Tx: c.tx, Clock: c.clock, Logger: logger, MaxBodyBytes: cfg.HTTP.MaxBodyBytes,
 	})
 	router := newRouter()
 	registerRoutes(router, c)
@@ -322,6 +342,14 @@ func (s *Server) Run(ctx context.Context) error {
 		return nil
 	})
 	group.Go(func() error {
+		s.components.shipper.Run(groupCtx)
+		return nil
+	})
+	group.Go(func() error {
+		s.components.tailer.Run(groupCtx)
+		return nil
+	})
+	group.Go(func() error {
 		<-groupCtx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.cfg.HTTP.ShutdownTimeout)
 		defer cancel()
@@ -334,6 +362,8 @@ func (s *Server) Run(ctx context.Context) error {
 // file d'envoi (elle se vide), enfin la base.
 func (s *Server) shutdown(ctx context.Context) error {
 	s.logger.InfoContext(ctx, "arrêt du serveur")
+	// Les flux temps réel d'abord : ce sont des requêtes qui ne se terminent pas, l'arrêt HTTP les attendrait.
+	s.components.hub.Close()
 	var errs []error
 	if err := s.httpServer.Shutdown(ctx); err != nil {
 		errs = append(errs, fmt.Errorf("arrêt HTTP : %w", err))
@@ -392,6 +422,14 @@ func (s *Server) cleanup(ctx context.Context) {
 			run:            func(ctx context.Context) (int64, error) { return c.newsletterService.PurgeStale(ctx, tokenRetention) },
 			failureMessage: "purge des abonnements non confirmés en échec",
 			successMessage: "abonnements non confirmés purgés", countAttribute: "abonnements_supprimes",
+		},
+		// Une commande trop ancienne ne sera plus rejouée : sa clé n'a plus lieu d'être gardée.
+		{
+			run: func(ctx context.Context) (int64, error) {
+				return c.idempotent.PurgeOlderThan(ctx, s.cfg.Jobs.CommandRetention)
+			},
+			failureMessage: "purge des commandes rejouables en échec",
+			successMessage: "commandes rejouables purgées", countAttribute: "commandes_supprimees",
 		},
 		// Une demande de changement d'adresse jamais confirmée ne peut plus aboutir une fois son lien expiré.
 		{

@@ -19,6 +19,9 @@ import (
 	"github.com/ashandcompany/heros-sos/backend/internal/server"
 )
 
+// logService identifie ce programme dans les journaux JSON.
+const logService = "api"
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "erreur :", err)
@@ -60,12 +63,13 @@ func run() error {
 	return app.Run(ctx)
 }
 
-// newLogger écrit en JSON en production (exploitable par un agrégateur de logs) et en texte
-// lisible sinon.
+// newLogger écrit en JSON (exploitable par un agrégateur de logs) ou en texte lisible, selon HEROS_LOG_FORMAT :
+// JSON par défaut en production. En JSON, chaque ligne porte service=api : c'est ce que Filebeat retient parmi les
+// journaux de tous les conteneurs.
 func newLogger(cfg config.Config) *slog.Logger {
 	options := &slog.HandlerOptions{Level: cfg.LogLevel}
-	if cfg.IsProduction() {
-		return slog.New(slog.NewJSONHandler(os.Stdout, options))
+	if cfg.LogFormat == config.LogFormatJSON {
+		return slog.New(slog.NewJSONHandler(os.Stdout, options)).With("service", logService)
 	}
 	return slog.New(slog.NewTextHandler(os.Stdout, options))
 }

@@ -225,8 +225,10 @@ func (r *gormRepository) List(ctx context.Context, status VerificationStatus, li
 // les interventions de ces héros (`hero_id IN (SELECT user_id FROM page)`). Agréger d'abord tous les avis puis
 // joindre coûtait un balayage complet de hero_reviews et intervention_heroes (avec un tri sur disque) à chaque
 // requête : 44 ms pour 2 000 héros et 60 000 avis, contre 1 ms avec l'index intervention_heroes_hero_id_idx.
-// COUNT(*) suffit : la clé primaire (intervention_id, hero_id) interdit qu'un héros compte deux fois une
-// intervention.
+// Les interventions ne sont pas comptées ici : un héros très actif en a des centaines de milliers, et les compter à
+// chaque affichage coûtait plusieurs secondes. Elles se lisent dans hero_stats, tenu à jour par des triggers (voir
+// la migration create_read_counters). Seul l'annuaire des modérateurs (interventionsWithLastOfPage) les compte
+// encore, avec la date de la dernière.
 //
 // Seul le tri par note doit connaître la note de tous les héros avant de couper : c'est le seul agrégat qui
 // parcourt tous les avis (voir ratingsOfAll). Au-delà de quelques centaines de milliers d'avis, il faudra
@@ -264,10 +266,9 @@ const (
 		) AS ratings ON ratings.hero_id = hero_profiles.user_id`
 	interventionsOfPage = `
 		LEFT JOIN (
-			SELECT hero_id, COUNT(*) AS interventions_count
-			FROM intervention_heroes
-			WHERE participation = 'confirmed' AND hero_id IN (SELECT user_id FROM page)
-			GROUP BY hero_id
+			SELECT hero_id, interventions AS interventions_count
+			FROM hero_stats
+			WHERE hero_id IN (SELECT user_id FROM page)
 		) AS interventions ON interventions.hero_id = page.user_id`
 	// interventionsWithLastOfPage ajoute la date de la dernière intervention (annuaire des modérateurs).
 	interventionsWithLastOfPage = `

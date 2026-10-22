@@ -64,6 +64,60 @@ createmoderator: ## Crée un modérateur : make createmoderator EMAIL=… FIRST=
 seed: ## Remplit la base de démonstration (univers Marvel) ; RESET=1 efface d'abord TOUTES les données
 	@$(WITH_ENV) go run ./cmd/seed $(if $(RESET),-reset)
 
+# --- Mesures de performance : 5 millions d'incidents ---------------------------------------------------
+# Tout se passe dans une base dédiée (PERF_DB_NAME) : jamais celle du développement quotidien, qui recevrait
+# plusieurs Go de données fictives. Ordre : perf-db (si la base est dans Docker), perf-prepare, seed-perf,
+# puis perf-run dans un terminal et perf dans un autre.
+PERF_DB_NAME      ?= herossos_perf
+PERF_DATABASE_URL ?= postgres://$(DB_USER):$(DB_PASSWORD)@localhost:$(DB_PORT)/$(PERF_DB_NAME)?sslmode=disable
+PERF_INCIDENTS    ?= 5000000
+PERF_MAX_SIZE_GB  ?= 0
+PERF_API_ADDR     ?= :8090
+PERF_API_URL      ?= http://127.0.0.1$(PERF_API_ADDR)/api/v1
+PERF_WORKERS      ?= 16
+PERF_DURATION     ?= 20s
+PERF_P95          ?= 350ms
+PERF_USER         ?= jane.foster@heros-sos.local
+
+# Les index de lecture sont seuls dans leur migration : les retirer puis les recréer (sans toucher aux données)
+# rejoue en direct la lenteur d'origine, puis le gain. psql lit l'URL de la base de mesures.
+PERF_PSQL         ?= psql '$(PERF_DATABASE_URL)' -v ON_ERROR_STOP=1 -q
+# Les deux migrations « que des index » : les listes, puis les derniers incidents résolus (qui demande une colonne ajoutée
+# entre les deux). Retirées dans l'ordre inverse de leur création.
+PERF_INDEXES_SQL  ?= migrations/20261022162000_add_incident_perf_indexes
+PERF_RESOLVED_SQL ?= migrations/20261022166000_add_incident_resolved_index
+
+.PHONY: perf-indexes-off
+perf-indexes-off: ## Démonstration : retire les index de lecture de la base de mesures (lenteur d'origine)
+	@$(PERF_PSQL) -f $(PERF_RESOLVED_SQL).down.sql && $(PERF_PSQL) -f $(PERF_INDEXES_SQL).down.sql && echo "Index de lecture retirés : lancez make perf pour voir la lenteur d'origine."
+
+.PHONY: perf-indexes-on
+perf-indexes-on: ## Démonstration : recrée les index de lecture de la base de mesures
+	@$(PERF_PSQL) -f $(PERF_INDEXES_SQL).up.sql && $(PERF_PSQL) -f $(PERF_RESOLVED_SQL).up.sql && echo "Index de lecture recréés."
+
+.PHONY: perf-db
+perf-db: ## Crée la base de mesures dans la base de la pile de développement (Docker)
+	@$(COMPOSE_DEV) exec -T db psql -U $(DB_USER) -d postgres -tc "SELECT 1 FROM pg_database WHERE datname='$(PERF_DB_NAME)'" | grep -q 1 || \
+		$(COMPOSE_DEV) exec -T db createdb -U $(DB_USER) $(PERF_DB_NAME)
+	@echo "Base $(PERF_DB_NAME) prête."
+
+.PHONY: perf-prepare
+perf-prepare: ## Migre la base de mesures et y charge les données Marvel (héros, vilains, citoyens)
+	@$(WITH_ENV) export HEROS_DATABASE_URL='$(PERF_DATABASE_URL)'; go run ./cmd/api -migrate && go run ./cmd/seed
+
+.PHONY: seed-perf
+seed-perf: ## Ajoute PERF_INCIDENTS (5 000 000) incidents à la base de mesures ; PERF_MAX_SIZE_GB=8 borne sa taille
+	@$(WITH_ENV) export HEROS_DATABASE_URL='$(PERF_DATABASE_URL)'; go run ./cmd/seedperf -incidents $(PERF_INCIDENTS) -max-size-gb $(PERF_MAX_SIZE_GB)
+
+.PHONY: perf-run
+perf-run: ## Lance l'API sur la base de mesures (migrations comprises), à laisser tourner pendant `make perf`
+	@$(WITH_ENV) export HEROS_DATABASE_URL='$(PERF_DATABASE_URL)' HEROS_HTTP_ADDR='$(PERF_API_ADDR)'; go run ./cmd/api
+
+.PHONY: perf
+perf: ## Mesure les temps de réponse (p95 ≤ PERF_P95) ; LOADTEST_PASSWORD=… ajoute « mes incidents » (compte PERF_USER)
+	@$(WITH_ENV) go run ./cmd/loadtest -base-url '$(PERF_API_URL)' -workers $(PERF_WORKERS) -duration $(PERF_DURATION) \
+		-p95 $(PERF_P95) $(if $(LOADTEST_PASSWORD),-identifier '$(PERF_USER)') $(if $(SCENARIOS),-scenarios '$(SCENARIOS)')
+
 .PHONY: build
 build: ## Compile tous les paquets
 	go build ./...
@@ -162,6 +216,26 @@ logs-dev: ## Suit les journaux de la pile de développement
 .PHONY: moderator-dev
 moderator-dev: ## Crée un modérateur dans la pile de développement : EMAIL=… FIRST=… LAST=… BIRTH=AAAA-MM-JJ
 	$(call create_moderator,$(COMPOSE_DEV))
+
+# Monitoring ELK (profil Compose `elk`) : Elasticsearch, Logstash, Kibana et Filebeat, qui lit les journaux JSON de l'API.
+# Compter 3 à 4 Go de mémoire en plus : donner 6 à 8 Go à Docker Desktop. Les images pèsent environ 2 Go.
+ELK_DISK_MIN_MB ?= 4096
+ELK_SERVICES    = elasticsearch logstash kibana filebeat elk-setup
+
+.PHONY: elk-dev
+elk-dev: ## Démarre le monitoring ELK (journaux de l'API en JSON, Kibana sur http://localhost:5601)
+	@$(MAKE) --no-print-directory disk-check DISK_MIN_MB=$(ELK_DISK_MIN_MB)
+	@test -f .env || { echo "Créez .env d'abord : make env"; exit 1; }
+	@# L'API est recréée avec des journaux JSON ; elle reprend le texte lisible au prochain `make up`.
+	HEROS_LOG_FORMAT=json $(COMPOSE_DEV) --profile elk up -d api $(ELK_SERVICES)
+	@echo "Kibana : http://localhost:$${KIBANA_PORT:-5601} (le dashboard apparaît une fois elk-setup terminé : make logs-dev)"
+
+.PHONY: elk-down-dev
+elk-down-dev: ## Arrête le monitoring ELK (V=1 supprime aussi ses données) et remet les journaux de l'API en texte
+	$(COMPOSE_DEV) --profile elk stop $(ELK_SERVICES)
+	$(COMPOSE_DEV) --profile elk rm -f $(if $(V),-v) $(ELK_SERVICES)
+	$(if $(V),docker volume rm -f heros-sos-dev_esdata >/dev/null 2>&1 || true)
+	$(COMPOSE_DEV) up -d api
 
 .PHONY: seed-dev
 seed-dev: ## Remplit la base de la pile de développement (univers Marvel) ; RESET=1 efface d'abord TOUTES les données

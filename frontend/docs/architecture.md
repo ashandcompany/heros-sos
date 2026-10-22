@@ -255,6 +255,33 @@ Sombre par défaut. Le choix est gardé en `localStorage` et appliqué par un sc
   ville → `location.coordinates` (BAN). En cas d'échec, l'incident n'a pas de position, mais la
   déclaration est acceptée quand même.
 
+### Hors ligne et temps réel
+
+**Où :** `lib/offline/` (file, chiffrement, envoi : sans navigateur, testé par `npm test`),
+`components/offline/` (fournisseur, badge d'état, `useOfflineAction`, `LiveEvents`),
+`app/api/sync/route.ts`, `public/sw.js`, `app/hors-ligne`. Le détail (idempotence, journal d'événements,
+limites) est dans `backend/stack/performance-et-synchronisation.md`.
+
+- **File des actions** : hors ligne, ou si l'envoi échoue faute de réseau, une action (déclarer un incident,
+  prendre en charge, rejoindre, inviter, répondre à une invitation, proposer ou voter un résultat) est rangée
+  dans IndexedDB, **corps chiffré**, puis rejouée dans l'ordre au retour du réseau. Un formulaire l'adopte en
+  enveloppant sa Server Action : `useActionState(useOfflineAction(action, build), idleFormState)`, où `build`
+  (voir `lib/offline/forms.ts`) lit la saisie comme la Server Action et rend l'action à ranger. Sans file
+  disponible (API absente, visiteur), la Server Action s'exécute comme avant.
+- **Relais `/api/sync`** : le navigateur rejoue une commande ici, la route la transmet à l'API Go avec la
+  session, le jeton CSRF et `Idempotency-Key` (le navigateur ne parle pas directement à l'API). Elle n'accepte
+  que les écritures de `lib/offline/commands.ts` : **ajouter une action rejouable, c'est l'ajouter à cette
+  liste**, avec son constructeur.
+- **Refus du serveur** : une commande refusée (409 : un autre héros est déjà sur place…) reste visible avec sa
+  raison (`refusals` dans `lib/offline/sender.ts`) jusqu'à ce que l'utilisateur la ferme.
+- **Service worker** : fichiers de l'application et pages `/profil` et `/heros` gardés pour la lecture hors
+  ligne, repli sur `/hors-ligne`. Il ne touche jamais à `/api/`. Les pages gardées sont effacées à la
+  déconnexion et au changement de compte.
+- **Temps réel** : `LiveEvents` écoute `/api/v1/events/stream` (SSE, servi par le reverse proxy) et rafraîchit
+  la page à chaque événement. Front lancé seul sur le port 3000, la connexion échoue sans bruit.
+- **Identifiant d'incident** : le formulaire de déclaration choisit l'`id` de l'incident (champ caché
+  `incidentId`) : un envoi rejoué ne crée pas deux incidents.
+
 ### Carte des incidents
 
 **Où :** `app/carte` (publique), `app/heros/carte`, `components/map/`, `lib/map.ts`.

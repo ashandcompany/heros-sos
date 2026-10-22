@@ -364,3 +364,35 @@ func TestChainOrder(t *testing.T) {
 		t.Errorf("ordre = %q, attendu %q", got, want)
 	}
 }
+
+func TestAccessLogRecordsTheMatchedRouteInsteadOfTheRawPath(t *testing.T) {
+	logger, logs := bufferLogger()
+	handler := AccessLog(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		SetRoute(r.Context(), "GET /api/v1/incidents/{id}")
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/v1/incidents/0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10", nil))
+
+	// Les durées se regroupent par motif : avec l'identifiant dans la route, chaque incident aurait la sienne.
+	if output := logs.String(); !strings.Contains(output, `route="GET /api/v1/incidents/{id}"`) {
+		t.Errorf("le motif de route doit être journalisé :\n%s", output)
+	}
+}
+
+func TestAccessLogMarksRequestsNoRouteMatched(t *testing.T) {
+	logger, logs := bufferLogger()
+	handler := AccessLog(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		WriteError(w, NotFound("absent"))
+	}))
+
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/v1/inconnu", nil))
+
+	if output := logs.String(); !strings.Contains(output, "route=unmatched") {
+		t.Errorf("une requête sans route doit être marquée unmatched :\n%s", output)
+	}
+}
+
+func TestSetRouteOutsideAccessLogDoesNothing(t *testing.T) {
+	SetRoute(context.Background(), "GET /x") // ne doit ni paniquer ni rien noter
+}

@@ -8,6 +8,8 @@ Complément au cahier des charges, qui prévoit PHP 8.4 et MySQL (§2.4) : le ba
 - [OpenAPI / Swagger](stack/openapi.md) : le contrat d'API (spec d'abord) et Swagger UI hors production.
 - [Docker](stack/docker.md) : les services de `docker-compose.yml` (api, worker, proxy, web, db, rabbitmq, mailpit).
 - [RabbitMQ](stack/rabbitmq.md) : la file des mails, et le repli sur la table `mail_outbox`.
+- [Performance et synchronisation](stack/performance-et-synchronisation.md) : tenir 5 millions d'incidents sous 350 ms (index, compteurs, curseur), le mode hors ligne (file, idempotence), le journal d'événements, le temps réel et le monitoring ELK.
+- [Monitoring ELK](stack/elk.md) : le profil Docker Compose `elk` (Elasticsearch, Logstash, Kibana, Filebeat) : démarrer, ce qu'on y voit, vérifier, dépanner.
 - [OMDb pour les films](stack/omdb.md) : le catalogue de films, son quota, sa licence, la clé et le cache.
 - [Sécurité et chiffrement](stack/securite.md) : les mesures retenues (cascade AES-256 puis XChaCha20, TLS hybride, Shamir, Ed25519).
 - [Chiffrement des champs](stack/chiffrement.md) : le détail de la cascade à clé de 512 bits (clés, format stocké, limites).

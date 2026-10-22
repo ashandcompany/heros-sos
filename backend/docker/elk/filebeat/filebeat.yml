@@ -1,0 +1,43 @@
+# Filebeat lit les journaux des conteneurs (le driver `json-file` de Docker les écrit sous
+# /var/lib/docker/containers, monté en lecture seule : pas besoin de docker.sock) et ne garde que ceux de l'API.
+# L'API écrit une ligne JSON par entrée avec service=api quand HEROS_LOG_FORMAT=json (`make elk` le règle).
+#
+# Démonstration en développement uniquement : Filebeat tourne en root pour lire ces fichiers.
+
+filebeat.inputs:
+  - type: filestream
+    id: docker-containers
+    paths:
+      - /var/lib/docker/containers/*/*-json.log
+    parsers:
+      # Enveloppe de Docker ({"log":"…","stream":"stdout","time":"…"}) : il reste la ligne de l'application,
+      # dans `message`.
+      - container:
+          stream: all
+          format: docker
+
+processors:
+  # La ligne de l'application est du JSON : ses champs (time, level, msg, route, duration_ms…) passent à la
+  # racine de l'événement.
+  - decode_json_fields:
+      fields: ["message"]
+      target: ""
+      overwrite_keys: true
+      add_error_key: false
+  # Les journaux des autres conteneurs (base, proxy, front…) ne portent pas service=api : ils sont écartés ici.
+  - drop_event:
+      when:
+        not:
+          equals:
+            service: "api"
+
+# Logstash fait le tri (suppression des champs personnels, aiguillage) et écrit dans Elasticsearch : Filebeat
+# n'a donc ni modèle d'index ni gestion du cycle de vie à gérer.
+setup.template.enabled: false
+setup.ilm.enabled: false
+
+output.logstash:
+  hosts: ["logstash:5044"]
+
+logging.level: warning
+logging.to_stderr: true

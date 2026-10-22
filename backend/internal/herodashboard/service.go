@@ -2,10 +2,13 @@ package herodashboard
 
 import (
 	"context"
+	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/ashandcompany/heros-sos/backend/internal/clock"
 	"github.com/ashandcompany/heros-sos/backend/internal/incident"
 )
 
@@ -19,20 +22,37 @@ const (
 	ongoingIncidentsLimit = 10
 )
 
-// IncidentLister lit les incidents (implémenté par incident.Service). Le tableau de bord ignore le total.
+// IncidentLister lit les incidents (implémenté par incident.Service). Le tableau de bord n'affiche aucune
+// pagination : il demande à ne pas calculer le total (ListFilter.SkipTotal).
 type IncidentLister interface {
-	List(ctx context.Context, filter incident.ListFilter, limit, offset int) ([]incident.Incident, int64, error)
+	List(ctx context.Context, filter incident.ListFilter, limit, offset int) (incident.ListResult, error)
 }
 
-// Service assemble le tableau de bord.
+// Options règle le service.
+type Options struct {
+	// StatsTTL est la fraîcheur des statistiques mises en cache (voir snapshotCache) ; zéro désactive le cache.
+	StatsTTL time.Duration
+	Clock    clock.Clock
+	Logger   *slog.Logger
+}
+
+// Service assemble le tableau de bord. Les statistiques (globales, puis celles de chaque héros) passent par un cache
+// qui ne fait jamais attendre un recalcul ; les deux listes d'incidents, qui se lisent dans des index, sont toujours
+// à jour.
 type Service struct {
 	repo      Repository
 	incidents IncidentLister
+	global    *snapshotCache[Global]
+	personal  *snapshotCache[Personal]
 }
 
 // NewService crée le service.
-func NewService(repo Repository, incidents IncidentLister) *Service {
-	return &Service{repo: repo, incidents: incidents}
+func NewService(repo Repository, incidents IncidentLister, opts Options) *Service {
+	return &Service{
+		repo: repo, incidents: incidents,
+		global:   newSnapshotCache[Global](opts.StatsTTL, opts.Clock, opts.Logger),
+		personal: newSnapshotCache[Personal](opts.StatsTTL, opts.Clock, opts.Logger),
+	}
 }
 
 // Dashboard est le tableau de bord d'un héros.
@@ -43,43 +63,60 @@ type Dashboard struct {
 	RecentIncidents    []incident.Incident
 }
 
-// Get calcule le tableau de bord du héros. Les cinq lectures sont indépendantes : elles s'exécutent en parallèle,
-// la première erreur annule les autres.
+// Get assemble le tableau de bord du héros. Les lectures sont indépendantes : elles s'exécutent en parallèle, la
+// première erreur annule les autres.
 func (s *Service) Get(ctx context.Context, heroID uuid.UUID) (Dashboard, error) {
-	// Chaque lecture écrit dans sa propre variable : Personal est rempli par deux d'entre elles.
-	var (
-		dashboard Dashboard
-		enemies   []Enemy
-	)
+	var dashboard Dashboard
 	group, ctx := errgroup.WithContext(ctx)
 	group.Go(func() (err error) {
-		dashboard.Global, err = s.repo.Global(ctx)
+		dashboard.Global, err = s.global.get(ctx, "global", s.repo.Global)
 		return err
 	})
 	group.Go(func() (err error) {
-		dashboard.Personal, err = s.repo.Personal(ctx, heroID)
+		dashboard.Personal, err = s.personal.get(ctx, heroID.String(), func(ctx context.Context) (Personal, error) {
+			return s.loadPersonal(ctx, heroID)
+		})
+		return err
+	})
+	group.Go(func() (err error) {
+		filter := incident.ListFilter{ActiveHeroID: &heroID, ApprovedOnly: true, SkipTotal: true}
+		page, err := s.incidents.List(ctx, filter, ongoingIncidentsLimit, 0)
+		dashboard.MyOngoingIncidents = page.Items
+		return err
+	})
+	group.Go(func() (err error) {
+		// Un incident échoué redevient disponible (une nouvelle intervention peut le reprendre) : il n'est pas résolu.
+		filter := incident.ListFilter{ApprovedOnly: true, SkipTotal: true, Statuses: []incident.Status{
+			incident.StatusReported, incident.StatusInProgress, incident.StatusFailed,
+		}}
+		page, err := s.incidents.List(ctx, filter, recentIncidentsLimit, 0)
+		dashboard.RecentIncidents = page.Items
+		return err
+	})
+	if err := group.Wait(); err != nil {
+		return Dashboard{}, err
+	}
+	return dashboard, nil
+}
+
+// loadPersonal calcule les statistiques d'un héros : ses compteurs et ses principaux ennemis.
+func (s *Service) loadPersonal(ctx context.Context, heroID uuid.UUID) (Personal, error) {
+	var (
+		personal Personal
+		enemies  []Enemy
+	)
+	group, ctx := errgroup.WithContext(ctx)
+	group.Go(func() (err error) {
+		personal, err = s.repo.Personal(ctx, heroID)
 		return err
 	})
 	group.Go(func() (err error) {
 		enemies, err = s.repo.MainEnemies(ctx, heroID, mainEnemiesLimit)
 		return err
 	})
-	group.Go(func() (err error) {
-		filter := incident.ListFilter{ActiveHeroID: &heroID, ApprovedOnly: true}
-		dashboard.MyOngoingIncidents, _, err = s.incidents.List(ctx, filter, ongoingIncidentsLimit, 0)
-		return err
-	})
-	group.Go(func() (err error) {
-		// Un incident échoué redevient disponible (une nouvelle intervention peut le reprendre) : il n'est pas résolu.
-		filter := incident.ListFilter{ApprovedOnly: true, Statuses: []incident.Status{
-			incident.StatusReported, incident.StatusInProgress, incident.StatusFailed,
-		}}
-		dashboard.RecentIncidents, _, err = s.incidents.List(ctx, filter, recentIncidentsLimit, 0)
-		return err
-	})
 	if err := group.Wait(); err != nil {
-		return Dashboard{}, err
+		return Personal{}, err
 	}
-	dashboard.Personal.MainEnemies = enemies
-	return dashboard, nil
+	personal.MainEnemies = enemies
+	return personal, nil
 }

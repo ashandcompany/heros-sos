@@ -16,6 +16,23 @@ Calculées à la demande en SQL.
 | Films d'un héros | `hero_films` avec `status = 'approved'` |
 | Pire ennemi | vilain le plus fréquent dans `incident_villains` pour les interventions du héros (via `intervention_heroes`) |
 
+## Compteurs de lecture
+
+Compter sur 5 millions d'incidents coûte de 150 ms à plusieurs secondes selon le filtre : les totaux et les statistiques ci-dessus ne sont plus recalculés à chaque lecture, mais **tenus à jour à chaque écriture** par des triggers de niveau instruction (une seule mise à jour par compteur, même pour 100 000 lignes insérées d'un coup, et aucun chemin d'écriture qui puisse les oublier). `rebuild_read_counters()` les recalcule depuis les tables ; `go run ./cmd/replay -rebuild-counters` l'appelle.
+
+| Table | Une ligne par | Contenu | Sert à |
+|---|---|---|---|
+| `incident_stats` | `(moderation, status, type_id)` | `incidents`, `citizens_rescued` | Total des listes (sans filtre ou par statut ; le public et les héros lisent la ligne `approved`), pourcentage par type, citoyens secourus |
+| `reporter_stats` | `(reporter_id, status)` | `incidents` | Total de « mes incidents » (tous les états de modération : un déclarant voit ses propres incidents en attente) |
+| `villain_stats` | `villain_id` | `incidents` (approuvés) | Nombre d'incidents d'un vilain (fiche, liste, total de son historique public) |
+| `hero_stats` | `hero_id` | `interventions` (confirmées), `resolved` (réussies, incident approuvé) | Nombre d'interventions d'un héros (fiche, liste) et total de son historique public |
+
+La modération (`incidents.moderation`) est une dimension de `incident_stats`, et `villain_stats` comme `hero_stats.resolved` ne comptent que ce que le public voit (incidents approuvés) : un trigger répercute une décision de modération sur les colonnes `incident_villains.incident_approved` et `intervention_heroes.resolved_at`, donc sur ces compteurs, dans les deux sens.
+
+`reporter_stats` n'a pas de clé étrangère vers `users` : le déclarant d'un incident passe à `NULL` à la suppression de son compte, et la mise à jour qui le fait retire l'incident de son compteur, que la ligne existe encore ou non. Les lignes à zéro restent en place.
+
+Sur cette base, les listes et les fiches se lisent en quelques millisecondes (voir [Performance et synchronisation](../stack/performance-et-synchronisation.md)).
+
 ## Tableau de bord des héros
 
 `GET /hero/dashboard` (rôle héros) sert les statistiques ci-dessus, calculées à la demande, plus deux listes. Tout ce
@@ -37,5 +54,9 @@ y a déjà été menée.
 | `myOngoingIncidents` | incident de l'intervention `in_progress` où le héros est `confirmed` et `is_active` |
 | `recentIncidents` | 5 derniers incidents `reported`, `in_progress` ou `failed` (un incident échoué peut être repris) |
 
-Les agrégats globaux parcourent `incidents` : sur plusieurs millions de lignes, il faudra les remplacer par des
-compteurs maintenus à l'écriture (trigger ou table de statistiques) plutôt que de les recalculer à chaque appel.
+Sur plusieurs millions d'incidents, ces agrégats ne se recalculent pas à chaque appel : `global.incidentsByType` et
+`global.rescuedCitizens` se lisent dans `incident_stats` (ligne `approved`), et les statistiques (globales, et celles de
+chaque héros) passent par un cache en mémoire (`HEROS_DASHBOARD_STATS_TTL`, 30 s) qui sert toujours la dernière valeur
+sur-le-champ et se rafraîchit en arrière-plan. Les deux listes d'incidents restent à jour. Le nombre d'interventions
+terminées n'a pas de compteur : il se calcule dans ce rafraîchissement. Voir
+[Performance et synchronisation](../stack/performance-et-synchronisation.md).

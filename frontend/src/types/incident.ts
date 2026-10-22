@@ -103,6 +103,11 @@ export type ResolvedIncident = Incident & {
 
 /** Données saisies par un citoyen pour déclarer un incident. */
 export interface IncidentDeclaration {
+  /**
+   * Identifiant choisi par l'appareil (UUID), facultatif : il reconnaît son incident même si l'envoi est rejoué
+   * (hors ligne, ou réponse perdue). Sans lui, c'est l'API qui en choisit un.
+   */
+  id?: string;
   /** Identifiant du type dans le référentiel (`typeId` de l'API). */
   typeId: number;
   title: string;

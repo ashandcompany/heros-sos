@@ -18,6 +18,13 @@ func Conn(ctx context.Context, db *gorm.DB) *gorm.DB {
 	return db.WithContext(ctx)
 }
 
+// InTx indique si ctx porte une transaction ouverte par un Transactor. Un code qui n'a de sens que dans une
+// transaction (un verrou valable jusqu'à sa fin, par exemple) s'en sert pour refuser de s'exécuter en dehors.
+func InTx(ctx context.Context) bool {
+	_, ok := ctx.Value(txKey{}).(*gorm.DB)
+	return ok
+}
+
 // Transactor exécute une fonction dans une transaction. Les services en dépendent par
 // interface pour pouvoir être testés sans base de données.
 type Transactor interface {

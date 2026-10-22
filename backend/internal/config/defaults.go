@@ -15,8 +15,11 @@ const (
 	defaultMaxBodyBytes       = 1 << 20 // 1 Mio
 	defaultHealthcheckTimeout = 3 * time.Second
 
-	defaultDBMaxOpenConns    = 25
-	defaultDBMaxIdleConns    = 5
+	defaultDBMaxOpenConns = 25
+	// Autant de connexions gardées que permises : avec moins, chaque pic de requêtes ferme puis rouvre des
+	// connexions PostgreSQL (3 à 5 ms chacune), jusqu'à épuiser les ports locaux à plusieurs milliers de requêtes
+	// par seconde (« can't assign requested address », mesuré sur 5 millions d'incidents).
+	defaultDBMaxIdleConns    = 25
 	defaultDBConnMaxLifetime = 30 * time.Minute
 	defaultDBConnMaxIdleTime = 10 * time.Minute
 	defaultDBPingTimeout     = 5 * time.Second
@@ -91,6 +94,26 @@ const (
 	defaultCleanupTimeout   = 2 * time.Minute
 	defaultSessionRetention = 7 * 24 * time.Hour
 	defaultTokenRetention   = 7 * 24 * time.Hour
+
+	// Une commande rejouable (clé d'idempotence) est conservée assez longtemps pour qu'un appareil resté hors
+	// ligne plusieurs semaines puisse encore synchroniser sans doublon.
+	defaultCommandRetention = 30 * 24 * time.Hour
+
+	// Journal d'événements : fréquence de lecture des nouveaux événements (diffusion en temps réel et journalisation),
+	// taille d'un passage, et délai entre deux signaux de vie sur un flux ouvert (sans quoi un proxy ou un
+	// navigateur coupe une connexion silencieuse).
+	defaultEventsPollInterval = 250 * time.Millisecond
+	defaultEventsBatchSize    = 500
+	defaultEventsHeartbeat    = 15 * time.Second
+	// Flux temps réel : connexions simultanées d'un même utilisateur (un onglet, un téléphone, un second
+	// onglet), durée maximale d'une connexion (le navigateur se reconnecte seul : la session est revérifiée), et
+	// événements gardés en attente pour un lecteur lent avant de le déconnecter (il reprendra où il en était).
+	defaultEventsMaxStreamsPerUser = 5
+	defaultEventsStreamMaxAge      = 10 * time.Minute
+	defaultEventsStreamBuffer      = 64
+
+	// defaultDashboardStatsTTL est la fraîcheur des statistiques du tableau de bord des héros.
+	defaultDashboardStatsTTL = 30 * time.Second
 
 	defaultLocationTTL   = 30 * time.Minute
 	defaultAlertRadiusKm = 10

@@ -17,6 +17,7 @@ const sidebars: SidebarsConfig = {
         {type: 'doc', id: 'stack/docker', label: 'Docker'},
         {type: 'doc', id: 'stack/rabbitmq', label: 'RabbitMQ'},
         {type: 'doc', id: 'stack/performance-et-synchronisation', label: 'Performance et synchronisation'},
+        {type: 'doc', id: 'stack/elk', label: 'Monitoring ELK'},
         {type: 'doc', id: 'stack/omdb', label: 'OMDb pour les films'},
         {type: 'doc', id: 'stack/securite', label: 'Sécurité et chiffrement'},
         {type: 'doc', id: 'stack/chiffrement', label: 'Chiffrement des champs'},

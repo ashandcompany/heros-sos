@@ -9,7 +9,7 @@ Un `docker-compose.yml` avec ces services :
 - `db` : PostgreSQL, avec un volume.
 - `rabbitmq` : retenu pour les mails, avec l'interface de management (à condition que l'hébergeur supporte Docker).
 - `mailpit` : faux serveur SMTP pour voir les mails en développement.
-- `elasticsearch`, `logstash`, `kibana`, `filebeat` et `elk-setup` dans le profil `elk` (`make elk`) : le monitoring ELK de développement, qui lit les journaux JSON de l'API (voir [Performance et synchronisation](performance-et-synchronisation.md)). Ils pèsent 3 à 4 Go de mémoire : rien ne démarre avec `make up`.
+- `elasticsearch`, `logstash`, `kibana`, `filebeat` et `elk-setup` dans le profil `elk` (`make elk`) : le monitoring ELK de développement, qui lit les journaux JSON de l'API (voir [Monitoring ELK](elk.md) et [Performance et synchronisation](performance-et-synchronisation.md)). Ils pèsent 3 à 4 Go de mémoire : rien ne démarre avec `make up`.
 - `adminer` ou pgAdmin dans un profil `dev` uniquement : le cahier §2.4 autorise phpMyAdmin seulement en développement et interdit tout outil équivalent en production (RGPD).
 
 Les secrets passent par `.env`, avec un `.env.example` commité et jamais le vrai fichier.

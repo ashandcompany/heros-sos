@@ -188,6 +188,8 @@ Côté code :
 
 ### P6 : ELK
 
+> Le guide d'utilisation (démarrer, vérifier, dépanner) est dans [Monitoring ELK](elk.md) ; cette section en donne la conception.
+
 - **Profil Compose `elk`** et `make elk`, sur le modèle de `--profile tools` (Adminer) : `make up` ne démarre rien de plus. Quatre services (`elasticsearch`, `logstash`, `kibana`, `filebeat`) et une tâche unique (`elk-setup`), avec leurs fichiers dans `backend/docker/elk/`. Les images sont `docker.elastic.co/elasticsearch/elasticsearch`, `…/kibana/kibana`, `…/logstash/logstash` et `…/beats/filebeat`, **à la même version**, fixée par `ELASTIC_VERSION` (9.3.1 par défaut ; jamais `latest`).
 - **L'API écrit en JSON** (`HEROS_LOG_FORMAT=json`, que `make elk` règle ; défaut : JSON en production, texte ailleurs), avec `service=api` sur chaque ligne et, pour chaque requête, `route` (le motif, par exemple `GET /api/v1/incidents/{id}`, et non l'URL avec l'identifiant), `status`, `duration_ms` et `request_id`.
 - **Filebeat** lit les journaux JSON des conteneurs (`/var/lib/docker/containers`, en lecture seule, déjà alimenté par le driver `json-file`) et ne garde que ceux de l'API. Il n'a pas besoin de `docker.sock`.

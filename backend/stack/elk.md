@@ -2,7 +2,7 @@
 
 **Un profil Docker Compose, `elk`, ajoute à la pile de développement de quoi voir les journaux de l'API dans Kibana : les temps de réponse par route, les erreurs, et chaque action sur un incident ou une intervention.** Il ne démarre jamais tout seul : `make up` ne lance rien de plus, il faut `make elk`.
 
-> **Statut.** Les fichiers sont écrits et la configuration Compose est valide, mais la pile **n'a pas encore été démarrée** (Docker n'était pas lancé quand elle a été écrite). Les versions d'image, les healthchecks, la lecture des journaux sous Docker Desktop et l'import du dashboard sont à constater au premier `make elk`. La section [Dépannage](#dépannage) liste ce qui peut coincer. Le contexte (pourquoi ELK, ce qui est mesuré) est dans [Performance et synchronisation](performance-et-synchronisation.md).
+> **Statut.** La pile a été **démarrée et vérifiée le 22/10/2026** sur Docker Desktop (macOS, 7,5 Go alloués), version 9.3.1. Constaté : les cinq services démarrent (environ 3 minutes la première fois, téléchargement des images compris), `elk-setup` importe le dashboard, les lignes de requêtes et les événements métier arrivent dans leurs index, le p95 par route se calcule, et les sept graphiques du dashboard s'affichent avec des données. Cette vérification a révélé un défaut, corrigé : l'adresse IP restait dans `event.original` (voir [Ce que le monitoring ne doit pas faire](#ce-que-le-monitoring-ne-doit-pas-faire)). **Non vérifié** : Linux (`vm.max_map_count`), Docker Desktop sous Windows, une autre version d'Elastic que 9.3.1. La section [Dépannage](#dépannage) liste ce qui peut coincer. Le contexte (pourquoi ELK, ce qui est mesuré) est dans [Performance et synchronisation](performance-et-synchronisation.md).
 
 ## Le trajet d'une ligne de journal
 
@@ -24,8 +24,8 @@ flowchart LR
 
 | Quoi | Détail |
 |---|---|
-| Mémoire | L'ELK ajoute **3 à 4 Go** à la pile de développement : donner **6 à 8 Go** à Docker Desktop (Settings, Resources) |
-| Disque | Les images pèsent environ 2 Go, les données un peu plus. Le Makefile mesure l'espace libre dans le **disque virtuel de Docker** (pas celui de la machine) et refuse de démarrer sous **4 Go** (`ELK_DISK_MIN_MB`, 4096 par défaut). Docker Desktop affiche cet espace en bas de sa fenêtre (« Disk : … used (limit …) ») |
+| Mémoire | Mesuré : l'ELK prend **3,3 Go** (Elasticsearch 1,5 ; Kibana 0,9 ; Logstash 0,8 ; Filebeat 0,1), soit **5,7 Go avec toute la pile** : donner **8 Go** à Docker Desktop (Settings, Resources) |
+| Disque | Les images pèsent **environ 6 Go** sur le disque de Docker (Kibana 2,3 ; Elasticsearch 1,6 ; Logstash 1,4 ; Filebeat 0,6), les données un peu plus. Le Makefile mesure l'espace libre dans le **disque virtuel de Docker** (pas celui de la machine) et refuse de démarrer sous **8 Go** tant qu'une image manque (`ELK_DISK_MIN_MB`), sous **2 Go** ensuite (`ELK_DISK_MIN_MB_READY`). Docker Desktop affiche cet espace en bas de sa fenêtre (« Disk : … used (limit …) ») |
 | Fichier `.env` | `backend/.env` doit exister (`make env`) : il existe déjà si la pile de développement tourne |
 | Linux seulement | Elasticsearch exige `sudo sysctl -w vm.max_map_count=262144` |
 | Réseau | Les images viennent de `docker.elastic.co` (gratuites en auto-hébergement, offre Basic) |
@@ -109,7 +109,7 @@ Ces causes sont celles qu'on attend ; elles n'ont pas encore été confirmées s
 
 | Symptôme | Cause probable | Que faire |
 |---|---|---|
-| `make elk` s'arrête sur « Le disque de Docker est presque plein » | Moins de 4 Go libres dans le disque virtuel de Docker | `docker builder prune -a -f` (cache de build, sans danger) ; ou agrandir le disque durablement (Docker Desktop, Settings, Resources, Virtual disk limit) ; ou continuer malgré tout avec `FORCE=1 make elk` |
+| `make elk` s'arrête sur « Le disque de Docker est presque plein » | Pas assez de place dans le disque virtuel de Docker (8 Go au premier démarrage, pour les images ; 2 Go ensuite) | `docker builder prune -a -f` (cache de build, sans danger) ; ou agrandir le disque durablement (Docker Desktop, Settings, Resources, Virtual disk limit) ; ou continuer malgré tout avec `FORCE=1 make elk` |
 | Elasticsearch redémarre en boucle ou est tué | Mémoire de Docker Desktop trop basse (OOM) ; sous Linux, `vm.max_map_count` trop bas | Passer Docker à 6 à 8 Go ; régler `vm.max_map_count` |
 | `elk-setup` signale « Délai dépassé » | Elasticsearch ou Kibana n'ont pas fini de démarrer (il attend jusqu'à 5 minutes) | Relancer `make elk` (idempotent) |
 | Kibana s'ouvre mais le dashboard manque | L'import du dashboard, écrit à la main, a échoué (non bloquant) | Voir `docker logs heros-sos-dev-elk-setup-1`. Les vues de données restent utilisables dans Discover, et les graphiques se recréent dans Lens |
@@ -118,6 +118,6 @@ Ces causes sont celles qu'on attend ; elles n'ont pas encore été confirmées s
 
 ## Ce que le monitoring ne doit pas faire
 
-- **Données personnelles.** Les adresses et descriptions d'incidents n'entrent jamais dans le journal d'événements ni dans ELK : les événements ne portent que des identifiants et des états, et Logstash retire en plus l'adresse IP et tout champ libre qui s'y glisserait.
+- **Données personnelles.** Les adresses et descriptions d'incidents n'entrent jamais dans le journal d'événements ni dans ELK : les événements ne portent que des identifiants et des états, et Logstash retire en plus l'adresse IP et tout champ libre qui s'y glisserait. Attention à `event.original` : Filebeat y garde la **ligne brute** (adresse IP et payload compris), que retirer les champs un par un ne couvre pas. Logstash le supprime explicitement. Vérifié au premier démarrage : sans cela, l'adresse IP de chaque requête restait stockée.
 - **Sécurité : démonstration locale uniquement.** Elasticsearch démarre avec la sécurité **désactivée** (pas de mot de passe, pas de TLS), Filebeat tourne en root, et le seuil de remplissage du disque d'Elasticsearch est désactivé pour qu'un portable presque plein ne mette pas les index en lecture seule. Rien de cela n'a sa place en production : il y faudrait la sécurité activée, des mots de passe dans des fichiers de secrets et TLS.
 - **Pas dans la CI.** Cette pile n'est jamais lancée par les tests.

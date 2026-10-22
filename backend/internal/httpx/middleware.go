@@ -127,7 +127,15 @@ const unmatchedRoute = "unmatched"
 
 // AccessLog journalise chaque requête : méthode, chemin (jamais la query string, qui peut
 // contenir un jeton), motif de route, statut, durée et adresse du client.
-func AccessLog(logger *slog.Logger) Middleware {
+//
+// Les motifs de quietRoutes (les sondes de santé, interrogées toutes les 10 secondes par Docker et par le proxy)
+// ne sont journalisés qu'au niveau DEBUG tant qu'ils réussissent : ils noieraient les vraies requêtes. Une sonde
+// qui échoue reste journalisée en WARN ou ERROR.
+func AccessLog(logger *slog.Logger, quietRoutes ...string) Middleware {
+	quiet := make(map[string]struct{}, len(quietRoutes))
+	for _, pattern := range quietRoutes {
+		quiet[pattern] = struct{}{}
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
@@ -141,6 +149,10 @@ func AccessLog(logger *slog.Logger) Middleware {
 				level = slog.LevelError
 			case recorder.status >= http.StatusBadRequest:
 				level = slog.LevelWarn
+			default:
+				if _, ok := quiet[route]; ok {
+					level = slog.LevelDebug
+				}
 			}
 			logger.Log(r.Context(), level, "requête",
 				"method", r.Method,

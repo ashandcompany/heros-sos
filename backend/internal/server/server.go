@@ -271,7 +271,7 @@ func NewWithDB(cfg config.Config, logger *slog.Logger, db *gorm.DB, opts ...Opti
 	handler := httpx.Chain(router,
 		httpx.RequestID,
 		httpx.WithClientIP(cfg.HTTP.TrustedProxies),
-		httpx.AccessLog(logger),
+		httpx.AccessLog(logger, probeRoutes...),
 		httpx.Recover(logger),
 		httpx.SecurityHeaders(cfg.IsProduction()),
 		c.authMiddleware.OriginCheck,

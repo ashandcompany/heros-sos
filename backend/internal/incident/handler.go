@@ -126,7 +126,8 @@ type villainSummary struct {
 	Alias string    `json:"alias"`
 }
 
-func newResponse(in Incident) Response {
+// NewResponse convertit un incident en sa représentation JSON (partagée avec le tableau de bord héros).
+func NewResponse(in Incident) Response {
 	villainIDs := make([]string, len(in.VillainIDs))
 	for i, id := range in.VillainIDs {
 		villainIDs[i] = id.String()
@@ -242,7 +243,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	items := make([]Response, len(incidents))
 	for i, item := range incidents {
-		items[i] = newResponse(item)
+		items[i] = NewResponse(item)
 	}
 	httpx.WriteJSON(w, http.StatusOK, httpx.NewPageResponse(items, total, page))
 }
@@ -266,7 +267,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, ErrNotFound)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, newResponse(*item))
+	httpx.WriteJSON(w, http.StatusOK, NewResponse(*item))
 }
 
 // Create traite POST /incidents.
@@ -297,7 +298,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusCreated, newResponse(*created))
+	httpx.WriteJSON(w, http.StatusCreated, NewResponse(*created))
 }
 
 func (h *Handler) Moderate(w http.ResponseWriter, r *http.Request) {
@@ -358,7 +359,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, newResponse(*item))
+	httpx.WriteJSON(w, http.StatusOK, NewResponse(*item))
 }
 
 func (h *Handler) SetPriority(w http.ResponseWriter, r *http.Request) {

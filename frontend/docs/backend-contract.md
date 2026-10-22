@@ -11,18 +11,18 @@ branchement. À mettre à jour à chaque fonction branchée.
 > d'incident, incidents et interventions (y compris incidents en cours, carte publique et historique public
 > des héros et des vilains), vidéothèque (paginée et filtrable), avis, blog, films des super-vilains, compte
 > (profil, photo, changement d'e-mail confirmé par lien), contact, newsletter (confirmation et
-> désinscription), « déconnexion de tous les appareils » et double authentification des modérateurs sont
-> branchés** sur l'API dès que `API_URL` est renseignée (tableau ci-dessous). Le reste fonctionne encore sur
+> désinscription), « déconnexion de tous les appareils », double authentification des modérateurs et
+> compteurs du tableau de bord de modération sont branchés** sur l'API dès que `API_URL` est renseignée (tableau ci-dessous). Le reste fonctionne encore sur
 > des mocks, y compris avec l'API.
 
 ## 1. Couverture : ce qui est dans le contrat, et le reste
 
-Le contrat décrit aujourd'hui **94 opérations** (plus `/health` et `/ready`) : identité (dont la double
+Le contrat décrit aujourd'hui **95 opérations** (plus `/health` et `/ready`) : identité (dont la double
 authentification des modérateurs) et modération des comptes, annuaire des héros, profil du compte (`/me`,
 photo, changements d'e-mail confirmés par lien), incidents (dont l'historique public d'un héros et d'un
 vilain), interventions, types d'incident, super-vilains, avis sur les interventions, vidéothèque (films), blog
-(articles), contact et newsletter. Les autres domaines du frontend (derniers incidents résolus de l'accueil,
-tableaux de bord) n'ont pas encore de contrat.
+(articles), contact, newsletter et compteurs du tableau de bord de modération. Seul le tableau de bord
+des super-héros n'a pas encore de contrat.
 
 ### ✅ Branché sur l'API
 
@@ -48,6 +48,7 @@ tableaux de bord) n'ont pas encore de contrat.
 | Vidéothèque (films)                   | `videos.ts`, `imdb.ts` (§ 3)                       | `/films`, `/films/heroes`, `/heroes/{heroId}/films`, `/hero/films*`, `/admin/hero-films*`, `/imdb/titles*`                             |
 | Films des super-vilains               | `videos.ts` (§ 3)                                  | `GET /villains/{villainId}/films` (public), `POST /admin/villain-films`, `DELETE /admin/villains/{villainId}/films/*`                  |
 | Blog                                  | `blog.ts` (§ 3)                                    | `GET /articles`, `GET /articles/{slug}` (publics), `/admin/articles`, `/admin/articles/{id}`                                           |
+| Tableau de bord de modération         | `moderation.ts`                                    | `GET /admin/moderation/summary`                                                                                                        |
 
 Fonctions de chaque fichier :
 
@@ -77,13 +78,15 @@ Fonctions de chaque fichier :
   `getPublishedVideos`, `getHeroesForVideos`, `addHeroVideo`, `getVillainFilms`, `addVillainFilm`,
   `deleteVillainFilm` ; `imdb.ts` : `searchImdbTitles`, `getImdbTitle`.
 - `blog.ts` : `getPublishedArticles`, `getPublishedArticle`, `getAllArticles`, `getArticle`,
-  `countDraftArticles`, `createArticle`, `updateArticle`, `deleteArticle`.
+  `createArticle`, `updateArticle`, `deleteArticle`.
+- `moderation.ts` : `getModerationSummary` (« Comptes à contrôler » n'a pas d'équivalent :
+  `accounts: null`, tuile masquée).
 
 ### ⏳ Encore sur les mocks (ou à faire)
 
-| Domaine frontend                  | Fonctions `lib/api/`                 | Contrat OpenAPI         | État |
-| --------------------------------- | ------------------------------------ | ----------------------- | ---- |
-| Tableau de bord héros, modération | `hero-dashboard.ts`, `moderation.ts` | ❌ aucun (statistiques) | mock |
+| Domaine frontend          | Fonctions `lib/api/` | Contrat OpenAPI         | État |
+| ------------------------- | -------------------- | ----------------------- | ---- |
+| Tableau de bord des héros | `hero-dashboard.ts`  | ❌ aucun (statistiques) | mock |
 
 Les derniers incidents résolus de l'accueil (`getLatestResolvedIncidents`) sont branchés (voir
 « Incidents et interventions : choix du branchement », § 3).
@@ -393,8 +396,8 @@ Types dans [src/types/review.ts](../src/types/review.ts) (`HeroReview`, `ReviewR
 - **Back-office** (`/admin/commentaires`) : deux onglets, « Avis des citoyens »
   (`/admin/hero-reviews`, filtre Publiés / Masqués, seuls les avis commentés sont listés) et
   « Réponses des super-héros » (`?type=reponses`, `/admin/hero-review-replies`, « À vérifier » par
-  défaut). La tuile du tableau de bord compte les réponses à vérifier (`total` de
-  `?status=pending`), puisqu'aucun avis n'attend de décision.
+  défaut). La tuile du tableau de bord compte les réponses à vérifier (`comments` de
+  `GET /admin/moderation/summary`), puisqu'aucun avis n'attend de décision.
 - **Pas de titre d'incident** : l'API n'en a pas (le schéma `Incident` n'a que type,
   description et lieu) et les avis ne portent que l'intervention. La liste du citoyen lit
   `GET /incidents/{id}` pour afficher « type · ville » (une requête par incident, `null` en cas
@@ -581,7 +584,7 @@ proposerait de noter depuis l'incident au lieu de « Mes interventions ».
 **Derniers incidents résolus de l'accueil** (`getLatestResolvedIncidents`) : un seul appel,
 `GET /incidents?status=succeeded&sort=-resolvedAt&limit=6`, sans session.
 
-**Encore sur les mocks avec l'API** : tableaux de bord (`hero-dashboard.ts`, `moderation.ts`).
+**Encore sur les mocks avec l'API** : tableau de bord des héros (`hero-dashboard.ts`).
 
 ### Blog : choix du branchement
 
@@ -595,8 +598,8 @@ proposerait de noter depuis l'incident au lieu de « Mes interventions ».
   page publique assainit de nouveau le contenu (`sanitizeArticleHtml`).
 - **Lecture publique** : sans session ; un brouillon ou un slug inconnu répond 404 (`null`, page
   introuvable). `getPublishedArticle` est mémorisé le temps d'un rendu (page et métadonnées).
-- **Tableau de bord** : « Articles en brouillon » vient du `total` de
-  `GET /admin/articles?status=brouillon` (`countDraftArticles`).
+- **Tableau de bord** : « Articles en brouillon » vient de `draftArticles` dans
+  `GET /admin/moderation/summary` (`getModerationSummary`).
 - **Erreurs** (les fonctions renvoient un `MutationResult`, message prêt à afficher) :
 
   | Code API (statut)                 | Message affiché                                                               |

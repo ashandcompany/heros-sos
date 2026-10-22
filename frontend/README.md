@@ -29,7 +29,8 @@ Identité (inscription, activation, connexion avec « Rester connecté », sessi
 appareils, mot de passe, double authentification des modérateurs), demandes de super-héros,
 modération des comptes, annuaire admin des super-héros, types d'incident, incidents et interventions
 (dont l'historique public des héros et des vilains), vidéothèque, avis, blog, films des super-vilains, profil et photo, changements d'adresse email (confirmés
-par un lien), contact et newsletter (confirmation et désinscription par lien) passent par l'API dès que
+par un lien), contact, newsletter (confirmation et désinscription par lien) et compteurs du tableau de bord de
+modération passent par l'API dès que
 `API_URL` est renseignée ; le reste reste mocké (voir [docs/backend-contract.md](docs/backend-contract.md)).
 Les photos de profil sont servies par l'API sous `/api/v1/avatars/…` : elles ne s'affichent que derrière le
 reverse proxy (`make up`, <http://localhost:8088>), pas avec `npm run dev` seul sur le port 3000.

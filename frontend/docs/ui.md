@@ -131,7 +131,7 @@ Un `<Link>` Next avec l'apparence d'un bouton. À utiliser pour **naviguer**.
 | Prop      | Valeurs                                                       | Usage                                                                       |
 | --------- | ------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | `variant` | `primary` (défaut), `secondary`, `danger`, `ghost`, `console` | `danger` pour refuser / supprimer ; `console` pour le gros appel à l'action |
-| `size`    | `md` (défaut), `lg`                                           |                                                                             |
+| `size`    | `sm`, `md` (défaut), `lg`                                     | `sm` pour les barres compactes (en-tête sur desktop)                        |
 
 `buttonClasses(variant, size)` renvoie les mêmes classes pour styler un `<button>` natif.
 

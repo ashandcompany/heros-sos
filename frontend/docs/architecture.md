@@ -263,6 +263,15 @@ Sombre par défaut. Le choix est gardé en `localStorage` et appliqué par un sc
 - **Espace pro** : position exacte, adresse, héros en intervention (position = lieu de
   l'intervention, aucun suivi GPS).
 - **Carte publique** : incidents validés seulement, position arrondie à ~1 km, ni adresse ni héros.
+- **`IncidentMapExplorer`** (client) : la carte et sa liste, synchronisées, utilisées par les deux
+  pages. Filtres par priorité et statut (appliqués à la liste et aux repères), couches « Zones
+  touchées » et « Super-héros » (espace pro). Choisir un incident dans la liste recadre la carte
+  et ouvre sa bulle ; cliquer un repère le met en évidence dans la liste. Le bouton « Vue
+  d'ensemble » revient au cadrage initial, qui ignore les incidents isolés à plus de 1 200 km du
+  point médian (ils restent sur la carte et dans la liste). Squelette : `MapExplorerSkeleton`.
+- **`IncidentMap`** ne gère plus ses couches ni sa sélection : il reçoit `visibleIds`,
+  `showZones`, `showTeams`, `selectedId` et `onSelect` de l'explorateur. La légende
+  (`MapLegend`, repliable) est posée sur la carte.
 
 ### Assainissement HTML
 

@@ -36,10 +36,21 @@ type record struct {
 }
 
 type joinedRecord struct {
-	Record    record `gorm:"embedded"`
-	TypeCode  string
-	TypeLabel string
+	Record               record `gorm:"embedded"`
+	TypeCode             string
+	TypeLabel            string
+	ResolvedAt           *time.Time
+	LatestInterventionID *uuid.UUID
 }
+
+// latestInterventionJoin rattache à chaque incident sa dernière intervention (alias `latest`) :
+// elle donne le lead et, pour un incident résolu, la date de résolution.
+const latestInterventionJoin = `LEFT JOIN LATERAL (
+	SELECT id, ended_at FROM interventions WHERE interventions.incident_id = incidents.id
+	ORDER BY started_at DESC NULLS LAST, id DESC LIMIT 1) AS latest ON TRUE`
+
+// resolvedAtExpression est la date de résolution : fin de la dernière intervention, si elle a réussi.
+const resolvedAtExpression = "CASE WHEN incidents.status = 'succeeded' THEN latest.ended_at END"
 
 func (record) TableName() string { return tableIncidents }
 
@@ -82,6 +93,35 @@ type ListFilter struct {
 	Statuses   []Status
 	HeroIDs    []uuid.UUID
 	VillainIDs []uuid.UUID
+	Sort       ListSort
+}
+
+// ListSort est l'ordre de la liste des incidents (valeur du paramètre `sort`).
+type ListSort string
+
+const (
+	// SortCreatedAt : les plus récemment déclarés d'abord (ordre par défaut).
+	SortCreatedAt ListSort = "-createdAt"
+	// SortResolvedAt : les plus récemment résolus d'abord, les incidents non résolus en dernier.
+	SortResolvedAt ListSort = "-resolvedAt"
+)
+
+// ParseListSort valide un ordre reçu en paramètre ; vide, l'ordre par défaut.
+func ParseListSort(raw string) (ListSort, bool) {
+	switch sort := ListSort(raw); sort {
+	case "":
+		return SortCreatedAt, true
+	case SortCreatedAt, SortResolvedAt:
+		return sort, true
+	}
+	return "", false
+}
+
+func (s ListSort) orderClause() string {
+	if s == SortResolvedAt {
+		return resolvedAtExpression + " DESC NULLS LAST, incidents.created_at DESC, incidents.id DESC"
+	}
+	return "incidents.created_at DESC, incidents.id DESC"
 }
 
 type gormRepository struct {
@@ -109,7 +149,7 @@ func (r *gormRepository) Create(ctx context.Context, in *Incident) error {
 
 func (r *gormRepository) Find(ctx context.Context, id uuid.UUID) (*Incident, error) {
 	var joined joinedRecord
-	err := r.incidentQuery(ctx).Where("incidents.id = ?", id).Take(&joined).Error
+	err := withResolution(r.incidentQuery(ctx)).Where("incidents.id = ?", id).Take(&joined).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrNotFound
 	}
@@ -149,7 +189,7 @@ func (r *gormRepository) List(ctx context.Context, filter ListFilter, limit, off
 		return nil, 0, fmt.Errorf("incident : comptage : %w", err)
 	}
 	var rows []joinedRecord
-	if err := query.Order("incidents.created_at DESC, incidents.id DESC").Limit(limit).Offset(offset).Find(&rows).Error; err != nil {
+	if err := withResolution(query).Order(filter.Sort.orderClause()).Limit(limit).Offset(offset).Find(&rows).Error; err != nil {
 		return nil, 0, fmt.Errorf("incident : liste : %w", err)
 	}
 	items, err := r.hydrate(ctx, rows)
@@ -160,6 +200,14 @@ func (r *gormRepository) incidentQuery(ctx context.Context) *gorm.DB {
 	return r.conn(ctx).Table(tableIncidents).
 		Select("incidents.*, incident_types.code AS type_code, incident_types.label AS type_label").
 		Joins("JOIN incident_types ON incident_types.id = incidents.type_id")
+}
+
+// withResolution ajoute la dernière intervention (date de résolution, lead) à une requête
+// d'incidents. Appliquée après le comptage : la jointure ne change pas le nombre de lignes.
+func withResolution(query *gorm.DB) *gorm.DB {
+	return query.Joins(latestInterventionJoin).
+		Select(`incidents.*, incident_types.code AS type_code, incident_types.label AS type_label, ` +
+			resolvedAtExpression + ` AS resolved_at, latest.id AS latest_intervention_id`)
 }
 
 func (r *gormRepository) hydrate(ctx context.Context, rows []joinedRecord) ([]Incident, error) {
@@ -220,5 +268,51 @@ func (r *gormRepository) hydrate(ctx context.Context, rows []joinedRecord) ([]In
 		interventionID := row.ID
 		items[byIncident[row.IncidentID]].InterventionID = &interventionID
 	}
+
+	byLatest := make(map[uuid.UUID]int, len(rows))
+	for i, row := range rows {
+		items[i].ResolvedAt = row.ResolvedAt
+		if row.LatestInterventionID != nil {
+			byLatest[*row.LatestInterventionID] = i
+		}
+	}
+	leads, err := r.publicLeads(ctx, byLatest)
+	if err != nil {
+		return nil, err
+	}
+	for interventionID, lead := range leads {
+		items[byLatest[interventionID]].Lead = lead
+	}
 	return items, nil
+}
+
+// publicLeads retourne le lead de chaque intervention demandée (clés de `interventions`). Seuls
+// les héros encore publics sont nommés : leur fiche doit exister.
+func (r *gormRepository) publicLeads(ctx context.Context, interventions map[uuid.UUID]int) (map[uuid.UUID]*HeroReference, error) {
+	if len(interventions) == 0 {
+		return nil, nil
+	}
+	ids := make([]uuid.UUID, 0, len(interventions))
+	for id := range interventions {
+		ids = append(ids, id)
+	}
+	var rows []struct {
+		InterventionID uuid.UUID
+		HeroID         uuid.UUID
+		Alias          string
+	}
+	if err := r.conn(ctx).Table("intervention_heroes").
+		Select("intervention_heroes.intervention_id, hero_profiles.user_id AS hero_id, hero_profiles.alias").
+		Joins("JOIN hero_profiles ON hero_profiles.user_id = intervention_heroes.hero_id").
+		Joins("JOIN users ON users.id = hero_profiles.user_id").
+		Where(`intervention_heroes.intervention_id IN ? AND intervention_heroes.role = 'lead'
+			AND hero_profiles.verification_status = 'approved' AND users.role = 'hero' AND users.status = 'active'`, ids).
+		Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("incident : lecture des leads : %w", err)
+	}
+	leads := make(map[uuid.UUID]*HeroReference, len(rows))
+	for _, row := range rows {
+		leads[row.InterventionID] = &HeroReference{ID: row.HeroID, Alias: row.Alias}
+	}
+	return leads, nil
 }

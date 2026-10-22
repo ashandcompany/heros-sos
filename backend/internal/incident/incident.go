@@ -64,8 +64,12 @@ type Incident struct {
 	VillainIDs        []uuid.UUID
 	Villains          []VillainReference
 	InterventionID    *uuid.UUID
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	// ResolvedAt est la fin de l'intervention réussie (nil si l'incident n'est pas résolu).
+	ResolvedAt *time.Time
+	// Lead mène la dernière intervention, nil sans intervention ou si son profil n'est plus public.
+	Lead      *HeroReference
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // VillainReference est un vilain associé à un incident.

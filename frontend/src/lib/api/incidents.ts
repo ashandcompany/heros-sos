@@ -37,7 +37,6 @@ import {
 } from "./interventions";
 import { MAX_PAGE_SIZE, pageQuery } from "./pagination";
 import { userFromToken } from "./session-user";
-import { getSuperHeroes } from "./super-heroes";
 import { getVillain } from "./villains";
 
 /*
@@ -106,7 +105,10 @@ function fromApiIncident(incident: ApiIncident, team: InterventionTeam | null = 
         latitude != null && longitude != null ? { lat: latitude, lng: longitude } : undefined,
     },
     reportedAt: incident.createdAt,
+    resolvedAt: incident.resolvedAt ?? undefined,
     villain: villain ? { id: villain.id, alias: villain.alias } : null,
+    // Le lead vient de l'équipe lue (espace héros), pas du `lead` public de l'incident : avec un
+    // héros, la fiche du citoyen proposerait de noter depuis l'incident au lieu de « Mes interventions ».
     hero: lead?.hero,
     description: incident.description,
     occurredAt: incident.occurredAt ?? undefined,
@@ -213,21 +215,21 @@ const byMostRecentlyResolved = (a: ResolvedIncident, b: ResolvedIncident) =>
 
 /**
  * Derniers incidents traités avec succès, du plus récemment résolu au plus ancien.
- * API : `GET /incidents?status=succeeded` ne donne ni le héros ni la date de résolution, que la
- * carte de l'accueil affiche. On lit donc `GET /heroes/{heroId}/incidents` (déjà trié par date de
- * résolution) pour chaque héros public, puis on fusionne : les `limit` premiers de chacun
- * suffisent pour obtenir les `limit` plus récents au total. Un appel par héros : à remplacer par
- * une seule route si le backend expose `resolvedAt` et le lead dans la liste publique.
+ * API : `GET /incidents?status=succeeded&sort=-resolvedAt&limit=…` **sans session** (comme la
+ * liste publique). Un incident dont le lead n'est plus public est écarté : la carte le nomme.
  */
 export async function getLatestResolvedIncidents(limit = 6): Promise<ResolvedIncident[]> {
   if (isApiEnabled) {
-    const heroes = await getSuperHeroes();
-    const perHero = await Promise.all(
-      heroes.map(({ id }) => getResolvedIncidentsByHero(id, limit)),
+    const response = await apiFetch(
+      `/incidents${pageQuery({ limit, offset: 0 }, { status: "succeeded", sort: "-resolvedAt" })}`,
     );
-    // Un incident résolu en équipe figure dans l'historique de chaque participant.
-    const unique = new Map(perHero.flat().map((incident) => [incident.id, incident]));
-    return [...unique.values()].sort(byMostRecentlyResolved).slice(0, limit);
+    const page = (await response.json()) as ApiSchema<"IncidentPage">;
+    return page.items
+      .map((incident) => ({
+        ...fromApiIncident(incident),
+        hero: incident.lead ? { id: incident.lead.id, alias: incident.lead.alias } : undefined,
+      }))
+      .filter(isResolved);
   }
 
   const resolved = incidentsMock

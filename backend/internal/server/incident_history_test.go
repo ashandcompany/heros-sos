@@ -140,4 +140,45 @@ func TestPublicIncidentHistoryOfHeroesAndVillains(t *testing.T) {
 	if pagedList.status != http.StatusOK || paged.Total != 2 || len(paged.Items) != 1 || paged.Items[0].ID != resolvedID {
 		t.Errorf("pagination : %d %s", pagedList.status, pagedList.body)
 	}
+
+	// La liste publique donne aussi la date de résolution et le lead (même forme que l'historique).
+	var publicList incidentSummaryPage
+	listed := anonymous.get("/incidents")
+	listed.decode(t, &publicList)
+	if listed.status != http.StatusOK || len(publicList.Items) != 2 || publicList.Items[0].ID != openID {
+		t.Fatalf("liste publique, plus récemment déclarés d'abord : %d %s", listed.status, listed.body)
+	}
+	if first := publicList.Items[0]; first.ResolvedAt != nil || first.Lead != nil {
+		t.Errorf("incident ouvert sans intervention : %+v", first)
+	}
+	if second := publicList.Items[1]; second.ResolvedAt == nil || second.Lead == nil || second.Lead.ID != lead.userID() ||
+		second.Lead.Alias != "Lead" {
+		t.Errorf("incident résolu de la liste publique : %+v", second)
+	}
+
+	var byResolution incidentSummaryPage
+	sorted := anonymous.get("/incidents?sort=-resolvedAt")
+	sorted.decode(t, &byResolution)
+	if sorted.status != http.StatusOK || len(byResolution.Items) != 2 ||
+		byResolution.Items[0].ID != resolvedID || byResolution.Items[1].ID != openID {
+		t.Errorf("tri par date de résolution, non résolus en dernier : %d %s", sorted.status, sorted.body)
+	}
+
+	var latest incidentSummaryPage
+	latestList := anonymous.get("/incidents?status=succeeded&sort=-resolvedAt&limit=6")
+	latestList.decode(t, &latest)
+	if latestList.status != http.StatusOK || latest.Total != 1 || latest.Items[0].ID != resolvedID {
+		t.Errorf("derniers incidents résolus : %d %s", latestList.status, latestList.body)
+	}
+
+	var detail incidentSummaryView
+	got = anonymous.get("/incidents/" + resolvedID)
+	got.decode(t, &detail)
+	if got.status != http.StatusOK || detail.ResolvedAt == nil || detail.Lead == nil || detail.Lead.ID != lead.userID() {
+		t.Errorf("fiche d'un incident résolu : %d %s", got.status, got.body)
+	}
+
+	if got := anonymous.get("/incidents?sort=resolvedAt"); got.status != http.StatusUnprocessableEntity {
+		t.Errorf("tri inconnu : %d %s", got.status, got.body)
+	}
 }

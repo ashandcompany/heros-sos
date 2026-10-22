@@ -85,8 +85,8 @@ Fonctions de chaque fichier :
 | --------------------------------- | ------------------------------------ | ----------------------- | ---- |
 | Tableau de bord héros, modération | `hero-dashboard.ts`, `moderation.ts` | ❌ aucun (statistiques) | mock |
 
-Les derniers incidents résolus de l'accueil (`getLatestResolvedIncidents`) sont branchés, mais au
-prix d'un appel par héros (voir « Incidents et interventions : choix du branchement », § 3).
+Les derniers incidents résolus de l'accueil (`getLatestResolvedIncidents`) sont branchés (voir
+« Incidents et interventions : choix du branchement », § 3).
 
 > [!WARNING]
 > Les « Future implémentation » écrites dans les commentaires de `lib/api/` pour les domaines non
@@ -571,11 +571,15 @@ demandent une session.
 | Incidents résolus dans les listes               | Non demandés (`status`), en attendant une décision sur leur exposition | Filtre « Résolus » retiré de l'espace héros |
 | Historique des interventions terminées          | `incident.interventionId` ne désigne que l'intervention en cours       | Section « Interventions précédentes » vide  |
 
-**Derniers incidents résolus de l'accueil** (`getLatestResolvedIncidents`) : `GET /incidents`
-ne donne ni le lead ni la date de résolution, que la carte affiche. La fonction lit donc
-`GET /heroes/{heroId}/incidents` (trié par date de résolution) pour chaque héros public et fusionne
-les résultats, soit un appel par héros. À remplacer par un seul appel si le backend ajoute
-`resolvedAt` et le lead à la liste publique (ou un tri `-resolvedAt`).
+**Date de résolution et lead** : chaque `Incident` porte `resolvedAt` (fin de l'intervention
+réussie, sinon `null`) et `lead` (héros qui mène la dernière intervention, `null` sans intervention
+ou si son profil n'est plus public). `GET /incidents` accepte `sort=-resolvedAt` (non résolus en
+dernier). `resolvedAt` est repris partout ; `lead` **seulement** par l'accueil : dans
+`fromApiIncident`, `hero` vient toujours de l'équipe lue, car avec un héros la fiche du citoyen
+proposerait de noter depuis l'incident au lieu de « Mes interventions ».
+
+**Derniers incidents résolus de l'accueil** (`getLatestResolvedIncidents`) : un seul appel,
+`GET /incidents?status=succeeded&sort=-resolvedAt&limit=6`, sans session.
 
 **Encore sur les mocks avec l'API** : tableaux de bord (`hero-dashboard.ts`, `moderation.ts`).
 

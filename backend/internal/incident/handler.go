@@ -80,6 +80,8 @@ type Response struct {
 	VillainIDs      []string         `json:"villainIds"`
 	Villains        []villainSummary `json:"villains"`
 	InterventionID  *uuid.UUID       `json:"interventionId,omitempty"`
+	ResolvedAt      *time.Time       `json:"resolvedAt"`
+	Lead            *heroSummary     `json:"lead"`
 	CreatedAt       time.Time        `json:"createdAt"`
 }
 
@@ -107,6 +109,10 @@ func newResponse(in Incident) Response {
 	for i, villain := range in.Villains {
 		villains[i] = villainSummary{ID: villain.ID, Alias: villain.Alias}
 	}
+	var lead *heroSummary
+	if in.Lead != nil {
+		lead = &heroSummary{ID: in.Lead.ID, Alias: in.Lead.Alias}
+	}
 	return Response{
 		ID: in.ID, TypeID: in.TypeID, TypeCode: in.TypeCode, TypeLabel: in.TypeLabel, Title: in.Title,
 		Description: in.Description, Status: string(in.Status), Priority: string(in.Priority),
@@ -115,7 +121,8 @@ func newResponse(in Incident) Response {
 			Address: in.Street, City: in.City, PostalCode: in.PostalCode, Country: in.Country,
 			AddressComplement: in.AddressComplement, Latitude: in.Latitude, Longitude: in.Longitude,
 		}, OccurredAt: in.OccurredAt,
-		VillainIDs: villainIDs, Villains: villains, InterventionID: in.InterventionID, CreatedAt: in.CreatedAt,
+		VillainIDs: villainIDs, Villains: villains, InterventionID: in.InterventionID,
+		ResolvedAt: in.ResolvedAt, Lead: lead, CreatedAt: in.CreatedAt,
 	}
 }
 
@@ -162,6 +169,11 @@ func parseListFilter(r *http.Request) (ListFilter, error) {
 		}
 		filter.Statuses = append(filter.Statuses, status)
 	}
+	sort, ok := ParseListSort(strings.TrimSpace(query.Get("sort")))
+	if !ok {
+		invalid["sort"] = "invalid"
+	}
+	filter.Sort = sort
 	if len(invalid) > 0 {
 		return ListFilter{}, &httpx.Error{
 			Status: http.StatusUnprocessableEntity, Code: httpx.CodeValidationFailed,

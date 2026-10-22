@@ -106,7 +106,7 @@ perf-prepare: ## Migre la base de mesures et y charge les données Marvel (héro
 	@$(WITH_ENV) export HEROS_DATABASE_URL='$(PERF_DATABASE_URL)'; go run ./cmd/api -migrate && go run ./cmd/seed
 
 .PHONY: seed-perf
-seed-perf: ## Ajoute PERF_INCIDENTS (5 000 000) incidents à la base de mesures ; PERF_MAX_SIZE_GB=8 borne sa taille
+seed-perf: ## Ajoute PERF_INCIDENTS (5 000 000) incidents à la base de mesures ; PERF_MAX_SIZE_GB=10 borne sa taille (8,2 Go mesurés)
 	@$(WITH_ENV) export HEROS_DATABASE_URL='$(PERF_DATABASE_URL)'; go run ./cmd/seedperf -incidents $(PERF_INCIDENTS) -max-size-gb $(PERF_MAX_SIZE_GB)
 
 .PHONY: perf-run

@@ -86,6 +86,29 @@ func (s *Service) Confirm(ctx context.Context, token string) error {
 	return s.Repo.Confirm(ctx, id, now)
 }
 
+// UnsubscribeLink construit le lien de désinscription d'un abonné, à placer dans chaque newsletter qui
+// lui est envoyée (Service.SendNewsletter de mail le rend obligatoire). Il est signé sans date limite :
+// le lien d'une ancienne newsletter doit rester utilisable, et ne porte que l'identifiant de
+// l'abonnement, jamais l'adresse.
+func (s *Service) UnsubscribeLink(subscriptionID uuid.UUID) string {
+	token := s.Links.Sign(signedlink.PurposeNewsletterUnsubscribe, subscriptionID, time.Time{})
+	return s.App.NewsletterUnsubscribeLink(token)
+}
+
+// Unsubscribe désabonne l'abonné désigné par un lien reçu dans une newsletter. Cliquer deux fois sur le
+// lien reste un succès ; un lien falsifié, ou d'une autre intention, retourne ErrLinkInvalid. Se
+// désabonner ne demande aucune connexion : le lien suffit, comme la loi l'exige.
+func (s *Service) Unsubscribe(ctx context.Context, token string) error {
+	id, err := s.Links.Verify(token, signedlink.PurposeNewsletterUnsubscribe, s.Clock.Now())
+	if errors.Is(err, signedlink.ErrInvalid) {
+		return ErrLinkInvalid
+	}
+	if err != nil {
+		return err
+	}
+	return s.Repo.Unsubscribe(ctx, id, s.Clock.Now())
+}
+
 // IsSubscribed indique si le titulaire d'un compte reçoit la newsletter.
 func (s *Service) IsSubscribed(ctx context.Context, userID uuid.UUID, email string) (bool, error) {
 	return s.Repo.IsSubscribed(ctx, userID, email)

@@ -278,7 +278,7 @@ func TestHandlerServesStoredPhotosWithImmutableCaching(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /avatars/{name}", avatar.NewHandler(store, slog.New(slog.NewTextHandler(io.Discard, nil))).Serve)
+	mux.HandleFunc("GET /avatars/{name}", avatar.NewHandler(store, slog.New(slog.DiscardHandler)).Serve)
 
 	get := func(path string) *httptest.ResponseRecorder {
 		recorder := httptest.NewRecorder()

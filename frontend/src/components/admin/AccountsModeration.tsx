@@ -172,7 +172,8 @@ function EmailChanges({ requests }: { requests: EmailChangeRequest[] }) {
         Changements d&apos;adresse email
       </h2>
       <p className="mb-4 text-sm text-muted">
-        La nouvelle adresse ne remplace l&apos;ancienne qu&apos;après votre validation.
+        La nouvelle adresse ne remplace l&apos;ancienne qu&apos;après sa confirmation par son
+        titulaire (lien reçu par mail), puis votre validation. Le titulaire en est prévenu.
       </p>
       {requests.length === 0 ? (
         <EmptyState>Aucune demande en attente.</EmptyState>
@@ -192,6 +193,14 @@ function EmailChanges({ requests }: { requests: EmailChangeRequest[] }) {
                     <dd className="break-all">{request.currentEmail}</dd>
                     <dt className="text-muted">Nouvelle adresse</dt>
                     <dd className="font-medium break-all text-accent">{request.newEmail}</dd>
+                    <dt className="text-muted">Confirmation</dt>
+                    <dd>
+                      {request.confirmed ? (
+                        <Badge tone="success">Adresse confirmée par son titulaire</Badge>
+                      ) : (
+                        <Badge tone="warning">En attente de confirmation par son titulaire</Badge>
+                      )}
+                    </dd>
                   </dl>
                 </div>
                 <ModerationForm
@@ -199,7 +208,10 @@ function EmailChanges({ requests }: { requests: EmailChangeRequest[] }) {
                   id={request.id}
                   subject={`changement d'email de ${fullName}`}
                   decisions={[
-                    { value: "valide", label: "Accepter", variant: "primary" },
+                    // Tant que l'adresse n'est pas confirmée, elle ne peut qu'être refusée (l'API le refuse aussi).
+                    ...(request.confirmed
+                      ? [{ value: "valide", label: "Accepter", variant: "primary" } as const]
+                      : []),
                     { value: "rejete", label: "Refuser", variant: "danger" },
                   ]}
                 />

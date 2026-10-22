@@ -22,7 +22,8 @@ import { userFromToken } from "./session-user";
 
 type ApiAccountStatus = ApiSchema<"UserSummary">["status"];
 
-const statusFromApi: Record<ApiAccountStatus, AccountStatus> = {
+/** État d'un compte de l'API vers celui du frontend (aussi lu par les fiches de super-héros). */
+export const accountStatusFromApi: Record<ApiAccountStatus, AccountStatus> = {
   pending_activation: "en-attente-activation",
   active: "actif",
   deactivated: "desactive",
@@ -42,7 +43,7 @@ function fromApiUserSummary(user: ApiSchema<"UserSummary">): AccountSummary {
     lastName: user.lastName,
     alias: user.alias ?? null,
     role: fromApiRole(user.role),
-    status: statusFromApi[user.status],
+    status: accountStatusFromApi[user.status],
     verifiedAt: user.verifiedAt ?? null,
     registeredAt: user.createdAt,
   };

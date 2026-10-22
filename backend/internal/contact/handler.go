@@ -58,7 +58,7 @@ func (h *Handler) Send(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	err := h.Service.Send(r.Context(), Input{Name: body.Name, Email: body.Email, Subject: body.Subject, Message: body.Message})
+	err := h.Service.Send(r.Context(), Input(body))
 	if err != nil {
 		h.fail(w, r, err)
 		return

@@ -1,4 +1,5 @@
 export {
+  confirmEmailChange,
   getEmailChangeRequests,
   getMyAccount,
   requestEmailChange,
@@ -10,15 +11,23 @@ export {
 export {
   activateAccount,
   confirmPasswordReset,
+  getMfaSession,
   getSessionUser,
   login,
   logout,
-  logoutEverywhere,
+  logoutAll,
   register,
   requestPasswordReset,
   resendActivation,
 } from "./auth";
 export { getMyAvatar, type AvatarData } from "./avatar";
+export {
+  enableMfa,
+  getMfaOverview,
+  regenerateMfaRecoveryCodes,
+  startMfaSetup,
+  verifyMfa,
+} from "./mfa";
 export {
   getHeroApplications,
   getMyHeroRequest,
@@ -71,7 +80,11 @@ export {
   voteOnOutcome,
 } from "./interventions";
 export { getModerationSummary } from "./moderation";
-export { confirmNewsletterSubscription, subscribeToNewsletter } from "./newsletter";
+export {
+  confirmNewsletterSubscription,
+  subscribeToNewsletter,
+  unsubscribeFromNewsletter,
+} from "./newsletter";
 export {
   getHeroPublicReviews,
   getMyInterventions,

@@ -21,11 +21,18 @@ var (
 	ErrChangeNotFound = errors.New("account : demande de changement d'adresse introuvable")
 	// ErrChangeNotPending indique qu'une demande a déjà été traitée.
 	ErrChangeNotPending = errors.New("account : demande de changement d'adresse déjà traitée")
+	// ErrChangeNotConfirmed indique que le titulaire de la nouvelle adresse ne l'a pas encore confirmée :
+	// un modérateur ne peut pas accepter la demande avant.
+	ErrChangeNotConfirmed = errors.New("account : nouvelle adresse pas encore confirmée")
+	// ErrLinkInvalid indique un lien de confirmation falsifié, expiré, ou qui ne correspond plus à une
+	// demande en cours (remplacée par son titulaire, ou refusée).
+	ErrLinkInvalid = errors.New("account : lien de confirmation invalide ou expiré")
 )
 
 // ChangeStatus est l'état d'une demande de changement d'adresse.
 type ChangeStatus string
 
+// États d'une demande : en attente de décision, acceptée, refusée.
 const (
 	ChangePending  ChangeStatus = "pending"
 	ChangeApproved ChangeStatus = "approved"
@@ -49,7 +56,10 @@ type EmailChange struct {
 	Status     ChangeStatus
 	ReviewedBy *uuid.UUID
 	ReviewedAt *time.Time
-	CreatedAt  time.Time
+	// ConfirmedAt est la date à laquelle le titulaire de la nouvelle adresse l'a confirmée par le lien
+	// reçu (nil tant qu'elle ne l'est pas).
+	ConfirmedAt *time.Time
+	CreatedAt   time.Time
 }
 
 // EmailChangeView est une demande vue par un modérateur, avec l'identité du demandeur.
@@ -64,8 +74,10 @@ type EmailChangeView struct {
 type Account struct {
 	User *user.User
 	// PendingEmail est l'adresse demandée et pas encore validée par un modérateur (vide sinon).
-	PendingEmail         string
-	NewsletterSubscribed bool
+	PendingEmail string
+	// PendingEmailConfirmed indique que son titulaire a cliqué sur le lien de confirmation.
+	PendingEmailConfirmed bool
+	NewsletterSubscribed  bool
 	// Hero est le profil de super-héros, pour un compte qui l'est devenu (nil sinon).
 	Hero *hero.Profile
 }

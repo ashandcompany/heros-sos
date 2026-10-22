@@ -3,7 +3,7 @@ import {
   updateHeroAvatarAction,
   updateHeroContactAction,
 } from "@/app/actions/hero";
-import { Panel } from "@/components/citizen/AccountDetails";
+import { Panel, SessionsPanel } from "@/components/citizen/AccountDetails";
 import { AvatarForm, ContactForm, EmailChangeForm } from "@/components/citizen/AccountForms";
 import { Avatar } from "@/components/ui/Avatar";
 import { getMyHeroProfile } from "@/lib/api";
@@ -67,12 +67,24 @@ export async function HeroProfileDetails() {
           <p className="mb-4 font-medium break-all">{profile.email}</p>
           {profile.pendingEmail && (
             <p className="mb-6 rounded-xl border border-rating/40 bg-rating/10 px-4 py-3 text-sm">
-              <span className="font-semibold text-rating">En attente de modération :</span>{" "}
+              <span className="font-semibold text-rating">
+                {profile.pendingEmailConfirmed
+                  ? "En attente de modération :"
+                  : "En attente de confirmation :"}
+              </span>{" "}
               <span className="break-all">{profile.pendingEmail}</span>
+              {!profile.pendingEmailConfirmed && (
+                <span className="mt-1 block text-muted">
+                  Ouvrez le lien du mail envoyé à cette adresse. Pas reçu ? Renvoyez la demande
+                  ci-dessous.
+                </span>
+              )}
             </p>
           )}
           <EmailChangeForm action={requestHeroEmailChangeAction} />
         </Panel>
+
+        <SessionsPanel />
       </div>
     </div>
   );

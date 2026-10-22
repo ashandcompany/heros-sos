@@ -352,11 +352,13 @@ export async function reviewEmailChangeAction(
   if (!result.ok) {
     return { status: "error", message: emailChangeReviewErrorMessage(result), fieldErrors: {} };
   }
-  return settle(
-    result,
-    [routes.adminAccounts],
-    approve ? "Nouvelle adresse email activée." : "Changement d'adresse email refusé.",
-  );
+
+  for (const path of [routes.admin, routes.adminAccounts]) revalidatePath(path);
+  return {
+    status: "success",
+    message: approve ? "Nouvelle adresse email activée." : "Changement d'adresse email refusé.",
+    fieldErrors: {},
+  };
 }
 
 function emailChangeReviewErrorMessage(
@@ -364,11 +366,13 @@ function emailChangeReviewErrorMessage(
 ): string {
   switch (result.error) {
     case "not-found":
-      return "Cette demande n'existe plus : son titulaire l'a peut-être remplacée. Rechargez la page.";
+      return "Cette demande n'existe plus : son titulaire l'a peut-être remplacée par une nouvelle.";
     case "already-reviewed":
       return "Cette demande a déjà été traitée.";
+    case "not-confirmed":
+      return "Le titulaire de la nouvelle adresse ne l'a pas encore confirmée : vous pouvez seulement refuser la demande.";
     case "email-already-used":
-      return "Cette adresse est désormais utilisée par un autre compte : refusez la demande.";
+      return "Cette adresse est maintenant utilisée par un autre compte : refusez la demande.";
     default:
       return apiFailureMessage(result);
   }

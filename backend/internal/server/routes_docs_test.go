@@ -1,7 +1,6 @@
 package server
 
 import (
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -22,7 +21,7 @@ func TestDocsExistOnlyOutsideProduction(t *testing.T) {
 		router := newRouter()
 		registerDocsRoutes(router, &components{
 			cfg:    config.Config{Environment: environment},
-			logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+			logger: slog.New(slog.DiscardHandler),
 		})
 
 		for _, path := range []string{apidocs.PagePath, apidocs.SpecPath, apidocs.InitializerPath, "/docs/assets/swagger-ui.css"} {

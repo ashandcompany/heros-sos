@@ -11,8 +11,8 @@ export interface ContactMessage {
 
 export type ContactMessageResult =
   | { ok: true }
-  /** Champs refusés par l'API (422) : champ → code (`required`, `invalid`, `too_short`…). */
+  /** Champs refusés par l'API (422) : champ (`name`, `email`, `subject`, `message`) → code. */
   | { ok: false; error: "invalid-fields"; fields: Record<string, string> }
-  /** Le service d'envoi n'a pas pris le message (503) : il n'est pas parti. */
+  /** Le message n'a pas pu être confié au service d'envoi (503) : il n'est pas parti. */
   | { ok: false; error: "delivery-unavailable" }
   | ApiFailure;

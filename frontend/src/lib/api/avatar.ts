@@ -15,7 +15,7 @@ export interface AvatarData {
  * initiales et couleur du placeholder différeraient entre les deux.
  * `null` sans profil (administrateur) ou en cas d'échec : une photo introuvable ne doit pas
  * empêcher d'afficher la navigation.
- * API : `GET /me`, mémorisé le temps d'un rendu (la page de profil le relit sans nouvel appel).
+ * API : `GET /me`, mémorisé le temps d'un rendu : la page de profil le relit sans nouvel appel.
  */
 export async function getMyAvatar(token: string): Promise<AvatarData | null> {
   try {

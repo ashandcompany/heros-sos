@@ -407,3 +407,109 @@ func TestProductionRulesStillApplyToSecretsFromFiles(t *testing.T) {
 		t.Fatalf("la validation de production doit s'appliquer à une valeur lue depuis un fichier : %v", err)
 	}
 }
+
+// La 2FA des modérateurs est obligatoire avant toute mise en ligne : en production elle est exigée par défaut
+// et ne peut pas être désactivée ; en développement elle est facultative, pour une démonstration.
+func TestModeratorTwoFactorIsRequiredInProductionAndCannotBeDisabled(t *testing.T) {
+	development, err := Load(fakeEnv(validEnv()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if development.Security.MFA.ModeratorRequired || development.Security.MFA.Issuer != defaultMFAIssuer ||
+		development.Security.MFA.RecoveryCodes != defaultMFARecoveryCodes {
+		t.Errorf("développement : %+v", development.Security.MFA)
+	}
+	optional := validEnv()
+	optional[envMFAModeratorRequired] = "true"
+	if cfg, err := Load(fakeEnv(optional)); err != nil || !cfg.Security.MFA.ModeratorRequired {
+		t.Errorf("exigée en développement : %+v %v", cfg.Security.MFA, err)
+	}
+
+	production, err := Load(fakeEnv(productionEnv()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !production.Security.MFA.ModeratorRequired {
+		t.Error("la 2FA des modérateurs doit être exigée par défaut en production")
+	}
+
+	env := productionEnv()
+	env[envMFAModeratorRequired] = "false"
+	_, err = Load(fakeEnv(env))
+	if err == nil || !strings.Contains(err.Error(), envMFAModeratorRequired) {
+		t.Fatalf("désactiver la 2FA en production doit être refusé : %v", err)
+	}
+
+	env[envMFAModeratorRequired] = "peut-être"
+	if _, err = Load(fakeEnv(env)); err == nil || !strings.Contains(err.Error(), "booléen attendu") {
+		t.Errorf("valeur invalide : %v", err)
+	}
+}
+
+func TestLinkPathsAndTTLsOfTheAccountFlows(t *testing.T) {
+	cfg, err := Load(fakeEnv(validEnv()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Security.Tokens.EmailChangeConfirmTTL != defaultEmailChangeConfirmTTL {
+		t.Errorf("durée du lien de confirmation d'adresse = %v", cfg.Security.Tokens.EmailChangeConfirmTTL)
+	}
+	if got, want := cfg.App.EmailChangeConfirmLink("a b"), "http://localhost:3000/changement-email/confirmation?token=a+b"; got != want {
+		t.Errorf("EmailChangeConfirmLink = %q, attendu %q", got, want)
+	}
+	if got, want := cfg.App.NewsletterUnsubscribeLink("x/y"), "http://localhost:3000/newsletter/desinscription?token=x%2Fy"; got != want {
+		t.Errorf("NewsletterUnsubscribeLink = %q, attendu %q", got, want)
+	}
+
+	env := validEnv()
+	env[envEmailChangeConfirmPath] = "/confirmer"
+	env[envNewsletterUnsubscribePath] = "/stop"
+	env[envEmailChangeConfirmTTL] = "1h"
+	cfg, err = Load(fakeEnv(env))
+	if err != nil || cfg.App.EmailChangeConfirmPath != "/confirmer" || cfg.App.NewsletterUnsubscribePath != "/stop" ||
+		cfg.Security.Tokens.EmailChangeConfirmTTL != time.Hour {
+		t.Errorf("surcharges : %+v %v", cfg.App, err)
+	}
+}
+
+// Les paramètres d'argon2 sont convertis vers des types plus étroits (uint32, uint8) : une valeur hors limites
+// doit être refusée, jamais tronquée en silence (300 threads deviendraient 44).
+func TestArgon2SettingsAreBoundedToTheirType(t *testing.T) {
+	tests := map[string]struct {
+		name, value string
+	}{
+		"threads au-delà d'un octet":    {envArgon2Threads, "300"},
+		"mémoire au-delà de 32 bits":    {envArgon2MemoryKiB, "4294967296"},
+		"itérations au-delà de 32 bits": {envArgon2Time, "5000000000"},
+		"threads nuls":                  {envArgon2Threads, "0"},
+	}
+	for label, tc := range tests {
+		t.Run(label, func(t *testing.T) {
+			env := validEnv()
+			env[tc.name] = tc.value
+			_, err := Load(fakeEnv(env))
+			if err == nil || !strings.Contains(err.Error(), tc.name) {
+				t.Errorf("%s=%s devrait être refusé, reçu %v", tc.name, tc.value, err)
+			}
+		})
+	}
+
+	env := validEnv()
+	env[envArgon2Threads] = "255"
+	cfg, err := Load(fakeEnv(env))
+	if err != nil || cfg.Security.Argon2.Threads != 255 {
+		t.Errorf("255 threads (la borne) doivent passer : %d, %v", cfg.Security.Argon2.Threads, err)
+	}
+}
+
+func TestCleanupTimeoutHasADefaultAndMustBePositive(t *testing.T) {
+	cfg, err := Load(fakeEnv(validEnv()))
+	if err != nil || cfg.Jobs.CleanupTimeout != defaultCleanupTimeout {
+		t.Errorf("durée par défaut = %v, %v", cfg.Jobs.CleanupTimeout, err)
+	}
+	env := validEnv()
+	env[envCleanupTimeout] = "0s"
+	if _, err := Load(fakeEnv(env)); err == nil || !strings.Contains(err.Error(), envCleanupTimeout) {
+		t.Errorf("un délai nul doit être refusé : %v", err)
+	}
+}

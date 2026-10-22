@@ -15,6 +15,9 @@ import (
 const (
 	CodeOriginNotAllowed = "origin_not_allowed"
 	CodeCSRFInvalid      = "csrf_invalid"
+	// CodeMFARequired : la session n'est pas complète, la double authentification doit d'abord être validée
+	// (ou activée, si elle est obligatoire).
+	CodeMFARequired = "mfa_required"
 )
 
 // Middleware regroupe les protections HTTP liées à la session. Les autres domaines (incidents,
@@ -91,10 +94,23 @@ func (m *Middleware) OriginCheck(next http.Handler) http.Handler {
 	})
 }
 
-// Protected exige une session valide et, si roles n'est pas vide, l'un de ces rôles. Sur les
-// méthodes qui modifient des données, il exige aussi le jeton CSRF de la session.
-// C'est le point d'entrée des autres domaines : router.Handle("POST /…", m.Protected(role)(h)).
+// Protected exige une session valide et COMPLÈTE (double authentification validée, ou ni activée ni
+// obligatoire) et, si roles n'est pas vide, l'un de ces rôles. Sur les méthodes qui modifient des données,
+// il exige aussi le jeton CSRF de la session.
+// C'est le point d'entrée des autres domaines : router.Handle("POST /…", m.Protected(role)(h)). Par défaut,
+// une session limitée n'ouvre donc rien : seules les routes qui la déclarent (ProtectedPendingMFA) lui sont
+// accessibles.
 func (m *Middleware) Protected(roles ...user.Role) httpx.Middleware {
+	return m.protect(false, roles)
+}
+
+// ProtectedPendingMFA est Protected pour les routes qu'une session limitée doit pouvoir appeler : la
+// double authentification elle-même (saisie du code, activation), l'état de la session et la déconnexion.
+func (m *Middleware) ProtectedPendingMFA(roles ...user.Role) httpx.Middleware {
+	return m.protect(true, roles)
+}
+
+func (m *Middleware) protect(allowPendingMFA bool, roles []user.Role) httpx.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			principal, authenticated := PrincipalFrom(r.Context())
@@ -104,6 +120,10 @@ func (m *Middleware) Protected(roles ...user.Role) httpx.Middleware {
 			}
 			if len(roles) > 0 && !slices.Contains(roles, principal.Role) {
 				httpx.WriteError(w, httpx.Forbidden("Vous n'avez pas les droits nécessaires."))
+				return
+			}
+			if !allowPendingMFA && !principal.MFAVerified {
+				httpx.WriteError(w, httpx.NewError(http.StatusForbidden, CodeMFARequired, "La double authentification doit d'abord être validée."))
 				return
 			}
 			if isUnsafeMethod(r.Method) {

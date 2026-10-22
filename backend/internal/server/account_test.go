@@ -12,16 +12,20 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/ashandcompany/heros-sos/backend/internal/mail"
 )
 
 // ---- Aides ------------------------------------------------------------------------------------
 
 type accountView struct {
 	ID, Role, Civility, FirstName, LastName, BirthDate, Email, PendingEmail, MobilePhone, AvatarURL string
+	PendingEmailConfirmed                                                                           bool
 	Address                                                                                         struct{ Street, Complement, PostalCode, City, Country string }
 	NewsletterSubscribed                                                                            bool
 	Hero                                                                                            *struct{ Alias, Bio string }
@@ -489,7 +493,58 @@ func TestAvatarRouteRefusesEveryNameThatIsNotOurs(t *testing.T) {
 
 type changeView struct {
 	ID, UserID, FirstName, LastName, CurrentEmail, NewEmail, Status string
-	ReviewedAt                                                      *string
+	ConfirmedAt, ReviewedAt                                         *string
+}
+
+// signedToken extrait le jeton d'un lien signé (bien plus long que celui des jetons en base).
+var signedToken = regexp.MustCompile(`token=([A-Za-z0-9_-]+)`)
+
+// mailsTo retourne les mails envoyés à une adresse dont le sujet contient subject, du plus ancien au plus récent.
+func (e *e2e) mailsTo(address, subject string) []mail.Message {
+	var found []mail.Message
+	for _, message := range e.mailer.Messages() {
+		if message.To == address && strings.Contains(message.Subject, subject) {
+			found = append(found, message)
+		}
+	}
+	return found
+}
+
+// confirmationTokens retourne les jetons des liens de confirmation envoyés à une nouvelle adresse.
+func (e *e2e) confirmationTokens(newEmail string) []string {
+	e.t.Helper()
+	var tokens []string
+	for _, message := range e.mailsTo(newEmail, "Confirmez votre nouvelle adresse email") {
+		match := signedToken.FindStringSubmatch(message.Text)
+		if match == nil {
+			e.t.Fatalf("aucun jeton dans le mail de confirmation :\n%s", message.Text)
+		}
+		tokens = append(tokens, match[1])
+	}
+	return tokens
+}
+
+// confirmEmailChange ouvre le dernier lien de confirmation reçu à la nouvelle adresse, depuis un autre
+// appareil que celui de la demande (sans session), comme le ferait son titulaire.
+func (e *e2e) confirmEmailChange(newEmail string) response {
+	e.t.Helper()
+	tokens := e.confirmationTokens(newEmail)
+	if len(tokens) == 0 {
+		e.t.Fatalf("aucun mail de confirmation envoyé à %s", newEmail)
+	}
+	return e.newActor().post("/email-change-requests/confirm", map[string]string{"token": tokens[len(tokens)-1]})
+}
+
+// requestConfirmedEmailChange dépose la demande puis la confirme : l'état dans lequel un modérateur peut
+// l'accepter.
+func (a *actor) requestConfirmedEmailChange(t *testing.T, email string) {
+	t.Helper()
+	if got := a.requestEmailChange(t, email); got.status != http.StatusCreated {
+		t.Fatalf("demande : %d %s", got.status, got.body)
+	}
+	if got := a.e.confirmEmailChange(email); got.status != http.StatusNoContent {
+		t.Fatalf("confirmation : %d %s", got.status, got.body)
+	}
 }
 
 func (a *actor) emailChanges(t *testing.T, query string) []changeView {
@@ -529,14 +584,58 @@ func TestEmailChangeNeedsAModeratorsApproval(t *testing.T) {
 		t.Errorf("la nouvelle adresse ne connecte pas avant validation : %d", got.status)
 	}
 
+	// Le titulaire de la nouvelle adresse reçoit un lien pour la confirmer : il le prouve sans session.
+	if sent := e.mailsTo("steve.rogers@avengers.example", "Confirmez votre nouvelle adresse email"); len(sent) != 1 ||
+		!strings.Contains(sent[0].Text, "Steve") || !strings.Contains(sent[0].Text, "/changement-email/confirmation?token=") {
+		t.Fatalf("mail de confirmation = %+v", sent)
+	}
+	if view.PendingEmailConfirmed {
+		t.Error("tant que le lien n'est pas ouvert, l'adresse n'est pas confirmée")
+	}
+
 	// Le modérateur voit l'identité du demandeur, les deux adresses, et peut décider sans autre appel.
 	pending := moderator.emailChanges(t, "?status=pending")
 	if len(pending) != 1 || pending[0].UserID != citizen.userID() || pending[0].FirstName != "Steve" || pending[0].LastName != "Rogers" ||
-		pending[0].CurrentEmail != "steve@avengers.example" || pending[0].NewEmail != "steve.rogers@avengers.example" || pending[0].Status != "pending" {
+		pending[0].CurrentEmail != "steve@avengers.example" || pending[0].NewEmail != "steve.rogers@avengers.example" || pending[0].Status != "pending" ||
+		pending[0].ConfirmedAt != nil {
 		t.Fatalf("liste = %+v", pending)
 	}
+
+	// Pas de validation avant la confirmation : l'adresse n'est peut-être pas celle de la personne.
+	if got := moderator.post("/admin/email-change-requests/"+pending[0].ID+"/approve", nil); got.status != http.StatusConflict || got.code() != "email_change_not_confirmed" {
+		t.Fatalf("validation avant confirmation : %d %s", got.status, got.body)
+	}
+	if view := citizen.account(t); view.Email != "steve@avengers.example" {
+		t.Errorf("l'adresse ne change pas sans confirmation : %+v", view)
+	}
+
+	if got := e.confirmEmailChange("steve.rogers@avengers.example"); got.status != http.StatusNoContent {
+		t.Fatalf("confirmation : %d %s", got.status, got.body)
+	}
+	// Cliquer deux fois sur le lien reste un succès, sans nouvelle trace.
+	if got := e.confirmEmailChange("steve.rogers@avengers.example"); got.status != http.StatusNoContent {
+		t.Errorf("second clic : %d %s", got.status, got.body)
+	}
+	if e.count("audit_logs", "action = 'user.email_change_confirm'") != 1 {
+		t.Error("la confirmation doit être journalisée une seule fois")
+	}
+	if view := citizen.account(t); !view.PendingEmailConfirmed || view.PendingEmail != "steve.rogers@avengers.example" {
+		t.Errorf("profil après confirmation : %+v", view)
+	}
+	if confirmed := moderator.emailChanges(t, "?status=pending"); len(confirmed) != 1 || confirmed[0].ConfirmedAt == nil {
+		t.Fatalf("le modérateur doit voir la confirmation : %+v", confirmed)
+	}
+
 	if got := moderator.post("/admin/email-change-requests/"+pending[0].ID+"/approve", nil); got.status != http.StatusNoContent {
 		t.Fatalf("validation : %d %s", got.status, got.body)
+	}
+
+	// La décision est communiquée : à la nouvelle adresse (acceptée), et à l'ancienne, qui peut donner l'alerte.
+	if sent := e.mailsTo("steve.rogers@avengers.example", "Votre nouvelle adresse email est active"); len(sent) != 1 {
+		t.Errorf("mail d'acceptation à la nouvelle adresse = %+v", sent)
+	}
+	if sent := e.mailsTo("steve@avengers.example", "a été remplacée"); len(sent) != 1 || !strings.Contains(sent[0].Text, "steve.rogers@avengers.example") {
+		t.Errorf("avertissement à l'ancienne adresse = %+v", sent)
 	}
 
 	// Après validation : la nouvelle adresse connecte, l'ancienne non, et la demande est close.
@@ -582,6 +681,17 @@ func TestEmailChangeRejectionKeepsTheCurrentAddress(t *testing.T) {
 	if got := e.newActor().login("steve@avengers.example", goodPassword); got.status != http.StatusOK {
 		t.Errorf("l'adresse actuelle doit toujours connecter : %d", got.status)
 	}
+	// Un refus est possible sans confirmation, et son titulaire en est prévenu à son adresse actuelle.
+	if sent := e.mailsTo("steve@avengers.example", "a été refusée"); len(sent) != 1 || !strings.Contains(sent[0].Text, "Steve") {
+		t.Errorf("mail de refus à l'adresse actuelle = %+v", sent)
+	}
+	if sent := e.mailsTo("autre@avengers.example", "a été refusée"); len(sent) != 0 {
+		t.Errorf("la nouvelle adresse n'a pas à être prévenue du refus : %+v", sent)
+	}
+	// Le lien de confirmation d'une demande refusée n'a plus d'objet.
+	if got := e.confirmEmailChange("autre@avengers.example"); got.status != http.StatusBadRequest || got.code() != "invalid_token" {
+		t.Errorf("confirmation après refus : %d %s", got.status, got.body)
+	}
 
 	// Après un refus, une nouvelle demande est possible.
 	if got := citizen.requestEmailChange(t, "autre@avengers.example"); got.status != http.StatusCreated {
@@ -603,6 +713,11 @@ func TestReplacingAPendingRequestInvalidatesTheOneAModeratorSaw(t *testing.T) {
 	seen := moderator.emailChanges(t, "?status=pending")[0]
 	citizen.requestEmailChange(t, "seconde@avengers.example")
 
+	// Le lien de la demande remplacée n'a plus d'objet : le titulaire de la première adresse ne peut pas la confirmer.
+	if got := e.confirmEmailChange("premiere@avengers.example"); got.status != http.StatusBadRequest || got.code() != "invalid_token" {
+		t.Errorf("confirmation de la demande remplacée : %d %s", got.status, got.body)
+	}
+
 	if got := moderator.post("/admin/email-change-requests/"+seen.ID+"/approve", nil); got.status != http.StatusNotFound || got.code() != "email_change_not_found" {
 		t.Fatalf("validation de la demande remplacée : %d %s", got.status, got.body)
 	}
@@ -613,6 +728,9 @@ func TestReplacingAPendingRequestInvalidatesTheOneAModeratorSaw(t *testing.T) {
 	current := moderator.emailChanges(t, "?status=pending")
 	if len(current) != 1 || current[0].NewEmail != "seconde@avengers.example" || current[0].ID == seen.ID {
 		t.Fatalf("une seule demande en attente, la nouvelle : %+v", current)
+	}
+	if got := e.confirmEmailChange("seconde@avengers.example"); got.status != http.StatusNoContent {
+		t.Fatalf("confirmation de la nouvelle demande : %d %s", got.status, got.body)
 	}
 	if got := moderator.post("/admin/email-change-requests/"+current[0].ID+"/approve", nil); got.status != http.StatusNoContent {
 		t.Errorf("validation de la nouvelle demande : %d %s", got.status, got.body)
@@ -676,9 +794,7 @@ func TestHeroCanChangeEmailToo(t *testing.T) {
 	moderator := e.newModerator("fury@shield.example")
 	hero := e.approvedHero(moderator, "tony@stark.io", "Iron Man")
 
-	if got := hero.requestEmailChange(t, "tony@stark-industries.io"); got.status != http.StatusCreated {
-		t.Fatalf("demande : %d %s", got.status, got.body)
-	}
+	hero.requestConfirmedEmailChange(t, "tony@stark-industries.io")
 	change := moderator.emailChanges(t, "?status=pending")[0]
 	if got := moderator.post("/admin/email-change-requests/"+change.ID+"/approve", nil); got.status != http.StatusNoContent {
 		t.Fatalf("validation : %d %s", got.status, got.body)
@@ -698,7 +814,7 @@ func TestApprovalFailsCleanlyWhenTheAddressWasTakenInTheMeantime(t *testing.T) {
 	e := newE2E(t, nil)
 	moderator := e.newModerator("fury@shield.example")
 	citizen := e.signUpAndLogin("steve@avengers.example")
-	citizen.requestEmailChange(t, "convoitee@avengers.example")
+	citizen.requestConfirmedEmailChange(t, "convoitee@avengers.example")
 
 	e.signUp("convoitee@avengers.example") // quelqu'un s'inscrit avec cette adresse entre-temps
 
@@ -722,7 +838,7 @@ func TestConcurrentApprovalsOfTheSameRequestSucceedOnce(t *testing.T) {
 	first := e.newModerator("fury@shield.example")
 	second := e.newModerator("hill@shield.example")
 	citizen := e.signUpAndLogin("steve@avengers.example")
-	citizen.requestEmailChange(t, "nouveau@avengers.example")
+	citizen.requestConfirmedEmailChange(t, "nouveau@avengers.example")
 	change := first.emailChanges(t, "?status=pending")[0]
 
 	moderators := []*actor{first, second, first, second, first, second}
@@ -765,6 +881,16 @@ func TestTwoUsersCannotBothObtainTheSameAddress(t *testing.T) {
 	natasha := e.signUpAndLogin("natasha@avengers.example")
 	steve.requestEmailChange(t, "partagee@avengers.example")
 	natasha.requestEmailChange(t, "partagee@avengers.example")
+	// Chaque demande a son propre lien : la même boîte les confirme toutes les deux.
+	tokens := e.confirmationTokens("partagee@avengers.example")
+	if len(tokens) != 2 || tokens[0] == tokens[1] {
+		t.Fatalf("liens de confirmation = %v", tokens)
+	}
+	for _, token := range tokens {
+		if got := e.newActor().post("/email-change-requests/confirm", map[string]string{"token": token}); got.status != http.StatusNoContent {
+			t.Fatalf("confirmation : %d %s", got.status, got.body)
+		}
+	}
 
 	changes := moderator.emailChanges(t, "?status=pending")
 	if len(changes) != 2 {
@@ -803,7 +929,7 @@ func TestEmailChangeDecisionsAreAuditedWithoutPersonalData(t *testing.T) {
 	e := newE2E(t, nil)
 	moderator := e.newModerator("fury@shield.example")
 	citizen := e.signUpAndLogin("steve@avengers.example")
-	citizen.requestEmailChange(t, "audit@avengers.example")
+	citizen.requestConfirmedEmailChange(t, "audit@avengers.example")
 	change := moderator.emailChanges(t, "")[0]
 	moderator.post("/admin/email-change-requests/"+change.ID+"/approve", nil)
 
@@ -811,7 +937,7 @@ func TestEmailChangeDecisionsAreAuditedWithoutPersonalData(t *testing.T) {
 	if err := e.db.Raw(`SELECT details::text FROM audit_logs WHERE action LIKE 'user.email_change_%' ORDER BY created_at`).Scan(&details).Error; err != nil {
 		t.Fatal(err)
 	}
-	if len(details) != 2 {
+	if len(details) != 3 { // demande, confirmation par le titulaire, validation
 		t.Fatalf("entrées d'audit = %v", details)
 	}
 	for _, entry := range details {
@@ -900,7 +1026,7 @@ func TestNewsletterSubscriptionFollowsTheApprovedEmailChange(t *testing.T) {
 	citizen := e.signUpAndLogin("steve@avengers.example")
 	citizen.put("/me/newsletter", map[string]any{"subscribed": true})
 
-	citizen.requestEmailChange(t, "nouveau@avengers.example")
+	citizen.requestConfirmedEmailChange(t, "nouveau@avengers.example")
 	change := moderator.emailChanges(t, "?status=pending")[0]
 	if got := moderator.post("/admin/email-change-requests/"+change.ID+"/approve", nil); got.status != http.StatusNoContent {
 		t.Fatalf("validation : %d %s", got.status, got.body)

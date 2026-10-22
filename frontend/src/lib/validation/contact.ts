@@ -1,4 +1,5 @@
-import type { ContactMessage, ContactSubject } from "@/types";
+import type { ContactMessage, ContactMessageResult, ContactSubject } from "@/types";
+import { apiFailureMessage, apiFieldErrors, hasFieldErrors, type FormState } from "./form-state";
 
 export const contactFields = ["name", "email", "subject", "message"] as const;
 export type ContactField = (typeof contactFields)[number];
@@ -51,4 +52,33 @@ export function validateContact(values: ContactValues): Partial<Record<ContactFi
 
 export function toContactMessage(values: ContactValues): ContactMessage {
   return { ...values, subject: values.subject as ContactSubject };
+}
+
+/** État d'erreur du formulaire de contact quand l'API refuse le message. */
+export function contactMessageFailureState(
+  result: Extract<ContactMessageResult, { ok: false }>,
+  values: ContactValues,
+): FormState<ContactField> {
+  switch (result.error) {
+    case "invalid-fields": {
+      const fieldErrors = apiFieldErrors(result.fields, contactFields);
+      return hasFieldErrors(fieldErrors)
+        ? { status: "error", fieldErrors, values }
+        : {
+            status: "error",
+            message: "Certaines informations ne sont pas valides.",
+            fieldErrors: {},
+            values,
+          };
+    }
+    case "delivery-unavailable":
+      return {
+        status: "error",
+        message: "Le message n'a pas pu être envoyé. Veuillez réessayer plus tard.",
+        fieldErrors: {},
+        values,
+      };
+    default:
+      return { status: "error", message: apiFailureMessage(result), fieldErrors: {}, values };
+  }
 }

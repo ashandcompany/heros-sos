@@ -1,0 +1,94 @@
+name: Docs deploy
+
+# Publie le site de documentation (docs-site/) sur GitHub Pages : https://ashandcompany.github.io/heros-sos/
+# (url et baseUrl sont dans docs-site/docusaurus.config.ts). Mêmes chemins et mêmes étapes que docs-ci.yml :
+# ce que la CI vérifie sur une PR est exactement ce qui est publié après la fusion dans develop.
+#
+# Prérequis, à faire une fois dans les réglages du dépôt :
+#   1. Settings → Pages → Source : « GitHub Actions ».
+#   2. Settings → Environments → github-pages → Deployment branches : autoriser `develop` (par défaut, seule la
+#      branche principale `main` peut déployer, et elle ne contient pas encore le site).
+# Tant que Pages n'est pas activé, le workflow construit et vérifie le site, saute la publication avec une
+# annotation et reste vert : il publie tout seul dès que le dépôt est réglé.
+on:
+  push:
+    branches: [develop]
+    paths:
+      - "docs-site/**"
+      - "backend/STACK.md"
+      - "backend/stack/**"
+      - "backend/MVP.md"
+      - "backend/TABLES.md"
+      - "backend/tables/**"
+      - "backend/openapi/openapi.yaml"
+      - "frontend/README.md"
+      - "frontend/docs/**"
+      - ".github/workflows/docs-deploy.yml"
+  workflow_dispatch:
+
+# Un seul déploiement à la fois ; celui en cours n'est pas interrompu, pour ne pas laisser un site à moitié publié.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # Vrai quand Pages est activé : seul ce cas déclenche la publication.
+    outputs:
+      pages: ${{ steps.pages.outcome == 'success' }}
+    defaults:
+      run:
+        working-directory: docs-site
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: docs-site/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # `prebuild` génère d'abord les pages d'API depuis backend/openapi/openapi.yaml.
+      - name: Build
+        run: npm run build
+
+      # Après le build : sidebars.ts importe les pages d'API générées.
+      - name: Type-check
+        run: npm run typecheck
+
+      # Échoue (404) si Pages n'est pas activé sur le dépôt : ce n'est pas une erreur de ce workflow.
+      - id: pages
+        uses: actions/configure-pages@v6
+        continue-on-error: true
+
+      - name: Pages non activé
+        if: steps.pages.outcome != 'success'
+        run: >-
+          echo "::notice title=GitHub Pages non activé::Le site est construit et vérifié, mais pas publié.
+          Activez Pages (Settings > Pages > Source : GitHub Actions) puis relancez ce workflow."
+
+      - if: steps.pages.outcome == 'success'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: docs-site/build
+
+  deploy:
+    needs: build
+    if: needs.build.outputs.pages == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

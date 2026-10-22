@@ -9,7 +9,7 @@
 # Node les y trouve en remontant l'arborescence, et le volume qui masque le node_modules de l'hôte
 # (binaires d'un autre système) démarre vide. Installées dans /app/docs-site/node_modules, elles seraient
 # recopiées (1,4 Go) dans ce volume à chaque création du conteneur : de quoi remplir le disque de Docker.
-# Le site lit aussi backend/STACK.md, MVP.md, TABLES.md et openapi/openapi.yaml : le service `docs-sync`
+# Le site lit aussi backend/STACK.md, stack/*.md, MVP.md, TABLES.md, tables/*.md et openapi/openapi.yaml : le service `docs-sync`
 # les recopie dans un volume monté en lecture seule (/app/backend). Jamais copiés dans l'image, et jamais
 # avec le reste de backend/ (le .env n'a rien à faire dans ce conteneur). Même chose pour frontend/README.md
 # et frontend/docs/*.md, montés dans /app/frontend.

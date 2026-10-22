@@ -1,9 +1,9 @@
-import { headers } from "next/headers";
+import { headers as requestHeaders } from "next/headers";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { cache } from "react";
 import { SESSION_COOKIE } from "@/lib/cookies";
 import { routes } from "@/lib/routes";
-import type { ApiFailure, AuthUser, UserRole } from "@/types";
+import type { ApiFailure, AuthUser, MfaStatus, UserRole } from "@/types";
 import { API_URL } from "./config";
 import type { components } from "./schema";
 
@@ -41,11 +41,8 @@ interface ApiRequest {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   /** Corps envoyé en JSON. */
   body?: unknown;
-  /**
-   * Corps envoyé tel quel (une image pour `PUT /me/avatar`), à la place de `body`. Son type se
-   * donne dans `headers` (`Content-Type`).
-   */
-  rawBody?: Blob;
+  /** Corps binaire envoyé tel quel (photo de profil, ni JSON ni multipart) : son type fait le `Content-Type`. */
+  file?: Blob;
   /** Jeton de session : transmis dans le cookie que l'API attend, jamais dans `Authorization`. */
   sessionToken?: string;
   /**
@@ -78,13 +75,14 @@ export async function apiFetch(path: string, request: ApiRequest = {}): Promise<
   const headers = new Headers(request.headers);
   headers.set("Accept", "application/json");
   if (request.body !== undefined) headers.set("Content-Type", "application/json");
+  if (request.file) headers.set("Content-Type", request.file.type);
   if (sessionToken) headers.set("Cookie", `${SESSION_COOKIE}=${sessionToken}`);
   if (csrfToken) headers.set("X-CSRF-Token", csrfToken);
 
   const response = await fetch(`${API_URL}${path}`, {
     method,
     headers,
-    body: request.body === undefined ? request.rawBody : JSON.stringify(request.body),
+    body: request.file ?? (request.body === undefined ? undefined : JSON.stringify(request.body)),
     cache: "no-store",
     signal: AbortSignal.timeout(API_TIMEOUT_MS),
   });
@@ -97,12 +95,13 @@ export async function apiFetch(path: string, request: ApiRequest = {}): Promise<
 }
 
 /**
- * L'API limite les demandes par adresse IP (connexion, contact, newsletter…) et enregistre
- * l'appareil de chaque session : on lui transmet l'adresse du visiteur (posée par le reverse
- * proxy) et son navigateur, sinon elle ne verrait que le serveur Next.
+ * Les routes publiques sont limitées par adresse IP, et l'API enregistre l'appareil de chaque
+ * session : on lui transmet l'adresse du visiteur (posée par le reverse proxy) et son navigateur,
+ * sinon elle ne verrait que le serveur Next. À passer dans `headers` des appels faits pour un
+ * visiteur (connexion, inscription, contact, newsletter…).
  */
 export async function visitorHeaders(): Promise<Headers> {
-  const incoming = await headers();
+  const incoming = await requestHeaders();
   const forwarded = new Headers();
   const forwardedFor = incoming.get("x-forwarded-for");
   const userAgent = incoming.get("user-agent");
@@ -247,6 +246,23 @@ export function fromApiRole(role: ApiRole): UserRole {
 /** Rôle du frontend vers celui de l'API (filtres). */
 export function roleToApi(role: UserRole): ApiRole {
   return roleToApiByRole[role];
+}
+
+const mfaStatusFromApi: Record<ApiSchema<"MfaStatus">, MfaStatus> = {
+  verified: "verified",
+  verification_required: "verification-required",
+  enrollment_required: "enrollment-required",
+  not_enrolled: "not-enrolled",
+};
+
+/** État de la double authentification de l'API vers celui du frontend. */
+export function fromApiMfaStatus(status: ApiSchema<"MfaStatus">): MfaStatus {
+  return mfaStatusFromApi[status];
+}
+
+/** Une session limitée ne sert qu'à la 2FA et à la déconnexion : l'API refuse tout le reste (`mfa_required`). */
+export function isLimitedSession(status: MfaStatus): boolean {
+  return status === "verification-required" || status === "enrollment-required";
 }
 
 /** Convertit un compte de l'API vers `AuthUser`. */

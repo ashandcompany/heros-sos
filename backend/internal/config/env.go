@@ -60,11 +60,16 @@ const (
 	envRateNewsletterPerEmail = "HEROS_RATE_NEWSLETTER_PER_EMAIL"
 	envRateEmailChangePerUser = "HEROS_RATE_EMAIL_CHANGE_PER_USER"
 	envRateAvatarPerUser      = "HEROS_RATE_AVATAR_PER_USER"
+	envRateMFAVerifyPerUser   = "HEROS_RATE_MFA_VERIFY_PER_USER"
 
 	envActivationTokenTTL    = "HEROS_ACTIVATION_TOKEN_TTL"
 	envPasswordResetTokenTTL = "HEROS_PASSWORD_RESET_TOKEN_TTL"
 
-	envNewsletterConfirmTTL = "HEROS_NEWSLETTER_CONFIRM_TTL"
+	envNewsletterConfirmTTL  = "HEROS_NEWSLETTER_CONFIRM_TTL"
+	envEmailChangeConfirmTTL = "HEROS_EMAIL_CHANGE_CONFIRM_TTL"
+
+	envMFAModeratorRequired = "HEROS_MFA_MODERATOR_REQUIRED"
+	envMFAIssuer            = "HEROS_MFA_ISSUER"
 
 	envCSRFSecret    = "HEROS_CSRF_SECRET"
 	envCryptoKeys    = "HEROS_CRYPTO_KEYS"
@@ -99,9 +104,12 @@ const (
 	envActivationPath    = "HEROS_ACTIVATION_PATH"
 	envPasswordResetPath = "HEROS_PASSWORD_RESET_PATH"
 
-	envNewsletterConfirmPath = "HEROS_NEWSLETTER_CONFIRM_PATH"
+	envNewsletterConfirmPath     = "HEROS_NEWSLETTER_CONFIRM_PATH"
+	envNewsletterUnsubscribePath = "HEROS_NEWSLETTER_UNSUBSCRIBE_PATH"
+	envEmailChangeConfirmPath    = "HEROS_EMAIL_CHANGE_CONFIRM_PATH"
 
 	envCleanupInterval  = "HEROS_CLEANUP_INTERVAL"
+	envCleanupTimeout   = "HEROS_CLEANUP_TIMEOUT"
 	envSessionRetention = "HEROS_SESSION_RETENTION"
 	envTokenRetention   = "HEROS_TOKEN_RETENTION"
 )
@@ -126,8 +134,9 @@ func EnvVarNames() []string {
 		envRateLoginPerIP, envRateLoginPerIdentifier, envRateRegisterPerIP,
 		envRatePasswordResetPerIP, envRatePasswordResetPerKey, envRateIncidentCreatePerUser, envMaxTrackedRateKeys,
 		envRateContactPerIP, envRateNewsletterPerIP, envRateNewsletterPerEmail, envRateEmailChangePerUser,
-		envRateAvatarPerUser,
-		envActivationTokenTTL, envPasswordResetTokenTTL, envNewsletterConfirmTTL,
+		envRateAvatarPerUser, envRateMFAVerifyPerUser,
+		envActivationTokenTTL, envPasswordResetTokenTTL, envNewsletterConfirmTTL, envEmailChangeConfirmTTL,
+		envMFAModeratorRequired, envMFAIssuer,
 		envCSRFSecret, envCryptoKeys, envCryptoActiveK,
 		envMailDriver, envMailFromAddress, envMailFromName, envSMTPHost, envSMTPPort,
 		envSMTPUsername, envSMTPPassword, envSMTPTLSMode, envSMTPTimeout, envMailWorkers,
@@ -135,6 +144,7 @@ func EnvVarNames() []string {
 		envOMDbAPIKey, envOMDbBaseURL, envOMDbTimeout,
 		envContactRecipient, envAvatarDir, envAvatarMaxBytes, envAvatarMaxDimension,
 		envPublicBaseURL, envActivationPath, envPasswordResetPath, envNewsletterConfirmPath,
-		envCleanupInterval, envSessionRetention, envTokenRetention,
+		envNewsletterUnsubscribePath, envEmailChangeConfirmPath,
+		envCleanupInterval, envCleanupTimeout, envSessionRetention, envTokenRetention,
 	}
 }

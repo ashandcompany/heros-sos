@@ -12,22 +12,23 @@ import (
 // test vérifie que les réponses le respectent). Les entités (user.User, avec son empreinte de mot de
 // passe) ne sont jamais sérialisées directement.
 
-// AccountResponse est le profil complet de l'utilisateur connecté.
-type AccountResponse struct {
-	ID                   uuid.UUID       `json:"id"`
-	Role                 string          `json:"role"`
-	Civility             string          `json:"civility"`
-	FirstName            string          `json:"firstName"`
-	LastName             string          `json:"lastName"`
-	BirthDate            string          `json:"birthDate"`
-	Email                string          `json:"email"`
-	PendingEmail         string          `json:"pendingEmail,omitempty"`
-	MobilePhone          string          `json:"mobilePhone"`
-	Address              addressResponse `json:"address"`
-	AvatarURL            string          `json:"avatarUrl,omitempty"`
-	NewsletterSubscribed bool            `json:"newsletterSubscribed"`
-	CreatedAt            time.Time       `json:"createdAt"`
-	Hero                 *heroResponse   `json:"hero,omitempty"`
+// Response est le profil complet de l'utilisateur connecté.
+type Response struct {
+	ID                    uuid.UUID       `json:"id"`
+	Role                  string          `json:"role"`
+	Civility              string          `json:"civility"`
+	FirstName             string          `json:"firstName"`
+	LastName              string          `json:"lastName"`
+	BirthDate             string          `json:"birthDate"`
+	Email                 string          `json:"email"`
+	PendingEmail          string          `json:"pendingEmail,omitempty"`
+	PendingEmailConfirmed bool            `json:"pendingEmailConfirmed,omitempty"`
+	MobilePhone           string          `json:"mobilePhone"`
+	Address               addressResponse `json:"address"`
+	AvatarURL             string          `json:"avatarUrl,omitempty"`
+	NewsletterSubscribed  bool            `json:"newsletterSubscribed"`
+	CreatedAt             time.Time       `json:"createdAt"`
+	Hero                  *heroResponse   `json:"hero,omitempty"`
 }
 
 type addressResponse struct {
@@ -43,11 +44,11 @@ type heroResponse struct {
 	Bio   string `json:"bio"`
 }
 
-func (h *Handler) newAccountResponse(a *Account) AccountResponse {
+func (h *Handler) newResponse(a *Account) Response {
 	u := a.User
-	response := AccountResponse{
+	response := Response{
 		ID: u.ID, Role: string(u.Role), Civility: u.Civility, FirstName: u.FirstName, LastName: u.LastName,
-		BirthDate: validation.FormatBirthDate(u.BirthDate), Email: u.Email, PendingEmail: a.PendingEmail,
+		BirthDate: validation.FormatBirthDate(u.BirthDate), Email: u.Email, PendingEmail: a.PendingEmail, PendingEmailConfirmed: a.PendingEmailConfirmed,
 		MobilePhone: u.Phone, NewsletterSubscribed: a.NewsletterSubscribed, CreatedAt: u.CreatedAt,
 		Address: addressResponse{
 			Street: u.Address.Street, Complement: u.Address.Complement, PostalCode: u.Address.PostalCode,
@@ -90,19 +91,26 @@ type EmailChangeStatusResponse struct {
 	Status   string `json:"status"`
 }
 
+type confirmRequest struct {
+	Token string `json:"token"`
+}
+
 type newsletterRequest struct {
 	Subscribed *bool `json:"subscribed"`
 }
 
 // EmailChangeResponse est une demande de changement d'adresse vue par un modérateur.
 type EmailChangeResponse struct {
-	ID           uuid.UUID  `json:"id"`
-	UserID       uuid.UUID  `json:"userId"`
-	FirstName    string     `json:"firstName"`
-	LastName     string     `json:"lastName"`
-	CurrentEmail string     `json:"currentEmail"`
-	NewEmail     string     `json:"newEmail"`
-	Status       string     `json:"status"`
-	CreatedAt    time.Time  `json:"createdAt"`
-	ReviewedAt   *time.Time `json:"reviewedAt,omitempty"`
+	ID           uuid.UUID `json:"id"`
+	UserID       uuid.UUID `json:"userId"`
+	FirstName    string    `json:"firstName"`
+	LastName     string    `json:"lastName"`
+	CurrentEmail string    `json:"currentEmail"`
+	NewEmail     string    `json:"newEmail"`
+	Status       string    `json:"status"`
+	CreatedAt    time.Time `json:"createdAt"`
+	// ConfirmedAt est la date à laquelle le titulaire de la nouvelle adresse l'a confirmée (absente tant
+	// qu'elle ne l'est pas) : un modérateur ne peut accepter qu'une demande confirmée.
+	ConfirmedAt *time.Time `json:"confirmedAt,omitempty"`
+	ReviewedAt  *time.Time `json:"reviewedAt,omitempty"`
 }

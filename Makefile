@@ -49,6 +49,10 @@ moderator: docker ## Crée un modérateur en dev : make moderator EMAIL=… FIRS
 seed: docker ## Remplit la base de dev avec des données Marvel (héros, vilains, incidents…) ; RESET=1 efface tout avant
 	@$(BACKEND) seed-dev
 
+.PHONY: resetmfa
+resetmfa: docker ## Réinitialise la 2FA d'un compte (appareil perdu) en dev : make resetmfa EMAIL=…
+	@$(BACKEND) resetmfa-dev
+
 .PHONY: reset
 reset: docker ## Arrête la pile de dev ET SUPPRIME ses données (base, photos, RabbitMQ), après confirmation
 	@read -rp "Supprimer les volumes de développement (base de données comprise) ? [o/N] " answer; \

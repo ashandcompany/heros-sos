@@ -21,8 +21,8 @@ import { heroIncidentRoute, routes } from "@/lib/routes";
 import { requireHeroSession } from "@/lib/server-session";
 import {
   avatarErrorMessage,
-  contactErrorState,
-  emailChangeErrorMessage,
+  contactFailureState,
+  emailChangeFailureState,
   readContactValues,
   validateAvatar,
   validateContact,
@@ -224,7 +224,7 @@ export async function updateHeroContactAction(
       country: values.country,
     },
   });
-  if (!result.ok) return contactErrorState(result, values);
+  if (!result.ok) return contactFailureState(result, values);
 
   revalidatePath(routes.heroProfile);
   revalidatePath(routes.adminHeroes);
@@ -243,7 +243,7 @@ export async function updateHeroAvatarAction(
   if (error || !avatar) return { status: "error", fieldErrors: { avatar: error } };
 
   const result = await updateMyHeroAvatar(token, avatar);
-  if (!result.ok) return { status: "error", fieldErrors: { avatar: avatarErrorMessage(result) } };
+  if (!result.ok) return { status: "error", message: avatarErrorMessage(result), fieldErrors: {} };
 
   for (const path of [routes.heroProfile, routes.home, routes.encyclopedia]) revalidatePath(path);
   return { status: "success", message: "Votre photo a été mise à jour.", fieldErrors: {} };
@@ -260,19 +260,13 @@ export async function requestHeroEmailChangeAction(
   if (error) return { status: "error", fieldErrors: { email: error }, values: { email } };
 
   const result = await requestHeroEmailChange(token, email);
-  if (!result.ok) {
-    return {
-      status: "error",
-      fieldErrors: { email: emailChangeErrorMessage(result) },
-      values: { email },
-    };
-  }
+  if (!result.ok) return emailChangeFailureState(result, email);
 
   revalidatePath(routes.heroProfile);
   return {
     status: "success",
     message:
-      "Demande envoyée : la nouvelle adresse sera active après validation par la modération.",
+      "Demande envoyée : un mail de confirmation vient d'être envoyé à la nouvelle adresse. Elle sera active une fois confirmée, puis validée par la modération.",
     fieldErrors: {},
   };
 }

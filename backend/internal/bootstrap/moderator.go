@@ -1,14 +1,17 @@
-// Package bootstrap crée les comptes qui ne peuvent pas passer par l'inscription publique : le
-// premier modérateur, qui valide ensuite les super-héros et les autres comptes.
+// Package bootstrap regroupe les opérations d'exploitation qui ne peuvent pas passer par l'API : créer le
+// premier modérateur, qui valide ensuite les super-héros et les autres comptes, et réinitialiser la 2FA
+// d'un compte qui a perdu son appareil.
 package bootstrap
 
 import (
 	"context"
 	"fmt"
 
+	"github.com/ashandcompany/heros-sos/backend/internal/audit"
 	"github.com/ashandcompany/heros-sos/backend/internal/auth"
 	"github.com/ashandcompany/heros-sos/backend/internal/clock"
 	"github.com/ashandcompany/heros-sos/backend/internal/config"
+	"github.com/ashandcompany/heros-sos/backend/internal/database"
 	"github.com/ashandcompany/heros-sos/backend/internal/ids"
 	"github.com/ashandcompany/heros-sos/backend/internal/user"
 	"github.com/ashandcompany/heros-sos/backend/internal/validation"
@@ -72,5 +75,46 @@ func CreateModerator(ctx context.Context, deps ModeratorDeps, in ModeratorInput)
 		return nil, err
 	}
 	account.Status = user.StatusActive
+	return account, nil
+}
+
+// ResetMFADeps regroupe les dépendances de la réinitialisation de la 2FA.
+type ResetMFADeps struct {
+	Users    user.Repository
+	MFA      *auth.MFAStore
+	Sessions *auth.SessionService
+	Audit    audit.Recorder
+	Tx       database.Transactor
+	Clock    clock.Clock
+}
+
+// ResetMFA supprime la double authentification d'un compte (appareil perdu, codes de secours épuisés) et
+// ferme toutes ses sessions. C'est une opération d'exploitation : aucune route de l'API ne la propose, pour
+// qu'un compte piraté ne puisse pas retirer sa propre protection. Le compte devra réactiver sa 2FA à la
+// prochaine connexion (obligatoire pour un modérateur en production). Elle est journalisée, sans acteur : la
+// personne qui lance la commande n'est pas un compte de l'application.
+func ResetMFA(ctx context.Context, deps ResetMFADeps, email string) (*user.User, error) {
+	normalized, code := validation.Email(email)
+	if code != "" {
+		return nil, &validation.Error{Fields: map[string]string{"email": code}}
+	}
+	account, err := deps.Users.FindByEmail(ctx, normalized)
+	if err != nil {
+		return nil, err
+	}
+	err = deps.Tx.WithinTx(ctx, func(ctx context.Context) error {
+		if _, err := deps.MFA.Reset(ctx, account.ID); err != nil {
+			return err
+		}
+		if err := deps.Sessions.RevokeAll(ctx, account.ID); err != nil {
+			return err
+		}
+		return deps.Audit.Record(ctx, audit.Entry{
+			Action: audit.ActionMFAReset, EntityType: "user", EntityID: &account.ID,
+		})
+	})
+	if err != nil {
+		return nil, err
+	}
 	return account, nil
 }

@@ -3,9 +3,9 @@ import { isApiEnabled, mockResponse } from "./config";
 import { ApiError, type ApiSchema, apiFetch, toApiFailure, visitorHeaders } from "./http";
 
 /**
- * Transmet un message du formulaire de contact à l'équipe du Bureau (par mail, rien n'est
- * conservé). API : `POST /contact/messages`, limité par adresse IP : celle du visiteur est
- * transmise (`visitorHeaders`).
+ * Transmet un message du formulaire de contact à l'équipe du Bureau, par mail : le visiteur n'en
+ * reçoit jamais, et rien n'est conservé en base.
+ * API : `POST /contact/messages` avec `{ name, email, subject, message }`, limité par adresse IP.
  */
 export async function sendContactMessage(message: ContactMessage): Promise<ContactMessageResult> {
   if (!isApiEnabled) return mockResponse({ ok: true });
@@ -13,12 +13,7 @@ export async function sendContactMessage(message: ContactMessage): Promise<Conta
   try {
     await apiFetch("/contact/messages", {
       method: "POST",
-      body: {
-        name: message.name,
-        email: message.email,
-        subject: message.subject,
-        message: message.message,
-      } satisfies ApiSchema<"ContactMessageRequest">,
+      body: message satisfies ApiSchema<"ContactMessageRequest">,
       headers: await visitorHeaders(),
     });
     return { ok: true };
@@ -31,6 +26,6 @@ export async function sendContactMessage(message: ContactMessage): Promise<Conta
         return { ok: false, error: "delivery-unavailable" };
       }
     }
-    return toApiFailure(error, "Message de contact");
+    return toApiFailure(error, "Formulaire de contact");
   }
 }

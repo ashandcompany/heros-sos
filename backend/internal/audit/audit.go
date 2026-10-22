@@ -34,6 +34,13 @@ const (
 	ActionPasswordReset     = "auth.password_reset"
 	ActionLogoutAllSessions = "auth.logout_all"
 
+	// Double authentification : jamais de code, de secret ni de code de secours dans le journal.
+	ActionMFAEnabled             = "auth.mfa_enabled"
+	ActionMFAFailed              = "auth.mfa_failed"
+	ActionMFARecoveryUsed        = "auth.mfa_recovery_used"
+	ActionMFARecoveryRegenerated = "auth.mfa_recovery_regenerated"
+	ActionMFAReset               = "auth.mfa_reset"
+
 	ActionInterventionTypeCreated = "intervention_type.create"
 	ActionVillainCreated          = "villain.create"
 	ActionVillainUpdated          = "villain.update"
@@ -48,9 +55,13 @@ const (
 	ActionEmailChangeRequested = "user.email_change_request"
 	ActionEmailChangeApproved  = "user.email_change_approve"
 	ActionEmailChangeRejected  = "user.email_change_reject"
-	ActionArticleCreated          = "article.create"
-	ActionArticleUpdated          = "article.update"
-	ActionArticleDeleted          = "article.delete"
+	// ActionEmailChangeConfirmed : le titulaire de la nouvelle adresse a cliqué sur le lien reçu.
+	ActionEmailChangeConfirmed = "user.email_change_confirm"
+
+	// Blog : création, modification et suppression d'un article par un modérateur.
+	ActionArticleCreated = "article.create"
+	ActionArticleUpdated = "article.update"
+	ActionArticleDeleted = "article.delete"
 )
 
 // Entry décrit une action à journaliser.

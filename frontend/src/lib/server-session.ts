@@ -1,9 +1,9 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getMyAvatar, type AvatarData } from "@/lib/api";
-import { SESSION_COOKIE } from "@/lib/cookies";
+import { SESSION_COOKIE, sessionCookieAttributes } from "@/lib/cookies";
 import { accountHomeByRole, routes } from "@/lib/routes";
-import { getUserFromToken } from "@/lib/session";
+import { getMfaRedirect, getUserFromToken } from "@/lib/session";
 import type { AuthUser, UserRole } from "@/types";
 
 /*
@@ -34,10 +34,21 @@ export async function requireRole(
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   const user = await getUserFromToken(token);
 
-  if (!user || !token) redirect(routes.login);
+  if (!user || !token) redirect((await getMfaRedirect(token)) ?? routes.login);
   if (![role].flat().includes(user.role)) redirect(accountHomeByRole[user.role]);
 
   return { token, user };
+}
+
+/**
+ * Pose le cookie de session dans le navigateur, avec la durée de vie fixée par l'API : après la
+ * connexion, et chaque fois que l'API remplace le jeton (activation ou validation de la 2FA).
+ */
+export async function setSessionCookie(token: string, expiresAt: string): Promise<void> {
+  (await cookies()).set(SESSION_COOKIE, token, {
+    ...sessionCookieAttributes,
+    expires: new Date(expiresAt),
+  });
 }
 
 export async function requireAdminSession(): Promise<string> {

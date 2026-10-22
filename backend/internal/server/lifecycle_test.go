@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -130,7 +129,7 @@ func TestRunFailsFastWhenThePortIsTaken(t *testing.T) {
 	defer func() { _ = occupied.Close() }()
 
 	cfg := testutil.Config(t, map[string]string{"HEROS_HTTP_ADDR": occupied.Addr().String()})
-	app, err := server.NewWithDB(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), testutil.NewDB(t))
+	app, err := server.NewWithDB(cfg, slog.New(slog.DiscardHandler), testutil.NewDB(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +151,7 @@ func TestNewRejectsAnUnreachableDatabase(t *testing.T) {
 		"HEROS_DATABASE_URL":          "postgres://heros:motdepasse-secret@127.0.0.1:1/inexistante?sslmode=disable",
 		"HEROS_DATABASE_PING_TIMEOUT": "500ms",
 	})
-	_, err := server.New(context.Background(), cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	_, err := server.New(context.Background(), cfg, slog.New(slog.DiscardHandler))
 	if err == nil {
 		t.Fatal("New doit échouer quand la base ne répond pas")
 	}
@@ -169,7 +168,7 @@ func TestJanitorPurgesStaleSessionsAndTokens(t *testing.T) {
 	cfg := testutil.Config(t, map[string]string{
 		"HEROS_HTTP_ADDR": address, "HEROS_CLEANUP_INTERVAL": "50ms", "HEROS_SESSION_RETENTION": "1h", "HEROS_TOKEN_RETENTION": "1h",
 	})
-	app, err := server.NewWithDB(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), db)
+	app, err := server.NewWithDB(cfg, slog.New(slog.DiscardHandler), db)
 	if err != nil {
 		t.Fatal(err)
 	}

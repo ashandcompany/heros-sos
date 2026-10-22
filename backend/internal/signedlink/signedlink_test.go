@@ -132,3 +132,23 @@ func TestNewSignerValidatesKeys(t *testing.T) {
 		t.Error("une clé de mauvaise taille doit être refusée")
 	}
 }
+
+// Un lien fabriqué pour une action ne vaut jamais pour une autre : confirmer une adresse ne doit pas
+// désabonner, ni l'inverse.
+func TestSignedLinkPurposesAreNotInterchangeable(t *testing.T) {
+	signer := newSigner(t, map[uint16][]byte{1: masterKey(1)}, 1)
+	purposes := []Purpose{PurposeNewsletterConfirm, PurposeEmailChangeConfirm, PurposeNewsletterUnsubscribe}
+
+	for _, issued := range purposes {
+		token := signer.Sign(issued, subject, now.Add(time.Hour))
+		for _, wanted := range purposes {
+			got, err := signer.Verify(token, wanted, now)
+			switch {
+			case issued == wanted && (err != nil || got != subject):
+				t.Errorf("intention %d : Verify = %v, %v", issued, got, err)
+			case issued != wanted && !errors.Is(err, ErrInvalid):
+				t.Errorf("un lien d'intention %d ne doit pas valoir pour l'intention %d : %v", issued, wanted, err)
+			}
+		}
+	}
+}

@@ -1,5 +1,6 @@
 // Package signedlink fabrique et vérifie des liens signés en Ed25519, pour les actions envoyées par
-// mail qui n'ont pas besoin d'un jeton en base (confirmation d'un abonnement à la newsletter).
+// mail qui n'ont pas besoin d'un jeton en base (confirmation ou désinscription de la newsletter,
+// confirmation de la nouvelle adresse d'un compte).
 //
 // Un lien désigne un objet (un identifiant, jamais une adresse email : l'URL ne porte aucune donnée
 // personnelle), une intention (Purpose) et une date limite. Il est stateless : rien n'est stocké, et
@@ -58,6 +59,12 @@ type Purpose byte
 const (
 	// PurposeNewsletterConfirm confirme un abonnement à la newsletter (double opt-in).
 	PurposeNewsletterConfirm Purpose = 1
+	// PurposeEmailChangeConfirm confirme la nouvelle adresse d'un compte : l'objet est la demande de
+	// changement, dont l'identifiant change quand son titulaire la remplace.
+	PurposeEmailChangeConfirm Purpose = 2
+	// PurposeNewsletterUnsubscribe désabonne de la newsletter. Il est émis sans date limite : le lien d'une
+	// ancienne newsletter doit rester utilisable.
+	PurposeNewsletterUnsubscribe Purpose = 3
 )
 
 // Signer signe et vérifie des liens. Il est immuable après sa création : il peut être partagé par

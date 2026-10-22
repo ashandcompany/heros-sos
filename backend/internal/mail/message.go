@@ -13,6 +13,7 @@ import (
 	"mime/quotedprintable"
 	"net/mail"
 	"net/textproto"
+	"net/url"
 	"strings"
 	"time"
 
@@ -30,6 +31,10 @@ type Message struct {
 	Subject string
 	Text    string
 	HTML    string
+	// ListUnsubscribe, facultatif, est l'adresse (http ou https) où se désabonner : elle devient l'en-tête
+	// List-Unsubscribe (RFC 2369), que les messageries affichent comme un lien « Se désabonner ». Elle
+	// est obligatoire pour une newsletter (voir Service.SendNewsletter).
+	ListUnsubscribe string
 }
 
 // Mailer envoie un mail. Les implémentations sont sûres pour un usage concurrent.
@@ -56,19 +61,34 @@ func (m Message) validate() (recipient *mail.Address, err error) {
 	if strings.ContainsAny(m.To, "\r\n") || strings.ContainsAny(m.ReplyTo, "\r\n") || strings.ContainsAny(m.Subject, "\r\n") {
 		return nil, fmt.Errorf("%w : saut de ligne dans un en-tête", ErrInvalidMessage)
 	}
-	recipient, err = mail.ParseAddress(m.To)
-	if err != nil || recipient.Name != "" {
+	recipient, ok := bareAddress(m.To)
+	if !ok {
 		return nil, fmt.Errorf("%w : destinataire", ErrInvalidMessage)
 	}
-	if m.ReplyTo != "" {
-		if replyTo, err := mail.ParseAddress(m.ReplyTo); err != nil || replyTo.Name != "" {
-			return nil, fmt.Errorf("%w : adresse de réponse", ErrInvalidMessage)
-		}
+	if _, ok := bareAddress(m.ReplyTo); m.ReplyTo != "" && !ok {
+		return nil, fmt.Errorf("%w : adresse de réponse", ErrInvalidMessage)
 	}
 	if strings.TrimSpace(m.Subject) == "" || (m.Text == "" && m.HTML == "") {
 		return nil, fmt.Errorf("%w : sujet ou contenu vide", ErrInvalidMessage)
 	}
+	if m.ListUnsubscribe != "" && !isWebLink(m.ListUnsubscribe) {
+		return nil, fmt.Errorf("%w : adresse de désinscription", ErrInvalidMessage)
+	}
 	return recipient, nil
+}
+
+// bareAddress lit une adresse simple : « a@b.c », sans nom affiché.
+func bareAddress(raw string) (*mail.Address, bool) {
+	address, err := mail.ParseAddress(raw)
+	return address, err == nil && address.Name == ""
+}
+
+// isWebLink dit si raw est un lien http(s) sûr à placer entre chevrons dans un en-tête : ni chevron, ni espace,
+// ni saut de ligne, qui casseraient l'en-tête.
+func isWebLink(raw string) bool {
+	link, err := url.Parse(raw)
+	return err == nil && (link.Scheme == "http" || link.Scheme == "https") && link.Host != "" &&
+		!strings.ContainsAny(raw, "\r\n<> ")
 }
 
 // build écrit le message au format MIME multipart/alternative : texte puis HTML, encodés en
@@ -93,6 +113,9 @@ func build(sender Sender, message Message, now time.Time) ([]byte, error) {
 	}
 	if message.ReplyTo != "" {
 		headers = append(headers, struct{ name, value string }{"Reply-To", (&mail.Address{Address: message.ReplyTo}).String()})
+	}
+	if message.ListUnsubscribe != "" {
+		headers = append(headers, struct{ name, value string }{"List-Unsubscribe", "<" + message.ListUnsubscribe + ">"})
 	}
 	var output bytes.Buffer
 	for _, header := range headers {

@@ -7,11 +7,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/ashandcompany/heros-sos/backend/internal/user"
 )
 
 // VerificationStatus est l'état d'une demande.
 type VerificationStatus string
 
+// États d'une demande : en attente de décision, acceptée, refusée.
 const (
 	StatusPending  VerificationStatus = "pending"
 	StatusApproved VerificationStatus = "approved"
@@ -21,6 +24,7 @@ const (
 // PublicSort est l'ordre de tri des profils publics de super-héros.
 type PublicSort string
 
+// Ordres de tri acceptés par la liste publique (valeur du paramètre `sort`).
 const (
 	PublicSortAlias         PublicSort = "alias"          // alias, croissant
 	PublicSortAverageRating PublicSort = "-averageRating" // note moyenne, décroissante
@@ -73,10 +77,39 @@ type Profile struct {
 
 // PublicProfile contient les données publiques d'un super-héros approuvé.
 type PublicProfile struct {
-	UserID             uuid.UUID
-	Alias              string
-	AvatarURL          *string
+	UserID uuid.UUID
+	Alias  string
+	// AvatarPath est la valeur stockée dans users.avatar_path, sans interprétation : c'est le
+	// handler qui en fait une adresse publique (voir resolveAvatarURL).
+	AvatarPath         *string
 	Bio                string
 	AverageRating      float64
 	InterventionsCount int64
+}
+
+// DirectoryEntry est un super-héros dans l'annuaire des modérateurs : la fiche publique, plus ce que
+// seule la modération voit (état du compte, adresse email, demande de changement d'adresse).
+type DirectoryEntry struct {
+	PublicProfile
+	Email         string
+	AccountStatus user.Status
+	// PendingEmail est l'adresse demandée et pas encore décidée par un modérateur (vide sinon).
+	PendingEmail string
+	// RegisteredAt est la date de création du compte.
+	RegisteredAt time.Time
+	// LastInterventionAt est le début de la dernière intervention à laquelle le héros a participé
+	// (nil s'il n'a jamais participé).
+	LastInterventionAt *time.Time
+}
+
+// DirectoryView est une entrée de l'annuaire avec l'identité civile du héros. Celle-ci est chiffrée
+// en base : elle est lue fiche par fiche, jamais en SQL.
+type DirectoryView struct {
+	DirectoryEntry
+	Civility  string
+	FirstName string
+	LastName  string
+	BirthDate time.Time
+	Phone     string
+	Address   user.Address
 }

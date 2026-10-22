@@ -50,6 +50,8 @@ const (
 	defaultPasswordResetTokenTTL = time.Hour
 
 	defaultNewsletterConfirmTTL = 48 * time.Hour
+	// Le lien de confirmation de la nouvelle adresse d'un compte : même durée que celui de la newsletter.
+	defaultEmailChangeConfirmTTL = 48 * time.Hour
 
 	defaultMailFromAddress = "no-reply@heros-sos.local"
 	defaultMailFromName    = "Heros-SOS"
@@ -76,9 +78,17 @@ const (
 	defaultActivationPath    = "/activation"
 	defaultPasswordResetPath = "/reinitialisation-mot-de-passe"
 
-	defaultNewsletterConfirmPath = "/newsletter/confirmation"
+	defaultNewsletterConfirmPath     = "/newsletter/confirmation"
+	defaultNewsletterUnsubscribePath = "/newsletter/desinscription"
+	defaultEmailChangeConfirmPath    = "/changement-email/confirmation"
+
+	// Double authentification (TOTP) : nom affiché dans l'application d'authentification, et nombre de
+	// codes de secours remis à l'activation.
+	defaultMFAIssuer        = "Heros-SOS"
+	defaultMFARecoveryCodes = 10
 
 	defaultCleanupInterval  = 15 * time.Minute
+	defaultCleanupTimeout   = 2 * time.Minute
 	defaultSessionRetention = 7 * 24 * time.Hour
 	defaultTokenRetention   = 7 * 24 * time.Hour
 )
@@ -97,6 +107,9 @@ var (
 	defaultRateNewsletterPerEmail = RateRule{Max: 3, Window: time.Hour}
 	defaultRateEmailChangePerUser = RateRule{Max: 5, Window: time.Hour}
 	defaultRateAvatarPerUser      = RateRule{Max: 20, Window: time.Hour}
+	// Un code TOTP a un million de valeurs : cinq essais par fenêtre de cinq minutes rendent leur
+	// énumération hors de portée, sans gêner une faute de frappe.
+	defaultRateMFAVerifyPerUser = RateRule{Max: 5, Window: 5 * time.Minute}
 )
 
 // Plancher de sécurité imposé en production pour le hachage des mots de passe

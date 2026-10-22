@@ -17,6 +17,7 @@ const tableUserTokens = "user_tokens"
 // TokenType distingue les usages d'un jeton envoyé par mail.
 type TokenType string
 
+// Usages d'un jeton : activation d'un compte, réinitialisation d'un mot de passe.
 const (
 	TokenActivation    TokenType = "activation"
 	TokenPasswordReset TokenType = "password_reset"

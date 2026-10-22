@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -17,7 +16,7 @@ import (
 	"github.com/ashandcompany/heros-sos/backend/internal/validation"
 )
 
-func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
+func discardLogger() *slog.Logger { return slog.New(slog.DiscardHandler) }
 
 func bufferLogger() (*slog.Logger, *bytes.Buffer) {
 	var buffer bytes.Buffer

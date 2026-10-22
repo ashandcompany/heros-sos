@@ -12,8 +12,8 @@ import {
 import { requireCitizenSession } from "@/lib/server-session";
 import {
   avatarErrorMessage,
-  contactErrorState,
-  emailChangeErrorMessage,
+  contactFailureState,
+  emailChangeFailureState,
   readContactValues,
   validateAvatar,
   validateContact,
@@ -42,15 +42,14 @@ export async function updateContactAction(
     mobilePhone: values.mobilePhone.replace(/[\s.-]/g, ""),
     address: {
       street: values.street,
-      // Chaîne vide : efface le complément (`null` le conserverait).
-      complement: values.complement,
+      complement: values.complement || null,
       postalCode: values.postalCode,
       city: values.city,
       country: values.country,
     },
   });
 
-  if (!result.ok) return contactErrorState(result, values);
+  if (!result.ok) return contactFailureState(result, values);
 
   revalidatePath(routes.profile);
   return { status: "success", message: "Vos coordonnées ont été mises à jour.", fieldErrors: {} };
@@ -68,7 +67,7 @@ export async function updateAvatarAction(
   if (error || !avatar) return { status: "error", fieldErrors: { avatar: error } };
 
   const result = await updateMyAvatar(token, avatar);
-  if (!result.ok) return { status: "error", fieldErrors: { avatar: avatarErrorMessage(result) } };
+  if (!result.ok) return { status: "error", message: avatarErrorMessage(result), fieldErrors: {} };
 
   revalidatePath(routes.profile);
   return {
@@ -89,19 +88,13 @@ export async function requestEmailChangeAction(
   if (error) return { status: "error", fieldErrors: { email: error }, values: { email } };
 
   const result = await requestEmailChange(token, email);
-  if (!result.ok) {
-    return {
-      status: "error",
-      fieldErrors: { email: emailChangeErrorMessage(result) },
-      values: { email },
-    };
-  }
+  if (!result.ok) return emailChangeFailureState(result, email);
 
   revalidatePath(routes.profile);
   return {
     status: "success",
     message:
-      "Demande envoyée : la nouvelle adresse sera active après validation par la modération.",
+      "Demande envoyée : un mail de confirmation vient d'être envoyé à la nouvelle adresse. Elle sera active une fois confirmée, puis validée par la modération.",
     fieldErrors: {},
   };
 }

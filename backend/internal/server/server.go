@@ -17,12 +17,12 @@ import (
 	"github.com/ashandcompany/heros-sos/backend/internal/audit"
 	"github.com/ashandcompany/heros-sos/backend/internal/auth"
 	"github.com/ashandcompany/heros-sos/backend/internal/avatar"
+	"github.com/ashandcompany/heros-sos/backend/internal/blog"
 	"github.com/ashandcompany/heros-sos/backend/internal/clock"
 	"github.com/ashandcompany/heros-sos/backend/internal/config"
 	"github.com/ashandcompany/heros-sos/backend/internal/contact"
 	"github.com/ashandcompany/heros-sos/backend/internal/crypto"
 	"github.com/ashandcompany/heros-sos/backend/internal/database"
-	"github.com/ashandcompany/heros-sos/backend/internal/blog"
 	"github.com/ashandcompany/heros-sos/backend/internal/film"
 	"github.com/ashandcompany/heros-sos/backend/internal/hero"
 	"github.com/ashandcompany/heros-sos/backend/internal/httpx"
@@ -63,6 +63,7 @@ type components struct {
 	villainHandler      *villain.Handler
 	typeHandler         *interventiontype.Handler
 
+	accountService    *account.Service
 	accountHandler    *account.Handler
 	avatarHandler     *avatar.Handler
 	contactHandler    *contact.Handler
@@ -159,23 +160,28 @@ func NewWithDB(cfg config.Config, logger *slog.Logger, db *gorm.DB, opts ...Opti
 		health: healthHandler{db: db, pingTimeout: cfg.Database.PingTimeout},
 	}
 
-	sessions := auth.NewSessionService(auth.NewSessionStore(db), c.clock, cfg.Session, logger)
+	sessions := auth.NewSessionService(auth.NewSessionStore(db), c.clock, cfg.Session, cfg.Security.MFA, logger)
 	cookies := auth.NewCookieManager(cfg.Session)
 	csrf := auth.NewCSRF(cfg.Security.CSRFSecret)
 
+	mfaStore := auth.NewMFAStore(db, sealer)
 	c.authService = auth.NewService(auth.ServiceDeps{
-		Users: c.users, Tokens: auth.NewTokenStore(db), Sessions: sessions,
+		Users: c.users, Tokens: auth.NewTokenStore(db), MFA: mfaStore, Sessions: sessions,
 		Hasher: auth.NewPasswordHasher(cfg.Security.Argon2), Mailer: mailService,
 		Audit: c.audit, Tx: c.tx, Clock: c.clock, Security: cfg.Security, App: cfg.App, Logger: logger,
 	})
 	c.authMiddleware = auth.NewMiddleware(sessions, cookies, csrf, cfg.HTTP.AllowedOrigins, logger)
 	c.authHandler = auth.NewHandler(auth.HandlerDeps{
-		Service: c.authService, Cookies: cookies, CSRF: csrf, Clock: c.clock, Logger: logger,
+		Service: c.authService, Cookies: cookies,
+		MFA: auth.NewMFAService(auth.MFADeps{
+			Store: mfaStore, Sessions: sessions, Users: c.users, Audit: c.audit, Tx: c.tx, Clock: c.clock,
+			Security: cfg.Security,
+		}), CSRF: csrf, Clock: c.clock, Logger: logger,
 		HTTP: cfg.HTTP, Limits: cfg.Security.RateLimits,
 	})
 	heroProfiles := hero.NewRepository(db)
 	c.heroHandler = hero.NewHandler(
-		hero.NewService(heroProfiles, c.users, c.audit, c.tx, c.clock), logger, cfg.HTTP)
+		hero.NewService(heroProfiles, c.users, c.audit, c.tx, c.clock), logger, cfg.HTTP, APIPrefix+avatarRoutePrefix)
 	c.moderationHandler = moderation.NewHandler(
 		moderation.NewService(c.users, sessions, c.audit, c.tx, c.clock), logger)
 
@@ -212,13 +218,16 @@ func NewWithDB(cfg config.Config, logger *slog.Logger, db *gorm.DB, opts ...Opti
 	c.newsletterHandler = newsletter.NewHandler(newsletter.HandlerDeps{
 		Service: c.newsletterService, Logger: logger, HTTP: cfg.HTTP, Limits: cfg.Security.RateLimits, Clock: c.clock,
 	})
+	c.accountService = account.NewService(account.ServiceDeps{
+		Users: c.users, Heroes: heroProfiles, Changes: account.NewEmailChangeRepository(db),
+		Newsletter: c.newsletterService, Avatars: avatars, Mailer: mailService, Links: links, App: cfg.App,
+		EmailChangeConfirmTTL: cfg.Security.Tokens.EmailChangeConfirmTTL,
+		Audit:                 c.audit, Tx: c.tx, Clock: c.clock,
+		AvatarMaxDimension: cfg.Avatar.MaxDimension, Logger: logger,
+	})
 	c.accountHandler = account.NewHandler(account.HandlerDeps{
-		Service: account.NewService(account.ServiceDeps{
-			Users: c.users, Heroes: heroProfiles, Changes: account.NewEmailChangeRepository(db),
-			Newsletter: c.newsletterService, Avatars: avatars, Audit: c.audit, Tx: c.tx, Clock: c.clock,
-			AvatarMaxDimension: cfg.Avatar.MaxDimension, Logger: logger,
-		}),
-		Logger: logger, HTTP: cfg.HTTP, Limits: cfg.Security.RateLimits, Clock: c.clock,
+		Service: c.accountService,
+		Logger:  logger, HTTP: cfg.HTTP, Limits: cfg.Security.RateLimits, Clock: c.clock,
 		Avatar: cfg.Avatar, AvatarURLPrefix: APIPrefix + avatarRoutePrefix,
 	})
 	c.avatarHandler = avatar.NewHandler(avatars, logger)
@@ -341,25 +350,64 @@ func (s *Server) runJanitor(ctx context.Context) {
 	}
 }
 
+// purgeTask est une purge périodique : ce qu'elle supprime, et les messages de son journal.
+type purgeTask struct {
+	run            func(ctx context.Context) (int64, error)
+	failureMessage string
+	successMessage string
+	countAttribute string
+}
+
+// cleanup fait un passage de nettoyage, borné par HEROS_CLEANUP_TIMEOUT : une requête bloquée ne doit pas
+// immobiliser la tâche. Un échec n'empêche pas les purges suivantes.
 func (s *Server) cleanup(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, s.cfg.Jobs.CleanupTimeout)
+	defer cancel()
+
 	c := s.components
 	c.authHandler.SweepLimiters()
 	c.incidentHandler.SweepLimiters()
 	c.accountHandler.SweepLimiters()
 	c.newsletterHandler.SweepLimiters()
 	c.contactHandler.SweepLimiters()
-	// Une adresse jamais confirmée n'est pas conservée plus longtemps qu'un jeton périmé.
-	if purged, err := c.newsletterService.PurgeStale(ctx, s.cfg.Jobs.TokenRetention); err != nil {
-		s.logger.ErrorContext(ctx, "purge des abonnements non confirmés en échec", "error", err)
-	} else if purged > 0 {
-		s.logger.InfoContext(ctx, "abonnements non confirmés purgés", "abonnements_supprimes", purged)
+
+	tokenRetention := s.cfg.Jobs.TokenRetention
+	for _, task := range []purgeTask{
+		// Une adresse jamais confirmée n'est pas conservée plus longtemps qu'un jeton périmé.
+		{
+			run:            func(ctx context.Context) (int64, error) { return c.newsletterService.PurgeStale(ctx, tokenRetention) },
+			failureMessage: "purge des abonnements non confirmés en échec",
+			successMessage: "abonnements non confirmés purgés", countAttribute: "abonnements_supprimes",
+		},
+		// Une demande de changement d'adresse jamais confirmée ne peut plus aboutir une fois son lien expiré.
+		{
+			run: func(ctx context.Context) (int64, error) {
+				return c.accountService.PurgeStaleEmailChanges(ctx, tokenRetention)
+			},
+			failureMessage: "purge des changements d'adresse non confirmés en échec",
+			successMessage: "changements d'adresse non confirmés purgés", countAttribute: "demandes_supprimees",
+		},
+	} {
+		s.purge(ctx, task)
 	}
-	sessions, tokens, err := c.authService.Cleanup(ctx, s.cfg.Jobs.SessionRetention, s.cfg.Jobs.TokenRetention)
+
+	sessions, tokens, err := c.authService.Cleanup(ctx, s.cfg.Jobs.SessionRetention, tokenRetention)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "nettoyage périodique en échec", "error", err)
 		return
 	}
 	if sessions > 0 || tokens > 0 {
 		s.logger.InfoContext(ctx, "nettoyage périodique", "sessions_supprimees", sessions, "jetons_supprimes", tokens)
+	}
+}
+
+func (s *Server) purge(ctx context.Context, task purgeTask) {
+	purged, err := task.run(ctx)
+	if err != nil {
+		s.logger.ErrorContext(ctx, task.failureMessage, "error", err)
+		return
+	}
+	if purged > 0 {
+		s.logger.InfoContext(ctx, task.successMessage, task.countAttribute, purged)
 	}
 }

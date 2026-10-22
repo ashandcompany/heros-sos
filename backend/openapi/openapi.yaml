@@ -247,7 +247,7 @@ paths:
         110 m, conservée en clair 30 minutes au plus (`HEROS_LOCATION_TTL`) puis supprimée, et n'est relue par aucune
         route : le serveur s'en sert seulement pour prévenir les héros à proximité (`HEROS_ALERT_RADIUS_KM`, 10 km par
         défaut) d'un nouvel incident avec coordonnées. Sans héros proche, ou sans coordonnées, tous les héros actifs
-        sont prévenus.
+        sont prévenus. Limité à 60 envois par heure et par héros (`HEROS_RATE_HERO_LOCATION_PER_USER`).
       operationId: saveHeroLocation
       security: [{ sessionCookie: [], csrfToken: [] }]
       requestBody:
@@ -270,6 +270,7 @@ paths:
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "500": { $ref: "#/components/responses/InternalError" }
     delete:
       tags: [Super-héros]

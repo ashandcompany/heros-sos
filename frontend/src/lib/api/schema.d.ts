@@ -94,7 +94,7 @@ export interface paths {
         get?: never;
         /**
          * Partager sa position actuelle
-         * @description Réservé aux super-héros. Remplace la position actuelle du héros (aucun historique). Elle est arrondie à environ 110 m, conservée en clair 30 minutes au plus (`HEROS_LOCATION_TTL`) puis supprimée, et n'est relue par aucune route : le serveur s'en sert seulement pour prévenir les héros à proximité (`HEROS_ALERT_RADIUS_KM`, 10 km par défaut) d'un nouvel incident avec coordonnées. Sans héros proche, ou sans coordonnées, tous les héros actifs sont prévenus.
+         * @description Réservé aux super-héros. Remplace la position actuelle du héros (aucun historique). Elle est arrondie à environ 110 m, conservée en clair 30 minutes au plus (`HEROS_LOCATION_TTL`) puis supprimée, et n'est relue par aucune route : le serveur s'en sert seulement pour prévenir les héros à proximité (`HEROS_ALERT_RADIUS_KM`, 10 km par défaut) d'un nouvel incident avec coordonnées. Sans héros proche, ou sans coordonnées, tous les héros actifs sont prévenus. Limité à 60 envois par heure et par héros (`HEROS_RATE_HERO_LOCATION_PER_USER`).
          */
         put: operations["saveHeroLocation"];
         post?: never;
@@ -3499,6 +3499,7 @@ export interface operations {
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
         };
     };

@@ -82,7 +82,8 @@ Règles :
 - **Pas d'historique :** chaque mise à jour remplace la précédente (upsert sur `hero_id`), on ne garde aucune trace des déplacements. Les coordonnées sont arrondies à 3 décimales (~110 m) avant stockage.
 - **Qui voit quoi :** seul le serveur lit la position (pour choisir les héros à prévenir). Aucune route ne la renvoie, ni aux citoyens, ni aux autres héros, ni aux modérateurs.
 - **Limite du web :** un site ne lit la position qu'au premier plan, donc elle n'est à jour que tant que l'espace héros est ouvert.
-- **Alerte de proximité :** à la déclaration d'un incident, le mail du §4.3.3 part aux modérateurs, plus aux héros dont la position est fraîche et à moins de 10 km (`HEROS_ALERT_RADIUS_KM`) si l'incident a des coordonnées. Sans héros proche, ou sans coordonnées, tous les héros actifs sont prévenus.
+- **Alerte de proximité :** à la déclaration d'un incident, le mail du §4.3.3 part aux modérateurs, plus aux héros dont la position est fraîche et à moins de 10 km (`HEROS_ALERT_RADIUS_KM`) si l'incident a des coordonnées ; leur mail précise qu'il a été signalé à moins de 10 km de leur dernière position partagée. Sans héros proche, ou sans coordonnées, tous les héros actifs sont prévenus, sans cette mention.
+- **Débit :** `PUT /hero/location` est limité à 60 envois par heure et par héros (`HEROS_RATE_HERO_LOCATION_PER_USER`) ; l'espace héros en envoie un toutes les 5 minutes et au retour sur l'onglet.
 - **Requête :** pré-filtre par rectangle sur `(latitude, longitude)`, puis distance de Haversine en SQL. PostGIS ne serait utile qu'avec beaucoup de héros.
 
 ## `sessions`

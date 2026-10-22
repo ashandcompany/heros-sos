@@ -2,6 +2,7 @@ package server_test
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,6 +36,16 @@ func (e *e2e) recipientsSince(before int) map[string]bool {
 		recipients[message.To] = true
 	}
 	return recipients
+}
+
+// nearbyMentionsSince retourne, par destinataire, si son mail d'incident cite la proximité.
+func (e *e2e) nearbyMentionsSince(before int) map[string]bool {
+	mentions := map[string]bool{}
+	for _, message := range e.mailer.Messages()[before:] {
+		mentions[message.To] = strings.Contains(message.Text, "à moins de 10 km de votre dernière position") &&
+			strings.Contains(message.HTML, "à moins de 10 km")
+	}
+	return mentions
 }
 
 func TestHeroLocationIsSharedReplacedAndCleared(t *testing.T) {
@@ -114,6 +125,28 @@ func TestHeroLocationIsSharedReplacedAndCleared(t *testing.T) {
 	}
 }
 
+func TestHeroLocationIsRateLimitedPerHero(t *testing.T) {
+	e := newE2E(t, map[string]string{"HEROS_RATE_HERO_LOCATION_PER_USER": "2/1h"})
+	moderator := e.newModerator("fury@shield.example")
+	hero := e.approvedHero(moderator, "hero@example.org", "Hero")
+	other := e.approvedHero(moderator, "other@example.org", "Other")
+	hero.consentToLocation(t)
+	other.consentToLocation(t)
+
+	for range 2 {
+		if got := hero.shareLocation(45.7, 4.8); got.status != http.StatusNoContent {
+			t.Fatalf("envoi sous la limite : %d %s", got.status, got.body)
+		}
+	}
+	if got := hero.shareLocation(45.7, 4.8); got.status != http.StatusTooManyRequests {
+		t.Errorf("envoi au-delà de la limite : %d %s", got.status, got.body)
+	}
+	// La limite est propre à chaque héros.
+	if got := other.shareLocation(45.7, 4.8); got.status != http.StatusNoContent {
+		t.Errorf("un autre héros n'est pas limité : %d %s", got.status, got.body)
+	}
+}
+
 func TestIncidentAlertsNearbyHeroesThenFallsBackToAll(t *testing.T) {
 	e := newE2E(t, nil)
 	reporter := e.signUpAndLogin("reporter@example.org")
@@ -139,6 +172,10 @@ func TestIncidentAlertsNearbyHeroesThenFallsBackToAll(t *testing.T) {
 	if len(got) != 2 || !got["fury@shield.example"] || !got["near@example.org"] {
 		t.Errorf("seuls le modérateur et le héros proche sont prévenus : %v", got)
 	}
+	// Seul le héros proche est informé qu'il est prévenu pour sa position.
+	if mentions := e.nearbyMentionsSince(before); !mentions["near@example.org"] || mentions["fury@shield.example"] {
+		t.Errorf("mention de la proximité : %v", mentions)
+	}
 
 	// Une position périmée n'est plus prise en compte : repli sur tous les héros.
 	e.clock.Advance(31 * time.Minute)
@@ -148,6 +185,11 @@ func TestIncidentAlertsNearbyHeroesThenFallsBackToAll(t *testing.T) {
 	got = e.recipientsSince(before)
 	if len(got) != 4 {
 		t.Errorf("repli sur tous les héros : %v", got)
+	}
+	for to, mentioned := range e.nearbyMentionsSince(before) {
+		if mentioned {
+			t.Errorf("un repli ne parle pas de proximité : %s", to)
+		}
 	}
 
 	// Sans coordonnées : tous les héros.

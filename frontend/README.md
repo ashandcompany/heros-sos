@@ -15,6 +15,8 @@ npm run dev
 | `npm run dev`             | Serveur de développement                                                 |
 | `npm run build`           | Build de production                                                      |
 | `npm run lint`            | ESLint                                                                   |
+| `npm test`                | Tests unitaires (Vitest)                                                 |
+| `npm run test:e2e`        | Parcours dans le navigateur (Playwright), sur un build en mode mock      |
 | `npm run format`          | Formate le code avec Prettier                                            |
 | `npm run format:check`    | Vérifie le formatage (CI)                                                |
 | `npm run api:types`       | Régénère `src/lib/api/schema.d.ts` depuis `backend/openapi/openapi.yaml` |
@@ -64,10 +66,11 @@ passe `Avengers2026!` (ex. `admin@heros-sos.local`).
 Copier `.env.example` vers `.env.local` (jamais versionné). Next.js ne charge les variables qu'au
 démarrage : redémarrer `npm run dev` après modification.
 
-| Variable   | Obligatoire | Défaut                 | Lue par                                   | Rôle                                                                                             |
-| ---------- | ----------- | ---------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `API_URL`  | Non         | vide → données mockées | `src/lib/api/config.ts`                   | Base de l'API Go **avec son préfixe**, ex : `http://localhost:8081/api/v1`                       |
-| `NODE_ENV` | Non         | défini par Next        | `lib/cookies.ts`, `actions/newsletter.ts` | `production` : cookies `secure`, cookie de session `__Host-session`. Ne pas le définir à la main |
+| Variable   | Obligatoire | Défaut                  | Lue par                                   | Rôle                                                                                                       |
+| ---------- | ----------- | ----------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `API_URL`  | Non         | vide → données mockées  | `src/lib/api/config.ts`                   | Base de l'API Go **avec son préfixe**, ex : `http://localhost:8081/api/v1`                                 |
+| `NODE_ENV` | Non         | défini par Next         | `lib/cookies.ts`, `actions/newsletter.ts` | `production` : cookies `secure`, cookie de session `__Host-session`. Ne pas le définir à la main           |
+| `SITE_URL` | En prod     | `http://localhost:3000` | `src/lib/site.ts`                         | URL publique du site : liens absolus du sitemap, de robots.txt et des aperçus Open Graph. Lue au démarrage |
 
 - `API_URL` est lue **par le serveur, au démarrage** : elle n'est jamais envoyée au navigateur et
   n'est pas figée au build (la même image Docker sert dans tous les environnements). Dans la pile

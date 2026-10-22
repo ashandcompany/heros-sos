@@ -310,6 +310,21 @@ modification du texte.
 
 Public (sans session). `sendContactMessage` envoie le message par mail à l'équipe via l'API (limité par IP) ; mocké sans `API_URL`, rien n'est alors envoyé.
 
+### Référencement : sitemap, robots.txt, Open Graph
+
+- `src/app/robots.ts` et `src/app/sitemap.ts` (pages publiques, articles publiés, fiches de
+  l'encyclopédie) sont rendus **à la requête** (`await connection()`) : `SITE_URL`
+  ([src/lib/site.ts](../src/lib/site.ts)) et les données sont lues au démarrage, jamais figées
+  au build. Une liste indisponible (API injoignable) est omise du sitemap.
+- Aperçus Open Graph générés (`opengraph-image.tsx`, gabarit commun
+  [src/lib/og.tsx](../src/lib/og.tsx)) pour les articles et les fiches de héros et de vilains.
+  Leurs `generateMetadata` posent `metadataBase` (depuis `SITE_URL`), `openGraph` et l'URL
+  canonique.
+- **Pas d'image par défaut à la racine** : le `metadata` du layout racine est évalué au build,
+  où `SITE_URL` n'est pas connue. Une image racine aurait une URL `http://localhost:3000` sur
+  toutes les pages statiques. Pour l'ajouter, il faudrait figer `SITE_URL` au build (argument
+  Docker) et poser `metadataBase` dans le layout racine.
+
 ## Checklists
 
 ### Ajouter une page protégée

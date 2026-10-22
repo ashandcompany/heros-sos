@@ -14,15 +14,24 @@ import {
 } from "@/lib/api";
 import { dossierNumber } from "@/lib/dossier";
 import { formatDate, formatInteger, formatLocation } from "@/lib/format";
-import { routes, villainSheetRoute } from "@/lib/routes";
+import { heroSheetRoute, routes, villainSheetRoute } from "@/lib/routes";
+import { getSiteUrl } from "@/lib/site";
 
 export async function generateMetadata({
   params,
 }: PageProps<"/encyclopedie/super-heros/[id]">): Promise<Metadata> {
   const hero = await getSuperHero((await params).id);
-  return hero
-    ? { title: hero.alias, description: `${hero.alias} : ${hero.power}.` }
-    : { title: "Super-héros introuvable" };
+  if (!hero) return { title: "Super-héros introuvable" };
+
+  const description = `${hero.alias} : ${hero.power}.`;
+  // Rendu à la requête (paramètre d'URL) : SITE_URL n'est pas figée au build.
+  return {
+    metadataBase: new URL(getSiteUrl()),
+    title: hero.alias,
+    description,
+    alternates: { canonical: heroSheetRoute(hero.id) },
+    openGraph: { type: "profile", title: hero.alias, description },
+  };
 }
 
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {

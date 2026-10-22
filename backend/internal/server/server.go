@@ -183,7 +183,7 @@ func NewWithDB(cfg config.Config, logger *slog.Logger, db *gorm.DB, opts ...Opti
 	c.heroHandler = hero.NewHandler(
 		hero.NewService(heroProfiles, c.users, c.audit, c.tx, c.clock), logger, cfg.HTTP, APIPrefix+avatarRoutePrefix)
 	c.moderationHandler = moderation.NewHandler(
-		moderation.NewService(c.users, sessions, c.audit, c.tx, c.clock), logger)
+		moderation.NewService(c.users, sessions, c.audit, c.tx, c.clock), moderation.NewSummaryStore(db), logger)
 
 	types := interventiontype.NewRepository(db)
 	c.blogHandler = blog.NewHandler(

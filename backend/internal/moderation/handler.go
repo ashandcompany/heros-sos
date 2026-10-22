@@ -25,12 +25,13 @@ const (
 // Handler expose les endpoints de modération des comptes.
 type Handler struct {
 	service *Service
+	summary *SummaryStore
 	logger  *slog.Logger
 }
 
 // NewHandler crée les handlers.
-func NewHandler(service *Service, logger *slog.Logger) *Handler {
-	return &Handler{service: service, logger: logger}
+func NewHandler(service *Service, summary *SummaryStore, logger *slog.Logger) *Handler {
+	return &Handler{service: service, summary: summary, logger: logger}
 }
 
 // UserSummary est un compte vu par un modérateur.

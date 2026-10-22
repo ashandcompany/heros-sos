@@ -18,6 +18,9 @@ import (
 	"github.com/ashandcompany/heros-sos/backend/internal/villain"
 )
 
+// CodeAlreadyExists est le code d'erreur d'une déclaration dont l'identifiant existe déjà.
+const CodeAlreadyExists = "incident_already_exists"
+
 // HandlerDeps regroupe les dépendances du handler.
 type HandlerDeps struct {
 	Service *Service
@@ -45,13 +48,14 @@ func NewHandler(deps HandlerDeps) *Handler {
 func (h *Handler) SweepLimiters() { h.createPerUser.Sweep() }
 
 type createPayload struct {
-	TypeID          int16    `json:"typeId"`
-	Title           string   `json:"title"`
-	Description     string   `json:"description"`
-	CitizensRescued int16    `json:"citizensRescued"`
-	Location        location `json:"location"`
-	OccurredAt      *string  `json:"occurredAt"`
-	VillainIDs      []string `json:"villainIds"`
+	ID              *uuid.UUID `json:"id"`
+	TypeID          int16      `json:"typeId"`
+	Title           string     `json:"title"`
+	Description     string     `json:"description"`
+	CitizensRescued int16      `json:"citizensRescued"`
+	Location        location   `json:"location"`
+	OccurredAt      *string    `json:"occurredAt"`
+	VillainIDs      []string   `json:"villainIds"`
 }
 
 type location struct {
@@ -171,6 +175,29 @@ func parseListFilter(r *http.Request) (ListFilter, error) {
 	return filter, nil
 }
 
+// parseCursorParam lit le paramètre cursor. Il remplace offset : les deux ensemble n'ont pas de sens.
+func parseCursorParam(r *http.Request) (*Cursor, error) {
+	query := r.URL.Query()
+	raw := query.Get("cursor")
+	if raw == "" {
+		return nil, nil
+	}
+	invalid := func(field string) error {
+		return &httpx.Error{
+			Status: http.StatusUnprocessableEntity, Code: httpx.CodeValidationFailed,
+			Message: "Certains paramètres sont invalides.", Fields: map[string]string{field: "invalid"},
+		}
+	}
+	if query.Has("offset") {
+		return nil, invalid("offset")
+	}
+	cursor, err := ParseCursor(raw)
+	if err != nil {
+		return nil, invalid("cursor")
+	}
+	return &cursor, nil
+}
+
 // List traite GET /incidents.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	principal, _ := auth.PrincipalFrom(r.Context())
@@ -184,6 +211,10 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
+	if filter.After, err = parseCursorParam(r); err != nil {
+		h.fail(w, r, err)
+		return
+	}
 	if principal.Role == user.RoleCitizen {
 		if filter.ReporterID != nil && *filter.ReporterID != principal.UserID {
 			h.fail(w, r, httpx.Forbidden("Vous ne pouvez consulter que vos propres signalements."))
@@ -191,16 +222,20 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		}
 		filter.ReporterID = &principal.UserID
 	}
-	incidents, total, err := h.Service.List(r.Context(), filter, page.Limit, page.Offset)
+	result, err := h.Service.List(r.Context(), filter, page.Limit, page.Offset)
 	if err != nil {
 		h.fail(w, r, err)
 		return
 	}
-	items := make([]Response, len(incidents))
-	for i, item := range incidents {
+	items := make([]Response, len(result.Items))
+	for i, item := range result.Items {
 		items[i] = newResponse(item)
 	}
-	httpx.WriteJSON(w, http.StatusOK, httpx.NewPageResponse(items, total, page))
+	var next string
+	if result.Next != nil {
+		next = result.Next.String()
+	}
+	httpx.WriteJSON(w, http.StatusOK, httpx.NewCursorPageResponse(items, result.Total, page, next))
 }
 
 // Get traite GET /incidents/{id}.
@@ -239,6 +274,16 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	if body.OccurredAt != nil {
 		in.OccurredAt = *body.OccurredAt
 	}
+	if body.ID != nil {
+		if *body.ID == uuid.Nil {
+			h.fail(w, r, &httpx.Error{
+				Status: http.StatusUnprocessableEntity, Code: httpx.CodeValidationFailed,
+				Message: "Certains champs sont invalides.", Fields: map[string]string{"id": "invalid"},
+			})
+			return
+		}
+		in.ID = *body.ID
+	}
 
 	created, err := h.Service.Create(r.Context(), principal.UserID, in, httpx.ClientIPFrom(r.Context()))
 	if err != nil {
@@ -252,6 +297,8 @@ func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, ErrNotFound):
 		err = httpx.NotFound("Incident introuvable.")
+	case errors.Is(err, ErrAlreadyExists):
+		err = httpx.Conflict(CodeAlreadyExists, "Un incident porte déjà cet identifiant.")
 	case errors.Is(err, ErrHeroNotFound):
 		err = httpx.NotFound("Super-héros introuvable.")
 	case errors.Is(err, villain.ErrNotFound):

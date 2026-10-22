@@ -24,6 +24,7 @@ func registerRoutes(router *Router, c *components) {
 	registerAccountRoutes(router, c)
 	registerPublicMailRoutes(router, c)
 	registerBlogRoutes(router, c)
+	registerEventRoutes(router, c)
 }
 
 // protected exige une session valide et complète (double authentification validée quand elle s'applique) et

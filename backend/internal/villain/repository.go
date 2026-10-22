@@ -205,10 +205,11 @@ func (r *gormRepository) List(ctx context.Context, aliasPrefix string, limit, of
 }
 
 func (r *gormRepository) viewQuery(ctx context.Context) *gorm.DB {
+	// Le nombre d'incidents est un compteur (villain_stats, tenu à jour par des triggers) : l'agréger sur
+	// incident_villains lisait des millions de lignes à chaque liste.
 	return r.conn(ctx).Table(tableVillains).
-		Select("villains.*, COUNT(incident_villains.incident_id) AS reported_incidents_count").
-		Joins("LEFT JOIN incident_villains ON incident_villains.villain_id = villains.id").
-		Group("villains.id")
+		Select("villains.*, COALESCE(villain_stats.incidents, 0) AS reported_incidents_count").
+		Joins("LEFT JOIN villain_stats ON villain_stats.villain_id = villains.id")
 }
 
 // withSpecialties renseigne TypeIDs (par identifiant) et Specialties (par libellé) des vilains,

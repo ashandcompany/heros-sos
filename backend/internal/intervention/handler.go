@@ -11,6 +11,7 @@ import (
 
 	"github.com/ashandcompany/heros-sos/backend/internal/auth"
 	"github.com/ashandcompany/heros-sos/backend/internal/config"
+	"github.com/ashandcompany/heros-sos/backend/internal/events"
 	"github.com/ashandcompany/heros-sos/backend/internal/httpx"
 )
 
@@ -26,6 +27,7 @@ const (
 	CodeOutcomeProposed     = "intervention_outcome_already_proposed"
 	CodeOutcomeVoted        = "intervention_outcome_already_validated"
 	CodeNoDispute           = "intervention_dispute_not_found"
+	CodeVersionConflict     = "intervention_version_conflict"
 )
 
 // Handler expose les routes du cycle d'intervention.
@@ -47,15 +49,19 @@ type invitePayload struct {
 type outcomePayload struct {
 	Status string `json:"status"`
 	Notes  string `json:"notes"`
+	// ExpectedVersion, facultative, est la version lue par le client : si l'intervention a changé depuis, 409.
+	ExpectedVersion *int `json:"expectedVersion"`
 }
 
 type outcomeValidationPayload struct {
-	Approved *bool `json:"approved"`
+	Approved        *bool `json:"approved"`
+	ExpectedVersion *int  `json:"expectedVersion"`
 }
 
 type Response struct {
 	ID             uuid.UUID         `json:"id"`
 	IncidentID     uuid.UUID         `json:"incidentId"`
+	Version        int               `json:"version"`
 	Status         string            `json:"status"`
 	ProposedStatus *string           `json:"proposedStatus,omitempty"`
 	ProposedBy     *uuid.UUID        `json:"proposedBy,omitempty"`
@@ -94,7 +100,7 @@ func responseFrom(in *Intervention) Response {
 		proposed = &value
 	}
 	return Response{
-		ID: in.ID, IncidentID: in.IncidentID, Status: string(in.Status), ProposedStatus: proposed,
+		ID: in.ID, IncidentID: in.IncidentID, Version: in.Version, Status: string(in.Status), ProposedStatus: proposed,
 		ProposedBy: in.ProposedBy, DecidedBy: in.DecidedBy, Notes: in.Notes,
 		StartedAt: in.StartedAt, EndedAt: in.EndedAt, Participants: participants,
 	}
@@ -209,7 +215,7 @@ func (h *Handler) ProposeOutcome(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	if err := h.service.ProposeOutcome(r.Context(), principal.UserID, id, Status(body.Status), body.Notes, clientIP(r)); err != nil {
+	if err := h.service.ProposeOutcome(r.Context(), principal.UserID, id, Status(body.Status), body.Notes, body.ExpectedVersion, clientIP(r)); err != nil {
 		h.fail(w, r, err)
 		return
 	}
@@ -235,7 +241,7 @@ func (h *Handler) ValidateOutcome(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if err := h.service.ValidateOutcome(r.Context(), principal.UserID, id, *body.Approved, clientIP(r)); err != nil {
+	if err := h.service.ValidateOutcome(r.Context(), principal.UserID, id, *body.Approved, body.ExpectedVersion, clientIP(r)); err != nil {
 		h.fail(w, r, err)
 		return
 	}
@@ -282,6 +288,8 @@ func toHTTPError(err error) error {
 	switch {
 	case errors.Is(err, ErrNotFound):
 		return httpx.NotFound("Intervention introuvable.")
+	case errors.Is(err, events.ErrVersionConflict):
+		return httpx.Conflict(CodeVersionConflict, "L'intervention a changé depuis la version que vous avez lue.")
 	case errors.Is(err, ErrIncidentNotAvailable):
 		return httpx.Conflict(CodeIncidentUnavailable, "Cet incident ne peut pas recevoir d'intervention.")
 	case errors.Is(err, ErrHeroNotApproved):

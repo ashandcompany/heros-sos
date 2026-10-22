@@ -12,6 +12,10 @@ import (
 
 var ErrNotFound = errors.New("incident : incident introuvable")
 
+// ErrAlreadyExists indique qu'un incident porte déjà l'identifiant fourni par le client. Rejouer une déclaration
+// faite hors ligne (même identifiant) tombe ici quand la clé d'idempotence ne l'a pas déjà absorbée.
+var ErrAlreadyExists = errors.New("incident : un incident porte déjà cet identifiant")
+
 // Status est l'état d'un incident.
 type Status string
 

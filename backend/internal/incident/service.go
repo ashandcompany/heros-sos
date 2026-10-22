@@ -13,6 +13,7 @@ import (
 	"github.com/ashandcompany/heros-sos/backend/internal/audit"
 	"github.com/ashandcompany/heros-sos/backend/internal/clock"
 	"github.com/ashandcompany/heros-sos/backend/internal/database"
+	"github.com/ashandcompany/heros-sos/backend/internal/events"
 	"github.com/ashandcompany/heros-sos/backend/internal/ids"
 	"github.com/ashandcompany/heros-sos/backend/internal/interventiontype"
 	"github.com/ashandcompany/heros-sos/backend/internal/user"
@@ -51,6 +52,7 @@ type ServiceDeps struct {
 	Users    user.Repository
 	Notifier Notifier
 	Audit    audit.Recorder
+	Events   events.Recorder
 	Tx       database.Transactor
 	Clock    clock.Clock
 	Logger   *slog.Logger
@@ -66,6 +68,9 @@ func NewService(deps ServiceDeps) *Service { return &Service{ServiceDeps: deps} 
 
 // CreateInput est la saisie d'une déclaration (valeurs brutes, non validées).
 type CreateInput struct {
+	// ID est l'identifiant choisi par le client (uuid.Nil : le serveur le choisit). Un appareil hors ligne le
+	// fixe à la déclaration pour reconnaître son incident une fois synchronisé.
+	ID                uuid.UUID
 	TypeID            int16
 	Title             string
 	Description       string
@@ -90,12 +95,22 @@ func (s *Service) Create(ctx context.Context, reporterID uuid.UUID, in CreateInp
 	if err != nil {
 		return nil, err
 	}
-	created.ID, created.ReporterID, created.Status = ids.New(), reporterID, StatusReported
+	created.ID, created.ReporterID, created.Status = in.ID, reporterID, StatusReported
+	if created.ID == uuid.Nil {
+		created.ID = ids.New()
+	}
 	created.Priority = PriorityNormal
 	created.CreatedAt, created.UpdatedAt = now, now
 
 	err = s.Tx.WithinTx(ctx, func(ctx context.Context) error {
+		// En premier : voir events.Recorder.Lock.
+		if err := s.Events.Lock(ctx); err != nil {
+			return err
+		}
 		if err := s.Repo.Create(ctx, created); err != nil {
+			return err
+		}
+		if _, err := s.Events.Append(ctx, declaredEvent(created, reporterID)); err != nil {
 			return err
 		}
 		return s.Audit.Record(ctx, audit.Entry{
@@ -108,6 +123,21 @@ func (s *Service) Create(ctx context.Context, reporterID uuid.UUID, in CreateInp
 	}
 	s.notify(ctx, created)
 	return created, nil
+}
+
+// declaredEvent est l'événement d'une déclaration : des identifiants et des états, ni description ni adresse.
+func declaredEvent(created *Incident, reporterID uuid.UUID) events.Event {
+	villainIDs := make([]string, len(created.VillainIDs))
+	for i, id := range created.VillainIDs {
+		villainIDs[i] = id.String()
+	}
+	return events.Event{
+		Type: events.IncidentDeclared, AggregateType: events.AggregateIncident, AggregateID: created.ID, IncidentID: created.ID,
+		ActorID: &reporterID,
+		Payload: map[string]any{
+			"typeId": created.TypeID, "priority": string(created.Priority), "city": created.City, "villainIds": villainIDs,
+		},
+	}
 }
 
 func (s *Service) validate(ctx context.Context, in CreateInput, now time.Time) (*Incident, error) {
@@ -206,8 +236,8 @@ func (s *Service) resolveVillains(ctx context.Context, rawIDs []string, created 
 	return nil
 }
 
-// List retourne les incidents (résolus ou non) correspondant au filtre, les plus récents d'abord.
-func (s *Service) List(ctx context.Context, filter ListFilter, limit, offset int) ([]Incident, int64, error) {
+// List retourne une page des incidents (résolus ou non) correspondant au filtre, les plus récents d'abord.
+func (s *Service) List(ctx context.Context, filter ListFilter, limit, offset int) (ListResult, error) {
 	return s.Repo.List(ctx, filter, limit, offset)
 }
 

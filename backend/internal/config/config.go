@@ -69,6 +69,7 @@ type Config struct {
 	Avatar      Avatar
 	App         App
 	Jobs        Jobs
+	Proximity   Proximity
 }
 
 // OMDb regroupe les réglages du catalogue de films.
@@ -322,6 +323,14 @@ type Jobs struct {
 	TokenRetention   time.Duration
 }
 
+// Proximity regroupe les réglages de la localisation des héros.
+type Proximity struct {
+	// LocationTTL : au-delà, une position n'est plus utilisée pour l'alerte et elle est purgée.
+	LocationTTL time.Duration
+	// AlertRadiusKm : rayon autour d'un incident dans lequel les héros sont prévenus.
+	AlertRadiusKm int
+}
+
 // IsProduction indique si l'application tourne en production.
 func (c Config) IsProduction() bool {
 	return c.Environment == EnvironmentProduction
@@ -449,6 +458,10 @@ func Load(getenv func(string) string) (Config, error) {
 			CleanupTimeout:   l.duration(envCleanupTimeout, defaultCleanupTimeout),
 			SessionRetention: l.duration(envSessionRetention, defaultSessionRetention),
 			TokenRetention:   l.duration(envTokenRetention, defaultTokenRetention),
+		},
+		Proximity: Proximity{
+			LocationTTL:   l.duration(envLocationTTL, defaultLocationTTL),
+			AlertRadiusKm: l.positiveInt(envAlertRadiusKm, defaultAlertRadiusKm),
 		},
 	}
 

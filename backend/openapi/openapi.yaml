@@ -238,6 +238,79 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "500": { $ref: "#/components/responses/InternalError" }
 
+  /hero/location:
+    put:
+      tags: [Super-héros]
+      summary: Partager sa position actuelle
+      description: >-
+        Réservé aux super-héros. Remplace la position actuelle du héros (aucun historique). Elle est arrondie à environ
+        110 m, conservée en clair 30 minutes au plus (`HEROS_LOCATION_TTL`) puis supprimée, et n'est relue par aucune
+        route : le serveur s'en sert seulement pour prévenir les héros à proximité (`HEROS_ALERT_RADIUS_KM`, 10 km par
+        défaut) d'un nouvel incident avec coordonnées. Sans héros proche, ou sans coordonnées, tous les héros actifs
+        sont prévenus.
+      operationId: saveHeroLocation
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [latitude, longitude]
+              properties:
+                latitude: { type: number, format: double, minimum: -90, maximum: 90 }
+                longitude: { type: number, format: double, minimum: -180, maximum: 180 }
+                accuracyM: { type: integer, minimum: 0, description: Précision de la mesure en mètres (facultatif). }
+      responses:
+        "204": { description: Position enregistrée. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { description: "Consentement absent (`hero_location_consent_required`)." }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    delete:
+      tags: [Super-héros]
+      summary: Cesser de partager sa position
+      description: Réservé aux super-héros. Supprime la position du héros en conservant son consentement (pour retirer le consentement, voir `/hero/location/consent`); sans position enregistrée, ne fait rien.
+      operationId: deleteHeroLocation
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      responses:
+        "204": { description: Position supprimée. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /hero/location/consent:
+    put:
+      tags: [Super-héros]
+      summary: Consentir au partage de sa position
+      description: >-
+        Réservé aux super-héros. Enregistre (avec sa date) le consentement explicite du héros au partage de sa position;
+        déjà consenti, la date d'origine est conservée. `PUT /hero/location` est refusé (409) tant que ce consentement
+        n'est pas donné.
+      operationId: grantHeroLocationConsent
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      responses:
+        "204": { description: Consentement enregistré. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    delete:
+      tags: [Super-héros]
+      summary: Retirer son consentement au partage de position
+      description: Réservé aux super-héros. Retire le consentement et supprime la position, dans la même transaction. Sans effet si rien n'était partagé.
+      operationId: revokeHeroLocationConsent
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      responses:
+        "204": { description: Consentement retiré et position supprimée. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
   /hero/reviews:
     get:
       tags: [Réputation]

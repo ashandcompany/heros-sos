@@ -36,7 +36,7 @@ Ajouter `villain_specialties` et `incident_villains` si on lie les vilains aux i
 - Envoi des numéros de la newsletter (l'abonnement par double opt-in et la désinscription existent déjà), articles du blog.
 - Équipes de héros : invitations, confirmations, validation du résultat, arbitrage par un modérateur.
 - 2FA TOTP des héros et des citoyens (celle des modérateurs n'est pas « hors MVP » : voir « À ne pas couper »), liste des appareils connectés.
-- Proximité des héros (`hero_locations`), encyclopédie Marvel.
+- Encyclopédie Marvel.
 
 ## À ne pas couper
 

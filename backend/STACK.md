@@ -1,4 +1,4 @@
-# Stack du backend
+﻿# Stack du backend
 
 Complément au cahier des charges, qui prévoit PHP 8.4 et MySQL (§2.4) : le backend est en **Go** avec **PostgreSQL**. Le frontend est en **Next.js** (dossier `frontend/`) et parle à l'API Go en REST. Le schéma des tables est dans [TABLES.md](TABLES.md).
 
@@ -25,11 +25,11 @@ Complément au cahier des charges, qui prévoit PHP 8.4 et MySQL (§2.4) : le ba
 - **Chiffrement :** nom, prénom, date de naissance, téléphone et adresse de tous les utilisateurs.
 - **« Citoyen vérifié » :** information de confiance, sans droit supplémentaire.
 - **RabbitMQ** pour les mails, si l'hébergeur supporte Docker.
+- **Proximité des héros :** position actuelle du héros (là où il se trouve, pas son domicile), partagée après consentement explicite (`hero_profiles.location_consent_at`), arrondie à ~110 m, en clair, sans historique, lue seulement par le serveur, périmée après 30 min. Alerte dans un rayon de 10 km, avec repli sur tous les héros actifs. Voir `hero_locations` dans [tables/comptes.md](tables/comptes.md#hero_locations).
 
 ## Décisions en attente
 
-1. **Proximité des héros :** à décider avec le client. Si elle est retenue : la position actuelle du héros (là où il se trouve, pas son domicile), partagée volontairement et visible des modérateurs, en clair, sans historique. Voir `hero_locations` dans [tables/comptes.md](tables/comptes.md#hero_locations-optionnelle).
-2. **Encyclopédie Marvel** (§6.1.4) : source à vérifier, l'API Marvel semble fermée.
+1. **Encyclopédie Marvel** (§6.1.4) : source à vérifier, l'API Marvel semble fermée.
 
 ## Prochaines étapes
 

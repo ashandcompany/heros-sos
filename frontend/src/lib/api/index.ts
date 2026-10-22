@@ -53,6 +53,7 @@ export { searchImdbTitles } from "./imdb";
 export {
   declareIncident,
   finishIntervention,
+  canSetPriority,
   getAllIncidents,
   getCitizenIncident,
   getHeroIncident,

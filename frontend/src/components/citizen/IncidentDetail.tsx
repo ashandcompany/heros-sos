@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { RatingStars } from "@/components/ui/RatingStars";
-import { getCitizenIncident, incidentFeatures } from "@/lib/api";
+import { getCitizenIncident } from "@/lib/api";
 import { formatDateTime, incidentStatusLabels, reporterRoleLabels } from "@/lib/format";
 import { heroSheetRoute, routes, villainSheetRoute } from "@/lib/routes";
 import { requireCitizenSession } from "@/lib/server-session";
@@ -50,14 +50,11 @@ function timelineSteps({ incident, interventions }: CitizenIncidentDetail): Time
     });
     return steps;
   }
-  // Avec l'API, un incident est diffusé dès sa déclaration : pas d'étape de vérification.
-  if (incidentFeatures.moderation) {
-    steps.push(
-      incident.moderation === "valide"
-        ? { key: "moderation", label: "Signalement vérifié par la modération", state: "done" }
-        : { key: "moderation", label: "Vérification par la modération", state: "current" },
-    );
-  }
+  steps.push(
+    incident.moderation === "valide"
+      ? { key: "moderation", label: "Signalement vérifié par la modération", state: "done" }
+      : { key: "moderation", label: "Vérification par la modération", state: "current" },
+  );
 
   for (const intervention of interventions) {
     steps.push({

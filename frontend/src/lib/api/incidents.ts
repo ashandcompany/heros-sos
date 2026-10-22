@@ -23,6 +23,7 @@ import type {
   ModerationStatus,
   MutationResult,
   OutcomeProposalResult,
+  ReporterRole,
   ResolvedIncident,
 } from "@/types";
 import { apiFailureMessage } from "@/lib/validation/form-state";
@@ -46,20 +47,14 @@ import { getVillain } from "./villains";
  * fiche d'un incident pour un citoyen, historique d'un héros ou d'un vilain dans l'encyclopédie
  * (`GET /heroes/{heroId}/incidents`, `GET /villains/{id}/incidents`).
  *
- * Restent mockés, faute de route : derniers incidents résolus (la liste publique ne renvoie pas
- * les résolus), la priorité, la modération des
- * déclarations (validation, rejet, correction) et l'historique des interventions terminées.
+ * Aussi branchés : derniers incidents résolus de l'accueil, priorité (`PUT /hero/incidents/{id}/priority`),
+ * modération des déclarations (`PUT /admin/incidents/{id}/moderation`, `PATCH /admin/incidents/{id}`).
+ * Reste mocké, faute de route : l'historique des interventions terminées.
  */
 
 /** Fonctions que l'API ne couvre pas encore : les écrans les masquent quand elle est active. */
 export const incidentFeatures = {
-  /** Validation, rejet et correction d'une déclaration par la modération. */
-  moderation: !isApiEnabled,
-  /** Priorité fixée par les super-héros. */
-  priority: !isApiEnabled,
-  /** « Témoin » ou « victime » dans la déclaration. */
-  reporterRole: !isApiEnabled,
-  /** `GET /incidents` ne renvoie pas les incidents résolus aux héros ni aux modérateurs. */
+  /** Les listes ne demandent pas les incidents résolus, en attendant une décision sur leur exposition. */
   resolvedInLists: !isApiEnabled,
 } as const;
 
@@ -82,10 +77,38 @@ const fromApiPriority: Record<ApiIncident["priority"], IncidentPriority> = {
   low: "basse",
 };
 
+const toApiPriority: Record<IncidentPriority, ApiIncident["priority"]> = {
+  critique: "critical",
+  haute: "high",
+  normale: "normal",
+  basse: "low",
+};
+
+const toApiStatus: Record<IncidentStatus, ApiIncident["status"]> = {
+  signale: "reported",
+  "en-cours": "in_progress",
+  resolu: "succeeded",
+};
+
+const fromApiModeration: Record<ApiIncident["moderation"], ModerationStatus> = {
+  pending: "en-attente",
+  approved: "valide",
+  rejected: "rejete",
+};
+
+const fromApiReporterRole: Record<NonNullable<ApiIncident["reporterRole"]>, ReporterRole> = {
+  witness: "temoin",
+  victim: "victime",
+};
+
+const toApiReporterRole: Record<ReporterRole, NonNullable<ApiIncident["reporterRole"]>> = {
+  temoin: "witness",
+  victime: "victim",
+};
+
 /**
- * Incident de l'API vers la forme du frontend. L'API diffuse un incident dès sa déclaration (aucune
- * vérification préalable) : `moderation` vaut donc `valide`. Le héros affiché est le lead de
- * l'équipe en cours, s'il est connu.
+ * Incident de l'API vers la forme du frontend. Le héros affiché est le lead de l'équipe en cours,
+ * s'il est connu.
  */
 function fromApiIncident(incident: ApiIncident, team: InterventionTeam | null = null): Incident {
   const { address, city, latitude, longitude } = incident.location;
@@ -97,7 +120,7 @@ function fromApiIncident(incident: ApiIncident, team: InterventionTeam | null = 
     title: incident.title || [incident.typeLabel, city].filter(Boolean).join(" · "),
     type: { code: incident.typeCode ?? "", label: incident.typeLabel ?? "" },
     status: fromApiStatus[incident.status],
-    moderation: "valide",
+    moderation: fromApiModeration[incident.moderation],
     priority: fromApiPriority[incident.priority],
     location: {
       city,
@@ -113,6 +136,7 @@ function fromApiIncident(incident: ApiIncident, team: InterventionTeam | null = 
     hero: lead?.hero,
     description: incident.description,
     occurredAt: incident.occurredAt ?? undefined,
+    reporterRole: incident.reporterRole ? fromApiReporterRole[incident.reporterRole] : undefined,
   };
 }
 
@@ -179,10 +203,23 @@ export async function withTeams(
   );
 }
 
-const featureUnavailable: MutationResult = {
-  ok: false,
-  error: "Cette fonction n'est pas encore disponible.",
-};
+/** Échec d'une mutation d'incident ; `messages` précise le 404 et le 409 propres à la route. */
+function toIncidentFailure(
+  error: unknown,
+  action: string,
+  messages: { notFound?: string; conflict?: string } = {},
+): MutationResult {
+  if (error instanceof ApiError) {
+    if (error.status === 404) {
+      return { ok: false, error: messages.notFound ?? "Incident introuvable." };
+    }
+    if (error.status === 409 && messages.conflict) return { ok: false, error: messages.conflict };
+    if (error.code === "validation_failed") {
+      return { ok: false, error: "Certaines informations sont invalides. Vérifiez le formulaire." };
+    }
+  }
+  return { ok: false, error: apiFailureMessage(toApiFailure(error, action)) };
+}
 
 /** Type du référentiel (API ou mock), réduit à ce qu'embarque un incident ; `undefined` si inconnu. */
 async function findIncidentType(
@@ -289,10 +326,9 @@ export async function getMyIncidents(token: string): Promise<Incident[]> {
 }
 
 /**
- * Déclare un incident ; il est diffusé aux super-héros.
- * Un citoyen, un super-héros ou un modérateur peut déclarer. Mock : la déclaration d'un modérateur
- * est validée d'office, celle d'un citoyen ou d'un super-héros attend la vérification de la
- * modération. L'API, elle, prévient aussitôt les héros et les modérateurs.
+ * Déclare un incident. Un citoyen, un super-héros ou un modérateur peut déclarer : la déclaration
+ * d'un modérateur est validée d'office, les autres attendent la vérification de la modération avant
+ * d'être diffusées. L'API prévient aussitôt héros et modérateurs par mail.
  * API : `POST /incidents`, avec la position géocodée par le frontend (carte des héros).
  */
 export async function declareIncident(
@@ -310,6 +346,9 @@ export async function declareIncident(
           typeId: declaration.typeId,
           title: declaration.title,
           description: declaration.description,
+          reporterRole: declaration.reporterRole
+            ? toApiReporterRole[declaration.reporterRole]
+            : null,
           // Le formulaire ne le demande pas : nombre connu après l'intervention.
           citizensRescued: 0,
           location: {
@@ -324,13 +363,7 @@ export async function declareIncident(
       });
       return { ok: true };
     } catch (error) {
-      if (error instanceof ApiError && error.code === "validation_failed") {
-        return {
-          ok: false,
-          error: "Certaines informations sont invalides. Vérifiez le formulaire.",
-        };
-      }
-      return { ok: false, error: apiFailureMessage(toApiFailure(error, "Déclaration d'incident")) };
+      return toIncidentFailure(error, "Déclaration d'incident");
     }
   }
 
@@ -362,14 +395,20 @@ export async function declareIncident(
 /**
  * Tous les incidents, éventuellement filtrés par décision de modération,
  * du plus récent au plus ancien.
- * API : `GET /incidents` (incidents signalés, en cours ou en échec, sans les résolus), avec leur
- * équipe en cours. L'API n'a pas de modération des déclarations : `moderation` est ignoré.
+ * API : `GET /incidents` (incidents signalés, en cours ou en échec, sans les résolus ; toutes les
+ * décisions pour un modérateur), avec leur équipe en cours. L'API ne filtre pas par décision : le
+ * filtre est appliqué ici.
  */
 export async function getAllIncidents(
   token: string,
   moderation?: ModerationStatus,
 ): Promise<Incident[]> {
-  if (isApiEnabled) return withTeams(token, await fetchAllIncidents(token), null);
+  if (isApiEnabled) {
+    const incidents = (await fetchAllIncidents(token)).filter(
+      (incident) => !moderation || fromApiModeration[incident.moderation] === moderation,
+    );
+    return withTeams(token, incidents, null);
+  }
 
   await userFromToken(token, "admin");
   return mockResponse(
@@ -394,16 +433,58 @@ export async function getIncident(token: string, id: string): Promise<HeroIncide
   return mockResponse(incident ? toHeroIncident(incident, null) : null);
 }
 
+/** Le lieu a-t-il changé ? Il faut alors le géocoder de nouveau. */
+const hasMoved = (
+  before: { address?: string; city: string },
+  after: { address: string; city: string },
+) =>
+  after.address !== (before.address ?? "") ||
+  normalizeCity(after.city) !== normalizeCity(before.city);
+
 /**
- * Corrige les informations d'un incident (titre, lieu, vilain, héros, statut…).
- * Absente du contrat : mock seulement (voir `incidentFeatures.moderation`).
+ * Corrige les informations d'un incident (titre, lieu, vilain, héros, statut…). Le héros et le
+ * statut sont reportés sur l'intervention en cours (créée, close ou retirée au besoin).
+ * API : `GET /incidents/{id}` (position connue), puis `PATCH /admin/incidents/{id}`.
  */
 export async function updateIncident(
   token: string,
   id: string,
   update: IncidentUpdate,
 ): Promise<MutationResult> {
-  if (isApiEnabled) return featureUnavailable;
+  if (isApiEnabled) {
+    try {
+      const current = await fetchIncident(token, id);
+      if (!current) return { ok: false, error: "Incident introuvable." };
+      // Lieu inchangé : la position connue est conservée.
+      let { latitude = null, longitude = null } = current.location;
+      if (hasMoved(current.location, update.location)) {
+        const coordinates = await geocodeLocation(update.location);
+        latitude = coordinates?.lat ?? null;
+        longitude = coordinates?.lng ?? null;
+      }
+      await apiFetch(`/admin/incidents/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        sessionToken: token,
+        body: {
+          typeId: update.typeId,
+          title: update.title,
+          description: update.description,
+          status: toApiStatus[update.status],
+          location: { ...update.location, latitude, longitude },
+          villainId: update.villainId,
+          heroId: update.status === "signale" ? null : update.heroId,
+        } satisfies ApiSchema<"IncidentUpdatePayload">,
+      });
+      return { ok: true };
+    } catch (error) {
+      return toIncidentFailure(error, "Correction d'un incident", {
+        notFound: "Incident, super-héros ou vilain introuvable.",
+        conflict:
+          "L'intervention n'a pas pu être mise à jour : ce super-héros participe peut-être déjà à une autre intervention.",
+      });
+    }
+  }
+
   await userFromToken(token, "admin");
   const incident = incidentsMock.find((existing) => existing.id === id);
   if (!incident) return mockResponse({ ok: false, error: "Incident introuvable." });
@@ -424,10 +505,7 @@ export async function updateIncident(
   incident.type = type;
   incident.description = update.description;
   // Le lieu change : on le géocode de nouveau (sinon on garde la position connue).
-  const moved =
-    update.location.address !== (incident.location.address ?? "") ||
-    normalizeCity(update.location.city) !== normalizeCity(incident.location.city);
-  const coordinates = moved
+  const coordinates = hasMoved(incident.location, update.location)
     ? ((await geocodeLocation(update.location)) ?? undefined)
     : incident.location.coordinates;
   incident.location = { ...incident.location, ...update.location, coordinates };
@@ -444,15 +522,33 @@ export async function updateIncident(
 }
 
 /**
- * Valide (déclaration conforme et réelle) ou rejette un incident.
- * Absente du contrat : mock seulement (voir `incidentFeatures.moderation`).
+ * Valide (déclaration conforme et réelle) ou rejette un incident. L'API ne remet pas une décision
+ * en attente : `en-attente` est refusé.
+ * API : `PUT /admin/incidents/{id}/moderation`.
  */
 export async function moderateIncident(
   token: string,
   id: string,
   decision: ModerationStatus,
 ): Promise<MutationResult> {
-  if (isApiEnabled) return featureUnavailable;
+  if (isApiEnabled) {
+    if (decision === "en-attente") {
+      return { ok: false, error: "Une décision ne peut pas être remise en attente." };
+    }
+    try {
+      await apiFetch(`/admin/incidents/${encodeURIComponent(id)}/moderation`, {
+        method: "PUT",
+        sessionToken: token,
+        body: {
+          decision: decision === "valide" ? "approved" : "rejected",
+        } satisfies ApiSchema<"IncidentModerationPayload">,
+      });
+      return { ok: true };
+    } catch (error) {
+      return toIncidentFailure(error, "Modération d'un incident");
+    }
+  }
+
   await userFromToken(token, "admin");
   const incident = incidentsMock.find((existing) => existing.id === id);
   if (!incident) return mockResponse({ ok: false, error: "Incident introuvable." });
@@ -668,8 +764,8 @@ export async function getIncidentMap(token: string): Promise<IncidentMapData> {
 
 /**
  * Carte publique, visible sans compte : incidents non résolus à une position approximative, sans
- * les super-héros. Mock : seulement ceux validés par la modération (un signalement en attente
- * peut être faux) ; l'API n'a pas de modération des déclarations.
+ * les super-héros. Seulement ceux validés par la modération (un signalement en attente peut être
+ * faux) : sans session, l'API ne renvoie que ceux-là.
  * API : `GET /incidents` sans session, toutes les pages.
  */
 export async function getPublicIncidentMap(): Promise<IncidentMapData> {
@@ -697,19 +793,42 @@ function findActionableIncident(id: string): Incident | { error: string } {
   return incident;
 }
 
+/** Priorité modifiable : incident signalé (ou en échec), sans intervention en cours. */
+export const canSetPriority = (incident: Pick<Incident, "status">) => incident.status === "signale";
+
 /**
- * Change la priorité d'un incident non résolu.
- * Absente du contrat : mock seulement (voir `incidentFeatures.priority`).
+ * Change la priorité d'un incident validé qui attend sa prise en charge.
+ * API : `PUT /hero/incidents/{id}/priority` (409 si une intervention a commencé entre-temps).
  */
 export async function setIncidentPriority(
   token: string,
   id: string,
   priority: IncidentPriority,
 ): Promise<MutationResult> {
-  if (isApiEnabled) return featureUnavailable;
+  if (isApiEnabled) {
+    try {
+      await apiFetch(`/hero/incidents/${encodeURIComponent(id)}/priority`, {
+        method: "PUT",
+        sessionToken: token,
+        body: { priority: toApiPriority[priority] } satisfies ApiSchema<"IncidentPriorityPayload">,
+      });
+      return { ok: true };
+    } catch (error) {
+      return toIncidentFailure(error, "Priorité d'un incident", {
+        conflict: "Un super-héros intervient déjà : la priorité ne peut plus être modifiée.",
+      });
+    }
+  }
+
   await userFromToken(token, "super-heros");
   const incident = findActionableIncident(id);
   if ("error" in incident) return mockResponse({ ok: false, error: incident.error });
+  if (!canSetPriority(incident)) {
+    return mockResponse({
+      ok: false,
+      error: "Un super-héros intervient déjà : la priorité ne peut plus être modifiée.",
+    });
+  }
 
   incident.priority = priority;
   return mockResponse({ ok: true });

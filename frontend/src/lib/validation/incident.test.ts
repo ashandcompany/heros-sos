@@ -43,12 +43,9 @@ describe("validateDeclaration", () => {
     expect(at(values.title, "d".repeat(DESCRIPTION_MAX_LENGTH + 1)).description).toBeDefined();
   });
 
-  it("ne demande « témoin ou victime » que si le formulaire pose la question", () => {
+  it("demande si le déclarant est témoin ou victime", () => {
     const withoutRole = { ...values, reporterRole: "" };
     expect(validateDeclaration(withoutRole, options).reporterRole).toBeDefined();
-    expect(
-      validateDeclaration(withoutRole, { ...options, askReporterRole: false }).reporterRole,
-    ).toBeUndefined();
   });
 
   it("refuse un type, un vilain ou une date inconnus", () => {

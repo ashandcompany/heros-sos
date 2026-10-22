@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { adminDeclareIncidentAction } from "@/app/actions/incidents";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { DeclareIncidentForm } from "@/components/citizen/DeclareIncidentForm";
-import { getIncidentTypes, getVillains, incidentFeatures } from "@/lib/api";
+import { getIncidentTypes, getVillains } from "@/lib/api";
 import { routes } from "@/lib/routes";
 import { requireAdminSession } from "@/lib/server-session";
 
@@ -18,7 +18,6 @@ async function AdminDeclareIncident() {
       villains={villains.map(({ id, alias }) => ({ id, alias }))}
       types={types}
       action={adminDeclareIncidentAction}
-      askReporterRole={incidentFeatures.reporterRole}
     />
   );
 }

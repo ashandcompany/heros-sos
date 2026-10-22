@@ -17,7 +17,7 @@ Le MVP permet de jouer le cœur du projet : un citoyen signale un incident, un h
 | **Comptes** | Inscription (§5.4), activation par email, connexion (« Rester connecté » : 30 jours), déconnexion et déconnexion de tous les appareils, `/auth/me`, mot de passe oublié, sessions, 2FA TOTP des modérateurs |
 | **Libre-service du compte** | Profil (`/me`, pour tous les rôles), photo de profil, changement d'adresse email (confirmé par un lien envoyé à la nouvelle adresse, puis validé par un modérateur), préférence de newsletter, formulaire de contact |
 | **Rôles** | Citoyen, héros, modérateur ; demande « Devenir super-héros » validée par un modérateur |
-| **Incidents** | Déclaration, liste des incidents en cours, mes incidents, détail, priorité, suppression d'un doublon |
+| **Incidents** | Déclaration, liste des incidents (résolus ou non, filtrable par statut, héros et vilain), mes incidents, détail, priorité, suppression d'un doublon |
 | **Interventions** | Un héros prend un incident et le clôture. Un seul héros par intervention : la table `intervention_heroes` est déjà prête pour l'équipe, rien ne sera à refaire. |
 | **Public** | Page d'accueil (derniers incidents réussis), liste des héros (alias, photo, description), liste des vilains |
 | **Modération** | Valider les héros, gérer les incidents, désactiver un compte, gérer les vilains |

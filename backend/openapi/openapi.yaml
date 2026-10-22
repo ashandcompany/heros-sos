@@ -1825,12 +1825,21 @@ paths:
     get:
       tags: [Films]
       summary: Vidéothèque publique
-      description: Films ayant au moins un rattachement validé à un super-héros.
+      description: >
+        Films ayant au moins un rattachement validé à un super-héros validé, une seule entrée par
+        film avec la liste de tous ses héros. Du rattachement le plus récent au plus ancien.
       operationId: listPublicFilms
       parameters:
         - name: hero
           in: query
+          description: >
+            Films rattachés à ce super-héros (leurs autres héros restent listés). Un héros inconnu
+            donne une page vide.
           schema: { type: string, format: uuid }
+        - name: q
+          in: query
+          description: Extrait du titre, sans tenir compte de la casse.
+          schema: { type: string, maxLength: 100 }
         - { $ref: "#/components/parameters/Limit" }
         - { $ref: "#/components/parameters/Offset" }
       responses:
@@ -1838,8 +1847,24 @@ paths:
           description: Une page de films publiés.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/HeroFilmPage" }
+              schema: { $ref: "#/components/schemas/PublicFilmPage" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /films/heroes:
+    get:
+      tags: [Films]
+      summary: Super-héros de la vidéothèque publique
+      description: Super-héros ayant au moins un film publié, par pseudo, avec leur nombre de films.
+      operationId: listFilmHeroes
+      responses:
+        "200":
+          description: Liste complète (non paginée).
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/FilmHeroCount" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   /heroes/{heroId}/films:
@@ -2022,6 +2047,14 @@ paths:
         - name: status
           in: query
           schema: { type: string, enum: [pending, approved, rejected] }
+        - name: hero
+          in: query
+          description: Films de ce super-héros uniquement (404 s'il est inconnu ou non validé).
+          schema: { type: string, format: uuid }
+        - name: q
+          in: query
+          description: Extrait du titre, sans tenir compte de la casse.
+          schema: { type: string, maxLength: 100 }
         - { $ref: "#/components/parameters/Limit" }
         - { $ref: "#/components/parameters/Offset" }
       responses:
@@ -2032,6 +2065,7 @@ paths:
               schema: { $ref: "#/components/schemas/HeroFilmPage" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/InternalError" }
     post:
@@ -2223,13 +2257,43 @@ paths:
     get:
       tags: [Incidents]
       summary: Liste publique des incidents
-      description: Accessible sans session. Liste les incidents sans identité civile du déclarant.
+      description: |
+        Accessible sans session. Liste tous les incidents (résolus ou non) sans identité civile du
+        déclarant. Les valeurs d'un même filtre sont combinées par OU, les filtres entre eux par ET.
+        Les filtres multiples s'écrivent avec un paramètre répété (?status=a&status=b)
+        (20 identifiants au maximum pour heroId et villainId).
       operationId: listIncidents
       parameters:
         - name: reporterId
           in: query
           description: Identifiant facultatif du déclarant; un citoyen connecté ne peut filtrer que sur son propre identifiant.
           schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          description: Statuts retenus.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items: { type: string, enum: [reported, in_progress, succeeded, failed] }
+        - name: heroId
+          in: query
+          description: Incidents où au moins un de ces héros est intervenu.
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 20
+            items: { type: string, format: uuid }
+        - name: villainId
+          in: query
+          description: Incidents liés à au moins un de ces vilains.
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 20
+            items: { type: string, format: uuid }
         - { $ref: "#/components/parameters/Limit" }
         - { $ref: "#/components/parameters/Offset" }
       responses:
@@ -2285,6 +2349,53 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Incident" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /heroes/{heroId}/incidents:
+    get:
+      tags: [Incidents]
+      summary: Incidents résolus par un héros
+      description: |
+        Publique (encyclopédie). Incidents résolus par une intervention réussie à laquelle le héros a
+        participé, les plus récemment résolus d'abord. Contrairement à `GET /incidents`, la liste
+        contient les incidents résolus, sans description ni adresse précise. 404 si le héros n'est pas
+        public (demande non approuvée ou compte inactif).
+      operationId: listHeroIncidents
+      parameters:
+        - { $ref: "#/components/parameters/HeroId" }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Page d'incidents résolus.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IncidentSummaryPage" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /villains/{id}/incidents:
+    get:
+      tags: [Vilains]
+      summary: Incidents d'un vilain
+      description: |
+        Publique (encyclopédie). Incidents auxquels le vilain est associé, quel que soit leur état, les
+        plus récents d'abord, sans description ni adresse précise. `lead` est le héros qui mène la
+        dernière intervention.
+      operationId: listVillainIncidents
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Page d'incidents.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IncidentSummaryPage" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   /incidents/{incidentId}/interventions:
@@ -4191,6 +4302,45 @@ components:
         limit: { type: integer }
         offset: { type: integer }
 
+    PublicFilm:
+      type: object
+      required: [id, title, plot, addedAt, heroes]
+      properties:
+        id: { type: string, format: uuid }
+        imdbId: { type: string }
+        videoUrl: { type: string, format: uri }
+        title: { type: string }
+        releaseYear: { type: integer, format: int32 }
+        posterUrl: { type: string, format: uri }
+        plot: { type: string }
+        addedAt:
+          type: string
+          format: date-time
+          description: Date du rattachement publié le plus récent.
+        heroes:
+          type: array
+          description: Super-héros auxquels le film est rattaché, par pseudo.
+          items: { $ref: "#/components/schemas/FilmHero" }
+
+    PublicFilmPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/PublicFilm" }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+
+    FilmHeroCount:
+      type: object
+      required: [id, alias, filmCount]
+      properties:
+        id: { type: string, format: uuid }
+        alias: { type: string }
+        filmCount: { type: integer }
+
     VillainFilmPage:
       type: object
       required: [items, total, limit, offset]
@@ -4293,6 +4443,66 @@ components:
         items:
           type: array
           items: { $ref: "#/components/schemas/Incident" }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+
+    IncidentSummary:
+      type: object
+      description: Incident vu depuis la fiche publique d'un héros ou d'un vilain.
+      required:
+        [
+          id,
+          title,
+          typeCode,
+          typeLabel,
+          status,
+          city,
+          createdAt,
+          resolvedAt,
+          lead,
+          villains,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        title:
+          type: string
+          description: Titre court de l'incident ; vide pour un incident déclaré avant son introduction.
+        typeCode: { type: string }
+        typeLabel: { type: string }
+        status:
+          { type: string, enum: [reported, in_progress, succeeded, failed] }
+        city: { type: string }
+        createdAt: { type: string, format: date-time }
+        resolvedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Fin de l'intervention réussie ; `null` si l'incident n'est pas résolu.
+        lead:
+          type: object
+          nullable: true
+          description: Héros qui mène la dernière intervention ; `null` sans intervention ou si son profil n'est plus public.
+          required: [id, alias]
+          properties:
+            id: { type: string, format: uuid }
+            alias: { type: string }
+        villains:
+          type: array
+          items:
+            type: object
+            required: [id, alias]
+            properties:
+              id: { type: string, format: uuid }
+              alias: { type: string }
+
+    IncidentSummaryPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/IncidentSummary" }
         total: { type: integer }
         limit: { type: integer }
         offset: { type: integer }

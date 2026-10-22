@@ -109,18 +109,72 @@ func newVillainResponse(item VillainFilm) Response {
 	}
 }
 
-func (h *Handler) PublicFilms(w http.ResponseWriter, r *http.Request) {
-	var heroID *uuid.UUID
-	if raw := r.URL.Query().Get("hero"); raw != "" {
-		parsed, err := uuid.Parse(raw)
-		if err != nil {
-			h.fail(w, r, &httpx.Error{Status: http.StatusUnprocessableEntity, Code: httpx.CodeValidationFailed,
-				Message: "Certains paramètres sont invalides.", Fields: map[string]string{"hero": "invalid"}})
-			return
-		}
-		heroID = &parsed
+type publicFilmResponse struct {
+	ID          uuid.UUID     `json:"id"`
+	IMDBID      string        `json:"imdbId,omitempty"`
+	VideoURL    string        `json:"videoUrl,omitempty"`
+	Title       string        `json:"title"`
+	ReleaseYear *int16        `json:"releaseYear,omitempty"`
+	PosterURL   string        `json:"posterUrl,omitempty"`
+	Plot        string        `json:"plot"`
+	AddedAt     time.Time     `json:"addedAt"`
+	Heroes      []HeroSummary `json:"heroes"`
+}
+
+func newPublicFilmResponse(item PublicFilm) publicFilmResponse {
+	heroes := make([]HeroSummary, len(item.Heroes))
+	for index, ref := range item.Heroes {
+		heroes[index] = HeroSummary{ID: ref.ID, Alias: ref.Alias}
 	}
-	h.listHeroFilms(w, r, heroID, StatusApproved)
+	return publicFilmResponse{
+		ID: item.ID, IMDBID: item.IMDBID, VideoURL: item.VideoURL, Title: item.Title,
+		ReleaseYear: item.ReleaseYear, PosterURL: item.PosterURL, Plot: item.Plot,
+		AddedAt: item.AddedAt, Heroes: heroes,
+	}
+}
+
+type filmHeroResponse struct {
+	ID        uuid.UUID `json:"id"`
+	Alias     string    `json:"alias"`
+	FilmCount int64     `json:"filmCount"`
+}
+
+// PublicFilms liste la vidéothèque publique : un film par entrée, avec tous ses héros.
+func (h *Handler) PublicFilms(w http.ResponseWriter, r *http.Request) {
+	heroID, ok := h.heroQuery(w, r)
+	if !ok {
+		return
+	}
+	page, err := httpx.ParsePage(r)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	items, total, err := h.service.ListPublicFilms(r.Context(),
+		PublicFilmFilter{HeroID: heroID, Title: r.URL.Query().Get("q")}, page.Limit, page.Offset)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	responses := make([]publicFilmResponse, len(items))
+	for index, item := range items {
+		responses[index] = newPublicFilmResponse(item)
+	}
+	httpx.WriteJSON(w, http.StatusOK, httpx.NewPageResponse(responses, total, page))
+}
+
+// FilmHeroes liste les super-héros ayant au moins un film publié (filtre de la vidéothèque).
+func (h *Handler) FilmHeroes(w http.ResponseWriter, r *http.Request) {
+	items, err := h.service.ListFilmHeroes(r.Context())
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	responses := make([]filmHeroResponse, len(items))
+	for index, item := range items {
+		responses[index] = filmHeroResponse{ID: item.ID, Alias: item.Alias, FilmCount: item.FilmCount}
+	}
+	httpx.WriteJSON(w, http.StatusOK, responses)
 }
 
 func (h *Handler) PublicHeroFilms(w http.ResponseWriter, r *http.Request) {
@@ -129,16 +183,16 @@ func (h *Handler) PublicHeroFilms(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, ErrNotFound)
 		return
 	}
-	h.listHeroFilms(w, r, &heroID, StatusApproved)
+	h.listHeroFilms(w, r, HeroFilmFilter{HeroID: &heroID, Status: StatusApproved})
 }
 
-func (h *Handler) listHeroFilms(w http.ResponseWriter, r *http.Request, heroID *uuid.UUID, status string) {
+func (h *Handler) listHeroFilms(w http.ResponseWriter, r *http.Request, filter HeroFilmFilter) {
 	page, err := httpx.ParsePage(r)
 	if err != nil {
 		h.fail(w, r, err)
 		return
 	}
-	items, total, err := h.service.ListHeroFilms(r.Context(), heroID, status, page.Limit, page.Offset)
+	items, total, err := h.service.ListHeroFilms(r.Context(), filter, page.Limit, page.Offset)
 	if err != nil {
 		h.fail(w, r, err)
 		return
@@ -202,21 +256,7 @@ func (h *Handler) GetTitle(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) MyFilms(w http.ResponseWriter, r *http.Request) {
 	principal, _ := auth.PrincipalFrom(r.Context())
-	page, err := httpx.ParsePage(r)
-	if err != nil {
-		h.fail(w, r, err)
-		return
-	}
-	items, total, err := h.service.ListHeroFilms(r.Context(), &principal.UserID, "", page.Limit, page.Offset)
-	if err != nil {
-		h.fail(w, r, err)
-		return
-	}
-	responses := make([]Response, len(items))
-	for index, item := range items {
-		responses[index] = newHeroResponse(item)
-	}
-	httpx.WriteJSON(w, http.StatusOK, httpx.NewPageResponse(responses, total, page))
+	h.listHeroFilms(w, r, HeroFilmFilter{HeroID: &principal.UserID})
 }
 
 func (h *Handler) AddMyFilm(w http.ResponseWriter, r *http.Request) {
@@ -252,25 +292,30 @@ func (h *Handler) DeleteMyFilm(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) AdminHeroFilms(w http.ResponseWriter, r *http.Request) {
-	page, err := httpx.ParsePage(r)
-	if err != nil {
-		h.fail(w, r, err)
+	heroID, ok := h.heroQuery(w, r)
+	if !ok {
 		return
 	}
 	status := r.URL.Query().Get("status")
 	if status == "" {
 		status = "all"
 	}
-	items, total, err := h.service.ListHeroFilms(r.Context(), nil, status, page.Limit, page.Offset)
+	h.listHeroFilms(w, r, HeroFilmFilter{HeroID: heroID, Status: status, Title: r.URL.Query().Get("q")})
+}
+
+// heroQuery lit le filtre facultatif `?hero=` ; répond 422 s'il n'est pas un UUID.
+func (h *Handler) heroQuery(w http.ResponseWriter, r *http.Request) (*uuid.UUID, bool) {
+	raw := r.URL.Query().Get("hero")
+	if raw == "" {
+		return nil, true
+	}
+	parsed, err := uuid.Parse(raw)
 	if err != nil {
-		h.fail(w, r, err)
-		return
+		h.fail(w, r, &httpx.Error{Status: http.StatusUnprocessableEntity, Code: httpx.CodeValidationFailed,
+			Message: "Certains paramètres sont invalides.", Fields: map[string]string{"hero": "invalid"}})
+		return nil, false
 	}
-	responses := make([]Response, len(items))
-	for index, item := range items {
-		responses[index] = newHeroResponse(item)
-	}
-	httpx.WriteJSON(w, http.StatusOK, httpx.NewPageResponse(responses, total, page))
+	return &parsed, true
 }
 
 func (h *Handler) AddAdminHeroFilm(w http.ResponseWriter, r *http.Request) {

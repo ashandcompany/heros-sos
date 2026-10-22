@@ -60,6 +60,10 @@ createmoderator: ## Crée un modérateur : make createmoderator EMAIL=… FIRST=
 	$(WITH_ENV) HEROS_MODERATOR_PASSWORD="$$password" go run ./cmd/createmoderator \
 		-email "$(EMAIL)" -first-name "$(FIRST)" -last-name "$(LAST)" -birth-date "$(BIRTH)"
 
+.PHONY: seed
+seed: ## Remplit la base de démonstration (univers Marvel) ; RESET=1 efface d'abord TOUTES les données
+	@$(WITH_ENV) go run ./cmd/seed $(if $(RESET),-reset)
+
 .PHONY: build
 build: ## Compile tous les paquets
 	go build ./...
@@ -158,6 +162,10 @@ logs-dev: ## Suit les journaux de la pile de développement
 .PHONY: moderator-dev
 moderator-dev: ## Crée un modérateur dans la pile de développement : EMAIL=… FIRST=… LAST=… BIRTH=AAAA-MM-JJ
 	$(call create_moderator,$(COMPOSE_DEV))
+
+.PHONY: seed-dev
+seed-dev: ## Remplit la base de la pile de développement (univers Marvel) ; RESET=1 efface d'abord TOUTES les données
+	$(COMPOSE_DEV) run --rm --entrypoint /seed api $(if $(RESET),-reset)
 
 .PHONY: resetmfa-dev
 resetmfa-dev: ## Réinitialise la 2FA d'un compte (appareil perdu) dans la pile de développement : EMAIL=…

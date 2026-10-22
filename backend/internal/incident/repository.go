@@ -69,7 +69,19 @@ func toRecord(in *Incident) record {
 type Repository interface {
 	Create(ctx context.Context, in *Incident) error
 	Find(ctx context.Context, id uuid.UUID) (*Incident, error)
-	List(ctx context.Context, reporterID *uuid.UUID, limit, offset int) ([]Incident, int64, error)
+	List(ctx context.Context, filter ListFilter, limit, offset int) ([]Incident, int64, error)
+	PublicHeroExists(ctx context.Context, heroID uuid.UUID) (bool, error)
+	ListResolvedByHero(ctx context.Context, heroID uuid.UUID, limit, offset int) ([]Summary, int64, error)
+	ListByVillain(ctx context.Context, villainID uuid.UUID, limit, offset int) ([]Summary, int64, error)
+}
+
+// ListFilter restreint la liste des incidents. Les valeurs d'un même critère sont combinées
+// par OU, les critères entre eux par ET.
+type ListFilter struct {
+	ReporterID *uuid.UUID
+	Statuses   []Status
+	HeroIDs    []uuid.UUID
+	VillainIDs []uuid.UUID
 }
 
 type gormRepository struct {
@@ -111,12 +123,26 @@ func (r *gormRepository) Find(ctx context.Context, id uuid.UUID) (*Incident, err
 	return &items[0], nil
 }
 
-func (r *gormRepository) List(ctx context.Context, reporterID *uuid.UUID, limit, offset int) ([]Incident, int64, error) {
+func (r *gormRepository) List(ctx context.Context, filter ListFilter, limit, offset int) ([]Incident, int64, error) {
 	query := r.incidentQuery(ctx)
-	if reporterID != nil {
-		query = query.Where("incidents.reporter_id = ?", *reporterID)
-	} else {
-		query = query.Where("incidents.status IN ?", []string{"reported", "in_progress", "failed"})
+	if filter.ReporterID != nil {
+		query = query.Where("incidents.reporter_id = ?", *filter.ReporterID)
+	}
+	if len(filter.Statuses) > 0 {
+		statuses := make([]string, len(filter.Statuses))
+		for i, status := range filter.Statuses {
+			statuses[i] = string(status)
+		}
+		query = query.Where("incidents.status IN ?", statuses)
+	}
+	if len(filter.HeroIDs) > 0 {
+		query = query.Where(`EXISTS (SELECT 1 FROM interventions i
+			JOIN intervention_heroes ih ON ih.intervention_id = i.id
+			WHERE i.incident_id = incidents.id AND ih.hero_id IN ?)`, filter.HeroIDs)
+	}
+	if len(filter.VillainIDs) > 0 {
+		query = query.Where(`EXISTS (SELECT 1 FROM incident_villains iv
+			WHERE iv.incident_id = incidents.id AND iv.villain_id IN ?)`, filter.VillainIDs)
 	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {

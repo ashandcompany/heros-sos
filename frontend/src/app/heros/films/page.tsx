@@ -16,11 +16,11 @@ export default function HeroVideosPage({ searchParams }: PageProps<"/heros/films
 
       <div className="grid gap-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:items-start">
         <section aria-labelledby="my-videos-title">
-          <h2 id="my-videos-title" className="mb-4 font-display text-xl font-semibold">
+          <h2 id="my-videos-title" className="mb-4 scroll-mt-20 font-display text-xl font-semibold">
             Mes films
           </h2>
           <Suspense fallback={<AdminListSkeleton items={2} />}>
-            <MyVideos />
+            <MyVideos searchParams={searchParams} />
           </Suspense>
         </section>
 

@@ -18,6 +18,34 @@ export interface HeroVideo {
   moderation: ModerationStatus;
 }
 
+/**
+ * Film de la vidéothèque publique : une seule fois, même s'il est rattaché à plusieurs héros.
+ */
+export interface PublicFilm {
+  id: string;
+  /** Super-héros auxquels il est rattaché (rattachements publiés), par pseudo. */
+  heroes: SuperHeroSummary[];
+  title: string;
+  description: string;
+  /** Lien vers la vidéo (hébergeur externe ou fiche IMDb). */
+  videoUrl: string;
+  imdbId?: string;
+  year?: number;
+  /** Date ISO 8601 du rattachement publié le plus récent. */
+  addedAt: string;
+}
+
+/** Super-héros ayant au moins un film publié (filtre de la vidéothèque). */
+export interface FilmHero extends SuperHeroSummary {
+  filmCount: number;
+}
+
+/** Filtres des listes de films : héros et extrait du titre (sans tenir compte de la casse). */
+export interface FilmFilter {
+  heroId?: string;
+  query?: string;
+}
+
 /** Film rattaché à la fiche d'un super-vilain par la modération, visible aussitôt. */
 export interface VillainFilm {
   id: string;

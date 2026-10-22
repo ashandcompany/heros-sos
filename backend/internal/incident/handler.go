@@ -15,6 +15,7 @@ import (
 	"github.com/ashandcompany/heros-sos/backend/internal/httpx"
 	"github.com/ashandcompany/heros-sos/backend/internal/ratelimit"
 	"github.com/ashandcompany/heros-sos/backend/internal/user"
+	"github.com/ashandcompany/heros-sos/backend/internal/villain"
 )
 
 // HandlerDeps regroupe les dépendances du handler.
@@ -118,6 +119,58 @@ func newResponse(in Incident) Response {
 	}
 }
 
+// maxFilterValues borne le nombre d'identifiants acceptés par filtre (route publique).
+const maxFilterValues = 20
+
+// parseUUIDs lit un paramètre répété (?name=a&name=b).
+func parseUUIDs(values []string, name string, invalid map[string]string) []uuid.UUID {
+	if len(values) > maxFilterValues {
+		invalid[name] = "invalid"
+		return nil
+	}
+	ids := make([]uuid.UUID, 0, len(values))
+	for _, raw := range values {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			invalid[name] = "invalid"
+			return nil
+		}
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+func parseListFilter(r *http.Request) (ListFilter, error) {
+	query := r.URL.Query()
+	invalid := map[string]string{}
+	filter := ListFilter{
+		HeroIDs:    parseUUIDs(query["heroId"], "heroId", invalid),
+		VillainIDs: parseUUIDs(query["villainId"], "villainId", invalid),
+	}
+	if raw := strings.TrimSpace(query.Get("reporterId")); raw != "" {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			invalid["reporterId"] = "invalid"
+		}
+		filter.ReporterID = &id
+	}
+	for _, raw := range query["status"] {
+		status, ok := ParseStatus(raw)
+		if !ok {
+			invalid["status"] = "invalid"
+			break
+		}
+		filter.Statuses = append(filter.Statuses, status)
+	}
+	if len(invalid) > 0 {
+		return ListFilter{}, &httpx.Error{
+			Status: http.StatusUnprocessableEntity, Code: httpx.CodeValidationFailed,
+			Message: "Certains paramètres sont invalides.", Fields: invalid,
+		}
+	}
+	return filter, nil
+}
+
 // List traite GET /incidents.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	principal, _ := auth.PrincipalFrom(r.Context())
@@ -126,26 +179,19 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	var reporterID *uuid.UUID
-	if raw := strings.TrimSpace(r.URL.Query().Get("reporterId")); raw != "" {
-		parsed, err := uuid.Parse(raw)
-		if err != nil {
-			h.fail(w, r, &httpx.Error{
-				Status: http.StatusUnprocessableEntity, Code: httpx.CodeValidationFailed,
-				Message: "Certains paramètres sont invalides.", Fields: map[string]string{"reporterId": "invalid"},
-			})
-			return
-		}
-		reporterID = &parsed
+	filter, err := parseListFilter(r)
+	if err != nil {
+		h.fail(w, r, err)
+		return
 	}
 	if principal.Role == user.RoleCitizen {
-		if reporterID != nil && *reporterID != principal.UserID {
+		if filter.ReporterID != nil && *filter.ReporterID != principal.UserID {
 			h.fail(w, r, httpx.Forbidden("Vous ne pouvez consulter que vos propres signalements."))
 			return
 		}
-		reporterID = &principal.UserID
+		filter.ReporterID = &principal.UserID
 	}
-	incidents, total, err := h.Service.List(r.Context(), reporterID, page.Limit, page.Offset)
+	incidents, total, err := h.Service.List(r.Context(), filter, page.Limit, page.Offset)
 	if err != nil {
 		h.fail(w, r, err)
 		return
@@ -203,8 +249,13 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error) {
-	if errors.Is(err, ErrNotFound) {
+	switch {
+	case errors.Is(err, ErrNotFound):
 		err = httpx.NotFound("Incident introuvable.")
+	case errors.Is(err, ErrHeroNotFound):
+		err = httpx.NotFound("Super-héros introuvable.")
+	case errors.Is(err, villain.ErrNotFound):
+		err = httpx.NotFound("Vilain introuvable.")
 	}
 	httpx.Fail(w, r, h.Logger, err)
 }

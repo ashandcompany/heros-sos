@@ -48,7 +48,7 @@ répond `403 mfa_required` partout ailleurs. Le front la traite comme un visiteu
 son code (`/connexion/verification`), ou activer sa 2FA la première fois (`/connexion/double-authentification`).
 Un code juste remplace le jeton de session par un nouveau (contre la fixation de session) et la rend complète.
 Il n'existe aucune route pour désactiver la 2FA : un appareil perdu se traite côté exploitation (`make
-resetmfa`).
+resetmfa-prod` depuis `backend/` en production, `make resetmfa` à la racine en développement).
 
 « Me déconnecter partout » (`POST /auth/logout-all`) ferme toutes les sessions du compte, celle-ci comprise.
 

@@ -56,7 +56,7 @@ Colonne « Front » : l'écran appelle bien la route quand `API_URL` est renseig
 | Données personnelles chiffrées en base (AES-256-GCM puis XChaCha20, clés versionnées) | ✅ |
 | Liens signés Ed25519 sans jeton en base : confirmation newsletter, confirmation d'email, désinscription | ✅ |
 | **2FA des modérateurs** : obligatoire en production (le serveur refuse de démarrer sinon), session limitée tant que le code n'est pas saisi, codes de secours, anti-rejeu, jeton renouvelé | ✅ |
-| Réinitialisation de la 2FA réservée à l'exploitation (`make resetmfa EMAIL=…`), tracée dans l'audit | ✅ |
+| Réinitialisation de la 2FA réservée à l'exploitation (`make resetmfa-prod EMAIL=…` depuis `backend/`, `make resetmfa` à la racine en développement), tracée dans l'audit | ✅ |
 | Journal d'audit des actions sensibles (écriture) | ✅ |
 | Création du premier modérateur (`make moderator`) | ✅ |
 | Envoi de mails asynchrone et borné (activation, mot de passe, changement d'email, contact, notification de décision) | ✅ |
@@ -141,7 +141,7 @@ cd backend
 make test                 # go test ./... -race -count=1 (PostgreSQL requis : make db-start)
 make check                # formatage, vet, tests, govulncheck (la CI lance les tests et govulncheck, pas le formatage ni vet)
 make golangci             # analyses supplémentaires (voir .golangci.yml)
-make resetmfa EMAIL=…     # exploitation : retirer la 2FA d'un compte
+make resetmfa-prod EMAIL=…  # exploitation : retirer la 2FA d'un compte (en dev, depuis la racine : make resetmfa)
 ```
 
 Contrat et branchement du front : [frontend/docs/backend-contract.md](../frontend/docs/backend-contract.md).

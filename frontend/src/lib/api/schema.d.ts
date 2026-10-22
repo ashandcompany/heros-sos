@@ -1076,7 +1076,10 @@ export interface paths {
         };
         /**
          * Liste publique des incidents
-         * @description Accessible sans session. Liste les incidents sans identité civile du déclarant.
+         * @description Accessible sans session. Liste tous les incidents (résolus ou non) sans identité civile du
+         *     déclarant. Les valeurs d'un même filtre sont combinées par OU, les filtres entre eux par ET.
+         *     Les filtres multiples s'écrivent avec un paramètre répété (?status=a&status=b)
+         *     (20 identifiants au maximum pour heroId et villainId).
          */
         get: operations["listIncidents"];
         put?: never;
@@ -4592,6 +4595,12 @@ export interface operations {
             query?: {
                 /** @description Identifiant facultatif du déclarant; un citoyen connecté ne peut filtrer que sur son propre identifiant. */
                 reporterId?: string;
+                /** @description Statuts retenus. */
+                status?: ("reported" | "in_progress" | "succeeded" | "failed")[];
+                /** @description Incidents où au moins un de ces héros est intervenu. */
+                heroId?: string[];
+                /** @description Incidents liés à au moins un de ces vilains. */
+                villainId?: string[];
                 /** @description Nombre d'éléments par page (1 à 100, 20 par défaut). */
                 limit?: components["parameters"]["Limit"];
                 /** @description Nombre d'éléments à sauter. */

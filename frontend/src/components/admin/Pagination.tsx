@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cn } from "@/components/ui/cn";
 import { pagePosition } from "@/lib/api";
 import type { Page } from "@/types";
 
@@ -16,7 +17,7 @@ export async function readPageNumber(
 }
 
 /**
- * Pages précédente et suivante d'une liste (liens : fonctionnent sans JavaScript et l'URL reste
+ * Pages précédente, suivante et numérotées d'une liste (liens : fonctionnent sans JavaScript et l'URL reste
  * partageable). Rien n'est affiché quand tout tient sur une page.
  */
 export function Pagination({
@@ -46,23 +47,56 @@ export function Pagination({
     return `${search ? `${basePath}?${search}` : basePath}${anchor ? `#${anchor}` : ""}`;
   };
   const linkClasses =
-    "inline-flex min-h-10 items-center rounded-full border border-border px-4 text-sm font-medium hover:border-muted";
+    "inline-flex min-h-11 min-w-11 items-center justify-center border-2 border-border px-3 text-sm font-medium hover:border-muted";
 
   return (
-    <nav aria-label="Pagination" className="mt-6 flex flex-wrap items-center gap-3">
+    <nav aria-label="Pagination" className="mt-8 flex flex-wrap items-center gap-2">
       {current > 1 && (
-        <Link href={href(current - 1)} className={linkClasses}>
-          <span aria-hidden="true">←&nbsp;</span>Page précédente
+        <Link href={href(current - 1)} className={linkClasses} rel="prev">
+          <span aria-hidden="true">←&nbsp;</span>Précédente
         </Link>
       )}
-      <p className="text-sm text-muted" aria-current="page">
-        Page {current} sur {count}
-      </p>
+      <ol className="flex flex-wrap items-center gap-2">
+        {pageWindow(current, count).map((target, index) =>
+          target === null ? (
+            <li key={`gap-${index}`} aria-hidden="true" className="px-1 text-muted">
+              …
+            </li>
+          ) : (
+            <li key={target}>
+              <Link
+                href={href(target)}
+                aria-label={`Page ${target} sur ${count}`}
+                aria-current={target === current ? "page" : undefined}
+                className={cn(
+                  linkClasses,
+                  target === current && "border-primary bg-primary/15 text-foreground",
+                )}
+              >
+                {target}
+              </Link>
+            </li>
+          ),
+        )}
+      </ol>
       {current < count && (
-        <Link href={href(current + 1)} className={linkClasses}>
-          Page suivante<span aria-hidden="true">&nbsp;→</span>
+        <Link href={href(current + 1)} className={linkClasses} rel="next">
+          Suivante<span aria-hidden="true">&nbsp;→</span>
         </Link>
       )}
     </nav>
   );
+}
+
+/** Pages affichées : la première, la dernière et deux voisines de la courante ; `null` = « … ». */
+function pageWindow(current: number, count: number): (number | null)[] {
+  const pages: (number | null)[] = [];
+  for (let target = 1; target <= count; target++) {
+    if (target === 1 || target === count || Math.abs(target - current) <= 2) {
+      pages.push(target);
+    } else if (pages.at(-1) !== null) {
+      pages.push(null);
+    }
+  }
+  return pages;
 }

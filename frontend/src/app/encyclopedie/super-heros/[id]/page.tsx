@@ -230,7 +230,7 @@ export default function HeroSheetPage({ params }: PageProps<"/encyclopedie/super
   return (
     <Container className="py-10 sm:py-14">
       <p className="mb-6 text-sm">
-        <Link href={`${routes.encyclopedia}#super-heros`} className="text-accent hover:underline">
+        <Link href={routes.encyclopedia} className="text-accent hover:underline">
           ← Tous les super-héros
         </Link>
       </p>

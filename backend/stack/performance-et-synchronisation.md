@@ -215,6 +215,9 @@ LOADTEST_PASSWORD='Avengers2026!' make perf   # p95 ≤ 350 ms, scénario « mes
 make perf-indexes-off          # retire les index de lecture : la lenteur d'origine revient
 make perf                      # …et la mesure le montre
 make perf-indexes-on
+# Tableau de bord des héros : il demande un compte héros (le scénario « mine » utilise PERF_USER, un citoyen)
+cd backend && LOADTEST_PASSWORD='Avengers2026!' go run ./cmd/loadtest -base-url http://127.0.0.1:8090/api/v1 \
+    -identifier tony.stark@heros-sos.local -dashboard -scenarios dashboard
 
 # Journal et compteurs
 cd backend && go run ./cmd/replay                    # le journal et la base racontent-ils la même histoire ?

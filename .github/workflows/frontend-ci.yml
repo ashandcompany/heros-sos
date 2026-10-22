@@ -49,5 +49,9 @@ jobs:
       - name: Check API types
         run: npm run api:types:check
 
+      # Tests unitaires sans navigateur : file des actions hors ligne (chiffrement, ordre de rejeu, refus du serveur).
+      - name: Unit tests
+        run: npm test
+
       - name: Build
         run: npm run build

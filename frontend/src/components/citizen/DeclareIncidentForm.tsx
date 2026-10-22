@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState, useEffect, useRef, type FormEvent } from "react";
+import { useActionState, useCallback, useEffect, useRef, type FormEvent } from "react";
 import type { DeclareIncidentFormAction } from "@/app/actions/incidents";
+import { useOfflineAction } from "@/components/offline/useOfflineAction";
 import { AddressField } from "@/components/ui/AddressField";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { RadioGroup } from "@/components/ui/RadioGroup";
@@ -9,13 +10,18 @@ import { SelectField } from "@/components/ui/SelectField";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { TextAreaField } from "@/components/ui/TextAreaField";
 import { TextField } from "@/components/ui/TextField";
-import { idleFormState, type FormState } from "@/lib/validation/form-state";
+import { commands } from "@/lib/offline/commands";
+import type { BuiltCommand } from "@/lib/offline/forms";
+import { hasFieldErrors, idleFormState, type FormState } from "@/lib/validation/form-state";
 import {
   declarationFields,
   DESCRIPTION_MAX_LENGTH,
   DESCRIPTION_MIN_LENGTH,
+  readDeclarationValues,
   reporterRoleOptions,
   TITLE_MAX_LENGTH,
+  toDeclaration,
+  validateDeclaration,
   type DeclarationField,
 } from "@/lib/validation/incident";
 import type { IncidentTypeDefinition, VillainSummary } from "@/types";
@@ -36,9 +42,53 @@ export function DeclareIncidentForm({
   action,
   askReporterRole,
 }: DeclareIncidentFormProps) {
-  const [state, formAction] = useActionState(action, idleFormState as FormState<DeclarationField>);
+  // Hors ligne (ou réseau coupé pendant l'envoi), la déclaration est gardée sur l'appareil et partira au retour du
+  // réseau : même validation que côté serveur, sur les types et vilains que le formulaire affiche.
+  const buildOffline = useCallback(
+    (formData: FormData): BuiltCommand<FormState<DeclarationField>> => {
+      const values = readDeclarationValues(formData);
+      const occurredAtIso = String(formData.get("occurredAtIso") ?? "");
+      const validated = { ...values, occurredAt: occurredAtIso || values.occurredAt };
+      const fieldErrors = validateDeclaration(validated, {
+        villainIds: villains.map(({ id }) => id),
+        typeIds: types.map(({ id }) => id),
+        askReporterRole,
+      });
+      if (hasFieldErrors(fieldErrors)) {
+        return { ok: false, state: { status: "error", fieldErrors, values } };
+      }
+      const declaration = toDeclaration(validated);
+      const draft = commands.declareIncident({
+        id: String(formData.get("incidentId") ?? ""),
+        typeId: declaration.typeId,
+        title: declaration.title,
+        description: declaration.description,
+        citizensRescued: 0,
+        // Le géocodage demande le réseau : l'incident arrive sans coordonnées.
+        location: {
+          address: declaration.location.address,
+          city: declaration.location.city,
+          latitude: null,
+          longitude: null,
+        },
+        occurredAt: declaration.occurredAt,
+        villainIds: declaration.villainId ? [declaration.villainId] : [],
+      });
+      if (!draft) {
+        return {
+          ok: false,
+          state: { status: "error", message: "Requête invalide.", fieldErrors: {}, values },
+        };
+      }
+      return { ok: true, draft, message: "Incident enregistré sur cet appareil." };
+    },
+    [villains, types, askReporterRole],
+  );
+  const submit = useOfflineAction(action, buildOffline);
+  const [state, formAction] = useActionState(submit, idleFormState as FormState<DeclarationField>);
   const formRef = useRef<HTMLFormElement>(null);
   const occurredAtIsoRef = useRef<HTMLInputElement>(null);
+  const incidentIdRef = useRef<HTMLInputElement>(null);
   const errors = state.fieldErrors;
   const values = state.values ?? {};
 
@@ -57,6 +107,8 @@ export function DeclareIncidentForm({
       occurredAtIsoRef.current.value =
         date && !Number.isNaN(date.getTime()) ? date.toISOString() : "";
     }
+    // Un identifiant par envoi, choisi par l'appareil : la même déclaration rejouée ne crée pas deux incidents.
+    if (incidentIdRef.current) incidentIdRef.current.value = crypto.randomUUID();
   };
 
   // Référentiel vide (aucun type créé par la modération) : rien ne peut être déclaré.
@@ -81,6 +133,7 @@ export function DeclareIncidentForm({
       className="space-y-5"
     >
       <input ref={occurredAtIsoRef} type="hidden" name="occurredAtIso" />
+      <input ref={incidentIdRef} type="hidden" name="incidentId" />
 
       {askReporterRole && (
         <RadioGroup

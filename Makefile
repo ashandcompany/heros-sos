@@ -49,6 +49,14 @@ moderator: docker ## Crée un modérateur en dev : make moderator EMAIL=… FIRS
 seed: docker ## Remplit la base de dev avec des données Marvel (héros, vilains, incidents…) ; RESET=1 efface tout avant
 	@$(BACKEND) seed-dev
 
+# Monitoring ELK : Kibana sur http://localhost:5601 (3 à 4 Go de mémoire en plus).
+.PHONY: elk elk-down
+elk: docker ## Démarre le monitoring ELK (journaux de l'API en JSON, Kibana : http://localhost:5601)
+	@$(BACKEND) elk-dev
+
+elk-down: docker ## Arrête le monitoring ELK (V=1 supprime aussi ses données)
+	@$(BACKEND) elk-down-dev
+
 # Mesures de performance sur 5 millions d'incidents, dans une base dédiée (voir backend/Makefile).
 .PHONY: perf-db perf-prepare seed-perf perf-run perf perf-indexes-off perf-indexes-on
 perf-db: docker ## Crée la base de mesures herossos_perf dans la base de dev (Docker)

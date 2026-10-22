@@ -214,6 +214,26 @@ logs-dev: ## Suit les journaux de la pile de développement
 moderator-dev: ## Crée un modérateur dans la pile de développement : EMAIL=… FIRST=… LAST=… BIRTH=AAAA-MM-JJ
 	$(call create_moderator,$(COMPOSE_DEV))
 
+# Monitoring ELK (profil Compose `elk`) : Elasticsearch, Logstash, Kibana et Filebeat, qui lit les journaux JSON de l'API.
+# Compter 3 à 4 Go de mémoire en plus : donner 6 à 8 Go à Docker Desktop. Les images pèsent environ 2 Go.
+ELK_DISK_MIN_MB ?= 4096
+ELK_SERVICES    = elasticsearch logstash kibana filebeat elk-setup
+
+.PHONY: elk-dev
+elk-dev: ## Démarre le monitoring ELK (journaux de l'API en JSON, Kibana sur http://localhost:5601)
+	@$(MAKE) --no-print-directory disk-check DISK_MIN_MB=$(ELK_DISK_MIN_MB)
+	@test -f .env || { echo "Créez .env d'abord : make env"; exit 1; }
+	@# L'API est recréée avec des journaux JSON ; elle reprend le texte lisible au prochain `make up`.
+	HEROS_LOG_FORMAT=json $(COMPOSE_DEV) --profile elk up -d api $(ELK_SERVICES)
+	@echo "Kibana : http://localhost:$${KIBANA_PORT:-5601} (le dashboard apparaît une fois elk-setup terminé : make logs-dev)"
+
+.PHONY: elk-down-dev
+elk-down-dev: ## Arrête le monitoring ELK (V=1 supprime aussi ses données) et remet les journaux de l'API en texte
+	$(COMPOSE_DEV) --profile elk stop $(ELK_SERVICES)
+	$(COMPOSE_DEV) --profile elk rm -f $(if $(V),-v) $(ELK_SERVICES)
+	$(if $(V),docker volume rm -f heros-sos-dev_esdata >/dev/null 2>&1 || true)
+	$(COMPOSE_DEV) up -d api
+
 .PHONY: seed-dev
 seed-dev: ## Remplit la base de la pile de développement (univers Marvel) ; RESET=1 efface d'abord TOUTES les données
 	$(COMPOSE_DEV) run --rm --entrypoint /seed api $(if $(RESET),-reset)

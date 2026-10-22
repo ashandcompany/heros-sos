@@ -495,23 +495,6 @@ Types dans [src/types/review.ts](../src/types/review.ts) (`HeroReview`, `ReviewR
   413, 415, 429 (avec `Retry-After`) et API indisponible passent par `toApiFailure` et
   `apiFailureMessage`.
 
-### Incidents, interventions et super-vilains : modèles différents
-
-Le contrat existe désormais, mais les « Future implémentation » de `lib/api/` ont été écrites
-avant lui et ne lui correspondent pas. Il faudra **réécrire les fonctions d'après `openapi.yaml`**,
-pas seulement changer les URL.
-
-| Sujet           | Frontend actuel (hypothèses)                                                             | Contrat                                                                                                                                          |
-| --------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Espaces         | Routes par rôle : `/hero/incidents…`, `/me/incidents`, `/admin/incidents…`               | Routes communes à tous les rôles (`/incidents`, `/interventions/{id}`) ; « mes incidents » = `GET /incidents?reporterId=…`                       |
-| Intervention    | `POST` / `PUT /hero/incidents/{id}/intervention` : un héros se positionne sur l'incident | Ressource à part : `POST /incidents/{incidentId}/interventions`, puis `join`, invitations (`confirm` / `decline`), `outcome`, `outcome/validate` |
-| Carte, priorité | `GET /incidents/map`, `GET /hero/incidents/map`, `PUT /hero/incidents/{id}/priority`     | Absents du contrat                                                                                                                               |
-| Modération      | `PUT /admin/incidents/{id}/moderation`, `PATCH /admin/incidents/{id}`                    | Absente du contrat (seul l'arbitrage du résultat d'une intervention existe)                                                                      |
-
-À trancher avec le backend : ce qui manque au contrat (carte, priorité, modération des incidents)
-est-il à ajouter, ou les écrans du frontend doivent-ils changer ? Les incidents d'un vilain et d'un
-héros ont été ajoutés (`GET /villains/{id}/incidents`, `GET /heroes/{heroId}/incidents`, branchés).
-
 ### Incidents et interventions : choix du branchement
 
 Fonctions dans [incidents.ts](../src/lib/api/incidents.ts) (incidents) et
@@ -564,7 +547,8 @@ demandent une session.
   `InterventionRef`) : l'API utilise l'intervention, le mock l'incident. Sans API, les actions
   d'équipe répondent qu'elles demandent l'API (le mock n'a qu'un héros par intervention).
 
-**Absent du contrat**, masqué avec l'API (`incidentFeatures` dans `incidents.ts`) :
+**Absent du contrat**, masqué avec l'API (`incidentFeatures` dans `incidents.ts`) ; à trancher avec le
+backend : ajouter ces routes, ou adapter les écrans. Seul le mock applique ces fonctions.
 
 | Fonction                                        | Frontend (hypothèse)                                                   | Avec l'API                                  |
 | ----------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------- |

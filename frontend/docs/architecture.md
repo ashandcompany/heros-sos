@@ -136,8 +136,10 @@ Un `401` de l'API sur un appel authentifié (session expirée ou révoquée) red
 - Les fonctions branchées choisissent selon `isApiEnabled` : `apiFetch()`
   ([http.ts](../src/lib/api/http.ts)) si `API_URL` est renseignée, le mock sinon. L'application
   démarre donc toujours sans backend.
-- Chaque fonction mockée documente en commentaire l'endpoint futur
-  (« Future implémentation : `GET ${API_URL}/incidents` … »). C'est la spec du branchement.
+- Chaque fonction branchée indique en commentaire la route appelée (« API :
+  `GET /admin/moderation/summary` »). Une fonction encore mockée pour un domaine sans contrat
+  documente la route supposée (« Future implémentation : `GET ${API_URL}/hero/dashboard` ») : une
+  hypothèse à faire valider par le backend.
 - Les mutations renvoient un résultat typé plutôt que de lever une exception :
   `{ ok: true, … } | { ok: false, error }` (ex : `LoginResult`). Les actions transforment `error`
   en message affiché.

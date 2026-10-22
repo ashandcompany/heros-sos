@@ -395,8 +395,7 @@ export async function getIncident(token: string, id: string): Promise<HeroIncide
 
 /**
  * Corrige les informations d'un incident (titre, lieu, vilain, héros, statut…).
- * Future implémentation : `PATCH ${API_URL}/admin/incidents/${id}` avec l'`IncidentUpdate`
- * (absente du contrat : voir `incidentFeatures.moderation`).
+ * Absente du contrat : mock seulement (voir `incidentFeatures.moderation`).
  */
 export async function updateIncident(
   token: string,
@@ -445,8 +444,7 @@ export async function updateIncident(
 
 /**
  * Valide (déclaration conforme et réelle) ou rejette un incident.
- * Future implémentation : `PUT ${API_URL}/admin/incidents/${id}/moderation` avec `{ decision }`
- * (absente du contrat : voir `incidentFeatures.moderation`).
+ * Absente du contrat : mock seulement (voir `incidentFeatures.moderation`).
  */
 export async function moderateIncident(
   token: string,
@@ -699,8 +697,8 @@ function findActionableIncident(id: string): Incident | { error: string } {
 }
 
 /**
- * Future implémentation : `PUT ${API_URL}/hero/incidents/${id}/priority` avec `{ priority }`
- * (absente du contrat : voir `incidentFeatures.priority`).
+ * Change la priorité d'un incident non résolu.
+ * Absente du contrat : mock seulement (voir `incidentFeatures.priority`).
  */
 export async function setIncidentPriority(
   token: string,

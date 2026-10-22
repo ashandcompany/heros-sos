@@ -208,7 +208,7 @@ Côté code :
   4. délai de synchronisation des actions faites hors ligne ;
   5. chronologie des événements (recherche enregistrée).
   Le flux temps réel dure jusqu'à 10 minutes : il est écarté des durées.
-- **Poids** : compter 3 à 4 Go de RAM en plus (ordre de grandeur, pas une mesure), donc 6 à 8 Go alloués à Docker Desktop, et 4 Go de disque libre pour les images. Sur Linux, Elasticsearch exige `vm.max_map_count=262144`. Pas d'ELK dans la CI.
+- **Poids** (mesuré sur Docker Desktop, macOS) : l'ELK prend 3,3 Go de mémoire (5,7 Go avec toute la pile), donc 8 Go alloués à Docker Desktop ; les images pèsent environ 6 Go sur le disque de Docker. Sur Linux, Elasticsearch exige `vm.max_map_count=262144`. Pas d'ELK dans la CI.
 
 ## 3. Utiliser et démontrer
 
@@ -250,7 +250,7 @@ Prévoir une vidéo de secours, et démarrer la pile ELK avant d'entrer en salle
 
 Ce document décrit ce qui a été **exécuté**. Le reste est écrit mais n'a pas tourné :
 
-- **La pile ELK n'a pas démarré** : Docker n'était pas lancé sur la machine qui a produit ce travail. Les fichiers (`docker-compose.dev.yml` avec le profil `elk`, Filebeat, Logstash, modèles d'index, `setup.sh`) sont valides au sens de leur syntaxe (Compose, YAML, JSON, bash), et le **format des lignes de journal** que Logstash attend est celui que l'API produit, vérifié. Mais la version d'image par défaut, les healthchecks, la lecture des fichiers de journaux sur Docker Desktop (macOS) et l'import du dashboard sont à constater au premier `make elk`. Le dashboard est écrit à la main : si son import échoue (non bloquant), les vues de données restent utilisables dans Discover et les graphiques se recréent dans Lens.
+- **La pile ELK a été démarrée une fois** (22/10/2026, Docker Desktop sur macOS, 7,5 Go, Elastic 9.3.1) : les cinq services démarrent, `elk-setup` importe le dashboard, les journaux et les événements arrivent dans Elasticsearch, le p95 par route se calcule et les sept graphiques du dashboard s'affichent avec des données (déclaration d'un incident avec `X-Client-Created-At` deux minutes dans le passé : `sync_delay_ms` = 120 496 ms). Ce démarrage a révélé un défaut, corrigé : l'adresse IP restait dans `event.original`. **Non vérifié** : Linux (`vm.max_map_count`), Windows, une autre version d'Elastic, et le monitoring sous plusieurs instances de l'API (Filebeat lit tous les conteneurs `api`, mais un seul a été lancé).
 - **Le parcours dans un vrai navigateur** : service worker, IndexedDB et `EventSource` n'ont pas été exercés dans un navigateur. Ce qui l'a été : la logique de la file (22 tests, avec le vrai chiffrement), la route `/api/sync` contre la vraie API (envoi, rejeu, refus, chemin interdit, session absente, mauvaise origine), et le flux SSE contre la vraie API avec trois comptes. Les formulaires compilent, passent ESLint et le build.
 - **Le comportement d'un navigateur coupé du réseau** : une Server Action qui échoue hors ligne lève une `TypeError` (comportement de `fetch`), c'est ce que le code intercepte. À confirmer dans chaque navigateur visé.
 - **Plusieurs instances de l'API** : les verrous consultatifs (écriture des événements, journalisation) sont prévus pour, mais seul un serveur a été lancé.

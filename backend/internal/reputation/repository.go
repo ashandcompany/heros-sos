@@ -416,6 +416,18 @@ func (r *gormRepository) SaveReply(ctx context.Context, reviewID, heroID uuid.UU
 }
 
 func (r *gormRepository) SetReviewStatus(ctx context.Context, reviewID, moderatorID uuid.UUID, status string, now time.Time) error {
+	// Un modérateur déclarant peut noter les héros, mais son avis est validé par un autre modérateur.
+	var review reviewRecord
+	if err := r.conn(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("id = ?", reviewID).Take(&review).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("reputation : lecture de l'avis avant modération : %w", err)
+	}
+	if review.CitizenID != nil && *review.CitizenID == moderatorID {
+		return ErrOwnReview
+	}
 	result := r.conn(ctx).Model(&reviewRecord{}).Where("id = ?", reviewID).Updates(map[string]any{
 		"status": status, "moderated_by": moderatorID, "moderated_at": now,
 	})

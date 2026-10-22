@@ -111,6 +111,7 @@ const reviewErrorMessages: Record<string, string> = {
   hero_already_reviewed: "Vous avez déjà noté ce super-héros pour cette intervention.",
   hero_review_not_eligible: "Cette action n'est pas possible sur cet avis.",
   hero_review_reply_unavailable: "Ce commentaire n'accepte pas de réponse.",
+  hero_review_own_review: "Votre propre avis doit être modéré par un autre modérateur.",
   not_found: "Avis ou intervention introuvable.",
   validation_failed: "Certaines informations sont invalides.",
 };

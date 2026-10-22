@@ -9,14 +9,10 @@ import { RatingForm } from "./RatingForm";
 const outcomeLabels = { reussi: "Intervention réussie", echoue: "Intervention échouée" } as const;
 
 /**
- * Super-héros à noter / déjà notés, pour le déclarant connecté (citoyen, ou héros dans son
- * espace). Lit la session : à rendre sous <Suspense>.
+ * Super-héros à noter / déjà notés, pour le déclarant connecté (citoyen, ou héros / modérateur
+ * dans son espace). Lit la session : à rendre sous <Suspense>.
  */
-export async function InterventionsList({
-  role = "citoyen",
-}: {
-  role?: Extract<UserRole, "citoyen" | "super-heros">;
-}) {
+export async function InterventionsList({ role = "citoyen" }: { role?: UserRole }) {
   const { token } = await requireRole(role);
   const interventions = await getMyInterventions(token);
 

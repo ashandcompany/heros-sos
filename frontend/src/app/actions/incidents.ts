@@ -78,8 +78,8 @@ export async function rateInterventionAction(
   _previousState: FormState<RatingField>,
   formData: FormData,
 ): Promise<FormState<RatingField>> {
-  // Le déclarant note les héros intervenus : un citoyen, ou un héros qui a signalé l'incident.
-  const { token } = await requireRole(["citoyen", "super-heros"]);
+  // Le déclarant note les héros intervenus : un citoyen, ou un héros / modérateur qui a signalé l'incident.
+  const { token } = await requireRole(["citoyen", "super-heros", "admin"]);
   const interventionId = String(formData.get("interventionId") ?? "");
   const heroId = String(formData.get("heroId") ?? "");
   const rating = Number(formData.get("rating"));
@@ -113,6 +113,7 @@ export async function rateInterventionAction(
 
   revalidatePath(routes.profileInterventions);
   revalidatePath(routes.heroRate);
+  revalidatePath(routes.adminRate);
   return { status: "success", message: "Merci, votre avis a été publié.", fieldErrors: {} };
 }
 

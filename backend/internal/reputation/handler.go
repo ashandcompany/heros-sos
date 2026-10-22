@@ -16,6 +16,7 @@ const (
 	CodeAlreadyReviewed  = "hero_already_reviewed"
 	CodeNotEligible      = "hero_review_not_eligible"
 	CodeReplyUnavailable = "hero_review_reply_unavailable"
+	CodeOwnReview        = "hero_review_own_review"
 )
 
 type Handler struct {
@@ -238,6 +239,8 @@ func toHTTPError(err error) error {
 		return httpx.Conflict(CodeAlreadyReviewed, "Ce héros a déjà été noté pour cette intervention.")
 	case errors.Is(err, ErrReplyUnavailable):
 		return httpx.Conflict(CodeReplyUnavailable, "Ce commentaire ne peut pas recevoir de réponse.")
+	case errors.Is(err, ErrOwnReview):
+		return httpx.NewError(http.StatusForbidden, CodeOwnReview, "Vous ne pouvez pas modérer votre propre avis.")
 	}
 	return err
 }

@@ -37,7 +37,7 @@ export function SiteHeader() {
         <Container className="relative flex h-16 items-center justify-between gap-4">
           <Link
             href={routes.home}
-            className="rounded-sm"
+            className="shrink-0 rounded-sm"
             aria-label="Heros-SOS, retour à l'accueil"
           >
             <Logo />

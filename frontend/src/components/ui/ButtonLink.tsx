@@ -3,7 +3,7 @@ import type { ComponentProps } from "react";
 import { cn } from "./cn";
 
 type Variant = "primary" | "secondary" | "danger" | "ghost" | "console";
-type Size = "md" | "lg";
+type Size = "sm" | "md" | "lg";
 
 // Boutons brutalistes : cadre épais, ombre dure décalée qui s'écrase au survol et au clic.
 const lift =
@@ -32,13 +32,14 @@ const variantClasses: Record<Variant, string> = {
 };
 
 const sizeClasses: Record<Size, string> = {
+  sm: "min-h-9 px-3 text-xs",
   md: "min-h-11 px-4 text-sm",
   lg: "min-h-12 px-6 text-base",
 };
 
 export const buttonClasses = (variant: Variant = "primary", size: Size = "md") =>
   cn(
-    "inline-flex items-center justify-center gap-2 font-display font-bold tracking-[0.1em] uppercase",
+    "inline-flex items-center justify-center gap-2 font-display whitespace-nowrap font-bold tracking-[0.1em] uppercase",
     "transition-none",
     variantClasses[variant],
     sizeClasses[size],

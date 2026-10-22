@@ -27,6 +27,7 @@ import (
 	"github.com/ashandcompany/heros-sos/backend/internal/film"
 	"github.com/ashandcompany/heros-sos/backend/internal/hero"
 	"github.com/ashandcompany/heros-sos/backend/internal/herodashboard"
+	"github.com/ashandcompany/heros-sos/backend/internal/herolocation"
 	"github.com/ashandcompany/heros-sos/backend/internal/httpx"
 	"github.com/ashandcompany/heros-sos/backend/internal/idempotency"
 	"github.com/ashandcompany/heros-sos/backend/internal/incident"
@@ -69,6 +70,8 @@ type components struct {
 	authHandler         *auth.Handler
 	heroHandler         *hero.Handler
 	dashboardHandler    *herodashboard.Handler
+	locationService     *herolocation.Service
+	locationHandler     *herolocation.Handler
 	moderationHandler   *moderation.Handler
 	incidentHandler     *incident.Handler
 	interventionHandler *intervention.Handler
@@ -211,8 +214,10 @@ func NewWithDB(cfg config.Config, logger *slog.Logger, db *gorm.DB, opts ...Opti
 		interventiontype.NewService(types, c.audit, c.tx, c.clock), logger, cfg.HTTP)
 	c.villainHandler = villain.NewHandler(
 		villain.NewService(villains, c.audit, c.tx, c.clock, types), logger, cfg.HTTP)
+	c.locationService = herolocation.NewService(db, c.clock, cfg.Proximity.LocationTTL, cfg.Proximity.AlertRadiusKm)
+	c.locationHandler = herolocation.NewHandler(c.locationService, logger, cfg.HTTP)
 	incidentService := incident.NewService(incident.ServiceDeps{
-		Repo: incident.NewRepository(db), Types: types, Villains: villains, Users: c.users,
+		Repo: incident.NewRepository(db), Types: types, Villains: villains, Users: c.users, Heroes: c.locationService,
 		Notifier: mailService, Audit: c.audit, Events: c.events, Tx: c.tx, Clock: c.clock, Logger: logger,
 	})
 	c.incidentHandler = incident.NewHandler(incident.HandlerDeps{
@@ -429,6 +434,12 @@ func (s *Server) cleanup(ctx context.Context) {
 			},
 			failureMessage: "purge des changements d'adresse non confirmés en échec",
 			successMessage: "changements d'adresse non confirmés purgés", countAttribute: "demandes_supprimees",
+		},
+		// Une position périmée n'est plus utilisée pour l'alerte : on ne la garde pas.
+		{
+			run:            c.locationService.PurgeStale,
+			failureMessage: "purge des positions de héros périmées en échec",
+			successMessage: "positions de héros périmées purgées", countAttribute: "positions_supprimees",
 		},
 	} {
 		s.purge(ctx, task)

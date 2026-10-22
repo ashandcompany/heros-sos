@@ -82,6 +82,7 @@ type Config struct {
 	Jobs        Jobs
 	Events      Events
 	Dashboard   Dashboard
+	Proximity   Proximity
 }
 
 // OMDb regroupe les réglages du catalogue de films.
@@ -362,6 +363,14 @@ type Dashboard struct {
 	StatsTTL time.Duration
 }
 
+// Proximity regroupe les réglages de la localisation des héros.
+type Proximity struct {
+	// LocationTTL : au-delà, une position n'est plus utilisée pour l'alerte et elle est purgée.
+	LocationTTL time.Duration
+	// AlertRadiusKm : rayon autour d'un incident dans lequel les héros sont prévenus.
+	AlertRadiusKm int
+}
+
 // IsProduction indique si l'application tourne en production.
 func (c Config) IsProduction() bool {
 	return c.Environment == EnvironmentProduction
@@ -502,6 +511,10 @@ func Load(getenv func(string) string) (Config, error) {
 			StreamBuffer:      l.positiveInt(envEventsStreamBuffer, defaultEventsStreamBuffer),
 		},
 		Dashboard: Dashboard{StatsTTL: l.durationOrZero(envDashboardStatsTTL, defaultDashboardStatsTTL)},
+		Proximity: Proximity{
+			LocationTTL:   l.duration(envLocationTTL, defaultLocationTTL),
+			AlertRadiusKm: l.positiveInt(envAlertRadiusKm, defaultAlertRadiusKm),
+		},
 	}
 
 	l.errs = append(l.errs, cfg.validate())

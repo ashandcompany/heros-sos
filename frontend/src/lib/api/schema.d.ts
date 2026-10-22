@@ -84,6 +84,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/hero/location": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Partager sa position actuelle
+         * @description Réservé aux super-héros. Remplace la position actuelle du héros (aucun historique). Elle est arrondie à environ 110 m, conservée en clair 30 minutes au plus (`HEROS_LOCATION_TTL`) puis supprimée, et n'est relue par aucune route : le serveur s'en sert seulement pour prévenir les héros à proximité (`HEROS_ALERT_RADIUS_KM`, 10 km par défaut) d'un nouvel incident avec coordonnées. Sans héros proche, ou sans coordonnées, tous les héros actifs sont prévenus.
+         */
+        put: operations["saveHeroLocation"];
+        post?: never;
+        /**
+         * Cesser de partager sa position
+         * @description Réservé aux super-héros. Supprime la position du héros en conservant son consentement (pour retirer le consentement, voir `/hero/location/consent`); sans position enregistrée, ne fait rien.
+         */
+        delete: operations["deleteHeroLocation"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/hero/location/consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Consentir au partage de sa position
+         * @description Réservé aux super-héros. Enregistre (avec sa date) le consentement explicite du héros au partage de sa position; déjà consenti, la date d'origine est conservée. `PUT /hero/location` est refusé (409) tant que ce consentement n'est pas donné.
+         */
+        put: operations["grantHeroLocationConsent"];
+        post?: never;
+        /**
+         * Retirer son consentement au partage de position
+         * @description Réservé aux super-héros. Retire le consentement et supprime la position, dans la même transaction. Sans effet si rien n'était partagé.
+         */
+        delete: operations["revokeHeroLocationConsent"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/hero/reviews": {
         parameters: {
             query?: never;
@@ -3467,6 +3515,113 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HeroDashboard"];
                 };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    saveHeroLocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: double */
+                    latitude: number;
+                    /** Format: double */
+                    longitude: number;
+                    /** @description Précision de la mesure en mètres (facultatif). */
+                    accuracyM?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Position enregistrée. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description Consentement absent (`hero_location_consent_required`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteHeroLocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Position supprimée. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    grantHeroLocationConsent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Consentement enregistré. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    revokeHeroLocationConsent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Consentement retiré et position supprimée. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];

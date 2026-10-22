@@ -48,7 +48,7 @@ Ce que `pg_stat_statements` a désigné avant correction, une requête à froid 
 
 | Point | Ce qui a changé |
 |---|---|
-| Numéros de migration | Celle de `develop` (`20261022130000_extend_incident_moderation`) prenait le numéro de la première des nôtres : les cinq migrations de ce travail sont renumérotées `20261022140000` à `144000` |
+| Numéros de migration | `develop` a pris, pendant ce travail, les numéros `20261022130000` (modération des incidents), `140000` et `150000` (position des héros). **golang-migrate n'applique que les versions supérieures à la version courante de la base** : une base qui a déjà appliqué `150000` ignorerait en silence une migration numérotée en dessous. Les sept migrations de ce travail sont donc renumérotées `20261022160000` à `166000`, après toutes celles de `develop` ; à refaire si `develop` en ajoute d'autres avant la fusion |
 | Compteurs | `incident_stats` garde la **modération** comme dimension (listes publiques : ligne `approved` ; modérateur : toutes ; « mes incidents » : `reporter_stats`, tous états). `villain_stats` ne compte que les liens vers un incident approuvé, et `hero_stats.resolved` que les interventions réussies d'un incident approuvé, comme leurs historiques publics |
 | Colonnes dénormalisées | Nouvelle `incident_villains.incident_approved`. `intervention_heroes.resolved_at` n'est renseignée que pour un incident approuvé. Un trigger (`incidents_sync_moderation`) répercute une décision de modération sur ces colonnes, donc sur les compteurs, **dans les deux sens** (rejet d'un incident déjà résolu, puis ré-approbation) |
 | Index | Index **partiels** `WHERE moderation = 'approved'` pour les listes publiques, et `incident_villains_villain_idx` partiel sur `incident_approved`. Ils ne servent que si la requête écrit `'approved'` en toutes lettres (un paramètre l'en empêcherait) |
@@ -139,7 +139,7 @@ Depuis la fusion de la PR #37, `GET /incidents` renvoie **tous les statuts** sau
 
 ### P1 : performance
 
-Cinq migrations, dans l'ordre (`20261022140000` à `146000`, après celle de la modération ; les numéros `143000` et `144000` sont ceux du journal et des commandes, plus bas) :
+Cinq migrations de lecture, dans l'ordre (`20261022160000`, `161000`, `162000`, `165000` et `166000`, après toutes celles de `develop` ; `163000` et `164000` sont celles du journal et des commandes, plus bas) :
 
 1. `denormalize_history_columns` : `incident_villains.incident_created_at` et `incident_approved`, et `intervention_heroes.resolved_at` (date de la résolution réussie d'un incident approuvé, pour un héros confirmé). Des triggers les remplissent à l'insertion, suivent le changement de statut d'une intervention et répercutent une décision de modération : aucun chemin d'écriture ne peut les oublier.
 2. `create_read_counters` : `incident_stats` (par modération, statut et type), `reporter_stats` (par déclarant et statut), `villain_stats` (incidents approuvés) et `hero_stats` (interventions et résolutions de chaque héros). Tenus à jour par des **triggers de niveau instruction** (`REFERENCING … TABLE`), et recalculables par `rebuild_read_counters()`, qui sert aussi au rattrapage initial. `TRUNCATE` les vide avec les tables.

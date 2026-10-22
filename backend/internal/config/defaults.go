@@ -114,6 +114,9 @@ const (
 
 	// defaultDashboardStatsTTL est la fraîcheur des statistiques du tableau de bord des héros.
 	defaultDashboardStatsTTL = 30 * time.Second
+
+	defaultLocationTTL   = 30 * time.Minute
+	defaultAlertRadiusKm = 10
 )
 
 // Règles de limitation de débit par défaut (maximum de requêtes par fenêtre).

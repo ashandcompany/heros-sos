@@ -84,8 +84,8 @@ PERF_USER         ?= jane.foster@heros-sos.local
 PERF_PSQL         ?= psql '$(PERF_DATABASE_URL)' -v ON_ERROR_STOP=1 -q
 # Les deux migrations « que des index » : les listes, puis les derniers incidents résolus (qui demande une colonne ajoutée
 # entre les deux). Retirées dans l'ordre inverse de leur création.
-PERF_INDEXES_SQL  ?= migrations/20261022142000_add_incident_perf_indexes
-PERF_RESOLVED_SQL ?= migrations/20261022146000_add_incident_resolved_index
+PERF_INDEXES_SQL  ?= migrations/20261022162000_add_incident_perf_indexes
+PERF_RESOLVED_SQL ?= migrations/20261022166000_add_incident_resolved_index
 
 .PHONY: perf-indexes-off
 perf-indexes-off: ## Démonstration : retire les index de lecture de la base de mesures (lenteur d'origine)

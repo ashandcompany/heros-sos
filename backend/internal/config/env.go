@@ -124,6 +124,9 @@ const (
 	envEventsStreamBuffer      = "HEROS_EVENTS_STREAM_BUFFER"
 
 	envDashboardStatsTTL = "HEROS_DASHBOARD_STATS_TTL"
+
+	envLocationTTL   = "HEROS_LOCATION_TTL"
+	envAlertRadiusKm = "HEROS_ALERT_RADIUS_KM"
 )
 
 // EnvVarNames retourne la liste de toutes les variables d'environnement reconnues.
@@ -161,5 +164,6 @@ func EnvVarNames() []string {
 		envEventsPollInterval, envEventsBatchSize, envEventsHeartbeat,
 		envEventsMaxStreamsPerUser, envEventsStreamMaxAge, envEventsStreamBuffer,
 		envDashboardStatsTTL,
+		envLocationTTL, envAlertRadiusKm,
 	}
 }

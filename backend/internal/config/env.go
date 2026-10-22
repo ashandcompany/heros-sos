@@ -112,6 +112,9 @@ const (
 	envCleanupTimeout   = "HEROS_CLEANUP_TIMEOUT"
 	envSessionRetention = "HEROS_SESSION_RETENTION"
 	envTokenRetention   = "HEROS_TOKEN_RETENTION"
+
+	envLocationTTL   = "HEROS_LOCATION_TTL"
+	envAlertRadiusKm = "HEROS_ALERT_RADIUS_KM"
 )
 
 // EnvVarNames retourne la liste de toutes les variables d'environnement reconnues.
@@ -146,5 +149,6 @@ func EnvVarNames() []string {
 		envPublicBaseURL, envActivationPath, envPasswordResetPath, envNewsletterConfirmPath,
 		envNewsletterUnsubscribePath, envEmailChangeConfirmPath,
 		envCleanupInterval, envCleanupTimeout, envSessionRetention, envTokenRetention,
-	}
+				envLocationTTL, envAlertRadiusKm,
+			}
 }

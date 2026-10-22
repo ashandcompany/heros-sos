@@ -43,12 +43,18 @@ type Notifier interface {
 	SendIncidentReported(ctx context.Context, to, title, interventionType string) error
 }
 
+// HeroLocator trouve les héros à proximité d'un point (implémenté par herolocation.Service).
+type HeroLocator interface {
+	EmailsNear(ctx context.Context, latitude, longitude float64) ([]string, error)
+}
+
 // ServiceDeps regroupe les dépendances du service.
 type ServiceDeps struct {
 	Repo     Repository
 	Types    TypeFinder
 	Villains VillainFinder
 	Users    user.Repository
+	Heroes   HeroLocator
 	Notifier Notifier
 	Audit    audit.Recorder
 	Tx       database.Transactor
@@ -380,25 +386,45 @@ func (s *Service) resolveUpdate(ctx context.Context, id uuid.UUID, in UpdateInpu
 	return &updated, nil
 }
 
-// notify prévient les modérateurs et les héros actifs, sauf le déclarant. Le lieu n'est jamais
-// envoyé par mail.
+// notify prévient les modérateurs et les héros, sauf le déclarant. Avec des coordonnées, seuls les héros à
+// proximité sont prévenus ; s'il n'y en a aucun, ou sans coordonnées, tous les héros actifs le sont. Le lieu
+// n'est jamais envoyé par mail.
 func (s *Service) notify(ctx context.Context, created *Incident) {
 	reporter, err := s.Users.FindByID(ctx, created.ReporterID)
 	if err != nil {
 		s.Logger.ErrorContext(ctx, "notification d'incident : déclarant introuvable", "incident_id", created.ID, "error", err)
 		return
 	}
-	recipients, err := s.Users.ActiveEmailsByRole(ctx, user.RoleModerator, user.RoleHero)
+	recipients, err := s.Users.ActiveEmailsByRole(ctx, user.RoleModerator)
 	if err != nil {
 		s.Logger.ErrorContext(ctx, "notification d'incident : destinataires illisibles", "incident_id", created.ID, "error", err)
 		return
 	}
-	for _, to := range recipients {
-		if to == reporter.Email {
+	heroes, err := s.heroRecipients(ctx, created)
+	if err != nil {
+		s.Logger.ErrorContext(ctx, "notification d'incident : héros illisibles", "incident_id", created.ID, "error", err)
+	}
+	seen := make(map[string]bool)
+	for _, to := range append(recipients, heroes...) {
+		if to == reporter.Email || seen[to] {
 			continue
 		}
+		seen[to] = true
 		if err := s.Notifier.SendIncidentReported(ctx, to, created.Title, created.TypeLabel); err != nil {
 			s.Logger.ErrorContext(ctx, "notification d'incident impossible", "incident_id", created.ID, "error", err)
 		}
 	}
+}
+
+func (s *Service) heroRecipients(ctx context.Context, created *Incident) ([]string, error) {
+	if created.Latitude != nil && created.Longitude != nil {
+		nearby, err := s.Heroes.EmailsNear(ctx, *created.Latitude, *created.Longitude)
+		if err != nil {
+			return nil, err
+		}
+		if len(nearby) > 0 {
+			return nearby, nil
+		}
+	}
+	return s.Users.ActiveEmailsByRole(ctx, user.RoleHero)
 }

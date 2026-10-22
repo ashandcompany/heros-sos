@@ -14,6 +14,7 @@ func registerRoutes(router *Router, c *components) {
 	registerAuthRoutes(router, c)
 	registerHeroRoutes(router, c)
 	registerHeroDashboardRoutes(router, c)
+	registerHeroLocationRoutes(router, c)
 	registerModerationRoutes(router, c)
 	registerDocsRoutes(router, c)
 	registerInterventionTypeRoutes(router, c)

@@ -57,6 +57,7 @@ y a déjà été menée.
 Sur plusieurs millions d'incidents, ces agrégats ne se recalculent pas à chaque appel : `global.incidentsByType` et
 `global.rescuedCitizens` se lisent dans `incident_stats` (ligne `approved`), et les statistiques (globales, et celles de
 chaque héros) passent par un cache en mémoire (`HEROS_DASHBOARD_STATS_TTL`, 30 s) qui sert toujours la dernière valeur
-sur-le-champ et se rafraîchit en arrière-plan. Les deux listes d'incidents restent à jour. Le nombre d'interventions
+sur-le-champ et se rafraîchit en arrière-plan (au démarrage de l'API, il est rempli d'avance pour chaque héros :
+`HEROS_DASHBOARD_WARMUP`). Les deux listes d'incidents restent à jour. Le nombre d'interventions
 terminées n'a pas de compteur : il se calcule dans ce rafraîchissement. Voir
 [Performance et synchronisation](../stack/performance-et-synchronisation.md).

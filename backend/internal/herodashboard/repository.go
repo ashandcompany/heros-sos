@@ -16,6 +16,8 @@ type Repository interface {
 	Global(ctx context.Context) (Global, error)
 	Personal(ctx context.Context, heroID uuid.UUID) (Personal, error)
 	MainEnemies(ctx context.Context, heroID uuid.UUID, limit int) ([]Enemy, error)
+	// HeroIDs liste les héros dont le tableau de bord peut être ouvert : approuvés et actifs (ceux de l'annuaire public).
+	HeroIDs(ctx context.Context) ([]uuid.UUID, error)
 }
 
 type gormRepository struct {
@@ -92,6 +94,20 @@ WHERE ih.hero_id = ? AND ih.participation = 'confirmed'
 GROUP BY v.id, v.alias
 ORDER BY encounters DESC, v.alias
 LIMIT ?`
+
+const heroIDsSQL = `SELECT hero_profiles.user_id
+FROM hero_profiles
+JOIN users ON users.id = hero_profiles.user_id
+WHERE hero_profiles.verification_status = 'approved' AND users.role = 'hero' AND users.status = 'active'
+ORDER BY hero_profiles.user_id`
+
+func (r *gormRepository) HeroIDs(ctx context.Context) ([]uuid.UUID, error) {
+	var ids []uuid.UUID
+	if err := r.conn(ctx).Raw(heroIDsSQL).Scan(&ids).Error; err != nil {
+		return nil, fmt.Errorf("herodashboard : liste des héros : %w", err)
+	}
+	return ids, nil
+}
 
 func (r *gormRepository) MainEnemies(ctx context.Context, heroID uuid.UUID, limit int) ([]Enemy, error) {
 	enemies := []Enemy{}

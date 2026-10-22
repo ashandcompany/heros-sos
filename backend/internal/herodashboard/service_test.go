@@ -37,8 +37,8 @@ func (r *fakeRepo) Personal(ctx context.Context, heroID uuid.UUID) (Personal, er
 	now := r.running.Add(1)
 	defer r.running.Add(-1)
 	for {
-		max := r.maxRunning.Load()
-		if now <= max || r.maxRunning.CompareAndSwap(max, now) {
+		peak := r.maxRunning.Load()
+		if now <= peak || r.maxRunning.CompareAndSwap(peak, now) {
 			break
 		}
 	}

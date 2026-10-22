@@ -81,10 +81,12 @@ Fonctions de chaque fichier :
 
 ### ⏳ Encore sur les mocks (ou à faire)
 
-| Domaine frontend                     | Fonctions `lib/api/`                          | Contrat OpenAPI                                               | État |
-| ------------------------------------ | --------------------------------------------- | ------------------------------------------------------------- | ---- |
-| Derniers incidents résolus (accueil) | `incidents.ts` : `getLatestResolvedIncidents` | ❌ aucun (`GET /incidents` public ne renvoie pas les résolus) | mock |
-| Tableau de bord héros, modération    | `hero-dashboard.ts`, `moderation.ts`          | ❌ aucun (statistiques)                                       | mock |
+| Domaine frontend                  | Fonctions `lib/api/`                 | Contrat OpenAPI         | État |
+| --------------------------------- | ------------------------------------ | ----------------------- | ---- |
+| Tableau de bord héros, modération | `hero-dashboard.ts`, `moderation.ts` | ❌ aucun (statistiques) | mock |
+
+Les derniers incidents résolus de l'accueil (`getLatestResolvedIncidents`) sont branchés, mais au
+prix d'un appel par héros (voir « Incidents et interventions : choix du branchement », § 3).
 
 > [!WARNING]
 > Les « Future implémentation » écrites dans les commentaires de `lib/api/` pour les domaines non
@@ -310,10 +312,9 @@ qu'un seul `GET /auth/me`.
   adresse). La fiche d'un vilain (`getIncidentsByVillain`) lit `GET /villains/{id}/incidents`, tous
   états confondus ; « Ils l'ont affronté » y liste les leads de ces incidents. Avis et films
   viennent aussi de l'API.
-- **Incidents mockés** : la correction d'un incident par la modération (`/admin/incidents/{id}`,
-  `updateIncidentAction`) prend ses héros dans `getIncidentHeroes` (mocks), pas dans
-  `getSuperHeroes` : les incidents mockés référencent les identifiants mock. À supprimer en
-  branchant les incidents.
+- **Correction d'un incident** (`/admin/incidents/{id}`, `updateIncidentAction`) : n'existe que
+  sans API (`incidentFeatures.moderation`). Elle prend ses héros dans `getSuperHeroes`, qui renvoie
+  alors les héros mock, ceux que référencent les incidents mockés.
 - **Espace héros et annuaire du back-office** : `getMyHeroProfile`, les coordonnées, la photo et le
   changement d'email passent par `/me`, `/me/avatar` et `/me/email-change-requests` ; l'annuaire
   (`getSuperHeroProfiles`) par `GET /admin/heroes` (voir « Profil, photo, email, newsletter et contact »).
@@ -570,9 +571,13 @@ demandent une session.
 | Incidents résolus dans les listes               | Non demandés (`status`), en attendant une décision sur leur exposition | Filtre « Résolus » retiré de l'espace héros |
 | Historique des interventions terminées          | `incident.interventionId` ne désigne que l'intervention en cours       | Section « Interventions précédentes » vide  |
 
-**Encore sur les mocks avec l'API** : derniers incidents résolus de l'accueil
-(`getLatestResolvedIncidents`, faisable avec `GET /incidents?status=succeeded` mais sans tri par
-date de résolution), tableaux de bord (`hero-dashboard.ts`, `moderation.ts`).
+**Derniers incidents résolus de l'accueil** (`getLatestResolvedIncidents`) : `GET /incidents`
+ne donne ni le lead ni la date de résolution, que la carte affiche. La fonction lit donc
+`GET /heroes/{heroId}/incidents` (trié par date de résolution) pour chaque héros public et fusionne
+les résultats, soit un appel par héros. À remplacer par un seul appel si le backend ajoute
+`resolvedAt` et le lead à la liste publique (ou un tri `-resolvedAt`).
+
+**Encore sur les mocks avec l'API** : tableaux de bord (`hero-dashboard.ts`, `moderation.ts`).
 
 ### Blog : choix du branchement
 

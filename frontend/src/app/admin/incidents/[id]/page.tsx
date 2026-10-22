@@ -13,8 +13,8 @@ import { TeamMembersList } from "@/components/hero/TeamMembersList";
 import { cn } from "@/components/ui/cn";
 import {
   getIncident,
-  getIncidentHeroes,
   getIncidentTypes,
+  getSuperHeroes,
   getVillains,
   incidentFeatures,
 } from "@/lib/api";
@@ -35,7 +35,7 @@ async function IncidentEditor({ params }: { params: Promise<{ id: string }> }) {
   const [incident, villains, heroes, types] = await Promise.all([
     getIncident(token, id),
     getVillains(),
-    getIncidentHeroes(),
+    incidentFeatures.moderation ? getSuperHeroes() : [],
     getIncidentTypes(token),
   ]);
   if (!incident) notFound();

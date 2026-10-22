@@ -114,9 +114,10 @@ Exigence de base, pas une finition :
   métier) est un **résultat** `{ ok: false, error }`, pas une exception. Une exception signale un
   bug ou une panne.
 - Une ressource introuvable renvoie `null` côté `lib/api/`, et la page appelle `notFound()`.
-- Aucun fichier `error.tsx`, `not-found.tsx` ni `loading.tsx` n'existe encore : les pages
-  utilisent `<Suspense>` + squelettes. Quand l'API réelle sera branchée, ajouter au minimum un
-  `error.tsx` et un `not-found.tsx` racine.
+- `app/error.tsx` (erreur inattendue, bouton « Réessayer ») et `app/not-found.tsx` (404, y
+  compris `notFound()`) existent à la racine, sur le gabarit `StatusPage`. Pas de `loading.tsx` :
+  les pages utilisent `<Suspense>` + squelettes. Une erreur dans le layout racine (en-tête) n'est
+  pas couverte : il faudrait un `global-error.tsx`.
 
 ## Sécurité côté frontend
 

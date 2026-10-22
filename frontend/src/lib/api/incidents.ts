@@ -37,6 +37,7 @@ import {
 } from "./interventions";
 import { MAX_PAGE_SIZE, pageQuery } from "./pagination";
 import { userFromToken } from "./session-user";
+import { getSuperHeroes } from "./super-heroes";
 import { getVillain } from "./villains";
 
 /*
@@ -207,15 +208,32 @@ const normalizeCity = (city: string) =>
     .trim()
     .toLowerCase();
 
+const byMostRecentlyResolved = (a: ResolvedIncident, b: ResolvedIncident) =>
+  Date.parse(b.resolvedAt) - Date.parse(a.resolvedAt);
+
 /**
- * Derniers incidents traités avec succès, du plus récent au plus ancien.
- * Future implémentation : `GET ${API_URL}/incidents?status=resolu&sort=-resolvedAt&limit=${limit}`
+ * Derniers incidents traités avec succès, du plus récemment résolu au plus ancien.
+ * API : `GET /incidents?status=succeeded` ne donne ni le héros ni la date de résolution, que la
+ * carte de l'accueil affiche. On lit donc `GET /heroes/{heroId}/incidents` (déjà trié par date de
+ * résolution) pour chaque héros public, puis on fusionne : les `limit` premiers de chacun
+ * suffisent pour obtenir les `limit` plus récents au total. Un appel par héros : à remplacer par
+ * une seule route si le backend expose `resolvedAt` et le lead dans la liste publique.
  */
 export async function getLatestResolvedIncidents(limit = 6): Promise<ResolvedIncident[]> {
+  if (isApiEnabled) {
+    const heroes = await getSuperHeroes();
+    const perHero = await Promise.all(
+      heroes.map(({ id }) => getResolvedIncidentsByHero(id, limit)),
+    );
+    // Un incident résolu en équipe figure dans l'historique de chaque participant.
+    const unique = new Map(perHero.flat().map((incident) => [incident.id, incident]));
+    return [...unique.values()].sort(byMostRecentlyResolved).slice(0, limit);
+  }
+
   const resolved = incidentsMock
     .filter(isPublic)
     .filter(isResolved)
-    .sort((a, b) => Date.parse(b.resolvedAt) - Date.parse(a.resolvedAt))
+    .sort(byMostRecentlyResolved)
     .slice(0, limit);
 
   return mockResponse(resolved);
@@ -861,7 +879,7 @@ export async function getResolvedIncidentsByHero(
       .filter(isPublic)
       .filter(isResolved)
       .filter((incident) => incident.hero.id === heroId)
-      .sort((a, b) => Date.parse(b.resolvedAt) - Date.parse(a.resolvedAt))
+      .sort(byMostRecentlyResolved)
       .slice(0, limit),
   );
 }
@@ -922,17 +940,4 @@ export async function getCitizenIncident(
       .sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt)),
     review: isMine ? (reviewsMock.find(({ incidentId }) => incidentId === id) ?? null) : null,
   });
-}
-
-/**
- * Super-héros qu'on peut affecter à un incident mocké (correction par la modération), triés par
- * pseudo : ceux des mocks, que les incidents mockés référencent. La correction n'existe pas avec
- * l'API (`incidentFeatures.moderation`) : à supprimer avec elle.
- */
-export async function getIncidentHeroes(): Promise<Array<{ id: string; alias: string }>> {
-  return mockResponse(
-    superHeroesMock
-      .map(({ id, alias }) => ({ id, alias }))
-      .sort((a, b) => a.alias.localeCompare(b.alias, "fr")),
-  );
 }

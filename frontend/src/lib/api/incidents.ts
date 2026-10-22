@@ -117,19 +117,25 @@ function toApiHeroIncident(incident: ApiIncident, team: InterventionTeam | null)
   return { ...converted, priority: converted.priority ?? "normale", interventions: [], team };
 }
 
+/** Incidents encore à traiter : un incident en échec redevient disponible. */
+const UNRESOLVED_STATUSES: readonly ApiIncident["status"][] = ["reported", "in_progress", "failed"];
+
 /**
- * Toutes les pages de `GET /incidents` (100 par appel), du plus récent au plus ancien. Sans jeton :
- * liste publique (incidents signalés, en cours ou en échec). Avec la session d'un citoyen, l'API
- * ne renvoie que ses propres déclarations : les écrans publics appellent donc sans jeton.
+ * Toutes les pages de `GET /incidents` (100 par appel), du plus récent au plus ancien. L'API
+ * renvoie tous les statuts : par défaut, seuls les incidents non résolus sont demandés
+ * (`statuses`, vide pour tout lire). Avec la session d'un citoyen, l'API ne renvoie que ses
+ * propres déclarations : les écrans publics appellent donc sans jeton.
  */
 async function fetchAllIncidents(
   token: string | undefined,
   filters: Record<string, string> = {},
+  statuses: readonly ApiIncident["status"][] = UNRESOLVED_STATUSES,
 ): Promise<ApiIncident[]> {
+  const statusQuery = statuses.map((status) => `&status=${status}`).join("");
   const incidents: ApiIncident[] = [];
   for (let offset = 0; ; offset += MAX_PAGE_SIZE) {
     const response = await apiFetch(
-      `/incidents${pageQuery({ limit: MAX_PAGE_SIZE, offset }, filters)}`,
+      `/incidents${pageQuery({ limit: MAX_PAGE_SIZE, offset }, filters)}${statusQuery}`,
       { sessionToken: token },
     );
     const page = (await response.json()) as ApiSchema<"IncidentPage">;
@@ -250,7 +256,7 @@ export async function getMyIncidents(token: string): Promise<Incident[]> {
   if (isApiEnabled) {
     const meId = await sessionUserId(token);
     if (!meId) return [];
-    return (await fetchAllIncidents(token, { reporterId: meId })).map((incident) =>
+    return (await fetchAllIncidents(token, { reporterId: meId }, [])).map((incident) =>
       fromApiIncident(incident),
     );
   }

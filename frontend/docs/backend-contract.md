@@ -547,9 +547,12 @@ demandent une session.
   désaccord, l'API répond `409 intervention_dispute_not_found`, affiché tel quel.
 - **Liste publique sans session** : pour un citoyen connecté, l'API restreint `GET /incidents` à
   ses propres déclarations (session lue sur toutes les routes). Les écrans publics (incidents en
-  cours, carte) appellent donc l'API **sans jeton**. La liste publique ne contient que les incidents
-  signalés, en cours ou en échec. L'`Incident` de l'API n'a pas de `reporterId` : la fiche du
-  citoyen déduit `isMine` de sa propre liste.
+  cours, carte) appellent donc l'API **sans jeton**.
+- **Statuts demandés** : `GET /incidents` renvoie tous les statuts, résolus compris. Les listes
+  (écrans publics, espace héros, back-office) ne demandent que les incidents non résolus
+  (`?status=reported&status=in_progress&status=failed`, `fetchAllIncidents`) ; seul « Mes
+  incidents » (`reporterId`) les lit tous. L'`Incident` de l'API n'a pas de `reporterId` : la
+  fiche du citoyen déduit `isMine` de sa propre liste.
 - **Le citoyen ne voit pas l'équipe** : les interventions lui sont fermées. Sa fiche affiche
   « une équipe intervient » et, une fois l'incident résolu, renvoie vers « Mes interventions »
   pour noter.
@@ -559,17 +562,17 @@ demandent une session.
 
 **Absent du contrat**, masqué avec l'API (`incidentFeatures` dans `incidents.ts`) :
 
-| Fonction                                        | Frontend (hypothèse)                                                  | Avec l'API                                  |
-| ----------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------- |
-| Validation, rejet, correction d'une déclaration | `PUT /admin/incidents/{id}/moderation`, `PATCH /admin/incidents/{id}` | Masquées : fiche en lecture seule           |
-| Priorité                                        | `PUT /hero/incidents/{id}/priority`                                   | Masquée (lue, jamais modifiable)            |
-| « Témoin » ou « victime »                       | `reporterRole` de la déclaration                                      | Champ retiré du formulaire                  |
-| Incidents résolus dans les listes               | `GET /incidents` ne les renvoie qu'à leur déclarant                   | Filtre « Résolus » retiré de l'espace héros |
-| Historique des interventions terminées          | `incident.interventionId` ne désigne que l'intervention en cours      | Section « Interventions précédentes » vide  |
+| Fonction                                        | Frontend (hypothèse)                                                   | Avec l'API                                  |
+| ----------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------- |
+| Validation, rejet, correction d'une déclaration | `PUT /admin/incidents/{id}/moderation`, `PATCH /admin/incidents/{id}`  | Masquées : fiche en lecture seule           |
+| Priorité                                        | `PUT /hero/incidents/{id}/priority`                                    | Masquée (lue, jamais modifiable)            |
+| « Témoin » ou « victime »                       | `reporterRole` de la déclaration                                       | Champ retiré du formulaire                  |
+| Incidents résolus dans les listes               | Non demandés (`status`), en attendant une décision sur leur exposition | Filtre « Résolus » retiré de l'espace héros |
+| Historique des interventions terminées          | `incident.interventionId` ne désigne que l'intervention en cours       | Section « Interventions précédentes » vide  |
 
-**Absent du contrat, encore sur les mocks avec l'API** (la liste publique ne renvoie pas les
-incidents résolus) : derniers incidents résolus de l'accueil (`getLatestResolvedIncidents`),
-tableaux de bord (`hero-dashboard.ts`, `moderation.ts`).
+**Encore sur les mocks avec l'API** : derniers incidents résolus de l'accueil
+(`getLatestResolvedIncidents`, faisable avec `GET /incidents?status=succeeded` mais sans tri par
+date de résolution), tableaux de bord (`hero-dashboard.ts`, `moderation.ts`).
 
 ### Blog : choix du branchement
 

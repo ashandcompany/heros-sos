@@ -2,12 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { EmptyState } from "@/components/admin/ModerationFilter";
-import { cn } from "@/components/ui/cn";
+import { Pagination, readPageNumber } from "@/components/admin/Pagination";
+import { buttonClasses } from "@/components/ui/ButtonLink";
 import { Container } from "@/components/ui/Container";
 import { getPublishedVideos } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { routes } from "@/lib/routes";
-import type { HeroVideo, SuperHeroSummary } from "@/types";
+import type { HeroVideo, Page, SuperHeroSummary } from "@/types";
 
 export const metadata: Metadata = {
   title: "Vidéothèque",
@@ -15,7 +16,7 @@ export const metadata: Metadata = {
     "Les films consacrés aux super-héros de Heros-SOS et leurs vidéos de conseils, vérifiés par la modération.",
 };
 
-type VideosSearchParams = Promise<{ heros?: string | string[] }>;
+type VideosSearchParams = PageProps<"/videotheque">["searchParams"];
 
 function VideoCard({ video }: { video: HeroVideo }) {
   const titleId = `film-${video.hero.id}-${video.id}-titre`;
@@ -54,65 +55,154 @@ function VideoCard({ video }: { video: HeroVideo }) {
   );
 }
 
-/** Lit l'URL (`?heros=`) : rendu sous <Suspense>. */
+/** Multiple de 2 et de 3 : les pages pleines remplissent la grille à toutes les largeurs. */
+const PAGE_SIZE = 12;
+const GALLERY_ANCHOR = "films";
+
+const fold = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
+
+const firstValue = (value: string | string[] | undefined) =>
+  (Array.isArray(value) ? value[0] : value)?.trim() || undefined;
+
+/** Première page de la vidéothèque avec ces filtres. */
+function filteredHref(query: Record<string, string | undefined>): string {
+  const params = new URLSearchParams();
+  for (const [name, value] of Object.entries(query)) if (value) params.set(name, value);
+  const search = params.toString();
+  return search ? `${routes.videos}?${search}` : routes.videos;
+}
+
+/**
+ * Filtre (GET : fonctionne sans JavaScript et l'URL reste partageable). Une liste déroulante
+ * plutôt que des onglets : elle reste utilisable quel que soit le nombre de héros.
+ */
+function GalleryFilter({
+  heroes,
+  current,
+  query,
+}: {
+  heroes: (SuperHeroSummary & { count: number })[];
+  current: SuperHeroSummary | undefined;
+  query: string | undefined;
+}) {
+  const fieldClasses =
+    "min-h-11 w-full min-w-0 border-2 border-border bg-background px-3 text-foreground placeholder:text-muted";
+
+  return (
+    <form
+      role="search"
+      action={routes.videos}
+      className="mt-6 mb-8 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,16rem)_auto] sm:items-end"
+    >
+      <label className="text-sm font-medium">
+        <span className="mb-2 block">Titre du film</span>
+        <input
+          type="search"
+          name="q"
+          defaultValue={query}
+          placeholder="Ex. : Iron Man"
+          className={fieldClasses}
+        />
+      </label>
+      <label className="text-sm font-medium">
+        <span className="mb-2 block">Super-héros</span>
+        <select name="heros" defaultValue={current?.id ?? ""} className={fieldClasses}>
+          <option value="">Tous les héros</option>
+          {heroes.map(({ id, alias, count }) => (
+            <option key={id} value={id}>
+              {alias} ({count})
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="submit" className={buttonClasses("secondary")}>
+          Filtrer
+        </button>
+        {(current || query) && (
+          <Link href={routes.videos} className="text-sm text-accent hover:underline">
+            Réinitialiser
+          </Link>
+        )}
+      </div>
+    </form>
+  );
+}
+
+/** Lit l'URL (`?heros=`, `?q=`, `?page=`) : rendu sous <Suspense>. */
 async function VideosGallery({ searchParams }: { searchParams: VideosSearchParams }) {
-  const raw = (await searchParams).heros;
-  const wanted = Array.isArray(raw) ? raw[0] : raw;
+  const params = await searchParams;
+  const wanted = firstValue(params.heros);
+  const query = firstValue(params.q);
+  const pageNumber = await readPageNumber(searchParams);
   const allVideos = await getPublishedVideos();
 
-  // Filtres : uniquement les super-héros qui ont au moins un film publié.
-  const heroes = [...new Map(allVideos.map(({ hero }) => [hero.id, hero] as const)).values()].sort(
-    (a, b) => a.alias.localeCompare(b.alias, "fr"),
-  );
+  // Filtre : uniquement les super-héros qui ont au moins un film publié, avec leur nombre de films.
+  const counts = new Map<string, SuperHeroSummary & { count: number }>();
+  for (const { hero } of allVideos) {
+    const entry = counts.get(hero.id) ?? { ...hero, count: 0 };
+    entry.count += 1;
+    counts.set(hero.id, entry);
+  }
+  const heroes = [...counts.values()].sort((a, b) => a.alias.localeCompare(b.alias, "fr"));
   const current: SuperHeroSummary | undefined = heroes.find(({ id }) => id === wanted);
-  const videos = current ? allVideos.filter(({ hero }) => hero.id === current.id) : allVideos;
 
-  const filters = [
-    { id: undefined, label: "Tous les héros" },
-    ...heroes.map(({ id, alias }) => ({ id, label: alias })),
-  ];
+  const needle = query && fold(query);
+  const videos = allVideos.filter(
+    ({ hero, title }) =>
+      (!current || hero.id === current.id) && (!needle || fold(title).includes(needle)),
+  );
+  const offset = (pageNumber - 1) * PAGE_SIZE;
+  const page: Page<HeroVideo> = {
+    items: videos.slice(offset, offset + PAGE_SIZE),
+    total: videos.length,
+    limit: PAGE_SIZE,
+    offset,
+  };
+  const filterQuery = { heros: current?.id, q: query };
 
   return (
     <>
-      <nav aria-label="Filtrer par super-héros" className="mt-6 mb-8">
-        <ul className="flex flex-wrap gap-2">
-          {filters.map((filter) => {
-            const isCurrent = filter.id === current?.id;
-            return (
-              <li key={filter.id ?? "tous"}>
-                <Link
-                  href={filter.id ? `${routes.videos}?heros=${filter.id}` : routes.videos}
-                  aria-current={isCurrent ? "page" : undefined}
-                  className={cn(
-                    "inline-flex min-h-10 items-center rounded-full border px-4 text-sm font-medium",
-                    isCurrent
-                      ? "border-primary bg-primary/15 text-foreground"
-                      : "border-border text-muted hover:border-muted hover:text-foreground",
-                  )}
-                >
-                  {filter.label}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
+      {allVideos.length > 0 && <GalleryFilter heroes={heroes} current={current} query={query} />}
 
-      <p role="status" className="mb-4 text-sm text-muted">
+      <p id={GALLERY_ANCHOR} role="status" className="mb-4 scroll-mt-20 text-sm text-muted">
         {videos.length} film{videos.length > 1 ? "s" : ""}
         {current ? ` consacré${videos.length > 1 ? "s" : ""} à ${current.alias}` : ""}
+        {query ? ` pour « ${query} »` : ""}
       </p>
 
-      {videos.length === 0 ? (
+      {allVideos.length === 0 ? (
         <EmptyState>Aucun film publié pour l&apos;instant.</EmptyState>
+      ) : videos.length === 0 ? (
+        <EmptyState>Aucun film ne correspond à cette recherche.</EmptyState>
+      ) : page.items.length === 0 ? (
+        // Page au-delà de la dernière (lien ancien ou saisi à la main).
+        <EmptyState>
+          Cette page n&apos;existe pas.{" "}
+          <Link href={filteredHref(filterQuery)} className="text-accent hover:underline">
+            Revenir aux premiers films
+          </Link>
+        </EmptyState>
       ) : (
-        <ul className="grid gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
-          {videos.map((video) => (
-            <li key={`${video.hero.id}-${video.id}`}>
-              <VideoCard video={video} />
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="grid gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
+            {page.items.map((video) => (
+              <li key={`${video.hero.id}-${video.id}`}>
+                <VideoCard video={video} />
+              </li>
+            ))}
+          </ul>
+          <Pagination
+            page={page}
+            basePath={routes.videos}
+            query={filterQuery}
+            anchor={GALLERY_ANCHOR}
+          />
+        </>
       )}
     </>
   );

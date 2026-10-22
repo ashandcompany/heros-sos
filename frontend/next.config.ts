@@ -25,6 +25,11 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // La sonde de santé du conteneur (`/api/health`) passe toutes les 10 secondes : sans ceci, chaque passage ajoute
+  // une ligne « GET … 200 » au journal de `next dev`.
+  logging: {
+    incomingRequests: { ignore: [/^\/api\/health$/] },
+  },
   cacheComponents: true,
   partialPrefetching: true,
   experimental: {

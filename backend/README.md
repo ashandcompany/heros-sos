@@ -236,6 +236,8 @@ seule, toutes les capacités Linux retirées, `no-new-privileges`, journaux tour
 **healthcheck** : `/api -healthcheck` interroge `/api/v1/ready` (base comprise) depuis l'intérieur du
 conteneur. Une image `FROM scratch` n'a ni shell ni `curl` : la sonde est donc dans le binaire du
 serveur (`cmd/api`, `internal/server/probe.go`), délai réglable par `HEROS_HEALTHCHECK_TIMEOUT`.
+Les sondes `/health` et `/ready` réussies ne sont journalisées qu'au niveau `debug` (`HEROS_LOG_LEVEL=debug` pour les
+voir) ; une sonde en échec reste en `warn` ou `error`.
 
 **Premier déploiement en production**
 

@@ -76,6 +76,7 @@ const fromApiStatus: Record<ApiIncident["status"], IncidentStatus> = {
 };
 
 const fromApiPriority: Record<ApiIncident["priority"], IncidentPriority> = {
+  critical: "critique",
   high: "haute",
   normal: "normale",
   low: "basse",

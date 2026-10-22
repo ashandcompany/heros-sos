@@ -69,6 +69,7 @@ type CreateInput struct {
 	TypeID            int16
 	Title             string
 	Description       string
+	ReporterRole      *string
 	CitizensRescued   int16
 	Street            string
 	PostalCode        string
@@ -84,7 +85,7 @@ type CreateInput struct {
 // Create enregistre l'incident d'un utilisateur, puis prévient les modérateurs et les héros. Toutes
 // les erreurs de saisie sont retournées ensemble (*validation.Error). Un échec d'envoi des mails
 // n'annule pas la déclaration : il est journalisé.
-func (s *Service) Create(ctx context.Context, reporterID uuid.UUID, in CreateInput, ip netip.Addr) (*Incident, error) {
+func (s *Service) Create(ctx context.Context, reporterID uuid.UUID, reporterAccountRole user.Role, in CreateInput, ip netip.Addr) (*Incident, error) {
 	now := s.Clock.Now()
 	created, err := s.validate(ctx, in, now)
 	if err != nil {
@@ -92,6 +93,10 @@ func (s *Service) Create(ctx context.Context, reporterID uuid.UUID, in CreateInp
 	}
 	created.ID, created.ReporterID, created.Status = ids.New(), reporterID, StatusReported
 	created.Priority = PriorityNormal
+	created.Moderation = ModerationPending
+	if reporterAccountRole == user.RoleModerator {
+		created.Moderation = ModerationApproved
+	}
 	created.CreatedAt, created.UpdatedAt = now, now
 
 	err = s.Tx.WithinTx(ctx, func(ctx context.Context) error {
@@ -140,6 +145,14 @@ func (s *Service) validate(ctx context.Context, in CreateInput, now time.Time) (
 	}
 	created.Latitude, created.Longitude = in.Latitude, in.Longitude
 	created.Priority = PriorityNormal
+	if in.ReporterRole != nil {
+		role := ReporterRole(strings.TrimSpace(*in.ReporterRole))
+		if role != ReporterWitness && role != ReporterVictim {
+			fields.Add("reporterRole", validation.CodeInvalid)
+		} else {
+			created.ReporterRole = &role
+		}
+	}
 
 	if raw := strings.TrimSpace(in.OccurredAt); raw != "" {
 		occurredAt, err := time.Parse(time.RFC3339, raw)
@@ -211,9 +224,160 @@ func (s *Service) List(ctx context.Context, filter ListFilter, limit, offset int
 	return s.Repo.List(ctx, filter, limit, offset)
 }
 
+// Moderate modifie la visibilité publique d'un incident et journalise la décision.
+func (s *Service) Moderate(ctx context.Context, actorID, id uuid.UUID, status ModerationStatus, ip netip.Addr) error {
+	if status != ModerationApproved && status != ModerationRejected {
+		return &validation.Error{Fields: map[string]string{"decision": validation.CodeInvalid}}
+	}
+	return s.Tx.WithinTx(ctx, func(ctx context.Context) error {
+		if err := s.Repo.SetModeration(ctx, id, status, s.Clock.Now()); err != nil {
+			return err
+		}
+		return s.Audit.Record(ctx, audit.Entry{
+			ActorID: &actorID, Action: audit.ActionIncidentModerated, EntityType: entityType, EntityID: &id,
+			Details: map[string]any{"moderation": status}, IP: ip,
+		})
+	})
+}
+
+// Update remplace les champs modifiables et synchronise l'intervention dans la même transaction.
+func (s *Service) Update(ctx context.Context, actorID, id uuid.UUID, in UpdateInput, ip netip.Addr) error {
+	updated, err := s.resolveUpdate(ctx, id, in)
+	if err != nil {
+		return err
+	}
+	return s.Tx.WithinTx(ctx, func(ctx context.Context) error {
+		if err := s.Repo.Update(ctx, updated, in.HeroID, s.Clock.Now()); err != nil {
+			return err
+		}
+		return s.Audit.Record(ctx, audit.Entry{
+			ActorID: &actorID, Action: audit.ActionIncidentUpdated, EntityType: entityType, EntityID: &id,
+			Details: map[string]any{"status": updated.Status}, IP: ip,
+		})
+	})
+}
+
+// SetPriority modifie la priorité d'un incident encore disponible et journalise le changement.
+func (s *Service) SetPriority(ctx context.Context, heroID, id uuid.UUID, priority Priority, ip netip.Addr) error {
+	if priority != PriorityCritical && priority != PriorityHigh && priority != PriorityNormal && priority != PriorityLow {
+		return &validation.Error{Fields: map[string]string{"priority": validation.CodeInvalid}}
+	}
+	public, err := s.Repo.PublicHeroExists(ctx, heroID)
+	if err != nil {
+		return err
+	}
+	if !public {
+		return ErrHeroNotFound
+	}
+	return s.Tx.WithinTx(ctx, func(ctx context.Context) error {
+		if err := s.Repo.SetPriority(ctx, id, priority, s.Clock.Now()); err != nil {
+			return err
+		}
+		return s.Audit.Record(ctx, audit.Entry{
+			ActorID: &heroID, Action: audit.ActionIncidentPrioritySet, EntityType: entityType, EntityID: &id,
+			Details: map[string]any{"priority": priority}, IP: ip,
+		})
+	})
+}
+
 // Get retourne le détail d'un incident.
 func (s *Service) Get(ctx context.Context, id uuid.UUID) (*Incident, error) {
 	return s.Repo.Find(ctx, id)
+}
+
+// UpdateInput porte les champs remplacés par la modération.
+type UpdateInput struct {
+	TypeID      int16
+	Title       string
+	Description string
+	Status      Status
+	Street      string
+	City        string
+	Latitude    *float64
+	Longitude   *float64
+	VillainID   *string
+	HeroID      *uuid.UUID
+}
+
+func (s *Service) resolveUpdate(ctx context.Context, id uuid.UUID, in UpdateInput) (*Incident, error) {
+	var fields validation.Collector
+	current, err := s.Repo.Find(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	updated := *current
+	var titleCode string
+	if updated.Title, titleCode = validation.RequiredText(in.Title, titleMaxLength); titleCode != "" {
+		fields.Add("title", titleCode)
+	}
+	updated.Description = strings.TrimSpace(in.Description)
+	if updated.Description == "" {
+		fields.Add("description", validation.CodeRequired)
+	}
+	updated.Status = in.Status
+	if _, ok := ParseStatus(string(in.Status)); !ok {
+		fields.Add("status", validation.CodeInvalid)
+	}
+	updated.Street = strings.TrimSpace(in.Street)
+	if updated.Street == "" {
+		fields.Add("location.address", validation.CodeRequired)
+	}
+	updated.City = strings.TrimSpace(in.City)
+	if updated.City == "" {
+		fields.Add("location.city", validation.CodeRequired)
+	}
+	updated.Latitude, updated.Longitude = in.Latitude, in.Longitude
+	if (in.Latitude == nil) != (in.Longitude == nil) {
+		fields.Add("location", validation.CodeInvalid)
+	}
+	if in.Latitude != nil && (*in.Latitude < -90 || *in.Latitude > 90 || *in.Longitude < -180 || *in.Longitude > 180) {
+		fields.Add("location", validation.CodeInvalid)
+	}
+
+	typeInfo, err := s.Types.Find(ctx, in.TypeID)
+	if errors.Is(err, interventiontype.ErrNotFound) || in.TypeID <= 0 {
+		fields.Add("typeId", validation.CodeInvalid)
+	} else if err != nil {
+		return nil, err
+	} else {
+		updated.TypeID, updated.TypeCode, updated.TypeLabel = typeInfo.ID, typeInfo.Code, typeInfo.Label
+	}
+
+	updated.VillainIDs = nil
+	updated.Villains = nil
+	if in.VillainID != nil && strings.TrimSpace(*in.VillainID) != "" {
+		villainID, parseErr := uuid.Parse(strings.TrimSpace(*in.VillainID))
+		if parseErr != nil {
+			fields.Add("villainId", validation.CodeInvalid)
+		} else if villainInfo, findErr := s.Villains.Find(ctx, villainID); errors.Is(findErr, villain.ErrNotFound) {
+			fields.Add("villainId", validation.CodeInvalid)
+		} else if findErr != nil {
+			return nil, findErr
+		} else {
+			updated.VillainIDs = []uuid.UUID{villainID}
+			updated.Villains = []VillainReference{{ID: villainID, Alias: villainInfo.Alias}}
+		}
+	}
+
+	if in.HeroID != nil {
+		public, findErr := s.Repo.PublicHeroExists(ctx, *in.HeroID)
+		if findErr != nil {
+			return nil, findErr
+		}
+		if !public {
+			return nil, ErrHeroNotFound
+		}
+	}
+	if updated.Status == StatusReported && in.HeroID != nil {
+		fields.Add("heroId", validation.CodeInvalid)
+	}
+	if updated.Status != StatusReported && in.HeroID == nil {
+		fields.Add("heroId", validation.CodeRequired)
+	}
+	if err := fields.Err(); err != nil {
+		return nil, err
+	}
+	return &updated, nil
 }
 
 // notify prévient les modérateurs et les héros actifs, sauf le déclarant. Le lieu n'est jamais

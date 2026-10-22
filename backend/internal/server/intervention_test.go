@@ -34,6 +34,11 @@ func (e *e2e) declareIncident(reporter, moderator *actor, code string) string {
 	if created.status != http.StatusCreated {
 		e.t.Fatalf("déclaration d'incident : %d %s", created.status, created.body)
 	}
+	if got := moderator.request(http.MethodPut, "/admin/incidents/"+incident.ID+"/moderation", map[string]string{
+		"decision": "approved",
+	}); got.status != http.StatusNoContent {
+		e.t.Fatalf("approbation de l'incident : %d %s", got.status, got.body)
+	}
 	return incident.ID
 }
 

@@ -206,8 +206,9 @@ func (r *gormRepository) List(ctx context.Context, aliasPrefix string, limit, of
 
 func (r *gormRepository) viewQuery(ctx context.Context) *gorm.DB {
 	return r.conn(ctx).Table(tableVillains).
-		Select("villains.*, COUNT(incident_villains.incident_id) AS reported_incidents_count").
+		Select("villains.*, COUNT(incidents.id) AS reported_incidents_count").
 		Joins("LEFT JOIN incident_villains ON incident_villains.villain_id = villains.id").
+		Joins("LEFT JOIN incidents ON incidents.id = incident_villains.incident_id AND incidents.moderation = ?", "approved").
 		Group("villains.id")
 }
 

@@ -30,10 +30,13 @@ Table de référence (§1.3, §5.8.1).
 |---|---|---|
 | `id` | uuid | PK |
 | `reporter_id` | uuid | FK `users` ON DELETE SET NULL : si le déclarant efface son compte, l'incident reste, anonymisé. Le déclarant (témoin) peut être un héros, qui peut aussi intervenir sur le même incident. |
+| `reporter_role` | text | `witness` (témoin), `victim` (victime), NULL si non renseigné. |
 | `type_id` | smallint | FK `incident_types`, NOT NULL |
+| `title` | text | Titre court de l'incident. |
 | `description` | text | NOT NULL |
 | `status` | text | `reported` (« Signalé à l'instant »), `in_progress` (« Intervention en cours »), `succeeded`, `failed`. Défaut `reported`. |
-| `priority` | text | `high`, `normal`, `low`. Défaut `normal`. Modifiable par modérateurs et héros (§4.1.1). |
+| `moderation` | text | `pending`, `approved`, `rejected`. Les signalements citoyens/héros démarrent en attente; les anciens incidents et les déclarations des modérateurs sont approuvés. Seuls les incidents approuvés sont publics et peuvent recevoir une intervention. |
+| `priority` | text | `critical`, `high`, `normal`, `low`. Défaut `normal`. Modifiable par les héros tant que l'incident est disponible (§4.1.1). |
 | `citizens_rescued` | smallint | Défaut 0. Renseigné par le témoin qui a déclaré l'incident (citoyen ou héros), corrigeable par un modérateur. Porté par l'incident et non par chaque intervention, pour ne pas compter deux fois les mêmes citoyens quand plusieurs héros interviennent. |
 | `street`, `postal_code`, `city`, `country` | text | Lieu en clair : sert à repérer les doublons (§4.1.1) |
 | `address_complement` | text | Facultatif : bâtiment, étage, repère, comme dans `users` |
@@ -42,6 +45,8 @@ Table de référence (§1.3, §5.8.1).
 | `created_at`, `updated_at` | timestamptz | |
 
 Index : `(status, priority, created_at DESC)` pour les listes, et `(lower(city), postal_code, lower(street))` pour les doublons. Un doublon se supprime réellement (§4.1.1) et l'action est tracée dans `audit_logs`.
+
+La décision de modération et les corrections de données sont réservées aux modérateurs et tracées dans `audit_logs`. La correction synchronise le statut et le héros principal avec l'intervention correspondante.
 
 ## `interventions`
 

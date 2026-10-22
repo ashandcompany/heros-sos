@@ -208,16 +208,18 @@ func TestIncidentDeclaration(t *testing.T) {
 	body := validIncident(incidentType.ID)
 	body["villainIds"] = []string{villain.ID}
 	body["occurredAt"] = "2026-10-18T22:30:00+02:00"
+	body["reporterRole"] = "witness"
 	before := len(e.mailer.Messages())
 	created := citizen.post("/incidents", body)
 	var incident struct {
-		ID, Title, Status, Priority string
-		TypeID               int16
-		Location             struct{ Address, City string }
-		VillainIDs           []string
+		ID, Title, Status, Priority, Moderation, ReporterRole string
+		TypeID                                                int16
+		Location                                              struct{ Address, City string }
+		VillainIDs                                            []string
 	}
 	created.decode(t, &incident)
 	if created.status != http.StatusCreated || incident.Title != "Cambriolage de la bijouterie" || incident.Status != "reported" || incident.Priority != "normal" ||
+		incident.Moderation != "pending" || incident.ReporterRole != "witness" ||
 		incident.TypeID != incidentType.ID || incident.Location.Address != "12 rue des Lilas" || incident.Location.City != "Lyon" ||
 		len(incident.VillainIDs) != 1 || incident.VillainIDs[0] != villain.ID {
 		t.Fatalf("déclaration : %d %s", created.status, created.body)
@@ -226,12 +228,15 @@ func TestIncidentDeclaration(t *testing.T) {
 	var stored struct {
 		Street          string
 		Priority        string
+		Moderation      string
+		ReporterRole    string
 		CitizensRescued int16
 	}
-	if err := e.db.Table("incidents").Select("street, priority, citizens_rescued").Where("id = ?", incident.ID).Take(&stored).Error; err != nil {
+	if err := e.db.Table("incidents").Select("street, priority, moderation, reporter_role, citizens_rescued").Where("id = ?", incident.ID).Take(&stored).Error; err != nil {
 		t.Fatal(err)
 	}
-	if stored.Street != "12 rue des Lilas" || stored.Priority != "normal" || stored.CitizensRescued != 0 {
+	if stored.Street != "12 rue des Lilas" || stored.Priority != "normal" || stored.Moderation != "pending" ||
+		stored.ReporterRole != "witness" || stored.CitizensRescued != 0 {
 		t.Errorf("valeurs documentées non persistées : %+v", stored)
 	}
 
@@ -247,6 +252,30 @@ func TestIncidentDeclaration(t *testing.T) {
 	var publicIncidents struct {
 		Items []struct{ ID string }
 		Total int
+	}
+	if got := anonymous.get("/incidents"); got.status != http.StatusOK {
+		t.Errorf("liste publique anonyme : %d %s", got.status, got.body)
+	} else {
+		got.decode(t, &publicIncidents)
+		if publicIncidents.Total != 0 || len(publicIncidents.Items) != 0 {
+			t.Errorf("un incident en attente ne doit pas être public : %+v", publicIncidents)
+		}
+	}
+	if got := anonymous.get("/incidents/" + incident.ID); got.status != http.StatusNotFound {
+		t.Errorf("détail d'un incident en attente caché au public : %d", got.status)
+	}
+	var ownIncidents struct {
+		Items []struct{ ID string }
+		Total int
+	}
+	citizen.get("/incidents?reporterId="+citizen.userID()).decode(t, &ownIncidents)
+	if ownIncidents.Total != 1 || ownIncidents.Items[0].ID != incident.ID {
+		t.Errorf("le déclarant voit son incident en attente : %+v", ownIncidents)
+	}
+	if got := moderator.request(http.MethodPut, "/admin/incidents/"+incident.ID+"/moderation", map[string]string{
+		"decision": "approved",
+	}); got.status != http.StatusNoContent {
+		t.Fatalf("approbation : %d %s", got.status, got.body)
 	}
 	if got := anonymous.get("/incidents"); got.status != http.StatusOK {
 		t.Errorf("liste publique anonyme : %d %s", got.status, got.body)
@@ -268,20 +297,12 @@ func TestIncidentDeclaration(t *testing.T) {
 			t.Errorf("détail visible sans session : %+v", publicIncident)
 		}
 	}
-	var ownIncidents struct {
-		Items []struct{ ID string }
-		Total int
-	}
-	citizen.get("/incidents?reporterId="+citizen.userID()).decode(t, &ownIncidents)
-	if ownIncidents.Total != 1 || ownIncidents.Items[0].ID != incident.ID {
-		t.Errorf("liste personnelle filtrée : %+v", ownIncidents)
-	}
 	other := e.signUpAndLogin("other-reporter@example.org")
 	if got := other.get("/incidents?reporterId=" + citizen.userID()); got.status != http.StatusForbidden {
 		t.Errorf("un citoyen ne filtre pas sur un autre déclarant : %d", got.status)
 	}
 	var byVillain struct{ Total int }
-	anonymous.get("/incidents?villainId=" + villain.ID).decode(t, &byVillain)
+	anonymous.get("/incidents?villainId="+villain.ID).decode(t, &byVillain)
 	if byVillain.Total != 1 {
 		t.Errorf("filtre villainId : %+v", byVillain)
 	}
@@ -300,8 +321,203 @@ func TestIncidentDeclaration(t *testing.T) {
 	}
 
 	// Un héros ou un modérateur peut aussi déclarer.
-	if got := moderator.post("/incidents", validIncident(incidentType.ID)); got.status != http.StatusCreated {
-		t.Errorf("modérateur déclarant : %d %s", got.status, got.body)
+	modCreated := moderator.post("/incidents", validIncident(incidentType.ID))
+	var moderatorIncident struct{ Moderation string }
+	modCreated.decode(t, &moderatorIncident)
+	if modCreated.status != http.StatusCreated || moderatorIncident.Moderation != "approved" {
+		t.Errorf("incident déclaré par un modérateur : %d %s", modCreated.status, modCreated.body)
+	}
+}
+
+func TestIncidentModerationCorrectionAndPriority(t *testing.T) {
+	e := newE2E(t, nil)
+	citizen := e.signUpAndLogin("citizen@example.org")
+	moderator := e.newModerator("fury@shield.example")
+	hero := e.approvedHero(moderator, "hero@example.org", "Captain")
+	replacementHero := e.approvedHero(moderator, "replacement@example.org", "Falcon")
+	firstType := e.createType(moderator, "burglary", "Cambriolage", false)
+	secondType := e.createType(moderator, "theft", "Vol", false)
+
+	var villain villainView
+	if got := citizen.post("/villains", map[string]string{"alias": "Le Corbeau Gris"}); got.status != http.StatusCreated {
+		t.Fatalf("création de vilain : %d %s", got.status, got.body)
+	} else {
+		got.decode(t, &villain)
+	}
+
+	firstIncidentBody := validIncident(firstType.ID)
+	firstIncidentBody["villainIds"] = []string{villain.ID}
+	created := citizen.post("/incidents", firstIncidentBody)
+	var incident struct{ ID string }
+	created.decode(t, &incident)
+	if created.status != http.StatusCreated {
+		t.Fatalf("déclaration : %d %s", created.status, created.body)
+	}
+
+	moderationPath := "/admin/incidents/" + incident.ID + "/moderation"
+	if got := citizen.request(http.MethodPut, moderationPath, map[string]string{"decision": "approved"}); got.status != http.StatusForbidden {
+		t.Errorf("un citoyen ne modère pas : %d", got.status)
+	}
+	if got := moderator.request(http.MethodPut, moderationPath, map[string]string{"decision": "pending"}); got.status != http.StatusUnprocessableEntity {
+		t.Errorf("décision de modération invalide : %d %s", got.status, got.body)
+	}
+	if got := moderator.request(http.MethodPut, moderationPath, map[string]string{"decision": "approved"}); got.status != http.StatusNoContent {
+		t.Fatalf("approbation : %d %s", got.status, got.body)
+	}
+
+	priorityPath := "/hero/incidents/" + incident.ID + "/priority"
+	if got := citizen.request(http.MethodPut, priorityPath, map[string]string{"priority": "critical"}); got.status != http.StatusForbidden {
+		t.Errorf("un citoyen ne modifie pas la priorité : %d", got.status)
+	}
+	if got := hero.request(http.MethodPut, priorityPath, map[string]string{"priority": "critical"}); got.status != http.StatusNoContent {
+		t.Fatalf("priorité critique : %d %s", got.status, got.body)
+	}
+	var prioritized struct{ Priority string }
+	if got := hero.get("/incidents/" + incident.ID); got.status != http.StatusOK {
+		t.Fatalf("lecture après priorité : %d %s", got.status, got.body)
+	} else {
+		got.decode(t, &prioritized)
+		if prioritized.Priority != "critical" {
+			t.Errorf("priorité retournée : %q", prioritized.Priority)
+		}
+	}
+	if got := hero.request(http.MethodPut, priorityPath, map[string]string{"priority": "urgent"}); got.status != http.StatusUnprocessableEntity {
+		t.Errorf("priorité invalide : %d %s", got.status, got.body)
+	}
+
+	updatePath := "/admin/incidents/" + incident.ID
+	updateBody := map[string]any{
+		"typeId": secondType.ID, "title": "Cambriolage corrigé", "description": "Description corrigée",
+		"status": "in_progress", "heroId": hero.userID(), "villainId": villain.ID,
+		"location": map[string]any{
+			"address": "20 rue des Lilas", "city": "Lyon", "latitude": 45.764, "longitude": 4.8357,
+		},
+	}
+	if got := citizen.request(http.MethodPatch, updatePath, updateBody); got.status != http.StatusForbidden {
+		t.Errorf("un citoyen ne corrige pas : %d", got.status)
+	}
+	updated := moderator.request(http.MethodPatch, updatePath, updateBody)
+	if updated.status != http.StatusOK {
+		t.Fatalf("correction : %d %s", updated.status, updated.body)
+	}
+	var corrected struct {
+		TypeID         int16
+		Title          string
+		Status         string
+		Priority       string
+		InterventionID string
+		Location       struct {
+			Address   string
+			City      string
+			Latitude  float64
+			Longitude float64
+		}
+		VillainIDs []string
+	}
+	updated.decode(t, &corrected)
+	if corrected.TypeID != secondType.ID || corrected.Title != "Cambriolage corrigé" ||
+		corrected.Status != "in_progress" || corrected.Priority != "critical" ||
+		corrected.InterventionID == "" || corrected.Location.Address != "20 rue des Lilas" ||
+		corrected.Location.City != "Lyon" || corrected.Location.Latitude != 45.764 ||
+		corrected.Location.Longitude != 4.8357 || len(corrected.VillainIDs) != 1 ||
+		corrected.VillainIDs[0] != villain.ID {
+		t.Errorf("incident corrigé : %+v", corrected)
+	}
+
+	var intervention struct {
+		ID, IncidentID, Status string
+	}
+	if err := e.db.Table("interventions").Where("incident_id = ?", incident.ID).Take(&intervention).Error; err != nil {
+		t.Fatal(err)
+	}
+	if intervention.Status != "in_progress" {
+		t.Errorf("intervention synchronisée : %+v", intervention)
+	}
+	if got := hero.request(http.MethodPut, priorityPath, map[string]string{"priority": "high"}); got.status != http.StatusConflict {
+		t.Errorf("un incident en cours ne peut plus changer de priorité : %d %s", got.status, got.body)
+	}
+
+	updateBody["heroId"] = replacementHero.userID()
+	reassigned := moderator.request(http.MethodPatch, updatePath, updateBody)
+	if reassigned.status != http.StatusOK {
+		t.Fatalf("changement du héros principal : %d %s", reassigned.status, reassigned.body)
+	}
+	var participants []struct {
+		HeroID   string
+		Role     string
+		IsActive bool
+	}
+	if err := e.db.Table("intervention_heroes").Where("intervention_id = ?", intervention.ID).Find(&participants).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(participants) != 1 || participants[0].HeroID != replacementHero.userID() ||
+		participants[0].Role != "lead" || !participants[0].IsActive {
+		t.Errorf("lead synchronisé avec la correction : %+v", participants)
+	}
+
+	updateBody["status"] = "succeeded"
+	resolved := moderator.request(http.MethodPatch, updatePath, updateBody)
+	if resolved.status != http.StatusOK {
+		t.Fatalf("résolution de la correction : %d %s", resolved.status, resolved.body)
+	}
+	if err := e.db.Table("interventions").Where("incident_id = ?", incident.ID).Take(&intervention).Error; err != nil {
+		t.Fatal(err)
+	}
+	if intervention.Status != "succeeded" {
+		t.Errorf("résultat de l'intervention synchronisé : %+v", intervention)
+	}
+	var activeParticipants int64
+	if err := e.db.Table("intervention_heroes").
+		Joins("JOIN interventions ON interventions.id = intervention_heroes.intervention_id").
+		Where("interventions.incident_id = ? AND intervention_heroes.is_active = ?", incident.ID, true).
+		Count(&activeParticipants).Error; err != nil {
+		t.Fatal(err)
+	}
+	if activeParticipants != 0 {
+		t.Errorf("participants actifs après résolution : %d", activeParticipants)
+	}
+
+	rejectedBody := validIncident(firstType.ID)
+	rejectedBody["villainIds"] = []string{villain.ID}
+	rejected := citizen.post("/incidents", rejectedBody)
+	var rejectedIncident struct{ ID string }
+	rejected.decode(t, &rejectedIncident)
+	if rejected.status != http.StatusCreated {
+		t.Fatalf("seconde déclaration : %d %s", rejected.status, rejected.body)
+	}
+	rejectedPath := "/admin/incidents/" + rejectedIncident.ID + "/moderation"
+	if got := moderator.request(http.MethodPut, rejectedPath, map[string]string{"decision": "rejected"}); got.status != http.StatusNoContent {
+		t.Fatalf("rejet : %d %s", got.status, got.body)
+	}
+	if got := e.newActor().get("/incidents/" + rejectedIncident.ID); got.status != http.StatusNotFound {
+		t.Errorf("détail rejeté visible publiquement : %d", got.status)
+	}
+	var publicList struct{ Total int }
+	if got := e.newActor().get("/incidents"); got.status != http.StatusOK {
+		t.Fatalf("liste publique : %d %s", got.status, got.body)
+	} else {
+		got.decode(t, &publicList)
+	}
+	if publicList.Total != 1 {
+		t.Errorf("les incidents rejetés doivent être exclus des listes publiques : %+v", publicList)
+	}
+	var villainHistory struct{ Total int }
+	if got := e.newActor().get("/villains/" + villain.ID + "/incidents"); got.status != http.StatusOK {
+		t.Fatalf("historique public du vilain : %d %s", got.status, got.body)
+	} else {
+		got.decode(t, &villainHistory)
+	}
+	if villainHistory.Total != 1 {
+		t.Errorf("l'historique public du vilain exclut l'incident rejeté : %+v", villainHistory)
+	}
+	var publicVillains struct{ Items []villainView }
+	if got := citizen.get("/villains?q=Le%20Corbeau"); got.status != http.StatusOK {
+		t.Fatalf("liste publique des vilains : %d %s", got.status, got.body)
+	} else {
+		got.decode(t, &publicVillains)
+	}
+	if len(publicVillains.Items) != 1 || publicVillains.Items[0].ReportedIncidentsCount != 1 {
+		t.Errorf("le compteur public exclut les incidents en attente et rejetés : %+v", publicVillains.Items)
 	}
 }
 
@@ -313,7 +529,8 @@ func TestIncidentDeclarationValidation(t *testing.T) {
 
 	bad := map[string]any{
 		"typeId": 0, "title": strings.Repeat("a", 81), "description": "", "citizensRescued": -1,
-		"location": map[string]string{"address": "", "city": ""}, "occurredAt": "2999-01-01T00:00:00Z",
+		"reporterRole": "suspect",
+		"location":     map[string]string{"address": "", "city": ""}, "occurredAt": "2999-01-01T00:00:00Z",
 		"villainIds": []string{"00000000-0000-0000-0000-000000000000"},
 	}
 	got := citizen.post("/incidents", bad)
@@ -321,7 +538,7 @@ func TestIncidentDeclarationValidation(t *testing.T) {
 	want := map[string]string{
 		"typeId": "invalid", "title": "too_long", "description": "required",
 		"citizensRescued": "invalid", "location.address": "required", "location.city": "required",
-		"occurredAt": "invalid", "villainIds": "invalid",
+		"occurredAt": "invalid", "villainIds": "invalid", "reporterRole": "invalid",
 	}
 	if got.status != http.StatusUnprocessableEntity {
 		t.Fatalf("%d %s", got.status, got.body)

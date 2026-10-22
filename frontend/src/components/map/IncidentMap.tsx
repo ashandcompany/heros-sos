@@ -1,19 +1,42 @@
 "use client";
 
 import "leaflet/dist/leaflet.css";
-import type { LatLngTuple, Map as LeafletMap } from "leaflet";
-import { useEffect, useRef } from "react";
+import type {
+  LatLngBounds,
+  LatLngTuple,
+  LayerGroup,
+  Map as LeafletMap,
+  Marker,
+  Popup,
+} from "leaflet";
+import { useEffect, useRef, useState } from "react";
+import { cn } from "@/components/ui/cn";
 import { formatDateTime, incidentPriorityLabels, incidentStatusLabels } from "@/lib/format";
 import type { MapTileConfig } from "@/lib/map";
 import { heroIncidentRoute } from "@/lib/routes";
 import type { IncidentMapData, MapIncident, MapTeam, MapZone } from "@/types";
+import { MapLegend } from "./MapLegend";
 
 /** Vue de la France métropolitaine, quand aucun incident n'est localisé. */
 const FRANCE_CENTER: LatLngTuple = [46.6, 2.4];
 const FRANCE_ZOOM = 6;
 
+/**
+ * Cadrage initial : les incidents à plus de cette distance (en mètres) du point médian sont
+ * laissés hors champ, pour qu'un incident isolé (à New York…) n'écrase pas tous les autres.
+ * Ils restent sur la carte et dans la liste.
+ */
+const MAIN_AREA_RADIUS = 1_200_000;
+
+/** Zoom minimal quand on sélectionne un incident depuis la liste. */
+const FOCUS_ZOOM = 11;
+
 /** Bulles : assez larges pour un titre sur deux lignes, sans masquer toute la carte. */
-const POPUP_OPTIONS = { minWidth: 240, maxWidth: 300 };
+const POPUP_OPTIONS = {
+  minWidth: 240,
+  maxWidth: 300,
+  autoPanPadding: [24, 24] as [number, number],
+};
 
 interface PopupCard {
   /** Petite ligne au-dessus du titre (type d'incident…). */
@@ -113,6 +136,37 @@ const zonePopup = (zone: MapZone) =>
     ],
   });
 
+const median = (values: number[]) => {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+};
+
+interface MapLayers {
+  map: LeafletMap;
+  incidents: LayerGroup;
+  zones: LayerGroup;
+  teams: LayerGroup;
+  markers: Map<string, Marker>;
+  popups: Map<string, Popup>;
+  /** Cadrage de la vue d'ensemble (`null` : aucun incident localisé). */
+  home: LatLngBounds | null;
+  animate: boolean;
+}
+
+export interface IncidentMapProps {
+  data: IncidentMapData;
+  tiles: MapTileConfig;
+  variant?: IncidentMapVariant;
+  /** Incidents affichés (filtres de la liste). */
+  visibleIds: ReadonlySet<string>;
+  showZones: boolean;
+  showTeams: boolean;
+  selectedId: string | null;
+  /** Appelé au clic sur un repère (`id`) ou à la fermeture de sa bulle (`null`). */
+  onSelect: (id: string | null) => void;
+  className?: string;
+}
+
 /**
  * Carte Leaflet des incidents non résolus, des zones touchées et, dans l'espace pro, des
  * super-héros en intervention.
@@ -123,25 +177,36 @@ export function IncidentMap({
   data,
   tiles,
   variant = "hero",
-}: {
-  data: IncidentMapData;
-  tiles: MapTileConfig;
-  variant?: IncidentMapVariant;
-}) {
+  visibleIds,
+  showZones,
+  showTeams,
+  selectedId,
+  onSelect,
+  className,
+}: IncidentMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const layersRef = useRef<MapLayers | null>(null);
+  const [ready, setReady] = useState(false);
+
+  // Rappel le plus récent, sans recréer la carte à chaque rendu du parent.
+  const onSelectRef = useRef(onSelect);
+  useEffect(() => {
+    onSelectRef.current = onSelect;
+  });
+  // Incident sélectionné, lu par les écouteurs Leaflet (créés une seule fois).
+  const selectedRef = useRef<string | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    let map: LeafletMap | null = null;
     let cancelled = false;
 
     void import("leaflet").then(({ default: L }) => {
       if (cancelled) return;
 
       const animate = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      map = L.map(container, {
+      const map = L.map(container, {
         center: FRANCE_CENTER,
         zoom: FRANCE_ZOOM,
         // La molette ferait zoomer la carte en faisant défiler la page.
@@ -152,6 +217,7 @@ export function IncidentMap({
         maxZoom: variant === "public" ? Math.min(PUBLIC_MAX_ZOOM, tiles.maxZoom) : tiles.maxZoom,
       });
       map.attributionControl.setPrefix(false);
+      map.zoomControl.setPosition("topright");
 
       L.tileLayer(tiles.url, {
         attribution: tiles.attribution,
@@ -168,21 +234,40 @@ export function IncidentMap({
         ),
       );
 
-      const incidents = L.layerGroup(
-        data.incidents.map((incident) =>
-          L.marker([incident.position.lat, incident.position.lng], {
-            title: `${incident.title} (${incidentStatusLabels[incident.status]})`,
-            riseOnHover: true,
-            icon: L.divIcon({
-              className: `incident-map__marker incident-map__marker--${incident.priority} incident-map__marker--${incident.status}`,
-              html: "<span></span>",
-              iconSize: [22, 22],
-              iconAnchor: [11, 11],
-              popupAnchor: [0, -12],
-            }),
-          }).bindPopup(() => incidentPopup(incident, variant), POPUP_OPTIONS),
-        ),
-      );
+      // Les bulles des incidents ne s'ouvrent pas au clic (comportement de Leaflet) : le clic
+      // sélectionne l'incident, et la sélection recadre la carte puis ouvre la bulle.
+      const markers = new Map<string, Marker>();
+      const popups = new Map<string, Popup>();
+      const incidentByPopup = new Map<Popup, string>();
+      for (const incident of data.incidents) {
+        const marker = L.marker([incident.position.lat, incident.position.lng], {
+          title: `${incident.title} (${incidentStatusLabels[incident.status]})`,
+          riseOnHover: true,
+          icon: L.divIcon({
+            className: `incident-map__marker incident-map__marker--${incident.priority} incident-map__marker--${incident.status}`,
+            html: "<span></span>",
+            iconSize: [22, 22],
+            iconAnchor: [11, 11],
+            popupAnchor: [0, -12],
+          }),
+        });
+        // Décalage d'une bulle attachée au repère : ancre de l'icône (-12) + décalage par défaut (7).
+        const popup = L.popup({ ...POPUP_OPTIONS, offset: [0, -5] })
+          .setLatLng(marker.getLatLng())
+          .setContent(() => incidentPopup(incident, variant));
+
+        marker.on("click", () => onSelectRef.current(incident.id));
+        markers.set(incident.id, marker);
+        popups.set(incident.id, popup);
+        incidentByPopup.set(popup, incident.id);
+      }
+
+      // Bulle fermée (croix, clic sur la carte) : l'incident n'est plus sélectionné. Une bulle
+      // fermée parce qu'un autre incident vient d'être choisi ne compte pas.
+      map.on("popupclose", ({ popup }) => {
+        const id = incidentByPopup.get(popup);
+        if (id && id === selectedRef.current) onSelectRef.current(null);
+      });
 
       const teams = L.layerGroup(
         data.teams.map((team) =>
@@ -202,50 +287,135 @@ export function IncidentMap({
         ),
       );
 
-      zones.addTo(map);
-      incidents.addTo(map);
-      if (variant === "hero") teams.addTo(map);
+      const incidents = L.layerGroup().addTo(map);
 
-      L.control
-        .layers(
-          undefined,
-          {
-            "Incidents ouverts": incidents,
-            ...(variant === "hero" && { "Super-héros en intervention": teams }),
-            "Zones touchées": zones,
-          },
-          { collapsed: false },
-        )
-        .addTo(map);
-
-      const points: LatLngTuple[] = data.incidents.map(({ position }) => [
-        position.lat,
-        position.lng,
-      ]);
-      if (points.length > 0) {
-        map.fitBounds(L.latLngBounds(points), {
-          padding: [40, 40],
-          maxZoom: variant === "public" ? 12 : 14,
-        });
+      // Vue d'ensemble : la zone où se concentrent les incidents, sans les points isolés.
+      let home: LatLngBounds | null = null;
+      if (data.incidents.length > 0) {
+        const center = L.latLng(
+          median(data.incidents.map(({ position }) => position.lat)),
+          median(data.incidents.map(({ position }) => position.lng)),
+        );
+        const points: LatLngTuple[] = data.incidents.map(({ position }) => [
+          position.lat,
+          position.lng,
+        ]);
+        const main = points.filter((point) => center.distanceTo(point) <= MAIN_AREA_RADIUS);
+        home = L.latLngBounds(main.length > 0 ? main : points);
+        map.fitBounds(home, { padding: [40, 40], maxZoom: variant === "public" ? 12 : 14 });
       }
+
+      layersRef.current = { map, incidents, zones, teams, markers, popups, home, animate };
+      setReady(true);
     });
 
     return () => {
       cancelled = true;
-      map?.remove();
+      layersRef.current?.map.remove();
+      layersRef.current = null;
+      setReady(false);
     };
   }, [data, tiles, variant]);
 
+  // Filtres : seuls les repères des incidents retenus restent sur la carte.
+  useEffect(() => {
+    const layers = layersRef.current;
+    if (!ready || !layers) return;
+    for (const [id, marker] of layers.markers) {
+      if (visibleIds.has(id)) layers.incidents.addLayer(marker);
+      else layers.incidents.removeLayer(marker);
+    }
+  }, [ready, visibleIds]);
+
+  useEffect(() => {
+    const layers = layersRef.current;
+    if (!ready || !layers) return;
+    if (showZones) layers.map.addLayer(layers.zones);
+    else layers.map.removeLayer(layers.zones);
+  }, [ready, showZones]);
+
+  useEffect(() => {
+    const layers = layersRef.current;
+    if (!ready || !layers) return;
+    if (showTeams && variant === "hero") layers.map.addLayer(layers.teams);
+    else layers.map.removeLayer(layers.teams);
+  }, [ready, showTeams, variant]);
+
+  // Sélection (liste ou repère) : on zoome sur le repère, puis on ouvre sa bulle.
+  useEffect(() => {
+    const layers = layersRef.current;
+    selectedRef.current = selectedId;
+    if (!ready || !layers) return;
+
+    const { map, markers, popups, animate } = layers;
+    for (const [id, marker] of markers) {
+      marker.getElement()?.classList.toggle("is-selected", id === selectedId);
+    }
+
+    map.closePopup();
+    const marker = selectedId ? markers.get(selectedId) : undefined;
+    const popup = selectedId ? popups.get(selectedId) : undefined;
+    if (!marker || !popup) return;
+
+    const target = marker.getLatLng();
+    const zoom = Math.max(map.getZoom(), Math.min(FOCUS_ZOOM, map.getMaxZoom()));
+    const open = () => {
+      // Une autre sélection a pu intervenir pendant le vol.
+      if (selectedRef.current === selectedId) map.openPopup(popup);
+    };
+    map.stop();
+    map.once("moveend", open);
+    if (animate) map.flyTo(target, zoom, { duration: 0.8 });
+    else map.setView(target, zoom, { animate: false });
+    return () => {
+      map.off("moveend", open);
+    };
+  }, [ready, selectedId]);
+
+  const resetView = () => {
+    const layers = layersRef.current;
+    if (!layers) return;
+    layers.map.closePopup();
+    if (layers.home) {
+      layers.map.flyToBounds(layers.home, {
+        padding: [40, 40],
+        maxZoom: variant === "public" ? 12 : 14,
+        animate: layers.animate,
+      });
+    } else {
+      layers.map.setView(FRANCE_CENTER, FRANCE_ZOOM);
+    }
+  };
+
   return (
     <div
-      ref={containerRef}
-      role="region"
-      aria-label={
-        variant === "hero"
-          ? "Carte des incidents et des super-héros en intervention"
-          : "Carte des incidents en cours"
-      }
-      className="incident-map h-[min(70vh,560px)] w-full border-2 border-edge bg-surface shadow-[6px_6px_0_0_var(--color-shadow)]"
-    />
+      className={cn(
+        "relative border-2 border-edge bg-surface shadow-[6px_6px_0_0_var(--color-shadow)]",
+        className,
+      )}
+    >
+      <div
+        ref={containerRef}
+        role="region"
+        aria-label={
+          variant === "hero"
+            ? "Carte des incidents et des super-héros en intervention"
+            : "Carte des incidents en cours"
+        }
+        className="incident-map size-full"
+      />
+      <button
+        type="button"
+        onClick={resetView}
+        disabled={!ready}
+        className="absolute top-2.5 left-2.5 z-10 border-2 border-ink bg-paper px-2.5 py-1.5 font-mono text-[0.6875rem] font-semibold tracking-wider text-ink uppercase shadow-[3px_3px_0_0_var(--color-ink)] hover:bg-mustard disabled:opacity-60"
+      >
+        Vue d&apos;ensemble
+      </button>
+      <MapLegend
+        showTeams={variant === "hero"}
+        className="absolute bottom-2.5 left-2.5 z-10 max-w-[calc(100%-1.25rem)]"
+      />
+    </div>
   );
 }

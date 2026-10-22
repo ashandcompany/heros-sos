@@ -513,3 +513,48 @@ func TestCleanupTimeoutHasADefaultAndMustBePositive(t *testing.T) {
 		t.Errorf("un délai nul doit être refusé : %v", err)
 	}
 }
+
+func TestLogFormatDefaultsToJSONInProductionAndTextElsewhere(t *testing.T) {
+	development, err := Load(fakeEnv(validEnv()))
+	if err != nil || development.LogFormat != LogFormatText {
+		t.Errorf("développement : %q, %v, attendu text", development.LogFormat, err)
+	}
+	production, err := Load(fakeEnv(productionEnv()))
+	if err != nil || production.LogFormat != LogFormatJSON {
+		t.Errorf("production : %q, %v, attendu json", production.LogFormat, err)
+	}
+
+	env := validEnv()
+	env[envLogFormat] = "json"
+	if cfg, err := Load(fakeEnv(env)); err != nil || cfg.LogFormat != LogFormatJSON {
+		t.Errorf("json demandé en développement : %q, %v", cfg.LogFormat, err)
+	}
+	env[envLogFormat] = "xml"
+	if _, err := Load(fakeEnv(env)); err == nil || !strings.Contains(err.Error(), envLogFormat) {
+		t.Errorf("un format inconnu doit être refusé : %v", err)
+	}
+}
+
+func TestEventSettingsHaveDefaultsAndMustBePositive(t *testing.T) {
+	cfg, err := Load(fakeEnv(validEnv()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := Events{
+		PollInterval: defaultEventsPollInterval, BatchSize: defaultEventsBatchSize, Heartbeat: defaultEventsHeartbeat,
+		MaxStreamsPerUser: defaultEventsMaxStreamsPerUser, StreamMaxAge: defaultEventsStreamMaxAge, StreamBuffer: defaultEventsStreamBuffer,
+	}
+	if cfg.Events != want {
+		t.Errorf("réglages = %+v, attendu %+v", cfg.Events, want)
+	}
+	if cfg.Jobs.CommandRetention != defaultCommandRetention {
+		t.Errorf("conservation des commandes = %v", cfg.Jobs.CommandRetention)
+	}
+	for _, name := range []string{envEventsPollInterval, envEventsBatchSize, envEventsHeartbeat, envEventsMaxStreamsPerUser, envEventsStreamMaxAge, envEventsStreamBuffer, envCommandRetention} {
+		env := validEnv()
+		env[name] = "0"
+		if _, err := Load(fakeEnv(env)); err == nil || !strings.Contains(err.Error(), name) {
+			t.Errorf("%s = 0 doit être refusé : %v", name, err)
+		}
+	}
+}

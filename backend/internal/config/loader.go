@@ -167,6 +167,20 @@ func (l *loader) logLevel() slog.Level {
 	return level
 }
 
+// logFormat lit le format des journaux. Par défaut : JSON en production (le monitoring le lit), texte sinon.
+func (l *loader) logFormat(production bool) LogFormat {
+	fallback := LogFormatText
+	if production {
+		fallback = LogFormatJSON
+	}
+	format := LogFormat(l.text(envLogFormat, string(fallback)))
+	if format != LogFormatJSON && format != LogFormatText {
+		l.fail("%s : valeur inconnue %q (json ou text)", envLogFormat, format)
+		return fallback
+	}
+	return format
+}
+
 func (l *loader) trustedProxies() []netip.Prefix {
 	var prefixes []netip.Prefix
 	for _, item := range l.list(envTrustedProxies) {

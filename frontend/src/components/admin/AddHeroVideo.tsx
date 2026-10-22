@@ -13,6 +13,7 @@ export type AddHeroVideoSearchParams = Promise<{
   heros?: string | string[];
   q?: string | string[];
   statut?: string | string[];
+  titre?: string | string[];
 }>;
 
 const first = (value: string | string[] | undefined) =>
@@ -31,16 +32,15 @@ export async function AddHeroVideo({ searchParams }: { searchParams: AddHeroVide
   const params = await searchParams;
   const query = first(params.q);
   const status = first(params.statut);
+  const listTitle = first(params.titre);
   const heroes = await getHeroesForVideos(token);
   const hero = heroes.find(({ id }) => id === first(params.heros));
 
   const [search, videos] = await Promise.all([
     hero && query ? searchImdbTitles(token, query) : null,
-    hero ? getHeroVideos(token) : [],
+    hero ? getHeroVideos(token, hero.id) : [],
   ]);
-  const owned = new Set(
-    videos.filter((video) => video.hero.id === hero?.id).map(({ imdbId }) => imdbId),
-  );
+  const owned = new Set(videos.map(({ imdbId }) => imdbId));
 
   return (
     <details
@@ -58,8 +58,9 @@ export async function AddHeroVideo({ searchParams }: { searchParams: AddHeroVide
         action={routes.adminVideos}
         className="grid gap-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)_auto]"
       >
-        {/* Garde le filtre de la liste de modération affichée en dessous. */}
+        {/* Garde les filtres de la liste de modération affichée en dessous. */}
         {status && <input type="hidden" name="statut" value={status} />}
+        {listTitle && <input type="hidden" name="titre" value={listTitle} />}
         <label htmlFor="add-film-hero" className="sr-only">
           Super-héros
         </label>

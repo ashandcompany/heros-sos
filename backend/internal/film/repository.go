@@ -2,8 +2,10 @@ package film
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,6 +13,7 @@ import (
 	"gorm.io/gorm/clause"
 
 	"github.com/ashandcompany/heros-sos/backend/internal/database"
+	"github.com/ashandcompany/heros-sos/backend/internal/hero"
 )
 
 const (
@@ -113,7 +116,9 @@ type Repository interface {
 	DeleteHeroFilm(ctx context.Context, heroID, filmID uuid.UUID) error
 	CreateVillainFilm(ctx context.Context, villainID, filmID uuid.UUID, actorID *uuid.UUID, now time.Time) error
 	DeleteVillainFilm(ctx context.Context, villainID, filmID uuid.UUID) error
-	ListHeroFilms(ctx context.Context, heroID *uuid.UUID, status string, limit, offset int) ([]HeroFilm, int64, error)
+	ListHeroFilms(ctx context.Context, filter HeroFilmFilter, limit, offset int) ([]HeroFilm, int64, error)
+	ListPublicFilms(ctx context.Context, filter PublicFilmFilter, limit, offset int) ([]PublicFilm, int64, error)
+	ListFilmHeroes(ctx context.Context) ([]FilmHero, error)
 	ListVillainFilms(ctx context.Context, villainID uuid.UUID, limit, offset int) ([]VillainFilm, int64, error)
 }
 
@@ -247,17 +252,20 @@ func (r *gormRepository) DeleteVillainFilm(ctx context.Context, villainID, filmI
 	return nil
 }
 
-func (r *gormRepository) ListHeroFilms(ctx context.Context, heroID *uuid.UUID, status string, limit, offset int) ([]HeroFilm, int64, error) {
+func (r *gormRepository) ListHeroFilms(ctx context.Context, filter HeroFilmFilter, limit, offset int) ([]HeroFilm, int64, error) {
 	query := r.conn(ctx).Table("films").Joins("JOIN hero_films ON hero_films.film_id = films.id").Joins(
 		"JOIN hero_profiles ON hero_profiles.user_id = hero_films.hero_id",
 	)
-	if heroID != nil {
-		query = query.Where("hero_films.hero_id = ?", *heroID)
+	if filter.HeroID != nil {
+		query = query.Where("hero_films.hero_id = ?", *filter.HeroID)
 	}
-	if status != "" && status != "all" {
-		query = query.Where("hero_films.status = ?", status)
-	} else if status == "" && heroID == nil {
+	if filter.Status != "" && filter.Status != "all" {
+		query = query.Where("hero_films.status = ?", filter.Status)
+	} else if filter.Status == "" && filter.HeroID == nil {
 		query = query.Where("hero_films.status = ?", StatusApproved)
+	}
+	if filter.Title != "" {
+		query = query.Where("films.title ILIKE ?", "%"+escapeLike(filter.Title)+"%")
 	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
@@ -279,6 +287,100 @@ hero_films.reviewed_by, hero_films.reviewed_at, hero_films.created_at AS added_a
 		}
 	}
 	return items, total, nil
+}
+
+// publicLinks : rattachements approuvés à des héros dont le profil est validé (les seuls dont les
+// films sont visibles des citoyens).
+const publicLinks = `FROM films
+JOIN hero_films ON hero_films.film_id = films.id AND hero_films.status = ?
+JOIN hero_profiles ON hero_profiles.user_id = hero_films.hero_id AND hero_profiles.verification_status = ?`
+
+type publicFilmRow struct {
+	ID          uuid.UUID
+	IMDBID      *string
+	VideoURL    *string
+	Title       string
+	ReleaseYear *int16
+	PosterURL   *string
+	Plot        string
+	CreatedAt   time.Time
+	AddedAt     time.Time
+	// Heroes : tableau JSON [{id, alias}].
+	Heroes string
+}
+
+func (r *gormRepository) ListPublicFilms(ctx context.Context, filter PublicFilmFilter, limit, offset int) ([]PublicFilm, int64, error) {
+	conditions := []string{"TRUE"}
+	args := []any{StatusApproved, string(hero.StatusApproved)}
+	if filter.HeroID != nil {
+		// Sous-requête plutôt que filtre sur la jointure : le film garde la liste de tous ses héros.
+		conditions = append(conditions, `EXISTS (SELECT 1 FROM hero_films linked
+WHERE linked.film_id = films.id AND linked.hero_id = ? AND linked.status = ?)`)
+		args = append(args, *filter.HeroID, StatusApproved)
+	}
+	if filter.Title != "" {
+		conditions = append(conditions, "films.title ILIKE ?")
+		args = append(args, "%"+escapeLike(filter.Title)+"%")
+	}
+	from := publicLinks + "\nWHERE " + strings.Join(conditions, " AND ")
+
+	var total int64
+	if err := r.conn(ctx).Raw("SELECT COUNT(DISTINCT films.id) "+from, args...).Scan(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("film : comptage de la vidéothèque publique : %w", err)
+	}
+	var rows []publicFilmRow
+	query := `SELECT films.id, films.imdb_id, films.video_url, films.title, films.release_year,
+films.poster_url, films.plot, films.created_at, MAX(hero_films.created_at) AS added_at,
+json_agg(json_build_object('id', hero_films.hero_id, 'alias', hero_profiles.alias)
+    ORDER BY hero_profiles.alias, hero_films.hero_id)::text AS heroes
+` + from + `
+GROUP BY films.id
+ORDER BY added_at DESC, films.id
+LIMIT ? OFFSET ?`
+	if err := r.conn(ctx).Raw(query, append(args, limit, offset)...).Scan(&rows).Error; err != nil {
+		return nil, 0, fmt.Errorf("film : vidéothèque publique : %w", err)
+	}
+	items := make([]PublicFilm, len(rows))
+	for index, row := range rows {
+		var heroes []HeroRef
+		if err := json.Unmarshal([]byte(row.Heroes), &heroes); err != nil {
+			return nil, 0, fmt.Errorf("film : héros du film %s : %w", row.ID, err)
+		}
+		items[index] = PublicFilm{
+			Film: toFilm(filmRecord{
+				ID: row.ID, IMDBID: row.IMDBID, VideoURL: row.VideoURL, Title: row.Title,
+				ReleaseYear: row.ReleaseYear, PosterURL: row.PosterURL, Plot: row.Plot, CreatedAt: row.CreatedAt,
+			}),
+			Heroes: heroes, AddedAt: row.AddedAt,
+		}
+	}
+	return items, total, nil
+}
+
+func (r *gormRepository) ListFilmHeroes(ctx context.Context) ([]FilmHero, error) {
+	var rows []struct {
+		ID        uuid.UUID
+		Alias     string
+		FilmCount int64
+	}
+	query := `SELECT hero_films.hero_id AS id, hero_profiles.alias, COUNT(*) AS film_count
+` + publicLinks + `
+GROUP BY hero_films.hero_id, hero_profiles.alias
+ORDER BY hero_profiles.alias, hero_films.hero_id`
+	if err := r.conn(ctx).Raw(query, StatusApproved, string(hero.StatusApproved)).Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("film : héros de la vidéothèque : %w", err)
+	}
+	items := make([]FilmHero, len(rows))
+	for index, row := range rows {
+		items[index] = FilmHero{HeroRef: HeroRef{ID: row.ID, Alias: row.Alias}, FilmCount: row.FilmCount}
+	}
+	return items, nil
+}
+
+// escapeLike neutralise les caractères joker de LIKE (l'échappement par défaut de PostgreSQL
+// est l'antislash).
+func escapeLike(s string) string {
+	return strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(s)
 }
 
 func (r *gormRepository) ListVillainFilms(ctx context.Context, villainID uuid.UUID, limit, offset int) ([]VillainFilm, int64, error) {

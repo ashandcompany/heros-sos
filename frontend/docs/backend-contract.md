@@ -37,7 +37,7 @@ publics, tableaux de bord, fiches complètes du back-office) n'ont pas encore de
 | Notes et avis                         | `reviews.ts` (§ 3)                       | `/me/interventions`, `/interventions/{id}/reviews`, `/hero/reviews*`, `/heroes/{heroId}/reviews`, `/admin/hero-review*` |
 | Super-vilains                         | `villains.ts`                            | `GET /villains`, `GET /villains/{id}` (publics), `POST /villains`, `PATCH /villains/{id}`                               |
 | Fiches publiques super-héros          | `super-heroes.ts` (§ 3)                  | `GET /heroes`, `GET /heroes/{heroId}` (publics)                                                                         |
-| Vidéothèque (films)                   | `videos.ts`, `imdb.ts` (§ 3)             | `/films`, `/heroes/{heroId}/films`, `/hero/films*`, `/admin/hero-films*`, `/imdb/titles*`                               |
+| Vidéothèque (films)                   | `videos.ts`, `imdb.ts` (§ 3)             | `/films`, `/films/heroes`, `/heroes/{heroId}/films`, `/hero/films*`, `/admin/hero-films*`, `/imdb/titles*`              |
 | Films des super-vilains               | `videos.ts` (§ 3)                        | `GET /villains/{villainId}/films` (public), `POST /admin/villain-films`, `DELETE /admin/villains/{villainId}/films/*`   |
 | Blog                                  | `blog.ts` (§ 3)                          | `GET /articles`, `GET /articles/{slug}` (publics), `/admin/articles`, `/admin/articles/{id}`                            |
 | Newsletter publique                   | `newsletter.ts` (§ 3)                    | `POST /newsletter/subscriptions`, `POST /newsletter/subscriptions/confirm`                                              |
@@ -60,8 +60,9 @@ Fonctions de chaque fichier :
   `moderateReply`.
 - `villains.ts` : `getVillains`, `getVillainsPage`, `getVillain`, `createVillain`, `updateVillain`.
 - `super-heroes.ts` (fiches publiques) : `getSuperHeroes`, `getFeaturedSuperHeroes`, `getSuperHero`.
-- `videos.ts` : `getMyVideos`, `addMyVideo`, `deleteMyVideo`, `getHeroVideos`, `moderateVideo`,
-  `deleteVideo`, `getPublishedVideos`, `getVillainFilms`, `addVillainFilm`, `deleteVillainFilm` ;
+- `videos.ts` : `getMyVideos`, `getMyVideosPage`, `addMyVideo`, `deleteMyVideo`, `getHeroVideos`,
+  `getHeroVideosPage`, `moderateVideo`, `deleteVideo`, `getPublishedFilmsPage`, `getFilmHeroes`,
+  `getPublishedVideos`, `getVillainFilms`, `addVillainFilm`, `deleteVillainFilm` ;
   `imdb.ts` : `searchImdbTitles`, `getImdbTitle`.
 - `blog.ts` : `getPublishedArticles`, `getPublishedArticle`, `getAllArticles`, `getArticle`,
   `countDraftArticles`, `createArticle`, `updateArticle`, `deleteArticle`.
@@ -308,9 +309,10 @@ qu'un seul `GET /auth/me`.
 ### Vidéothèque : choix du branchement
 
 - **Un film, plusieurs héros** : l'API stocke chaque film une fois et le rattache à un ou
-  plusieurs héros. Elle renvoie **une entrée par rattachement** (`Film.hero`) : `HeroVideo.id` est
-  l'identifiant du film, et un même `id` peut revenir pour deux héros dans `/films`. Les listes
-  prennent donc `hero.id` + `id` comme clé React.
+  plusieurs héros. La vidéothèque publique (`GET /films`, `PublicFilm`) renvoie **une entrée par
+  film** avec la liste de ses héros (`heroes`). Les autres listes (`/heroes/{heroId}/films`,
+  `/hero/films`, `/admin/hero-films`) renvoient **une entrée par rattachement** (`Film.hero`) :
+  `HeroVideo.id` est l'identifiant du film, et les listes prennent `hero.id` + `id` comme clé React.
 - **Modération par couple (héros, film)** : `POST /admin/hero-films/{heroId}/{filmId}/approve` ou
   `…/reject`, `DELETE /admin/hero-films/{heroId}/{filmId}`. Les formulaires du back-office ne
   transmettant qu'un `id`, ils envoient la clé `heroId/filmId` (`heroVideoKey`), relue par les
@@ -320,8 +322,13 @@ qu'un seul `GET /auth/me`.
   Les listes publiques ne renvoient pas `moderation` : leurs films sont considérés `valide`.
 - **Conversion** : `plot` → `description`, `releaseYear` → `year`. Sans `videoUrl`, un film du
   catalogue pointe vers sa fiche `https://www.imdb.com/title/{imdbId}/`.
-- **Pagination** : les écrans n'étant pas paginés, les fonctions lisent toutes les pages
-  (100 films par appel) et renvoient un tableau trié du plus récent au plus ancien.
+- **Pagination et filtres** : la vidéothèque publique, la modération et « Ma vidéothèque » sont
+  paginées par l'API (`getPublishedFilmsPage`, `getHeroVideosPage`, `getMyVideosPage`). `GET /films`
+  et `GET /admin/hero-films` filtrent par héros (`hero`) et par extrait du titre (`q`, 100
+  caractères au plus, insensible à la casse mais pas aux accents). Le filtre par héros de la
+  vidéothèque vient de `GET /films/heroes` (héros ayant un film publié, avec leur nombre de films).
+  `getMyVideos`, `getHeroVideos` (un héros) et `getPublishedVideos` (fiche d'un héros) lisent
+  encore toutes les pages (100 films par appel) : ces listes sont bornées à un seul héros.
 - **Catalogue IMDb** : la recherche passe par l'API (OMDb), la clé reste côté serveur
   (`HEROS_OMDB_API_KEY` dans `backend/.env`, voir `.env.example`). Sans clé valide, l'API répond
   `502 catalog_unavailable` : `searchImdbTitles` renvoie `{ ok: false, error: "catalog-unavailable" }`

@@ -4,16 +4,21 @@ import { villainFilmsMock } from "@/mocks/villain-films";
 import { villainsMock } from "@/mocks/villains";
 import { apiFailureMessage } from "@/lib/validation/form-state";
 import type {
+  FilmFilter,
+  FilmHero,
   HeroVideo,
   ModerationStatus,
   MutationResult,
+  Page,
+  PageRequest,
+  PublicFilm,
   SuperHeroSummary,
   VillainFilm,
 } from "@/types";
 import { isApiEnabled, mockResponse } from "./config";
 import { ApiError, type ApiSchema, apiFetch, toApiFailure } from "./http";
 import { getImdbTitle } from "./imdb";
-import { MAX_PAGE_SIZE, pageQuery } from "./pagination";
+import { fromApiPage, MAX_PAGE_SIZE, pageQuery, toMockPage } from "./pagination";
 import { userFromToken } from "./session-user";
 
 /*
@@ -72,6 +77,14 @@ async function fetchAllFilms(
 
 const byMostRecent = (a: HeroVideo, b: HeroVideo) => Date.parse(b.addedAt) - Date.parse(a.addedAt);
 
+/** Longueur maximale d'une recherche par titre acceptée par l'API (au-delà : 422). */
+export const FILM_QUERY_MAX_LENGTH = 100;
+
+/** Recherche par titre transmise à l'API : `undefined` si vide, tronquée à la longueur permise. */
+function filmQuery(query: string | undefined): string | undefined {
+  return query?.trim().slice(0, FILM_QUERY_MAX_LENGTH) || undefined;
+}
+
 const filmErrorMessages: Record<string, string> = {
   film_not_found: "Film introuvable.",
   film_already_linked: "Ce film est déjà dans votre vidéothèque.",
@@ -103,26 +116,69 @@ export function parseHeroVideoKey(key: string): { heroId: string; filmId: string
 }
 
 /**
- * Films ajoutés par les super-héros, des plus récents aux plus anciens.
- * API : `GET /admin/hero-films?status=…`, page après page.
+ * Une page des films ajoutés par les super-héros, des plus récents aux plus anciens, filtrés par
+ * statut, héros et titre (aucun pour un héros inconnu ou non validé).
+ * API : `GET /admin/hero-films?status=…&hero=…&q=…`.
  */
-export async function getHeroVideos(
+export async function getHeroVideosPage(
   token: string,
-  moderation?: ModerationStatus,
-): Promise<HeroVideo[]> {
+  filter: FilmFilter & { moderation?: ModerationStatus } = {},
+  page: PageRequest = {},
+): Promise<Page<HeroVideo>> {
   if (!isApiEnabled) {
     await userFromToken(token, "admin");
+    const matches = matchesFilmFilter(filter);
     return mockResponse(
-      videosMock
-        .filter((video) => !moderation || video.moderation === moderation)
-        .sort(byMostRecent),
+      toMockPage(
+        videosMock
+          .filter((video) => !filter.moderation || video.moderation === filter.moderation)
+          .filter((video) => matches([video.hero], video.title))
+          .sort(byMostRecent),
+        page,
+      ),
     );
   }
 
-  const films = await fetchAllFilms("/admin/hero-films", token, {
-    status: moderation && statusToApi[moderation],
-  });
-  return films.sort(byMostRecent);
+  try {
+    const response = await apiFetch(
+      `/admin/hero-films${pageQuery(page, {
+        status: filter.moderation && statusToApi[filter.moderation],
+        hero: filter.heroId,
+        q: filmQuery(filter.query),
+      })}`,
+      { sessionToken: token },
+    );
+    return fromApiPage((await response.json()) as ApiSchema<"HeroFilmPage">, fromApiFilm);
+  } catch (error) {
+    // Héros inconnu ou non validé (404, ou identifiant mock refusé en 422) : aucun film.
+    if (
+      filter.heroId &&
+      error instanceof ApiError &&
+      (error.status === 404 || error.status === 422)
+    ) {
+      return toMockPage([], page);
+    }
+    throw error;
+  }
+}
+
+/**
+ * Tous les films d'un super-héros, quel que soit leur statut (pour signaler ceux déjà dans sa
+ * vidéothèque) ; aucun s'il est inconnu ou non validé.
+ * API : `GET /admin/hero-films?hero=…`, page après page.
+ */
+export async function getHeroVideos(token: string, heroId: string): Promise<HeroVideo[]> {
+  if (!isApiEnabled) {
+    await userFromToken(token, "admin");
+    return mockResponse(videosMock.filter((video) => video.hero.id === heroId));
+  }
+
+  try {
+    return await fetchAllFilms("/admin/hero-films", token, { hero: heroId });
+  } catch (error) {
+    if (error instanceof ApiError && (error.status === 404 || error.status === 422)) return [];
+    throw error;
+  }
 }
 
 /**
@@ -280,6 +336,25 @@ export async function getMyVideos(token: string): Promise<HeroVideo[]> {
 }
 
 /**
+ * Une page de la vidéothèque du héros connecté, des films les plus récents aux plus anciens.
+ * API : `GET /hero/films`.
+ */
+export async function getMyVideosPage(
+  token: string,
+  page: PageRequest = {},
+): Promise<Page<HeroVideo>> {
+  if (!isApiEnabled) {
+    const user = await userFromToken(token, "super-heros");
+    return mockResponse(
+      toMockPage(videosMock.filter((video) => video.hero.id === user.id).sort(byMostRecent), page),
+    );
+  }
+
+  const response = await apiFetch(`/hero/films${pageQuery(page)}`, { sessionToken: token });
+  return fromApiPage((await response.json()) as ApiSchema<"HeroFilmPage">, fromApiFilm);
+}
+
+/**
  * Ajoute un film du catalogue IMDb ; il sera publié après validation par la modération.
  * API : `POST /hero/films` avec `{ imdbId }`.
  */
@@ -323,31 +398,97 @@ export async function deleteMyVideo(token: string, id: string): Promise<Mutation
 /* ---------- Vidéothèque publique ---------- */
 
 /**
- * Films publiés par la modération, des plus récents aux plus anciens, éventuellement ceux
- * d'un seul super-héros (aucun s'il est inconnu de l'API).
- * API : `GET /films` ou `GET /heroes/{heroId}/films`, page après page.
+ * Une page de la vidéothèque publique : chaque film une seule fois, avec tous ses héros, du
+ * rattachement le plus récent au plus ancien. Filtrée par héros et par titre.
+ * API : `GET /films?hero=…&q=…`.
  */
-export async function getPublishedVideos(heroId?: string): Promise<HeroVideo[]> {
+export async function getPublishedFilmsPage(
+  filter: FilmFilter = {},
+  page: PageRequest = {},
+): Promise<Page<PublicFilm>> {
   if (!isApiEnabled) {
+    const matches = matchesFilmFilter(filter);
     return mockResponse(
-      videosMock
-        .filter((video) => video.moderation === "valide")
-        .filter((video) => !heroId || video.hero.id === heroId)
-        .sort(byMostRecent),
+      toMockPage(
+        publicFilmsFromMocks().filter((film) => matches(film.heroes, film.title)),
+        page,
+      ),
     );
   }
 
-  const path = heroId ? `/heroes/${encodeURIComponent(heroId)}/films` : "/films";
   try {
-    return (await fetchAllFilms(path)).sort(byMostRecent);
+    const response = await apiFetch(
+      `/films${pageQuery(page, { hero: filter.heroId, q: filmQuery(filter.query) })}`,
+    );
+    return fromApiPage((await response.json()) as ApiSchema<"PublicFilmPage">, fromApiPublicFilm);
   } catch (error) {
-    // Héros inconnu de l'API (404, ou identifiant mock refusé en 422) : aucun film.
-    if (heroId && error instanceof ApiError && (error.status === 404 || error.status === 422)) {
-      return [];
+    // Identifiant de héros mal formé (lien ancien ou saisi à la main) : aucun film.
+    if (filter.heroId && error instanceof ApiError && error.status === 422) {
+      return toMockPage([], page);
     }
     throw error;
   }
 }
+
+/**
+ * Super-héros ayant au moins un film publié, par pseudo, avec leur nombre de films.
+ * API : `GET /films/heroes`.
+ */
+export async function getFilmHeroes(): Promise<FilmHero[]> {
+  if (!isApiEnabled) {
+    const heroes = new Map<string, FilmHero>();
+    for (const { heroes: filmHeroes } of publicFilmsFromMocks()) {
+      for (const hero of filmHeroes) {
+        const entry = heroes.get(hero.id) ?? { ...hero, filmCount: 0 };
+        entry.filmCount += 1;
+        heroes.set(hero.id, entry);
+      }
+    }
+    return mockResponse([...heroes.values()].sort(byHeroAlias));
+  }
+
+  const response = await apiFetch("/films/heroes");
+  const heroes = (await response.json()) as ApiSchema<"FilmHeroCount">[];
+  return heroes.map(({ id, alias, filmCount }) => ({ id, alias, filmCount })).sort(byHeroAlias);
+}
+
+/**
+ * Films publiés d'un super-héros, des plus récents aux plus anciens (aucun s'il est inconnu de
+ * l'API). API : `GET /heroes/{heroId}/films`, page après page.
+ */
+export async function getPublishedVideos(heroId: string): Promise<HeroVideo[]> {
+  if (!isApiEnabled) {
+    return mockResponse(
+      videosMock
+        .filter((video) => video.moderation === "valide" && video.hero.id === heroId)
+        .sort(byMostRecent),
+    );
+  }
+
+  try {
+    return (await fetchAllFilms(`/heroes/${encodeURIComponent(heroId)}/films`)).sort(byMostRecent);
+  } catch (error) {
+    // Héros inconnu de l'API (404, ou identifiant mock refusé en 422) : aucun film.
+    if (error instanceof ApiError && (error.status === 404 || error.status === 422)) return [];
+    throw error;
+  }
+}
+
+function fromApiPublicFilm(film: ApiSchema<"PublicFilm">): PublicFilm {
+  return {
+    id: film.id,
+    heroes: film.heroes,
+    title: film.title,
+    description: film.plot,
+    videoUrl: film.videoUrl ?? (film.imdbId ? `https://www.imdb.com/title/${film.imdbId}/` : ""),
+    imdbId: film.imdbId,
+    year: film.releaseYear,
+    addedAt: film.addedAt,
+  };
+}
+
+const byHeroAlias = (a: SuperHeroSummary, b: SuperHeroSummary) =>
+  a.alias.localeCompare(b.alias, "fr");
 
 /* ---------- Films des super-vilains ---------- */
 
@@ -483,6 +624,40 @@ export async function deleteVillainFilm(
 }
 
 /* ---------- Mocks ---------- */
+
+/** Mock : films publiés regroupés comme le fait l'API (un film IMDb partagé par plusieurs héros). */
+function publicFilmsFromMocks(): PublicFilm[] {
+  const films = new Map<string, PublicFilm>();
+  for (const video of videosMock.filter(({ moderation }) => moderation === "valide")) {
+    const key = video.imdbId ?? video.id;
+    const film = films.get(key);
+    if (!film) {
+      const { id, title, description, videoUrl, imdbId, year, addedAt } = video;
+      films.set(key, {
+        id,
+        title,
+        description,
+        videoUrl,
+        imdbId,
+        year,
+        addedAt,
+        heroes: [video.hero],
+      });
+      continue;
+    }
+    film.heroes = [...film.heroes, video.hero].sort(byHeroAlias);
+    if (Date.parse(video.addedAt) > Date.parse(film.addedAt)) film.addedAt = video.addedAt;
+  }
+  return [...films.values()].sort((a, b) => Date.parse(b.addedAt) - Date.parse(a.addedAt));
+}
+
+/** Mock : filtre d'une liste de films, comme l'API (titre sans tenir compte de la casse). */
+function matchesFilmFilter({ heroId, query }: FilmFilter) {
+  const needle = filmQuery(query)?.toLocaleLowerCase("fr");
+  return (heroes: SuperHeroSummary[], title: string) =>
+    (!heroId || heroes.some(({ id }) => id === heroId)) &&
+    (!needle || title.toLocaleLowerCase("fr").includes(needle));
+}
 
 async function addMyVideoWithMocks(token: string, imdbId: string): Promise<MutationResult> {
   const user = await userFromToken(token, "super-heros");

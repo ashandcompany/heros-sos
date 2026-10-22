@@ -806,9 +806,29 @@ export interface paths {
         };
         /**
          * Vidéothèque publique
-         * @description Films ayant au moins un rattachement validé à un super-héros.
+         * @description Films ayant au moins un rattachement validé à un super-héros validé, une seule entrée par film avec la liste de tous ses héros. Du rattachement le plus récent au plus ancien.
          */
         get: operations["listPublicFilms"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/films/heroes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Super-héros de la vidéothèque publique
+         * @description Super-héros ayant au moins un film publié, par pseudo, avec leur nombre de films.
+         */
+        get: operations["listFilmHeroes"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2041,6 +2061,38 @@ export interface components {
             total: number;
             limit: number;
             offset: number;
+        };
+        PublicFilm: {
+            /** Format: uuid */
+            id: string;
+            imdbId?: string;
+            /** Format: uri */
+            videoUrl?: string;
+            title: string;
+            /** Format: int32 */
+            releaseYear?: number;
+            /** Format: uri */
+            posterUrl?: string;
+            plot: string;
+            /**
+             * Format: date-time
+             * @description Date du rattachement publié le plus récent.
+             */
+            addedAt: string;
+            /** @description Super-héros auxquels le film est rattaché, par pseudo. */
+            heroes: components["schemas"]["FilmHero"][];
+        };
+        PublicFilmPage: {
+            items: components["schemas"]["PublicFilm"][];
+            total: number;
+            limit: number;
+            offset: number;
+        };
+        FilmHeroCount: {
+            /** Format: uuid */
+            id: string;
+            alias: string;
+            filmCount: number;
         };
         VillainFilmPage: {
             items: components["schemas"]["Film"][];
@@ -4016,7 +4068,10 @@ export interface operations {
     listPublicFilms: {
         parameters: {
             query?: {
+                /** @description Films rattachés à ce super-héros (leurs autres héros restent listés). Un héros inconnu donne une page vide. */
                 hero?: string;
+                /** @description Extrait du titre, sans tenir compte de la casse. */
+                q?: string;
                 /** @description Nombre d'éléments par page (1 à 100, 20 par défaut). */
                 limit?: components["parameters"]["Limit"];
                 /** @description Nombre d'éléments à sauter. */
@@ -4034,10 +4089,31 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HeroFilmPage"];
+                    "application/json": components["schemas"]["PublicFilmPage"];
                 };
             };
             422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listFilmHeroes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Liste complète (non paginée). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FilmHeroCount"][];
+                };
+            };
             500: components["responses"]["InternalError"];
         };
     };
@@ -4284,6 +4360,10 @@ export interface operations {
         parameters: {
             query?: {
                 status?: "pending" | "approved" | "rejected";
+                /** @description Films de ce super-héros uniquement (404 s'il est inconnu ou non validé). */
+                hero?: string;
+                /** @description Extrait du titre, sans tenir compte de la casse. */
+                q?: string;
                 /** @description Nombre d'éléments par page (1 à 100, 20 par défaut). */
                 limit?: components["parameters"]["Limit"];
                 /** @description Nombre d'éléments à sauter. */
@@ -4306,6 +4386,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationFailed"];
             500: components["responses"]["InternalError"];
         };

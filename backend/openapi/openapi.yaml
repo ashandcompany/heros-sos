@@ -1837,13 +1837,43 @@ paths:
     get:
       tags: [Incidents]
       summary: Liste publique des incidents
-      description: Accessible sans session. Liste les incidents sans identité civile du déclarant.
+      description: |
+        Accessible sans session. Liste tous les incidents (résolus ou non) sans identité civile du
+        déclarant. Les valeurs d'un même filtre sont combinées par OU, les filtres entre eux par ET.
+        Les filtres multiples s'écrivent avec un paramètre répété (?status=a&status=b)
+        (20 identifiants au maximum pour heroId et villainId).
       operationId: listIncidents
       parameters:
         - name: reporterId
           in: query
           description: Identifiant facultatif du déclarant; un citoyen connecté ne peut filtrer que sur son propre identifiant.
           schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          description: Statuts retenus.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items: { type: string, enum: [reported, in_progress, succeeded, failed] }
+        - name: heroId
+          in: query
+          description: Incidents où au moins un de ces héros est intervenu.
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 20
+            items: { type: string, format: uuid }
+        - name: villainId
+          in: query
+          description: Incidents liés à au moins un de ces vilains.
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 20
+            items: { type: string, format: uuid }
         - { $ref: "#/components/parameters/Limit" }
         - { $ref: "#/components/parameters/Offset" }
       responses:

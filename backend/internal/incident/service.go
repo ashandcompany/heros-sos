@@ -206,9 +206,9 @@ func (s *Service) resolveVillains(ctx context.Context, rawIDs []string, created 
 	return nil
 }
 
-// List retourne les incidents proposés aux héros, les plus récents d'abord.
-func (s *Service) List(ctx context.Context, reporterID *uuid.UUID, limit, offset int) ([]Incident, int64, error) {
-	return s.Repo.List(ctx, reporterID, limit, offset)
+// List retourne les incidents (résolus ou non) correspondant au filtre, les plus récents d'abord.
+func (s *Service) List(ctx context.Context, filter ListFilter, limit, offset int) ([]Incident, int64, error) {
+	return s.Repo.List(ctx, filter, limit, offset)
 }
 
 // Get retourne le détail d'un incident.

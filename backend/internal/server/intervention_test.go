@@ -188,4 +188,41 @@ func TestInterventionLifecycle(t *testing.T) {
 	if e.count("incidents", "id = ? AND status = 'succeeded'", teamIncidentID) != 1 {
 		t.Error("l'unanimité doit clôturer l'incident comme réussi")
 	}
+
+	ids := func(query string) map[string]bool {
+		got := lead.get("/incidents" + query)
+		if got.status != http.StatusOK {
+			t.Fatalf("liste %q : %d %s", query, got.status, got.body)
+		}
+		var page struct{ Items []struct{ ID string } }
+		got.decode(t, &page)
+		found := map[string]bool{}
+		for _, item := range page.Items {
+			found[item.ID] = true
+		}
+		return found
+	}
+	if all := ids(""); len(all) != 4 || !all[soloIncidentID] || !all[teamIncidentID] {
+		t.Errorf("la liste doit contenir les incidents résolus : %v", all)
+	}
+	if got := ids("?status=succeeded"); len(got) != 2 || !got[soloIncidentID] || !got[teamIncidentID] {
+		t.Errorf("filtre status=succeeded : %v", got)
+	}
+	if got := ids("?status=failed&status=reported"); len(got) != 2 || !got[incidentID] || !got[secondIncidentID] {
+		t.Errorf("filtre status multiple : %v", got)
+	}
+	if got := ids("?heroId=" + member.userID()); len(got) != 2 || !got[incidentID] || !got[teamIncidentID] {
+		t.Errorf("filtre heroId : %v", got)
+	}
+	if got := ids("?heroId=" + member.userID() + "&status=succeeded"); len(got) != 1 || !got[teamIncidentID] {
+		t.Errorf("filtres combinés : %v", got)
+	}
+	if got := ids("?heroId=" + outsider.userID()); len(got) != 0 {
+		t.Errorf("héros sans intervention : %v", got)
+	}
+	for _, query := range []string{"?status=inconnu", "?heroId=x", "?villainId=x"} {
+		if got := lead.get("/incidents" + query); got.status != http.StatusUnprocessableEntity {
+			t.Errorf("%s : %d", query, got.status)
+		}
+	}
 }

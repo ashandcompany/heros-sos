@@ -1,7 +1,7 @@
 import type { ApiFailure } from "./api";
 import type { AccountStatus } from "./account";
 import type { Civility, PostalAddress } from "./auth";
-import type { Incident, IncidentType } from "./incident";
+import type { Incident, IncidentType, InterventionTeam } from "./incident";
 import type { ModerationStatus } from "./moderation";
 import type { VillainSummary } from "./villain";
 
@@ -136,7 +136,10 @@ export interface HeroDashboard {
     mainEnemies: Array<VillainSummary & { encounters: number }>;
   };
   /** Incidents sur lesquels le héros intervient en ce moment. */
-  myOngoingIncidents: Incident[];
+  myOngoingIncidents: DashboardIncident[];
   /** Derniers incidents signalés et non résolus, tous héros confondus. */
-  recentIncidents: Incident[];
+  recentIncidents: DashboardIncident[];
 }
+
+/** Incident d'une liste du tableau de bord ; avec l'API, il embarque l'équipe qui intervient dessus. */
+export type DashboardIncident = Incident & { team?: InterventionTeam | null };

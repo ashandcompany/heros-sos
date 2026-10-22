@@ -37,6 +37,7 @@ tableaux de bord) n'ont pas encore de contrat.
 | Comptes (désactivation, vérification) | `user-moderation.ts`                               | `/admin/users`, `/admin/users/{id}/deactivate`, `…/reactivate`, `…/verify`                                                             |
 | Incidents, interventions, équipes     | `incidents.ts`, `interventions.ts` (§ 3)           | `/incidents/*`, `/interventions/*`, `/admin/interventions/{id}/decision`                                                               |
 | Historique public (héros, vilains)    | `incidents.ts` (§ 3)                               | `GET /heroes/{heroId}/incidents`, `GET /villains/{id}/incidents` (publics)                                                             |
+| Tableau de bord héros                 | `hero-dashboard.ts` (§ 3)                          | `GET /hero/dashboard`                                                                                                                  |
 | Types d'incident                      | `incident-types.ts`                                | `/intervention-types`, `/admin/intervention-types`                                                                                     |
 | Notes et avis                         | `reviews.ts` (§ 3)                                 | `/me/interventions`, `/interventions/{id}/reviews`, `/hero/reviews*`, `/heroes/{heroId}/reviews`, `/admin/hero-review*`                |
 | Super-vilains                         | `villains.ts`                                      | `GET /villains`, `GET /villains/{id}` (publics), `POST /villains`, `PATCH /villains/{id}`                                              |
@@ -84,7 +85,7 @@ Fonctions de chaque fichier :
 | Domaine frontend                     | Fonctions `lib/api/`                          | Contrat OpenAPI                                               | État |
 | ------------------------------------ | --------------------------------------------- | ------------------------------------------------------------- | ---- |
 | Derniers incidents résolus (accueil) | `incidents.ts` : `getLatestResolvedIncidents` | ❌ aucun (`GET /incidents` public ne renvoie pas les résolus) | mock |
-| Tableau de bord héros, modération    | `hero-dashboard.ts`, `moderation.ts`          | ❌ aucun (statistiques)                                       | mock |
+| Tableau de bord de modération        | `moderation.ts`                               | ❌ `GET /admin/moderation/summary` pas encore utilisé         | mock |
 
 > [!WARNING]
 > Les « Future implémentation » écrites dans les commentaires de `lib/api/` pour les domaines non
@@ -199,7 +200,7 @@ vrai identifiant, n'y retrouve rien de lui. Aucun compte réel n'emprunte l'iden
 mock, donc personne ne voit les données d'un autre.
 
 > [!WARNING]
-> Conséquence, tant que ces domaines ne sont pas branchés : listes vides (tableau de bord héros…).
+> Conséquence, tant que ces domaines ne sont pas branchés : listes vides (tableau de bord de modération…).
 > Le compte (profil, photo, email) et « Mon profil » côté héros sont branchés (`GET /me`) et ne sont plus
 > concernés.
 
@@ -572,7 +573,28 @@ demandent une session.
 
 **Encore sur les mocks avec l'API** : derniers incidents résolus de l'accueil
 (`getLatestResolvedIncidents`, faisable avec `GET /incidents?status=succeeded` mais sans tri par
-date de résolution), tableaux de bord (`hero-dashboard.ts`, `moderation.ts`).
+date de résolution), tableau de bord de modération (`moderation.ts`).
+
+### Tableau de bord héros : choix du branchement
+
+`getHeroDashboard` appelle `GET /hero/dashboard` (rôle héros) : la réponse a déjà la forme de `HeroDashboard`
+pour `global` et `personal`, sans conversion. Les deux listes d'incidents passent par `fromApiIncident` puis
+reçoivent leur équipe (`GET /interventions/{id}`, comme la liste des incidents du héros) pour que la carte
+affiche « Vous intervenez » ou « Pris en charge par … ».
+
+- **Modération** : tout ce qui vient des incidents ne retient que ceux approuvés (`moderation = 'approved'`),
+  comme `GET /incidents` pour un héros : un incident en attente ou rejeté n'est ni compté ni listé.
+- **Interventions** : une intervention terminée (réussie ou échouée) compte une fois, quel que soit le nombre de
+  héros ; les chiffres personnels ne comptent que les participations confirmées (une invitation n'en est pas une).
+- **Citoyens secourus** : somme des incidents réussis, une seule fois par incident.
+- **Vilains emprisonnés** : `villains.status = 'emprisonne'`, le statut que l'annuaire des vilains affiche
+  (et non `incident_villains.arrested`, que l'API n'écrit pas).
+- **Note** : avis publiés uniquement (un avis commenté attend la modération).
+- **Vidéos** : `videos` compte tous les films liés au héros, `publishedVideos` ceux que la modération a approuvés.
+- **Non résolus** : signalés, en cours ou échoués (une nouvelle intervention peut reprendre un incident échoué,
+  comme dans la liste des incidents du héros). Les listes sont bornées à 5 incidents récents et 3 ennemis.
+- **Mes incidents en cours** : l'incident de l'intervention en cours dont le héros est participant confirmé et
+  actif ; au plus un, car un héros n'intervient que sur un incident à la fois.
 
 ### Blog : choix du branchement
 

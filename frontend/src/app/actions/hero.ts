@@ -3,13 +3,17 @@
 import { revalidatePath } from "next/cache";
 import {
   addMyVideo,
+  deleteHeroLocation,
   deleteMyVideo,
   finishIntervention,
+  grantHeroLocationConsent,
   inviteHeroes,
   joinIntervention,
   replyToReview,
   requestHeroEmailChange,
   respondToInvitation,
+  revokeHeroLocationConsent,
+  saveHeroLocation,
   setIncidentPriority,
   takeChargeOfIncident,
   updateMyHeroAvatar,
@@ -31,7 +35,7 @@ import {
 } from "@/lib/validation/account";
 import { hasFieldErrors, type FormState } from "@/lib/validation/form-state";
 import { OUTCOME_NOTES_MAX_LENGTH, REPLY_MAX_LENGTH } from "@/lib/validation/hero";
-import type { InterventionOutcome, InterventionRef, MutationResult } from "@/types";
+import type { HeroPosition, InterventionOutcome, InterventionRef, MutationResult } from "@/types";
 
 /*
  * Server Actions de l'espace super-héros. Chacune revérifie la session (le proxy ne suffit pas)
@@ -303,6 +307,56 @@ export async function deleteMyVideoAction(
     [routes.heroVideos, routes.heroDashboard, routes.admin, routes.adminVideos],
     "Film retiré de votre vidéothèque.",
   );
+}
+
+/* ---------- Partage de position ---------- */
+
+export async function setLocationSharingAction(
+  _previousState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const { token } = await requireHeroSession();
+  const enabled = formData.get("enabled");
+  if (enabled !== "true" && enabled !== "false") return invalidRequest;
+
+  const sharing = enabled === "true";
+  const result = sharing
+    ? await grantHeroLocationConsent(token)
+    : await revokeHeroLocationConsent(token);
+  // Le suivi de la position est rendu par le layout de l'espace héros : il doit relire le consentement.
+  if (result.ok) revalidatePath(routes.heroSpace, "layout");
+  return settle(
+    result,
+    [routes.heroProfile],
+    sharing
+      ? "Partage de position activé."
+      : "Partage de position désactivé : votre position a été supprimée.",
+  );
+}
+
+/**
+ * Envoie la position mesurée par le navigateur. Appelée directement par le suivi de l'espace héros
+ * (pas de formulaire) : les valeurs viennent du client et sont revérifiées ici.
+ */
+export async function saveHeroLocationAction(position: HeroPosition): Promise<MutationResult> {
+  const { token } = await requireHeroSession();
+  const { latitude, longitude, accuracyM } = position ?? {};
+  const isCoordinate = (value: unknown, limit: number): value is number =>
+    typeof value === "number" && Number.isFinite(value) && Math.abs(value) <= limit;
+  if (!isCoordinate(latitude, 90) || !isCoordinate(longitude, 180)) {
+    return { ok: false, error: "Position invalide." };
+  }
+  const accuracy =
+    typeof accuracyM === "number" && Number.isFinite(accuracyM) && accuracyM >= 0
+      ? Math.round(accuracyM)
+      : undefined;
+  return saveHeroLocation(token, { latitude, longitude, accuracyM: accuracy });
+}
+
+/** Supprime la position en gardant le consentement (« Arrêter pour l'instant »). */
+export async function pauseHeroLocationAction(): Promise<MutationResult> {
+  const { token } = await requireHeroSession();
+  return deleteHeroLocation(token);
 }
 
 /* ---------- Réputation ---------- */

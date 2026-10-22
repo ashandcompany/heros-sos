@@ -61,6 +61,10 @@ const sections: LegalSection[] = [
             Pour les super-héros : fiche de profil, réponses aux incidents, vidéos ajoutées et
             réputation.
           </li>
+          <li>
+            Pour les super-héros qui activent « Partager ma position » : leur position actuelle,
+            arrondie à environ 110 m, et la date de leur consentement.
+          </li>
         </ul>
 
         <h3>Lors de votre abonnement à la newsletter</h3>
@@ -116,6 +120,12 @@ const sections: LegalSection[] = [
               <td>Intérêt légitime : informer le public des zones à risque</td>
             </tr>
             <tr>
+              <td>Prévenir les super-héros proches d&apos;un nouvel incident</td>
+              <td>
+                Consentement, que le super-héros peut retirer à tout moment depuis « Mon profil »
+              </td>
+            </tr>
+            <tr>
               <td>Modérer les contenus publiés</td>
               <td>Intérêt légitime : garantir un service fiable</td>
             </tr>
@@ -155,6 +165,13 @@ const sections: LegalSection[] = [
             <td>Déclarations d&apos;incidents et interventions</td>
             <td>
               <ToComplete>durée, et sort des données après suppression du compte</ToComplete>
+            </td>
+          </tr>
+          <tr>
+            <td>Position actuelle d&apos;un super-héros</td>
+            <td>
+              30 minutes au plus, sans historique : chaque envoi remplace le précédent. Supprimée
+              dès que le super-héros arrête le partage ou retire son consentement.
             </td>
           </tr>
           <tr>
@@ -215,6 +232,11 @@ const sections: LegalSection[] = [
             votre adresse IP.
           </li>
         </ul>
+        <p>
+          La position d&apos;un super-héros n&apos;est lue que par nos serveurs, pour choisir qui
+          prévenir d&apos;un incident : elle n&apos;est affichée à personne, ni au public, ni aux
+          autres super-héros, ni à la modération.
+        </p>
         <p>Nous ne vendons ni ne louons vos données.</p>
       </>
     ),
@@ -374,7 +396,7 @@ export default function PrivacyPage() {
           temps elles sont conservées et comment exercer vos droits.
         </p>
       }
-      updatedAt="2026-10-20"
+      updatedAt="2026-10-22"
       sections={sections}
     />
   );

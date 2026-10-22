@@ -69,6 +69,13 @@ func (c *snapshotCache[V]) get(ctx context.Context, key string, load func(contex
 	}
 	c.mu.Unlock()
 
+	// Un contexte déjà annulé ne démarre pas de calcul : il serait détaché de la requête et se poursuivrait pour
+	// personne (c'est ce qui arrivait au préchauffage quand le serveur s'arrête).
+	if err := ctx.Err(); err != nil {
+		var zero V
+		return zero, err
+	}
+
 	// Premier appel de cette clé : calcul en direct, partagé entre les appels simultanés. Il est détaché de la requête
 	// (qui peut être abandonnée) mais l'appelant, lui, n'attend pas plus longtemps que sa requête.
 	result := c.group.DoChan(key, func() (any, error) {

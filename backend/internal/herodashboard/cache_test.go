@@ -192,3 +192,18 @@ func TestAnAbandonedFirstCallStillFillsTheCache(t *testing.T) {
 		t.Errorf("%d calculs, attendu 1", calls.Load())
 	}
 }
+
+// Un contexte déjà annulé ne lance pas de calcul : il serait détaché de la requête et continuerait pour personne.
+func TestACancelledContextDoesNotStartAComputation(t *testing.T) {
+	cache, _ := newTestCache(time.Minute)
+	var calls atomic.Int64
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := cache.get(ctx, "k", counter(&calls)); !errors.Is(err, context.Canceled) {
+		t.Fatalf("erreur : %v, attendu context.Canceled", err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if calls.Load() != 0 {
+		t.Errorf("%d calculs lancés pour un contexte annulé", calls.Load())
+	}
+}

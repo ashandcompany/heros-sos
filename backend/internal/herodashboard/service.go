@@ -142,6 +142,11 @@ func (s *Service) Warm(ctx context.Context) (WarmReport, error) {
 			break
 		}
 		group.Go(func() error {
+			// L'annulation a pu arriver pendant l'attente d'une place : le héros suivant ne démarre pas, et ce n'est
+			// pas un échec.
+			if ctx.Err() != nil {
+				return nil
+			}
 			_, err := s.personal.get(ctx, heroID.String(), func(ctx context.Context) (Personal, error) {
 				return s.loadPersonal(ctx, heroID)
 			})

@@ -262,7 +262,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	principal, _ := auth.PrincipalFrom(r.Context())
 	if item.Moderation != ModerationApproved &&
 		principal.Role != user.RoleModerator &&
-		!((principal.Role == user.RoleCitizen || principal.Role == user.RoleHero) && item.ReporterID == principal.UserID) {
+		((principal.Role != user.RoleCitizen && principal.Role != user.RoleHero) || item.ReporterID != principal.UserID) {
 		h.fail(w, r, ErrNotFound)
 		return
 	}

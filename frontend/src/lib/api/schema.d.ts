@@ -13,7 +13,7 @@ export interface paths {
         };
         /**
          * Interventions terminées à noter
-         * @description Liste les héros confirmés des interventions clôturées sur les incidents déclarés par l'utilisateur connecté (citoyen ou héros), avec ses avis déjà déposés. Un héros déclarant ne peut pas se noter lui-même.
+         * @description Liste les héros confirmés des interventions clôturées sur les incidents déclarés par l'utilisateur connecté (citoyen, héros ou modérateur), avec ses avis déjà déposés. Un héros déclarant ne peut pas se noter lui-même.
          */
         get: operations["listMyRateableInterventions"];
         put?: never;
@@ -35,7 +35,7 @@ export interface paths {
         put?: never;
         /**
          * Noter un héros de l'intervention
-         * @description Seul le déclarant connecté (citoyen ou héros) peut noter chaque participant confirmé d'une intervention clôturée, une fois par héros; un héros déclarant ne peut pas se noter lui-même. Une note seule est publiée immédiatement; un avis avec commentaire attend la modération.
+         * @description Seul le déclarant connecté (citoyen, héros ou modérateur) peut noter chaque participant confirmé d'une intervention clôturée, une fois par héros; un héros déclarant ne peut pas se noter lui-même. Une note seule est publiée immédiatement; un avis avec commentaire attend la modération.
          */
         post: operations["createHeroReview"];
         delete?: never;
@@ -222,7 +222,10 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Publier ou masquer un avis */
+        /**
+         * Publier ou masquer un avis
+         * @description Un modérateur ne peut pas modérer un avis qu'il a lui-même déposé (403 hero_review_own_review).
+         */
         patch: operations["moderateHeroReview"];
         trace?: never;
     };

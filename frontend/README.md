@@ -15,6 +15,7 @@ npm run dev
 | `npm run dev`             | Serveur de développement                                                 |
 | `npm run build`           | Build de production                                                      |
 | `npm run lint`            | ESLint                                                                   |
+| `npm test`                | Tests unitaires de la file hors ligne (`node --test`, sans navigateur)   |
 | `npm run format`          | Formate le code avec Prettier                                            |
 | `npm run format:check`    | Vérifie le formatage (CI)                                                |
 | `npm run api:types`       | Régénère `src/lib/api/schema.d.ts` depuis `backend/openapi/openapi.yaml` |

@@ -41,7 +41,14 @@ Table de référence (§1.3, §5.8.1).
 | `occurred_at` | timestamptz | |
 | `created_at`, `updated_at` | timestamptz | |
 
-Index : `(status, priority, created_at DESC)` pour les listes, et `(lower(city), postal_code, lower(street))` pour les doublons. Un doublon se supprime réellement (§4.1.1) et l'action est tracée dans `audit_logs`.
+Index :
+- `(created_at DESC, id DESC)` : la liste sans filtre, les plus récents d'abord (le tri de `GET /incidents`) ;
+- `(status, created_at DESC, id DESC)` : la liste filtrée par statut ;
+- `(reporter_id, created_at DESC, id DESC)` : « mes incidents » (une clé étrangère ne crée pas d'index dans PostgreSQL) ;
+- `(status, priority, created_at DESC)` : l'index d'origine des listes ;
+- `(lower(city), postal_code, lower(street))` : les doublons.
+
+Les trois premiers sont posés par la migration `add_incident_perf_indexes`, après mesure sur 5 millions d'incidents (voir [Performance et synchronisation](../stack/performance-et-synchronisation.md)). Un doublon se supprime réellement (§4.1.1) et l'action est tracée dans `audit_logs`.
 
 ## `interventions`
 
@@ -58,7 +65,7 @@ Une intervention est l'engagement d'une équipe de héros sur un incident : elle
 | `notes` | text | |
 | `started_at`, `ended_at` | timestamptz | |
 
-Index unique partiel : `UNIQUE (incident_id) WHERE status = 'in_progress'`.
+Index unique partiel : `UNIQUE (incident_id) WHERE status = 'in_progress'`. Index `(incident_id, started_at DESC NULLS LAST, id DESC)` : la dernière intervention d'un incident, sans tri (migration `add_incident_perf_indexes`).
 
 ## `intervention_heroes`
 
@@ -74,15 +81,17 @@ Les héros d'une intervention : c'est ici que plusieurs héros peuvent interveni
 | `outcome_validation` | text | `pending`, `approved`, `rejected`. Défaut `pending`. |
 | `is_active` | boolean | Vrai tant que le héros est `confirmed` sur une intervention `in_progress`. Tenu à jour par le service dans la même transaction. |
 | `invited_at`, `joined_at` | timestamptz | |
+| `resolved_at` | timestamptz | Date de la résolution réussie à laquelle ce héros a participé (la fin de l'intervention `succeeded`), pour un héros `confirmed` ; NULL sinon. **Dénormalisée** : remplie par des triggers, jamais par le service. Elle permet à un index de donner l'historique d'un héros déjà trié. |
 | | | PK `(intervention_id, hero_id)` |
 
-Index `(hero_id)` : les listes de héros comptent les interventions confirmées de quelques héros seulement (la clé primaire commence par `intervention_id` et n'y sert pas).
+Index `(hero_id)` : la clé primaire commence par `intervention_id` et ne sert pas à chercher par héros. Index partiel `(hero_id, resolved_at DESC, intervention_id DESC) WHERE resolved_at IS NOT NULL` : l'historique des incidents résolus par un héros, sans tri.
 
 Index uniques partiels :
 - `UNIQUE (hero_id) WHERE is_active` : un héros n'a qu'une intervention à la fois (§3.1.2).
 - `UNIQUE (intervention_id) WHERE role = 'lead'` : un seul lead par intervention.
 
 Règles appliquées par le service :
+- **Journal :** chaque action ci-dessous écrit un événement dans `events`, dans la même transaction (voir [Technique](technique.md#events)).
 - **Démarrer :** un héros qui décide d'intervenir (§4.1.1) crée l'intervention, devient `lead` et `confirmed`. L'incident passe à `in_progress`.
 - **Rejoindre :** un autre héros peut rejoindre l'intervention en cours de lui-même (`confirmed` directement).
 - **Ajouter des collègues :** un héros de l'intervention ajoute ceux qui sont venus avec lui. Chacun reçoit une demande de confirmation (`invited`). Il confirme (`confirmed`), ou répond qu'il n'est pas sur les lieux : sa ligne est alors **supprimée**.

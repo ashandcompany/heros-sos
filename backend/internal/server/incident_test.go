@@ -280,6 +280,15 @@ func TestIncidentDeclaration(t *testing.T) {
 	if got := other.get("/incidents?reporterId=" + citizen.userID()); got.status != http.StatusForbidden {
 		t.Errorf("un citoyen ne filtre pas sur un autre déclarant : %d", got.status)
 	}
+	var byVillain struct{ Total int }
+	anonymous.get("/incidents?villainId=" + villain.ID).decode(t, &byVillain)
+	if byVillain.Total != 1 {
+		t.Errorf("filtre villainId : %+v", byVillain)
+	}
+	anonymous.get("/incidents?villainId=00000000-0000-0000-0000-000000000000").decode(t, &byVillain)
+	if byVillain.Total != 0 {
+		t.Errorf("filtre villainId inconnu : %+v", byVillain)
+	}
 	var villains struct{ Items []villainView }
 	if got := citizen.get("/villains?q=Le%20Corbeau"); got.status != http.StatusOK {
 		t.Fatalf("liste des vilains : %d %s", got.status, got.body)

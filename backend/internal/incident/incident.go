@@ -15,8 +15,22 @@ var ErrNotFound = errors.New("incident : incident introuvable")
 // Status est l'état d'un incident.
 type Status string
 
-// StatusReported est l'état d'un incident venant d'être déclaré.
-const StatusReported Status = "reported"
+const (
+	// StatusReported est l'état d'un incident venant d'être déclaré.
+	StatusReported   Status = "reported"
+	StatusInProgress Status = "in_progress"
+	StatusSucceeded  Status = "succeeded"
+	StatusFailed     Status = "failed"
+)
+
+// ParseStatus valide un statut reçu en paramètre.
+func ParseStatus(raw string) (Status, bool) {
+	switch status := Status(raw); status {
+	case StatusReported, StatusInProgress, StatusSucceeded, StatusFailed:
+		return status, true
+	}
+	return "", false
+}
 
 // Priority est le niveau de priorité d'un incident.
 type Priority string

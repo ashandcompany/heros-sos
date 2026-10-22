@@ -1,8 +1,9 @@
 # Configuration de golangci-lint (v2) : `make golangci`.
 #
-# Le CI vérifie déjà gofmt, go vet, govulncheck et les tests (`make check`). Ces analyseurs vont plus loin sur les
-# conventions Go et les erreurs courantes. La liste est volontairement courte : chacun dit quelque chose d'utile
-# ici, aucun ne réclame un style de code.
+# Le CI lance déjà govulncheck et les tests ; `make check` ajoute gofmt et go vet en local. Ces analyseurs vont
+# plus loin sur les conventions Go et les erreurs courantes. La liste est volontairement courte : chacun dit
+# quelque chose d'utile ici, aucun ne réclame un style de code. Le CI les applique aux remarques nouvelles d'une
+# PR seulement (voir `.github/workflows/backend-ci.yml`).
 version: "2"
 
 run:

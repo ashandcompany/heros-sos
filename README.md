@@ -37,6 +37,7 @@ Les fichiers `docker-compose*.yml` sont à la racine : un seul endroit pour lanc
 | `make docs` | Démarre seulement la documentation (sans le reste de la pile). |
 | `make adminer` | Ajoute Adminer, un client SQL. |
 | `make moderator EMAIL=… FIRST=… LAST=… BIRTH=AAAA-MM-JJ` | Crée un modérateur (mot de passe demandé, jamais passé en argument). |
+| `make resetmfa EMAIL=…` | Réinitialise la double authentification d'un compte qui a perdu son appareil, **en développement** (vérifier son identité d'abord). En production : `make resetmfa-prod EMAIL=…` depuis `backend/`. |
 | `make seed` | Remplit la base avec des données de démonstration Marvel : modérateurs, héros, citoyens, vilains, incidents, interventions, avis, films, articles. Tous les comptes ont le mot de passe `Avengers2026!` (ex. `admin@heros-sos.local`, `peter.parker@heros-sos.local`, `mary.jane.watson@heros-sos.local`). Refusé sur une base déjà remplie ; `RESET=1` **efface d'abord toutes les données**. Refusé en production. |
 | `make resetmfa EMAIL=…` | Réinitialise la double authentification d'un compte qui a perdu son appareil (vérifier son identité d'abord). |
 | `make reset` | Arrête la pile **et supprime ses données** (base, photos, RabbitMQ), après confirmation. |

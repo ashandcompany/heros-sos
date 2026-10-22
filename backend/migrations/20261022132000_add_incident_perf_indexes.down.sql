@@ -1,0 +1,6 @@
+DROP INDEX intervention_heroes_resolved_idx;
+DROP INDEX interventions_incident_idx;
+DROP INDEX incident_villains_villain_idx;
+DROP INDEX incidents_reporter_created_idx;
+DROP INDEX incidents_status_created_idx;
+DROP INDEX incidents_created_idx;

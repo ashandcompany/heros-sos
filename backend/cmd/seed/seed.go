@@ -24,6 +24,7 @@ var dataTables = []string{
 	"users", "hero_profiles", "sessions", "user_tokens", "audit_logs",
 	"incident_types", "incidents", "interventions", "intervention_heroes",
 	"villains", "villain_specialties", "incident_villains",
+	"events", "event_publication", "processed_commands",
 	"hero_reviews", "hero_review_replies",
 	"films", "hero_films", "villain_films",
 	"email_change_requests", "newsletter_subscriptions", "articles",

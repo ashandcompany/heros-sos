@@ -70,6 +70,7 @@ type components struct {
 	authHandler         *auth.Handler
 	heroHandler         *hero.Handler
 	dashboardHandler    *herodashboard.Handler
+	dashboardService    *herodashboard.Service
 	locationService     *herolocation.Service
 	locationHandler     *herolocation.Handler
 	moderationHandler   *moderation.Handler
@@ -224,9 +225,10 @@ func NewWithDB(cfg config.Config, logger *slog.Logger, db *gorm.DB, opts ...Opti
 		Service: incidentService,
 		Logger:  logger, HTTP: cfg.HTTP, Limits: cfg.Security.RateLimits, Clock: c.clock,
 	})
-	c.dashboardHandler = herodashboard.NewHandler(herodashboard.NewService(
+	c.dashboardService = herodashboard.NewService(
 		herodashboard.NewRepository(db), incidentService,
-		herodashboard.Options{StatsTTL: cfg.Dashboard.StatsTTL, Clock: c.clock, Logger: logger}), logger)
+		herodashboard.Options{StatsTTL: cfg.Dashboard.StatsTTL, Clock: c.clock, Logger: logger})
+	c.dashboardHandler = herodashboard.NewHandler(c.dashboardService, logger)
 	c.interventionHandler = intervention.NewHandler(intervention.NewService(intervention.ServiceDeps{
 		Repo: intervention.NewRepository(db), Users: c.users, Heroes: heroProfiles,
 		Audit: c.audit, Events: c.events, Tx: c.tx, Clock: c.clock, App: cfg.App, Notifier: mailService, Logger: logger,
@@ -346,6 +348,12 @@ func (s *Server) Run(ctx context.Context) error {
 		s.components.tailer.Run(groupCtx)
 		return nil
 	})
+	if s.cfg.Dashboard.Warmup {
+		group.Go(func() error {
+			s.warmDashboard(groupCtx)
+			return nil
+		})
+	}
 	group.Go(func() error {
 		<-groupCtx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.cfg.HTTP.ShutdownTimeout)
@@ -374,6 +382,21 @@ func (s *Server) shutdown(ctx context.Context) error {
 		errs = append(errs, fmt.Errorf("fermeture de la base : %w", err))
 	}
 	return errors.Join(errs...)
+}
+
+// warmDashboard calcule d'avance les statistiques du tableau de bord des héros, en arrière-plan : le serveur répond
+// déjà pendant ce temps, et une requête qui arrive partage le calcul en cours.
+func (s *Server) warmDashboard(ctx context.Context) {
+	report, err := s.components.dashboardService.Warm(ctx)
+	switch {
+	case ctx.Err() != nil:
+		return // arrêt du serveur
+	case err != nil:
+		s.logger.WarnContext(ctx, "tableau de bord : préchauffage échoué, les statistiques se calculeront à la première requête", "error", err)
+	default:
+		s.logger.InfoContext(ctx, "tableau de bord : statistiques préchauffées",
+			"heroes", report.Heroes, "failed", report.Failed, "duration_ms", report.Elapsed.Milliseconds())
+	}
 }
 
 // runJanitor exécute périodiquement les tâches de nettoyage jusqu'à l'annulation du contexte.

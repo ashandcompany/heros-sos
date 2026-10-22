@@ -124,6 +124,7 @@ const (
 	envEventsStreamBuffer      = "HEROS_EVENTS_STREAM_BUFFER"
 
 	envDashboardStatsTTL = "HEROS_DASHBOARD_STATS_TTL"
+	envDashboardWarmup   = "HEROS_DASHBOARD_WARMUP"
 
 	envLocationTTL   = "HEROS_LOCATION_TTL"
 	envAlertRadiusKm = "HEROS_ALERT_RADIUS_KM"
@@ -163,7 +164,7 @@ func EnvVarNames() []string {
 		envCleanupInterval, envCleanupTimeout, envSessionRetention, envTokenRetention, envCommandRetention,
 		envEventsPollInterval, envEventsBatchSize, envEventsHeartbeat,
 		envEventsMaxStreamsPerUser, envEventsStreamMaxAge, envEventsStreamBuffer,
-		envDashboardStatsTTL,
+		envDashboardStatsTTL, envDashboardWarmup,
 		envLocationTTL, envAlertRadiusKm,
 	}
 }

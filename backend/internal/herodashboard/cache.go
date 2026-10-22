@@ -48,6 +48,9 @@ func newSnapshotCache[V any](ttl time.Duration, clk clock.Clock, logger *slog.Lo
 	return &snapshotCache[V]{ttl: ttl, clock: clk, logger: logger, entries: map[string]*snapshot[V]{}}
 }
 
+// enabled dit si le cache garde des valeurs (un ttl nul le désactive).
+func (c *snapshotCache[V]) enabled() bool { return c.ttl > 0 }
+
 // get retourne la valeur de la clé, calculée par load au besoin.
 func (c *snapshotCache[V]) get(ctx context.Context, key string, load func(context.Context) (V, error)) (V, error) {
 	if c.ttl <= 0 {

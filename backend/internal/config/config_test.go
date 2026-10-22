@@ -557,6 +557,22 @@ func TestDashboardStatsTTLHasADefaultAndMayBeZero(t *testing.T) {
 	}
 }
 
+func TestDashboardWarmupIsOnByDefaultAndMayBeSwitchedOff(t *testing.T) {
+	cfg, err := Load(fakeEnv(validEnv()))
+	if err != nil || !cfg.Dashboard.Warmup {
+		t.Fatalf("défaut : %v, %v", cfg.Dashboard.Warmup, err)
+	}
+	env := validEnv()
+	env[envDashboardWarmup] = "false"
+	if cfg, err := Load(fakeEnv(env)); err != nil || cfg.Dashboard.Warmup {
+		t.Errorf("%s = false : %v, %v", envDashboardWarmup, cfg.Dashboard.Warmup, err)
+	}
+	env[envDashboardWarmup] = "peut-être"
+	if _, err := Load(fakeEnv(env)); err == nil || !strings.Contains(err.Error(), envDashboardWarmup) {
+		t.Errorf("une valeur qui n'est pas un booléen doit être refusée : %v", err)
+	}
+}
+
 func TestEventSettingsHaveDefaultsAndMustBePositive(t *testing.T) {
 	cfg, err := Load(fakeEnv(validEnv()))
 	if err != nil {

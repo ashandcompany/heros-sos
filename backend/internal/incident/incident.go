@@ -10,7 +10,10 @@ import (
 	"github.com/google/uuid"
 )
 
-var ErrNotFound = errors.New("incident : incident introuvable")
+var (
+	ErrNotFound     = errors.New("incident : incident introuvable")
+	ErrNotAvailable = errors.New("incident : incident non disponible")
+)
 
 // Status est l'état d'un incident.
 type Status string
@@ -36,9 +39,27 @@ func ParseStatus(raw string) (Status, bool) {
 type Priority string
 
 const (
-	PriorityHigh   Priority = "high"
-	PriorityNormal Priority = "normal"
-	PriorityLow    Priority = "low"
+	PriorityCritical Priority = "critical"
+	PriorityHigh     Priority = "high"
+	PriorityNormal   Priority = "normal"
+	PriorityLow      Priority = "low"
+)
+
+// ModerationStatus est l'état de validation d'une déclaration.
+type ModerationStatus string
+
+const (
+	ModerationPending  ModerationStatus = "pending"
+	ModerationApproved ModerationStatus = "approved"
+	ModerationRejected ModerationStatus = "rejected"
+)
+
+// ReporterRole indique si le déclarant était témoin ou victime.
+type ReporterRole string
+
+const (
+	ReporterWitness ReporterRole = "witness"
+	ReporterVictim  ReporterRole = "victim"
 )
 
 // Incident est un incident déclaré.
@@ -52,6 +73,8 @@ type Incident struct {
 	Description       string
 	Status            Status
 	Priority          Priority
+	Moderation        ModerationStatus
+	ReporterRole      *ReporterRole
 	CitizensRescued   int16
 	Street            string
 	PostalCode        string

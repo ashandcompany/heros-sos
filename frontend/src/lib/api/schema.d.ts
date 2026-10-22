@@ -1271,8 +1271,10 @@ export interface paths {
         };
         /**
          * Liste publique des incidents
-         * @description Accessible sans session. Liste tous les incidents (résolus ou non) sans identité civile du
-         *     déclarant. Les valeurs d'un même filtre sont combinées par OU, les filtres entre eux par ET.
+         * @description Accessible sans session. Ne renvoie que les incidents approuvés, sans identité civile du
+         *     déclarant. Un déclarant connecté peut consulter ses propres incidents quel que soit leur
+         *     statut de modération; un modérateur peut tous les consulter. Les valeurs d'un même filtre
+         *     sont combinées par OU, les filtres entre eux par ET.
          *     Les filtres multiples s'écrivent avec un paramètre répété (?status=a&status=b)
          *     (20 identifiants au maximum pour heroId et villainId).
          */
@@ -1282,7 +1284,8 @@ export interface paths {
          * Déclarer un incident
          * @description Tout utilisateur connecté peut déclarer un incident classé par un type existant. Les vilains
          *     sont facultatifs et plusieurs vilains peuvent être associés. L'adresse est conservée en clair
-         *     pour permettre la détection des doublons prévue par le schéma.
+         *     pour permettre la détection des doublons prévue par le schéma. Les déclarations de citoyens et
+         *     de héros sont en attente de modération; celles des modérateurs sont approuvées d'office.
          */
         post: operations["createIncident"];
         delete?: never;
@@ -1300,10 +1303,73 @@ export interface paths {
         };
         /**
          * Détail public d'un incident
-         * @description Accessible sans session.
+         * @description Accessible sans session pour les incidents approuvés. Le déclarant connecté peut aussi
+         *     consulter son propre signalement quel que soit son statut de modération; les modérateurs
+         *     peuvent consulter tous les incidents.
          */
         get: operations["getIncident"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/incidents/{id}/moderation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Modérer un incident
+         * @description Réservé aux modérateurs. Approuve ou rejette le signalement.
+         */
+        put: operations["moderateIncident"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/incidents/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Corriger un incident
+         * @description Réservé aux modérateurs. Remplace les informations éditables et synchronise le héros et
+         *     le statut de l'intervention. Les coordonnées géographiques sont fournies par le client.
+         */
+        patch: operations["updateIncident"];
+        trace?: never;
+    };
+    "/hero/incidents/{id}/priority": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Modifier la priorité d'un incident
+         * @description Réservé aux héros. Disponible uniquement pour un incident approuvé qui n'a pas d'intervention active.
+         */
+        put: operations["setIncidentPriority"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2490,6 +2556,11 @@ export interface components {
             title: string;
             description: string;
             /**
+             * @description Rôle du déclarant au moment des faits.
+             * @enum {string|null}
+             */
+            reporterRole?: "witness" | "victim" | null;
+            /**
              * Format: int32
              * @default 0
              */
@@ -2522,7 +2593,11 @@ export interface components {
             /** @enum {string} */
             status: "reported" | "in_progress" | "succeeded" | "failed";
             /** @enum {string} */
-            priority: "high" | "normal" | "low";
+            priority: "critical" | "high" | "normal" | "low";
+            /** @enum {string} */
+            moderation: "pending" | "approved" | "rejected";
+            /** @enum {string|null} */
+            reporterRole?: "witness" | "victim" | null;
             /** Format: int32 */
             citizensRescued: number;
             location: {
@@ -2548,6 +2623,34 @@ export interface components {
             }[];
             /** Format: date-time */
             createdAt: string;
+        };
+        IncidentModerationPayload: {
+            /** @enum {string} */
+            decision: "approved" | "rejected";
+        };
+        IncidentPriorityPayload: {
+            /** @enum {string} */
+            priority: "critical" | "high" | "normal" | "low";
+        };
+        IncidentUpdatePayload: {
+            /** Format: int32 */
+            typeId: number;
+            title: string;
+            description: string;
+            /** @enum {string} */
+            status: "reported" | "in_progress" | "succeeded" | "failed";
+            location: {
+                address: string;
+                city: string;
+                /** Format: double */
+                latitude: number | null;
+                /** Format: double */
+                longitude: number | null;
+            };
+            /** Format: uuid */
+            villainId: string | null;
+            /** Format: uuid */
+            heroId: string | null;
         };
         IncidentPage: {
             items: components["schemas"]["Incident"][];
@@ -5485,6 +5588,134 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    moderateIncident: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identifiant de l'utilisateur (champ `id` de la liste des comptes).
+                 * @example 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
+                 */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IncidentModerationPayload"];
+            };
+        };
+        responses: {
+            /** @description Décision enregistrée. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateIncident: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identifiant de l'utilisateur (champ `id` de la liste des comptes).
+                 * @example 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
+                 */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IncidentUpdatePayload"];
+            };
+        };
+        responses: {
+            /** @description Incident corrigé. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Incident"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description L'intervention ou le héros ne peut pas être synchronisé. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    setIncidentPriority: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identifiant de l'utilisateur (champ `id` de la liste des comptes).
+                 * @example 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
+                 */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IncidentPriorityPayload"];
+            };
+        };
+        responses: {
+            /** @description Priorité modifiée. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description L'incident n'est pas disponible pour une modification de priorité. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["ValidationFailed"];
             500: components["responses"]["InternalError"];
         };
     };

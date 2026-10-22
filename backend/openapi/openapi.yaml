@@ -5192,6 +5192,12 @@ components:
       properties:
         alias: { type: string, description: Pseudo public. }
         bio: { type: string, description: Description publique. }
+        locationConsentAt:
+          {
+            type: string,
+            format: date-time,
+            description: "Date du consentement au partage de position (`PUT /hero/location/consent`), absente sans consentement.",
+          }
 
     ContactUpdateRequest:
       type: object

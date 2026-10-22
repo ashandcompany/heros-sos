@@ -3058,6 +3058,11 @@ export interface components {
             alias: string;
             /** @description Description publique. */
             bio: string;
+            /**
+             * Format: date-time
+             * @description Date du consentement au partage de position (`PUT /hero/location/consent`), absente sans consentement.
+             */
+            locationConsentAt?: string;
         };
         ContactUpdateRequest: {
             /** @description Portable français (06 ou 07) ou international (+33…) ; espaces, points et tirets sont ignorés. */

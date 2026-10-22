@@ -31,6 +31,7 @@ type profileRecord struct {
 	ReviewedBy         *uuid.UUID
 	ReviewedAt         *time.Time
 	RejectionReason    *string
+	LocationConsentAt  *time.Time
 	CreatedAt          time.Time
 }
 
@@ -101,7 +102,7 @@ func (r profileRecord) toProfile() Profile {
 	profile := Profile{
 		UserID: r.UserID, Alias: r.Alias, Bio: r.Bio, RequestMessage: r.RequestMessage,
 		Status: VerificationStatus(r.VerificationStatus), ReviewedBy: r.ReviewedBy,
-		ReviewedAt: r.ReviewedAt, CreatedAt: r.CreatedAt,
+		ReviewedAt: r.ReviewedAt, LocationConsentAt: r.LocationConsentAt, CreatedAt: r.CreatedAt,
 	}
 	if r.RejectionReason != nil {
 		profile.RejectionReason = *r.RejectionReason

@@ -42,6 +42,8 @@ type addressResponse struct {
 type heroResponse struct {
 	Alias string `json:"alias"`
 	Bio   string `json:"bio"`
+	// LocationConsentAt est absente tant que le héros n'a pas consenti au partage de sa position.
+	LocationConsentAt *time.Time `json:"locationConsentAt,omitempty"`
 }
 
 func (h *Handler) newResponse(a *Account) Response {
@@ -59,7 +61,7 @@ func (h *Handler) newResponse(a *Account) Response {
 		response.AvatarURL = h.AvatarURLPrefix + u.AvatarPath
 	}
 	if a.Hero != nil {
-		response.Hero = &heroResponse{Alias: a.Hero.Alias, Bio: a.Hero.Bio}
+		response.Hero = &heroResponse{Alias: a.Hero.Alias, Bio: a.Hero.Bio, LocationConsentAt: a.Hero.LocationConsentAt}
 	}
 	return response
 }

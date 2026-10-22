@@ -57,6 +57,9 @@ func TestHeroLocationIsSharedReplacedAndCleared(t *testing.T) {
 	}
 
 	// Sans consentement, aucune position n'est acceptée.
+	if view := hero.account(t); view.Hero == nil || view.Hero.LocationConsentAt != "" {
+		t.Errorf("le profil ne doit pas annoncer de consentement : %+v", view.Hero)
+	}
 	if got := hero.shareLocation(45.7, 4.8); got.status != http.StatusConflict || got.code() != "hero_location_consent_required" {
 		t.Errorf("sans consentement : %d %s", got.status, got.body)
 	}
@@ -71,6 +74,9 @@ func TestHeroLocationIsSharedReplacedAndCleared(t *testing.T) {
 	e.db.Table("hero_profiles").Select("location_consent_at::text").Where("user_id = ?", hero.userID()).Take(&again)
 	if consentedAt == "" || consentedAt != again {
 		t.Errorf("date de consentement : %q puis %q", consentedAt, again)
+	}
+	if view := hero.account(t); view.Hero == nil || view.Hero.LocationConsentAt == "" {
+		t.Errorf("le profil doit annoncer le consentement : %+v", view.Hero)
 	}
 
 	if got := hero.shareLocation(45.764043, 4.835659); got.status != http.StatusNoContent {
@@ -99,6 +105,9 @@ func TestHeroLocationIsSharedReplacedAndCleared(t *testing.T) {
 	}
 	if e.count("hero_locations", "true") != 0 || e.count("hero_profiles", "location_consent_at IS NOT NULL") != 0 {
 		t.Error("le retrait doit supprimer la position et le consentement")
+	}
+	if view := hero.account(t); view.Hero == nil || view.Hero.LocationConsentAt != "" {
+		t.Errorf("le profil ne doit plus annoncer de consentement : %+v", view.Hero)
 	}
 	if got := hero.shareLocation(45.7, 4.8); got.status != http.StatusConflict {
 		t.Errorf("envoi après retrait : %d", got.status)

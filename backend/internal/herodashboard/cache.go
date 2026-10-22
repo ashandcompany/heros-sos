@@ -79,6 +79,15 @@ func (c *snapshotCache[V]) get(ctx context.Context, key string, load func(contex
 	// Premier appel de cette clé : calcul en direct, partagé entre les appels simultanés. Il est détaché de la requête
 	// (qui peut être abandonnée) mais l'appelant, lui, n'attend pas plus longtemps que sa requête.
 	result := c.group.DoChan(key, func() (any, error) {
+		// Un calcul partagé qui vient de se terminer a pu ranger sa valeur entre le moment où cet appel a constaté
+		// l'absence de valeur et celui où il est devenu le calcul de la clé : la revérifier évite de calculer deux fois.
+		c.mu.Lock()
+		if entry, ok := c.entries[key]; ok {
+			value := entry.value
+			c.mu.Unlock()
+			return value, nil
+		}
+		c.mu.Unlock()
 		loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshTimeout)
 		defer cancel()
 		value, err := load(loadCtx)

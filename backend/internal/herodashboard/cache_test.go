@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -205,5 +206,35 @@ func TestACancelledContextDoesNotStartAComputation(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	if calls.Load() != 0 {
 		t.Errorf("%d calculs lancés pour un contexte annulé", calls.Load())
+	}
+}
+
+// Des appels simultanés sur une même clé ne la calculent qu'une fois, même quand le calcul est très court : un appel qui
+// a constaté « rien en cache » juste avant la fin du calcul d'un autre ne doit pas en lancer un second.
+func TestManyConcurrentCallersComputeEachKeyOnce(t *testing.T) {
+	cache, _ := newTestCache(time.Minute)
+	const keys, callers = 300, 8
+	calls := make([]atomic.Int64, keys)
+	var wg sync.WaitGroup
+	for caller := 0; caller < callers; caller++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for key := 0; key < keys; key++ {
+				_, err := cache.get(context.Background(), strconv.Itoa(key), func(context.Context) (int, error) {
+					calls[key].Add(1)
+					return key, nil
+				})
+				if err != nil {
+					t.Error(err)
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	for key := range calls {
+		if got := calls[key].Load(); got != 1 {
+			t.Fatalf("la clé %d a été calculée %d fois, attendu 1", key, got)
+		}
 	}
 }

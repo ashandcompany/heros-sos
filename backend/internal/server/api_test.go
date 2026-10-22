@@ -546,6 +546,7 @@ func TestAdminRoutesRequireAModerator(t *testing.T) {
 		{http.MethodPost, "/admin/hero-requests/" + someone + "/approve"},
 		{http.MethodPost, "/admin/hero-requests/" + someone + "/reject"},
 		{http.MethodGet, "/admin/users"},
+		{http.MethodGet, "/admin/moderation/summary"},
 		{http.MethodPost, "/admin/users/" + someone + "/deactivate"},
 		{http.MethodPost, "/admin/users/" + someone + "/reactivate"},
 		{http.MethodPost, "/admin/users/" + someone + "/verify"},
@@ -559,6 +560,29 @@ func TestAdminRoutesRequireAModerator(t *testing.T) {
 				t.Errorf("citoyen : %d, attendu 403", got.status)
 			}
 		})
+	}
+}
+
+func TestModeratorSummaryCountsPendingItems(t *testing.T) {
+	e := newE2E(t, nil)
+	moderator := e.newModerator("fury@shield.example")
+	type summary struct {
+		Incidents, HeroApplications, Videos, Comments, EmailChanges, DraftArticles int64
+	}
+	var before summary
+	moderator.get("/admin/moderation/summary").decode(t, &before)
+	if before != (summary{}) {
+		t.Fatalf("base vide : %+v", before)
+	}
+
+	applicant := e.signUpAndLogin("candidat@example.org")
+	if got := applicant.post("/heroes/requests", map[string]string{"alias": "Hawkeye"}); got.status != http.StatusCreated {
+		t.Fatalf("%d %s", got.status, got.body)
+	}
+	var after summary
+	moderator.get("/admin/moderation/summary").decode(t, &after)
+	if after != (summary{HeroApplications: 1}) {
+		t.Fatalf("après une demande de héros : %+v", after)
 	}
 }
 

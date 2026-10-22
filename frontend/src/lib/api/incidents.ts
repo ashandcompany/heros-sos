@@ -42,11 +42,12 @@ import { getVillain } from "./villains";
 /*
  * Incidents et interventions. Branchés sur l'API : déclaration, « mes incidents », espace
  * super-héros (liste, fiche, carte, prise en charge, résultat, équipes : voir `interventions.ts`),
- * lecture par la modération, incidents en cours et carte publique (`GET /incidents` sans session)
- * et fiche d'un incident pour un citoyen.
+ * lecture par la modération, incidents en cours et carte publique (`GET /incidents` sans session),
+ * fiche d'un incident pour un citoyen, historique d'un héros ou d'un vilain dans l'encyclopédie
+ * (`GET /heroes/{heroId}/incidents`, `GET /villains/{id}/incidents`).
  *
- * Restent mockés, faute de route : derniers incidents résolus, historique d'un héros ou d'un
- * vilain (la liste publique ne renvoie pas les résolus), la priorité, la modération des
+ * Restent mockés, faute de route : derniers incidents résolus (la liste publique ne renvoie pas
+ * les résolus), la priorité, la modération des
  * déclarations (validation, rejet, correction) et l'historique des interventions terminées.
  */
 
@@ -116,19 +117,25 @@ function toApiHeroIncident(incident: ApiIncident, team: InterventionTeam | null)
   return { ...converted, priority: converted.priority ?? "normale", interventions: [], team };
 }
 
+/** Incidents encore à traiter : un incident en échec redevient disponible. */
+const UNRESOLVED_STATUSES: readonly ApiIncident["status"][] = ["reported", "in_progress", "failed"];
+
 /**
- * Toutes les pages de `GET /incidents` (100 par appel), du plus récent au plus ancien. Sans jeton :
- * liste publique (incidents signalés, en cours ou en échec). Avec la session d'un citoyen, l'API
- * ne renvoie que ses propres déclarations : les écrans publics appellent donc sans jeton.
+ * Toutes les pages de `GET /incidents` (100 par appel), du plus récent au plus ancien. L'API
+ * renvoie tous les statuts : par défaut, seuls les incidents non résolus sont demandés
+ * (`statuses`, vide pour tout lire). Avec la session d'un citoyen, l'API ne renvoie que ses
+ * propres déclarations : les écrans publics appellent donc sans jeton.
  */
 async function fetchAllIncidents(
   token: string | undefined,
   filters: Record<string, string> = {},
+  statuses: readonly ApiIncident["status"][] = UNRESOLVED_STATUSES,
 ): Promise<ApiIncident[]> {
+  const statusQuery = statuses.map((status) => `&status=${status}`).join("");
   const incidents: ApiIncident[] = [];
   for (let offset = 0; ; offset += MAX_PAGE_SIZE) {
     const response = await apiFetch(
-      `/incidents${pageQuery({ limit: MAX_PAGE_SIZE, offset }, filters)}`,
+      `/incidents${pageQuery({ limit: MAX_PAGE_SIZE, offset }, filters)}${statusQuery}`,
       { sessionToken: token },
     );
     const page = (await response.json()) as ApiSchema<"IncidentPage">;
@@ -249,7 +256,7 @@ export async function getMyIncidents(token: string): Promise<Incident[]> {
   if (isApiEnabled) {
     const meId = await sessionUserId(token);
     if (!meId) return [];
-    return (await fetchAllIncidents(token, { reporterId: meId })).map((incident) =>
+    return (await fetchAllIncidents(token, { reporterId: meId }, [])).map((incident) =>
       fromApiIncident(incident),
     );
   }
@@ -800,14 +807,55 @@ export async function finishIntervention(
 
 /* ---------- Fiches publiques de l'encyclopédie ---------- */
 
+type ApiIncidentSummary = ApiSchema<"IncidentSummary">;
+
+/**
+ * Incident de l'historique public (sans description ni adresse précise). Le héros affiché est le
+ * lead de la dernière intervention ; le vilain, le premier associé.
+ */
+function fromApiSummary(incident: ApiIncidentSummary): Incident {
+  const villain = incident.villains[0];
+  return {
+    id: incident.id,
+    title: incident.title || [incident.typeLabel, incident.city].filter(Boolean).join(" · "),
+    type: { code: incident.typeCode, label: incident.typeLabel },
+    status: fromApiStatus[incident.status],
+    moderation: "valide",
+    location: { city: incident.city },
+    reportedAt: incident.createdAt,
+    resolvedAt: incident.resolvedAt ?? undefined,
+    villain: villain ? { id: villain.id, alias: villain.alias } : null,
+    hero: incident.lead ? { id: incident.lead.id, alias: incident.lead.alias } : undefined,
+  };
+}
+
+/** Une page d'historique public ; vide si la fiche n'existe pas (404) ou si l'identifiant est invalide. */
+async function fetchIncidentSummaries(path: string, limit: number): Promise<Incident[]> {
+  try {
+    const response = await apiFetch(`${path}${pageQuery({ limit, offset: 0 })}`);
+    const page = (await response.json()) as ApiSchema<"IncidentSummaryPage">;
+    return page.items.map(fromApiSummary);
+  } catch (error) {
+    if (error instanceof ApiError && (error.status === 404 || error.status === 422)) return [];
+    throw error;
+  }
+}
+
 /**
  * Interventions réussies d'un super-héros, des plus récentes aux plus anciennes.
- * Future implémentation : `GET ${API_URL}/heroes/${heroId}/incidents?status=resolu&limit=${limit}`
+ * API : `GET /heroes/{heroId}/incidents` (publique).
  */
 export async function getResolvedIncidentsByHero(
   heroId: string,
   limit = 6,
 ): Promise<ResolvedIncident[]> {
+  if (isApiEnabled) {
+    const incidents = await fetchIncidentSummaries(
+      `/heroes/${encodeURIComponent(heroId)}/incidents`,
+      limit,
+    );
+    return incidents.filter(isResolved);
+  }
   return mockResponse(
     incidentsMock
       .filter(isPublic)
@@ -820,9 +868,12 @@ export async function getResolvedIncidentsByHero(
 
 /**
  * Incidents attribués à un super-vilain, du plus récent au plus ancien.
- * Future implémentation : `GET ${API_URL}/villains/${villainId}/incidents?limit=${limit}`
+ * API : `GET /villains/{id}/incidents` (publique).
  */
 export async function getIncidentsByVillain(villainId: string, limit = 6): Promise<Incident[]> {
+  if (isApiEnabled) {
+    return fetchIncidentSummaries(`/villains/${encodeURIComponent(villainId)}/incidents`, limit);
+  }
   return mockResponse(
     incidentsMock
       .filter(isPublic)

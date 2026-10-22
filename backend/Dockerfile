@@ -2,7 +2,7 @@
 
 # Image de l'API Heros-SOS : compilation statique, puis image `scratch` (ni shell, ni paquets, ni
 # gestionnaire d'identités) exécutée par un utilisateur non privilégié. La surface d'attaque se
-# réduit à deux binaires et aux certificats racine.
+# réduit à quatre binaires et aux certificats racine.
 
 # Version de Go épinglée (même numéro que la directive `go` de go.mod) : un tag « 1.26 » flottant
 # laisserait une image en cache compiler avec une bibliothèque standard déjà vulnérable.
@@ -24,6 +24,7 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api && \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/createmoderator ./cmd/createmoderator && \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/resetmfa ./cmd/resetmfa && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/seed ./cmd/seed && \
     mkdir /out/avatars
 
 # ---- Image finale -----------------------------------------------------------------------------
@@ -35,7 +36,8 @@ COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certifi
 # qui a perdu son appareil (jamais par l'API) :
 #   docker compose run --rm --entrypoint /createmoderator api -email … -first-name … -last-name … -birth-date …
 #   docker compose run --rm --entrypoint /resetmfa api -email …
-COPY --from=builder /out/api /out/createmoderator /out/resetmfa /
+# `seed` remplit une base de démonstration (refusé en production) : make seed
+COPY --from=builder /out/api /out/createmoderator /out/resetmfa /out/seed /
 
 LABEL org.opencontainers.image.title="heros-sos-api" \
       org.opencontainers.image.description="API REST de la plateforme Heros-SOS" \

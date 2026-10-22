@@ -15,6 +15,7 @@ import (
 	"github.com/ashandcompany/heros-sos/backend/internal/httpx"
 	"github.com/ashandcompany/heros-sos/backend/internal/ratelimit"
 	"github.com/ashandcompany/heros-sos/backend/internal/user"
+	"github.com/ashandcompany/heros-sos/backend/internal/villain"
 )
 
 // HandlerDeps regroupe les dépendances du handler.
@@ -248,8 +249,13 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error) {
-	if errors.Is(err, ErrNotFound) {
+	switch {
+	case errors.Is(err, ErrNotFound):
 		err = httpx.NotFound("Incident introuvable.")
+	case errors.Is(err, ErrHeroNotFound):
+		err = httpx.NotFound("Super-héros introuvable.")
+	case errors.Is(err, villain.ErrNotFound):
+		err = httpx.NotFound("Vilain introuvable.")
 	}
 	httpx.Fail(w, r, h.Logger, err)
 }

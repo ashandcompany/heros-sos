@@ -45,6 +45,10 @@ adminer: docker ## Ajoute Adminer (client SQL) à la pile de dev : http://localh
 moderator: docker ## Crée un modérateur en dev : make moderator EMAIL=… FIRST=… LAST=… BIRTH=AAAA-MM-JJ
 	@$(BACKEND) moderator-dev
 
+.PHONY: seed
+seed: docker ## Remplit la base de dev avec des données Marvel (héros, vilains, incidents…) ; RESET=1 efface tout avant
+	@$(BACKEND) seed-dev
+
 .PHONY: resetmfa
 resetmfa: docker ## Réinitialise la 2FA d'un compte (appareil perdu) en dev : make resetmfa EMAIL=…
 	@$(BACKEND) resetmfa-dev

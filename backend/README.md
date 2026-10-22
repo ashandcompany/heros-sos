@@ -202,7 +202,8 @@ Envoyer un mail : dépendre de l'interface `mail.Mailer` (la file asynchrone l'i
   2FA n'est pas validée est **limitée** : l'API ne lui ouvre que `/auth/mfa/*`, `/auth/me` et la
   déconnexion, et répond `403 mfa_required` partout ailleurs. `/auth/login` renvoie l'état dans `mfa`
   (`verified`, `verification_required`, `enrollment_required`, `not_enrolled`). Il n'existe pas de route pour
-  désactiver la 2FA : un appareil perdu se traite par l'exploitation, `make resetmfa EMAIL=…`.
+  désactiver la 2FA : un appareil perdu se traite par l'exploitation, `make resetmfa-prod EMAIL=…` en
+  production (voir « Production »), `make resetmfa EMAIL=…` à la racine en développement.
 - **Confirmation de la nouvelle adresse** : l'adresse demandée reçoit un lien (page
   `HEROS_EMAIL_CHANGE_CONFIRM_PATH` du frontend, jeton dans `?token=`, à poster sur
   `/email-change-requests/confirm`). Un modérateur ne peut accepter la demande qu'une fois l'adresse
@@ -303,9 +304,20 @@ la même interface `mail.Mailer`.
   numéros. `mail.SendNewsletter` est la seule façon d'en envoyer un et refuse un message sans lien de
   désinscription. Le consentement est daté dans `newsletter_subscriptions.confirmed_at`.
 - **Double authentification des modérateurs** : `HEROS_MFA_MODERATOR_REQUIRED=true` est imposé (le serveur
-  refuse de démarrer avec `false`). Le premier modérateur créé par `createmoderator` active sa 2FA à sa
-  première connexion et note ses codes de secours. Un modérateur qui perd son appareil et ses codes se
-  débloque par `make resetmfa-prod EMAIL=…`, après vérification de son identité : la commande supprime sa 2FA
-  et ferme ses sessions, et le journal d'audit en garde la trace.
+  refuse de démarrer avec `false`).
+  - *Activation, pour chaque modérateur* : l'exploitation crée le compte (`make moderator-prod`, depuis
+    `backend/`), puis la personne se connecte elle-même. Sa session est limitée : le front l'envoie sur
+    `/connexion/double-authentification`, où elle ajoute la clé à une application d'authentification (clé à
+    saisir ou lien `otpauth://`, pas de QR code), saisit un premier code et **note ses codes de secours**,
+    affichés une seule fois. L'exploitation ne voit jamais le secret.
+  - *Codes de secours presque épuisés* : tant qu'il a son appareil, le modérateur en régénère depuis
+    `/admin/securite` (un code de l'application est exigé).
+  - *Réinitialisation (appareil et codes de secours perdus)* : après avoir vérifié l'identité de la personne
+    par un autre moyen que le compte lui-même, lancer `make resetmfa-prod EMAIL=…` **depuis `backend/`**. La
+    commande supprime sa 2FA, ferme toutes ses sessions et écrit `auth.mfa_reset` dans le journal d'audit ;
+    à sa prochaine connexion, la personne réactive sa 2FA comme à la première fois. Elle passe par la base,
+    pas par l'API : elle marche aussi quand tous les modérateurs sont verrouillés.
+  - **Pas `make resetmfa`** : cette cible (à la racine, `backend/` n'en a pas) vise la pile de développement.
+    La lancer en production ne débloquerait personne.
 - **Changement d'adresse email** : régler `HEROS_EMAIL_CHANGE_CONFIRM_PATH` sur la page du frontend
   (`/changement-email/confirmation`) ; le lien reçu vaut `HEROS_EMAIL_CHANGE_CONFIRM_TTL` (48 h par défaut).

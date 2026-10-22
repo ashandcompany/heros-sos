@@ -84,6 +84,7 @@ func registerHeroRoutes(router *Router, c *components) {
 
 func registerModerationRoutes(router *Router, c *components) {
 	h := c.moderationHandler
+	router.Handle(http.MethodGet, "/admin/moderation/summary", c.protected(h.Summary, user.RoleModerator))
 	router.Handle(http.MethodGet, "/admin/users", c.protected(h.ListUsers, user.RoleModerator))
 	router.Handle(http.MethodPost, "/admin/users/{id}/deactivate", c.protected(h.Deactivate, user.RoleModerator))
 	router.Handle(http.MethodPost, "/admin/users/{id}/reactivate", c.protected(h.Reactivate, user.RoleModerator))

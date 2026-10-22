@@ -1423,6 +1423,30 @@ paths:
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/InternalError" }
 
+  /admin/moderation/summary:
+    get:
+      tags: [Modération]
+      summary: Compteurs du tableau de bord
+      description: Réservé aux modérateurs. Nombre d'éléments en attente dans chaque section, calculé en une seule requête.
+      operationId: getModerationSummary
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Les compteurs.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModerationSummary" }
+              example:
+                incidents: 3
+                heroApplications: 2
+                videos: 1
+                comments: 0
+                emailChanges: 1
+                draftArticles: 4
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
   /admin/users:
     get:
       tags: [Modération]
@@ -4026,6 +4050,17 @@ components:
             format: date-time,
             description: Date de création du compte.,
           }
+
+    ModerationSummary:
+      type: object
+      required: [incidents, heroApplications, videos, comments, emailChanges, draftArticles]
+      properties:
+        incidents: { type: integer, description: "Incidents signalés (`reported`)." }
+        heroApplications: { type: integer, description: Demandes de super-héros en attente. }
+        videos: { type: integer, description: Films de héros en attente de validation. }
+        comments: { type: integer, description: Réponses de héros en attente de vérification. }
+        emailChanges: { type: integer, description: Changements d'email en attente. }
+        draftArticles: { type: integer, description: Articles du blog en brouillon. }
 
     UserSummaryPage:
       type: object

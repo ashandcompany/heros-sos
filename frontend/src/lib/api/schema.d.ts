@@ -729,6 +729,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/moderation/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Compteurs du tableau de bord
+         * @description Réservé aux modérateurs. Nombre d'éléments en attente dans chaque section, calculé en une seule requête.
+         */
+        get: operations["getModerationSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/users": {
         parameters: {
             query?: never;
@@ -2214,6 +2234,20 @@ export interface components {
              * @description Date de création du compte.
              */
             createdAt: string;
+        };
+        ModerationSummary: {
+            /** @description Incidents signalés (`reported`). */
+            incidents: number;
+            /** @description Demandes de super-héros en attente. */
+            heroApplications: number;
+            /** @description Films de héros en attente de validation. */
+            videos: number;
+            /** @description Réponses de héros en attente de vérification. */
+            comments: number;
+            /** @description Changements d'email en attente. */
+            emailChanges: number;
+            /** @description Articles du blog en brouillon. */
+            draftArticles: number;
         };
         UserSummaryPage: {
             items: components["schemas"]["UserSummary"][];
@@ -4193,6 +4227,39 @@ export interface operations {
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getModerationSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Les compteurs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "incidents": 3,
+                     *       "heroApplications": 2,
+                     *       "videos": 1,
+                     *       "comments": 0,
+                     *       "emailChanges": 1,
+                     *       "draftArticles": 4
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ModerationSummary"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };

@@ -64,6 +64,57 @@ createmoderator: ## Crée un modérateur : make createmoderator EMAIL=… FIRST=
 seed: ## Remplit la base de démonstration (univers Marvel) ; RESET=1 efface d'abord TOUTES les données
 	@$(WITH_ENV) go run ./cmd/seed $(if $(RESET),-reset)
 
+# --- Mesures de performance : 5 millions d'incidents ---------------------------------------------------
+# Tout se passe dans une base dédiée (PERF_DB_NAME) : jamais celle du développement quotidien, qui recevrait
+# plusieurs Go de données fictives. Ordre : perf-db (si la base est dans Docker), perf-prepare, seed-perf,
+# puis perf-run dans un terminal et perf dans un autre.
+PERF_DB_NAME      ?= herossos_perf
+PERF_DATABASE_URL ?= postgres://$(DB_USER):$(DB_PASSWORD)@localhost:$(DB_PORT)/$(PERF_DB_NAME)?sslmode=disable
+PERF_INCIDENTS    ?= 5000000
+PERF_MAX_SIZE_GB  ?= 0
+PERF_API_ADDR     ?= :8090
+PERF_API_URL      ?= http://127.0.0.1$(PERF_API_ADDR)/api/v1
+PERF_WORKERS      ?= 16
+PERF_DURATION     ?= 20s
+PERF_P95          ?= 350ms
+PERF_USER         ?= jane.foster@heros-sos.local
+
+# Les index de lecture sont seuls dans leur migration : les retirer puis les recréer (sans toucher aux données)
+# rejoue en direct la lenteur d'origine, puis le gain. psql lit l'URL de la base de mesures.
+PERF_PSQL         ?= psql '$(PERF_DATABASE_URL)' -v ON_ERROR_STOP=1 -q
+PERF_INDEXES_SQL  ?= migrations/20261022132000_add_incident_perf_indexes
+
+.PHONY: perf-indexes-off
+perf-indexes-off: ## Démonstration : retire les index de lecture de la base de mesures (lenteur d'origine)
+	@$(PERF_PSQL) -f $(PERF_INDEXES_SQL).down.sql && echo "Index de lecture retirés : lancez make perf pour voir la lenteur d'origine."
+
+.PHONY: perf-indexes-on
+perf-indexes-on: ## Démonstration : recrée les index de lecture de la base de mesures
+	@$(PERF_PSQL) -f $(PERF_INDEXES_SQL).up.sql && echo "Index de lecture recréés."
+
+.PHONY: perf-db
+perf-db: ## Crée la base de mesures dans la base de la pile de développement (Docker)
+	@$(COMPOSE_DEV) exec -T db psql -U $(DB_USER) -d postgres -tc "SELECT 1 FROM pg_database WHERE datname='$(PERF_DB_NAME)'" | grep -q 1 || \
+		$(COMPOSE_DEV) exec -T db createdb -U $(DB_USER) $(PERF_DB_NAME)
+	@echo "Base $(PERF_DB_NAME) prête."
+
+.PHONY: perf-prepare
+perf-prepare: ## Migre la base de mesures et y charge les données Marvel (héros, vilains, citoyens)
+	@$(WITH_ENV) export HEROS_DATABASE_URL='$(PERF_DATABASE_URL)'; go run ./cmd/api -migrate && go run ./cmd/seed
+
+.PHONY: seed-perf
+seed-perf: ## Ajoute PERF_INCIDENTS (5 000 000) incidents à la base de mesures ; PERF_MAX_SIZE_GB=8 borne sa taille
+	@$(WITH_ENV) export HEROS_DATABASE_URL='$(PERF_DATABASE_URL)'; go run ./cmd/seedperf -incidents $(PERF_INCIDENTS) -max-size-gb $(PERF_MAX_SIZE_GB)
+
+.PHONY: perf-run
+perf-run: ## Lance l'API sur la base de mesures (migrations comprises), à laisser tourner pendant `make perf`
+	@$(WITH_ENV) export HEROS_DATABASE_URL='$(PERF_DATABASE_URL)' HEROS_HTTP_ADDR='$(PERF_API_ADDR)'; go run ./cmd/api
+
+.PHONY: perf
+perf: ## Mesure les temps de réponse (p95 ≤ PERF_P95) ; LOADTEST_PASSWORD=… ajoute « mes incidents » (compte PERF_USER)
+	@$(WITH_ENV) go run ./cmd/loadtest -base-url '$(PERF_API_URL)' -workers $(PERF_WORKERS) -duration $(PERF_DURATION) \
+		-p95 $(PERF_P95) $(if $(LOADTEST_PASSWORD),-identifier '$(PERF_USER)') $(if $(SCENARIOS),-scenarios '$(SCENARIOS)')
+
 .PHONY: build
 build: ## Compile tous les paquets
 	go build ./...

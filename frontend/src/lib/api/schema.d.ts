@@ -2494,6 +2494,8 @@ export interface components {
             emailChanges: number;
             /** @description Articles du blog en brouillon. */
             draftArticles: number;
+            /** @description Numéros de la newsletter en brouillon (à envoyer). */
+            draftNewsletters: number;
         };
         UserSummaryPage: {
             items: components["schemas"]["UserSummary"][];
@@ -4804,7 +4806,8 @@ export interface operations {
                      *       "videos": 1,
                      *       "comments": 0,
                      *       "emailChanges": 1,
-                     *       "draftArticles": 4
+                     *       "draftArticles": 4,
+                     *       "draftNewsletters": 2
                      *     }
                      */
                     "application/json": components["schemas"]["ModerationSummary"];

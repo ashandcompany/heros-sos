@@ -1540,6 +1540,7 @@ paths:
                 comments: 0
                 emailChanges: 1
                 draftArticles: 4
+                draftNewsletters: 2
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "500": { $ref: "#/components/responses/InternalError" }
@@ -4500,7 +4501,16 @@ components:
 
     ModerationSummary:
       type: object
-      required: [incidents, heroApplications, videos, comments, emailChanges, draftArticles]
+      required:
+        [
+          incidents,
+          heroApplications,
+          videos,
+          comments,
+          emailChanges,
+          draftArticles,
+          draftNewsletters,
+        ]
       properties:
         incidents: { type: integer, description: "Incidents signalés (`reported`)." }
         heroApplications: { type: integer, description: Demandes de super-héros en attente. }
@@ -4508,6 +4518,7 @@ components:
         comments: { type: integer, description: Réponses de héros en attente de vérification. }
         emailChanges: { type: integer, description: Changements d'email en attente. }
         draftArticles: { type: integer, description: Articles du blog en brouillon. }
+        draftNewsletters: { type: integer, description: Numéros de la newsletter en brouillon (à envoyer). }
 
     UserSummaryPage:
       type: object

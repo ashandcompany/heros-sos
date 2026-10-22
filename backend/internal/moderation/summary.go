@@ -19,6 +19,7 @@ type Summary struct {
 	Comments         int64 `json:"comments" gorm:"column:comments"`
 	EmailChanges     int64 `json:"emailChanges" gorm:"column:email_changes"`
 	DraftArticles    int64 `json:"draftArticles" gorm:"column:draft_articles"`
+	DraftNewsletters int64 `json:"draftNewsletters" gorm:"column:draft_newsletters"`
 }
 
 // SummaryStore calcule le résumé en une seule requête.
@@ -35,7 +36,8 @@ const summarySQL = `SELECT
 	(SELECT COUNT(*) FROM hero_films WHERE status = 'pending') AS videos,
 	(SELECT COUNT(*) FROM hero_review_replies WHERE status = 'pending') AS comments,
 	(SELECT COUNT(*) FROM email_change_requests WHERE status = 'pending') AS email_changes,
-	(SELECT COUNT(*) FROM articles WHERE status = 'brouillon') AS draft_articles`
+	(SELECT COUNT(*) FROM articles WHERE status = 'brouillon') AS draft_articles,
+	(SELECT COUNT(*) FROM newsletters WHERE sent_at IS NULL) AS draft_newsletters`
 
 // Get retourne les compteurs courants.
 func (s *SummaryStore) Get(ctx context.Context) (Summary, error) {

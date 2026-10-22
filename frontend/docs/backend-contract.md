@@ -6,22 +6,23 @@ dit **où le frontend actuel s'écarte de ce contrat** et ce qu'il faut changer 
 branchement. À mettre à jour à chaque fonction branchée.
 
 > [!NOTE]
-> État au 21/10/2026 : **identité (inscription, activation, connexion, session, mot de passe),
+> État au 22/10/2026 : **identité (inscription, activation, connexion, session, mot de passe),
 > demandes de super-héros, fiches publiques et annuaire admin des super-héros, modération des comptes, types
-> d'incident, incidents et interventions (y compris incidents en cours et carte publique), vidéothèque, avis, blog, films des
-> super-vilains, compte (profil, photo,
-> changement d'e-mail confirmé par lien), contact, newsletter (confirmation et désinscription), « déconnexion
-> de tous les appareils » et double authentification des modérateurs sont branchés** sur l'API dès que
-> `API_URL` est renseignée (tableau ci-dessous). Le reste fonctionne encore sur des mocks, y compris
-> avec l'API.
+> d'incident, incidents et interventions (y compris incidents en cours, carte publique et historique public
+> des héros et des vilains), vidéothèque (paginée et filtrable), avis, blog, films des super-vilains, compte
+> (profil, photo, changement d'e-mail confirmé par lien), contact, newsletter (confirmation et
+> désinscription), « déconnexion de tous les appareils » et double authentification des modérateurs sont
+> branchés** sur l'API dès que `API_URL` est renseignée (tableau ci-dessous). Le reste fonctionne encore sur
+> des mocks, y compris avec l'API.
 
 ## 1. Couverture : ce qui est dans le contrat, et le reste
 
-Le contrat décrit aujourd'hui **91 opérations** (plus `/health` et `/ready`) : identité (dont la double
+Le contrat décrit aujourd'hui **94 opérations** (plus `/health` et `/ready`) : identité (dont la double
 authentification des modérateurs) et modération des comptes, annuaire des héros, profil du compte (`/me`,
-photo, changements d'e-mail confirmés par lien), incidents, interventions, types d'incident, super-vilains,
-avis sur les interventions, vidéothèque (films), blog (articles), contact et newsletter. Les autres domaines du
-frontend (incidents publics, tableaux de bord) n'ont pas encore de contrat.
+photo, changements d'e-mail confirmés par lien), incidents (dont l'historique public d'un héros et d'un
+vilain), interventions, types d'incident, super-vilains, avis sur les interventions, vidéothèque (films), blog
+(articles), contact et newsletter. Les autres domaines du frontend (derniers incidents résolus de l'accueil,
+tableaux de bord) n'ont pas encore de contrat.
 
 ### ✅ Branché sur l'API
 
@@ -35,6 +36,7 @@ frontend (incidents publics, tableaux de bord) n'ont pas encore de contrat.
 | Demande de statut super-héros         | `hero-requests.ts`                                 | `/heroes/requests`, `/heroes/requests/me`, `/admin/hero-requests/*`                                                                    |
 | Comptes (désactivation, vérification) | `user-moderation.ts`                               | `/admin/users`, `/admin/users/{id}/deactivate`, `…/reactivate`, `…/verify`                                                             |
 | Incidents, interventions, équipes     | `incidents.ts`, `interventions.ts` (§ 3)           | `/incidents/*`, `/interventions/*`, `/admin/interventions/{id}/decision`                                                               |
+| Historique public (héros, vilains)    | `incidents.ts` (§ 3)                               | `GET /heroes/{heroId}/incidents`, `GET /villains/{id}/incidents` (publics)                                                             |
 | Types d'incident                      | `incident-types.ts`                                | `/intervention-types`, `/admin/intervention-types`                                                                                     |
 | Notes et avis                         | `reviews.ts` (§ 3)                                 | `/me/interventions`, `/interventions/{id}/reviews`, `/hero/reviews*`, `/heroes/{heroId}/reviews`, `/admin/hero-review*`                |
 | Super-vilains                         | `villains.ts`                                      | `GET /villains`, `GET /villains/{id}` (publics), `POST /villains`, `PATCH /villains/{id}`                                              |
@@ -43,7 +45,7 @@ frontend (incidents publics, tableaux de bord) n'ont pas encore de contrat.
 | Profil, photo, changements d'email    | `account.ts`, `avatar.ts`, `super-heroes.ts` (§ 3) | `/me`, `/me/avatar`, `/avatars/{name}`, `/me/email-change-requests`, `/email-change-requests/confirm`, `/admin/email-change-requests*` |
 | Newsletter                            | `newsletter.ts`, `account.ts`                      | `/newsletter/subscriptions`, `…/confirm`, `…/unsubscribe`, `PUT /me/newsletter`                                                        |
 | Formulaire de contact                 | `contact.ts`                                       | `POST /contact/messages`                                                                                                               |
-| Vidéothèque (films)                   | `videos.ts`, `imdb.ts` (§ 3)                       | `/films`, `/films/heroes`, `/heroes/{heroId}/films`, `/hero/films*`, `/admin/hero-films*`, `/imdb/titles*`                              |
+| Vidéothèque (films)                   | `videos.ts`, `imdb.ts` (§ 3)                       | `/films`, `/films/heroes`, `/heroes/{heroId}/films`, `/hero/films*`, `/admin/hero-films*`, `/imdb/titles*`                             |
 | Films des super-vilains               | `videos.ts` (§ 3)                                  | `GET /villains/{villainId}/films` (public), `POST /admin/villain-films`, `DELETE /admin/villains/{villainId}/films/*`                  |
 | Blog                                  | `blog.ts` (§ 3)                                    | `GET /articles`, `GET /articles/{slug}` (publics), `/admin/articles`, `/admin/articles/{id}`                                           |
 
@@ -53,16 +55,15 @@ Fonctions de chaque fichier :
   `resendActivation`, `requestPasswordReset`, `confirmPasswordReset`.
 - `mfa.ts` : `getMfaOverview`, `startMfaSetup`, `enableMfa`, `verifyMfa`, `regenerateMfaRecoveryCodes`.
 - `account.ts` : `getMyAccount`, `updateMyContact`, `updateMyAvatar`, `requestEmailChange`,
-  `confirmEmailChange`, `updateNewsletterPreference`, `getEmailChangeRequests`, `reviewEmailChange`.
+  `confirmEmailChange`, `updateNewsletterPreference`, `getEmailChangeRequests`, `reviewEmailChange` ;
+  `avatar.ts` : `getMyAvatar`.
 - `newsletter.ts` : `subscribeToNewsletter`, `confirmNewsletterSubscription`, `unsubscribeFromNewsletter` ;
   `contact.ts` : `sendContactMessage`.
 - `hero-requests.ts` : `requestHeroStatus`, `getMyHeroRequest`, `getHeroApplications`,
   `reviewHeroApplication`.
 - `user-moderation.ts` : `getAccounts`, `moderateAccount`.
-- `account.ts` : `getMyAccount`, `updateMyContact`, `updateMyAvatar`, `requestEmailChange`,
-  `updateNewsletterPreference`, `getEmailChangeRequests`, `reviewEmailChange` ;
-  `super-heroes.ts` (espace héros) : `getMyHeroProfile`, `updateMyHeroContact`,
-  `updateMyHeroAvatar`, `requestHeroEmailChange`.
+- `incidents.ts` (historique public) : `getResolvedIncidentsByHero`, `getIncidentsByVillain` ; les autres
+  fonctions d'incidents et d'équipes sont dans « Incidents et interventions : choix du branchement » (§ 3).
 - `incident-types.ts` : `getIncidentTypes`, `getAllIncidentTypes`, `createIncidentType`.
 - `reviews.ts` : `getMyInterventions`, `rateIntervention`, `getMyReputation`, `replyToReview`,
   `getHeroPublicReviews`, `getReviewsForModeration`, `moderateReview`, `getRepliesForModeration`,
@@ -73,19 +74,17 @@ Fonctions de chaque fichier :
   (annuaire admin) `getSuperHeroProfiles`.
 - `videos.ts` : `getMyVideos`, `getMyVideosPage`, `addMyVideo`, `deleteMyVideo`, `getHeroVideos`,
   `getHeroVideosPage`, `moderateVideo`, `deleteVideo`, `getPublishedFilmsPage`, `getFilmHeroes`,
-  `getPublishedVideos`, `getVillainFilms`, `addVillainFilm`, `deleteVillainFilm` ;
-  `imdb.ts` : `searchImdbTitles`, `getImdbTitle`.
+  `getPublishedVideos`, `getHeroesForVideos`, `addHeroVideo`, `getVillainFilms`, `addVillainFilm`,
+  `deleteVillainFilm` ; `imdb.ts` : `searchImdbTitles`, `getImdbTitle`.
 - `blog.ts` : `getPublishedArticles`, `getPublishedArticle`, `getAllArticles`, `getArticle`,
   `countDraftArticles`, `createArticle`, `updateArticle`, `deleteArticle`.
-- `newsletter.ts` : `subscribeToNewsletter`, `confirmNewsletterSubscription` ; `contact.ts` :
-  `sendContactMessage`.
 
 ### ⏳ Encore sur les mocks (ou à faire)
 
-| Domaine frontend                  | Fonctions `lib/api/`                                                                                 | Contrat OpenAPI                                                                       | État |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ---- |
-| Incidents résolus publics         | `incidents.ts` : `getLatestResolvedIncidents`, `getResolvedIncidentsByHero`, `getIncidentsByVillain` | ❌ aucun (`GET /incidents` public ne renvoie pas les résolus, ni filtre héros/vilain) | mock |
-| Tableau de bord héros, modération | `hero-dashboard.ts`, `moderation.ts`                                                                 | ❌ aucun (statistiques)                                                               | mock |
+| Domaine frontend                     | Fonctions `lib/api/`                          | Contrat OpenAPI                                               | État |
+| ------------------------------------ | --------------------------------------------- | ------------------------------------------------------------- | ---- |
+| Derniers incidents résolus (accueil) | `incidents.ts` : `getLatestResolvedIncidents` | ❌ aucun (`GET /incidents` public ne renvoie pas les résolus) | mock |
+| Tableau de bord héros, modération    | `hero-dashboard.ts`, `moderation.ts`          | ❌ aucun (statistiques)                                       | mock |
 
 > [!WARNING]
 > Les « Future implémentation » écrites dans les commentaires de `lib/api/` pour les domaines non
@@ -358,9 +357,8 @@ qu'un seul `GET /auth/me`.
 
 - **Ajout par un modérateur** (`/admin/videotheque`, section « Ajouter un film à un
   super-héros ») : `POST /admin/hero-films` avec `{ heroId, imdbId }`, film publié aussitôt
-  (`addHeroVideo`). Les fiches complètes des super-héros étant mockées, la liste des héros vient des comptes
-  (`GET /admin/users?role=hero&status=active`, `getHeroesForVideos`) : seuls leurs identifiants
-  sont valides pour l'API.
+  (`addHeroVideo`). La liste des héros proposés vient des comptes actifs
+  (`GET /admin/users?role=hero&status=active`, `getHeroesForVideos`).
 - **Films des super-vilains** : rattachés par un modérateur depuis la fiche du vilain
   (`/admin/super-vilains/{id}#films`, recherche IMDb par `?q=`), visibles aussitôt, sans
   modération, dans la section « Au cinéma » de la fiche publique. Ajout : `POST /admin/villain-films`
@@ -505,11 +503,10 @@ pas seulement changer les URL.
 | Intervention    | `POST` / `PUT /hero/incidents/{id}/intervention` : un héros se positionne sur l'incident | Ressource à part : `POST /incidents/{incidentId}/interventions`, puis `join`, invitations (`confirm` / `decline`), `outcome`, `outcome/validate` |
 | Carte, priorité | `GET /incidents/map`, `GET /hero/incidents/map`, `PUT /hero/incidents/{id}/priority`     | Absents du contrat                                                                                                                               |
 | Modération      | `PUT /admin/incidents/{id}/moderation`, `PATCH /admin/incidents/{id}`                    | Absente du contrat (seul l'arbitrage du résultat d'une intervention existe)                                                                      |
-| Super-vilains   | `GET /villains/{id}/incidents` (derniers méfaits sur la fiche publique)                  | Absent du contrat (liste et fiche branchées : `GET /villains`, `GET /villains/{id}`, publics)                                                    |
 
-À trancher avec le backend avant de brancher : ce qui manque au contrat (carte, priorité,
-modération des incidents, incidents d'un vilain) est-il à ajouter, ou les écrans du frontend
-doivent-ils changer ?
+À trancher avec le backend : ce qui manque au contrat (carte, priorité, modération des incidents)
+est-il à ajouter, ou les écrans du frontend doivent-ils changer ? Les incidents d'un vilain et d'un
+héros ont été ajoutés (`GET /villains/{id}/incidents`, `GET /heroes/{heroId}/incidents`, branchés).
 
 ### Incidents et interventions : choix du branchement
 
@@ -629,8 +626,8 @@ leur faire renvoyer un `Page<T>` ([src/types/api.ts](../src/types/api.ts)), avec
 | `toMockPage`   | Découpe une liste mockée comme l'API, pour garder la même signature avec et sans backend      |
 | `pagePosition` | Page courante et nombre de pages, pour le composant de pagination des écrans d'administration |
 
-Exception : quand l'écran affiche toute la liste (formulaires, vidéothèque), la fonction lit
-toutes les pages avec `limit: MAX_PAGE_SIZE` et renvoie un tableau (`getIncidentTypes`,
+Exception : quand l'écran affiche toute la liste (formulaires, films d'un seul héros), la fonction
+lit toutes les pages avec `limit: MAX_PAGE_SIZE` et renvoie un tableau (`getIncidentTypes`,
 `fetchAllFilms` dans `videos.ts`).
 
 ### Variable d'environnement

@@ -59,16 +59,16 @@ sa route dans `routes.ts` (et dans la sous-navigation si elle doit y figurer).
 
 ### Fichiers
 
-| Fichier                                                   | Rôle                                                                                                                                                               |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [src/lib/cookies.ts](../src/lib/cookies.ts)               | Nom du cookie (`__Host-session` en production, `session` sinon, comme l'API) et attributs : `httpOnly`, `sameSite: lax`, `secure` en prod                          |
-| [src/lib/session.ts](../src/lib/session.ts)               | `getUserFromToken(token)` : jeton → `AuthUser \| null`. Utilisable partout (pas de `next/headers`)                                                                 |
-| [src/lib/server-session.ts](../src/lib/server-session.ts) | Helpers qui lisent le cookie : `getCurrentUser()`, `requireRole()`, `requireAdminSession()`, `requireCitizenSession()`, `requireHeroSession()`                     |
-| [src/proxy.ts](../src/proxy.ts)                           | Contrôle d'accès avant le rendu                                                                                                                                    |
-| [src/app/actions/auth.ts](../src/app/actions/auth.ts)     | `loginAction` (pose le cookie), `logoutAction` (révoque la session puis efface le cookie) et `logoutAllAction` (ferme toutes les sessions du compte)               |
-| [src/lib/api/auth.ts](../src/lib/api/auth.ts)             | `login`, `getSessionUser`, `logout`, `logoutAll`, `register`, `activateAccount`, `resendActivation`, `requestPasswordReset`, `confirmPasswordReset` (API ou mocks) |
-| [src/app/actions/mfa.ts](../src/app/actions/mfa.ts)       | Double authentification : `verifyMfaAction`, `startMfaSetupAction`, `enableMfaAction`, `regenerateRecoveryCodesAction` (recopient le nouveau jeton de session)     |
-| [src/lib/api/mfa.ts](../src/lib/api/mfa.ts)               | `getMfaOverview`, `startMfaSetup`, `enableMfa`, `verifyMfa`, `regenerateMfaRecoveryCodes` (`/auth/mfa/*`, sans mock)                                               |
+| Fichier                                                   | Rôle                                                                                                                                                                                |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [src/lib/cookies.ts](../src/lib/cookies.ts)               | Nom du cookie (`__Host-session` en production, `session` sinon, comme l'API) et attributs : `httpOnly`, `sameSite: lax`, `secure` en prod                                           |
+| [src/lib/session.ts](../src/lib/session.ts)               | `getUserFromToken(token)` : jeton → `AuthUser \| null`. Utilisable partout (pas de `next/headers`)                                                                                  |
+| [src/lib/server-session.ts](../src/lib/server-session.ts) | Helpers qui lisent le cookie : `getCurrentUser()`, `requireRole()`, `requireAdminSession()`, `requireCitizenSession()`, `requireHeroSession()`                                      |
+| [src/proxy.ts](../src/proxy.ts)                           | Contrôle d'accès avant le rendu                                                                                                                                                     |
+| [src/app/actions/auth.ts](../src/app/actions/auth.ts)     | `loginAction` (pose le cookie), `logoutAction` (révoque la session puis efface le cookie) et `logoutAllAction` (ferme toutes les sessions du compte)                                |
+| [src/lib/api/auth.ts](../src/lib/api/auth.ts)             | `login`, `getSessionUser`, `getMfaSession`, `logout`, `logoutAll`, `register`, `activateAccount`, `resendActivation`, `requestPasswordReset`, `confirmPasswordReset` (API ou mocks) |
+| [src/app/actions/mfa.ts](../src/app/actions/mfa.ts)       | Double authentification : `verifyMfaAction`, `startMfaSetupAction`, `enableMfaAction`, `regenerateRecoveryCodesAction` (recopient le nouveau jeton de session)                      |
+| [src/lib/api/mfa.ts](../src/lib/api/mfa.ts)               | `getMfaOverview`, `startMfaSetup`, `enableMfa`, `verifyMfa`, `regenerateMfaRecoveryCodes` (`/auth/mfa/*`, sans mock)                                                                |
 
 Le mode dépend de `API_URL` ([config.ts](../src/lib/api/config.ts), `isApiEnabled`) :
 

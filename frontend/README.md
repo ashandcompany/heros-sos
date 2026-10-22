@@ -27,8 +27,8 @@ Sans configuration, toute l'application tourne sur les mocks (comptes de test da
 
 Identité (inscription, activation, connexion avec « Rester connecté », session, déconnexion de tous les
 appareils, mot de passe, double authentification des modérateurs), demandes de super-héros,
-modération des comptes, annuaire admin des super-héros, types d'incident, incidents et interventions,
-vidéothèque, avis, blog, films des super-vilains, profil et photo, changements d'adresse email (confirmés
+modération des comptes, annuaire admin des super-héros, types d'incident, incidents et interventions
+(dont l'historique public des héros et des vilains), vidéothèque, avis, blog, films des super-vilains, profil et photo, changements d'adresse email (confirmés
 par un lien), contact et newsletter (confirmation et désinscription par lien) passent par l'API dès que
 `API_URL` est renseignée ; le reste reste mocké (voir [docs/backend-contract.md](docs/backend-contract.md)).
 Les photos de profil sont servies par l'API sous `/api/v1/avatars/…` : elles ne s'affichent que derrière le
@@ -37,7 +37,9 @@ La recherche de films IMDb exige une clé OMDb côté API (`HEROS_OMDB_API_KEY` 
 `backend/.env`). Après une mise à jour du backend, relancer `make up-dev` pour reconstruire
 l'image de l'API (sinon les nouvelles routes répondent 404). Les comptes
 sont alors ceux de l'API : à créer par `POST /auth/register`, puis à activer avec le lien reçu
-par mail (Mailpit, `http://localhost:8025`, avec `make up`).
+par mail (Mailpit, `http://localhost:8025`, avec `make up`). Pour une base de démonstration déjà remplie
+(héros, vilains, incidents, films, articles…), lancer `make seed` à la racine : tous les comptes ont le mot de
+passe `Avengers2026!` (ex. `admin@heros-sos.local`).
 
 - **Tout dans Docker** (recommandé) : depuis la racine du dépôt, `make up` (crée `backend/.env` au
   premier lancement). Front et API derrière le même proxy : <http://localhost:8088>. `API_URL` est

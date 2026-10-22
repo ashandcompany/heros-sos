@@ -105,6 +105,8 @@ services:
       NODE_ENV: production
       # Le serveur Next appelle l'API directement sur le réseau `edge`, sans repasser par le proxy.
       API_URL: http://api:8080/api/v1
+      # Liens absolus du sitemap, de robots.txt et des aperçus Open Graph (lue au démarrage).
+      SITE_URL: https://${DOMAIN}
     networks:
       edge:
         ipv4_address: ${WEB_IP:-172.30.0.3}

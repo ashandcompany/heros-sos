@@ -30,6 +30,19 @@ function MenuIcon({ open }: { open: boolean }) {
   );
 }
 
+function LogoutIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5 fill-none stroke-current">
+      <path
+        d="M14 4H5v16h9M10 12h10m-4-4 4 4-4 4"
+        strokeWidth="2"
+        strokeLinecap="square"
+        strokeLinejoin="miter"
+      />
+    </svg>
+  );
+}
+
 /** Lien vers l'espace de chaque rôle. */
 const spaceLinkByRole: Record<AuthUser["role"], { label: string; href: string } | null> = {
   citoyen: { label: "Mon espace", href: routes.profile },
@@ -50,7 +63,7 @@ function AccountActions({ user, variant, isSpacePage, onNavigate }: AccountActio
 
   const mobile = variant === "mobile";
   // Sur desktop, boutons compacts pour que la barre tienne même avec un compte connecté.
-  const compact = mobile ? "" : "px-3 text-xs";
+  const size = mobile ? "md" : "sm";
 
   if (!user) {
     return (
@@ -58,15 +71,11 @@ function AccountActions({ user, variant, isSpacePage, onNavigate }: AccountActio
         <Link
           href={routes.login}
           onClick={onNavigate}
-          className={cn(buttonClasses(mobile ? "secondary" : "ghost"), compact)}
+          className={buttonClasses(mobile ? "secondary" : "ghost", size)}
         >
           Connexion
         </Link>
-        <Link
-          href={routes.signup}
-          onClick={onNavigate}
-          className={cn(buttonClasses("primary"), compact)}
-        >
+        <Link href={routes.signup} onClick={onNavigate} className={buttonClasses("primary", size)}>
           Inscription
         </Link>
       </>
@@ -80,34 +89,52 @@ function AccountActions({ user, variant, isSpacePage, onNavigate }: AccountActio
       {/* Sur desktop étroit, seule la photo reste : le nom passe en infobulle. */}
       <p
         title={mobile ? undefined : user.displayName}
-        className={cn("flex items-center gap-3 text-sm text-muted", mobile && "col-span-2")}
+        className={cn(
+          "flex min-w-0 items-center gap-2 text-sm text-muted",
+          mobile && "col-span-2 gap-3",
+        )}
       >
         <Avatar
           name={user.avatar?.name ?? user.displayName}
           src={user.avatar?.src ?? null}
           size={mobile ? 40 : 32}
         />
-        <span className={cn(!mobile && "sr-only xl:not-sr-only")}>
-          Connecté·e : <span className="font-semibold text-foreground">{user.displayName}</span>
-        </span>
+        {mobile ? (
+          <span>
+            Connecté·e : <span className="font-semibold text-foreground">{user.displayName}</span>
+          </span>
+        ) : (
+          <span className="sr-only max-w-32 truncate font-semibold text-foreground xl:not-sr-only">
+            <span className="sr-only">Connecté·e : </span>
+            {user.displayName}
+          </span>
+        )}
       </p>
       {spaceLink && (
         <Link
           href={spaceLink.href}
           onClick={onNavigate}
           aria-current={isSpacePage ? "page" : undefined}
-          className={cn(buttonClasses("secondary"), compact)}
+          className={buttonClasses("secondary", size)}
         >
           {spaceLink.label}
         </Link>
       )}
       <form action={logoutAction} className={cn(mobile && !spaceLink && "col-span-2")}>
-        <button
-          type="submit"
-          className={cn(buttonClasses(mobile ? "secondary" : "ghost"), compact, "w-full")}
-        >
-          Déconnexion
-        </button>
+        {mobile ? (
+          <button type="submit" className={cn(buttonClasses("secondary"), "w-full")}>
+            Déconnexion
+          </button>
+        ) : (
+          <button
+            type="submit"
+            title="Déconnexion"
+            aria-label="Déconnexion"
+            className="inline-flex size-9 items-center justify-center text-muted hover:bg-surface-raised hover:text-accent"
+          >
+            <LogoutIcon />
+          </button>
+        )}
       </form>
     </>
   );
@@ -190,7 +217,7 @@ function MainNavView({ user, pathname }: { user: NavUser; pathname: string | nul
         <ul className="flex items-end gap-1">{navLinks("desktop")}</ul>
       </nav>
 
-      <div className="hidden items-center gap-2 lg:flex">
+      <div className="hidden shrink-0 items-center gap-2 lg:flex">
         <AccountActions
           user={user}
           variant="desktop"

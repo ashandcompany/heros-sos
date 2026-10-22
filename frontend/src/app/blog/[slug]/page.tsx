@@ -5,14 +5,28 @@ import { Suspense } from "react";
 import { Container } from "@/components/ui/Container";
 import { getPublishedArticle } from "@/lib/api";
 import { formatDate } from "@/lib/format";
-import { routes } from "@/lib/routes";
+import { blogArticleRoute, routes } from "@/lib/routes";
 import { sanitizeArticleHtml } from "@/lib/sanitize";
+import { getSiteUrl } from "@/lib/site";
 
 export async function generateMetadata({ params }: PageProps<"/blog/[slug]">): Promise<Metadata> {
   const article = await getPublishedArticle((await params).slug);
-  return article
-    ? { title: article.title, description: article.excerpt }
-    : { title: "Article introuvable" };
+  if (!article?.publishedAt) return { title: "Article introuvable" };
+
+  // Rendu à la requête (paramètre d'URL) : SITE_URL n'est pas figée au build.
+  return {
+    metadataBase: new URL(getSiteUrl()),
+    title: article.title,
+    description: article.excerpt,
+    alternates: { canonical: blogArticleRoute(article.slug) },
+    openGraph: {
+      type: "article",
+      title: article.title,
+      description: article.excerpt,
+      publishedTime: article.publishedAt,
+      authors: [article.authorName],
+    },
+  };
 }
 
 /** Mêmes styles que dans l'éditeur du back-office, à l'échelle d'une page de lecture. */

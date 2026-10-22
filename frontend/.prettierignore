@@ -7,3 +7,8 @@ next-env.d.ts
 
 # Généré par `npm run api:types` depuis backend/openapi/openapi.yaml
 src/lib/api/schema.d.ts
+
+# Rapports de Playwright (`npm run test:e2e`)
+test-results
+playwright-report
+blob-report

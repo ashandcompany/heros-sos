@@ -2641,6 +2641,20 @@ export interface components {
                 id: string;
                 alias: string;
             }[];
+            /**
+             * Format: date-time
+             * @description Fin de l'intervention réussie ; `null` si l'incident n'est pas résolu.
+             */
+            resolvedAt: string | null;
+            /**
+             * @description Héros qui mène la dernière intervention (en cours ou terminée) ; `null` sans intervention
+             *     ou si son profil n'est plus public. Mêmes règles que l'historique d'un vilain.
+             */
+            lead: {
+                /** Format: uuid */
+                id: string;
+                alias: string;
+            } | null;
             /** Format: date-time */
             createdAt: string;
         };
@@ -5602,6 +5616,11 @@ export interface operations {
                 heroId?: string[];
                 /** @description Incidents liés à au moins un de ces vilains. */
                 villainId?: string[];
+                /**
+                 * @description Ordre : les plus récemment déclarés d'abord (`-createdAt`, par défaut), ou les plus
+                 *     récemment résolus d'abord (`-resolvedAt`, les incidents non résolus en dernier).
+                 */
+                sort?: "-createdAt" | "-resolvedAt";
                 /** @description Nombre d'éléments par page (1 à 100, 20 par défaut). */
                 limit?: components["parameters"]["Limit"];
                 /** @description Nombre d'éléments à sauter. */

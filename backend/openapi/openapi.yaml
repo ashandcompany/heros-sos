@@ -2342,6 +2342,12 @@ paths:
             type: array
             maxItems: 20
             items: { type: string, format: uuid }
+        - name: sort
+          in: query
+          description: |
+            Ordre : les plus récemment déclarés d'abord (`-createdAt`, par défaut), ou les plus
+            récemment résolus d'abord (`-resolvedAt`, les incidents non résolus en dernier).
+          schema: { type: string, enum: [-createdAt, -resolvedAt], default: -createdAt }
         - { $ref: "#/components/parameters/Limit" }
         - { $ref: "#/components/parameters/Offset" }
       responses:
@@ -4555,6 +4561,8 @@ components:
           citizensRescued,
           location,
           villainIds,
+          resolvedAt,
+          lead,
           createdAt,
         ]
       properties:
@@ -4599,6 +4607,21 @@ components:
             properties:
               id: { type: string, format: uuid }
               alias: { type: string }
+        resolvedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Fin de l'intervention réussie ; `null` si l'incident n'est pas résolu.
+        lead:
+          type: object
+          nullable: true
+          description: |
+            Héros qui mène la dernière intervention (en cours ou terminée) ; `null` sans intervention
+            ou si son profil n'est plus public. Mêmes règles que l'historique d'un vilain.
+          required: [id, alias]
+          properties:
+            id: { type: string, format: uuid }
+            alias: { type: string }
         createdAt: { type: string, format: date-time }
 
     IncidentModerationPayload:

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
-import { getHeroIncident, getSuperHeroes, incidentFeatures } from "@/lib/api";
+import { canSetPriority, getHeroIncident, getSuperHeroes } from "@/lib/api";
 import { formatDateTime, interventionOutcomeLabels, reporterRoleLabels } from "@/lib/format";
 import { requireHeroSession } from "@/lib/server-session";
 import {
@@ -228,7 +228,7 @@ export async function HeroIncidentDetail({ params }: { params: Promise<{ id: str
             </section>
           )}
 
-          {incidentFeatures.priority && incident.status !== "resolu" && (
+          {canSetPriority(incident) && (
             <section aria-labelledby="priority-title" className={panelClasses}>
               <h2 id="priority-title" className="mb-4 font-display text-xl font-semibold">
                 Priorité

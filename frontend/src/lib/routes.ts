@@ -63,6 +63,8 @@ export const heroIncidentRoute = (id: string) => `${routes.heroIncidents}/${id}`
 export const blogArticleRoute = (slug: string) => `${routes.blog}/${slug}`;
 export const heroSheetRoute = (id: string) => `${routes.encyclopedia}/super-heros/${id}`;
 export const villainSheetRoute = (id: string) => `${routes.encyclopedia}/super-vilains/${id}`;
+/** Onglet des super-vilains de l'encyclopédie (celui des héros est `routes.encyclopedia`). */
+export const encyclopediaVillainsRoute = `${routes.encyclopedia}?onglet=vilains`;
 
 export interface NavItem {
   label: string;

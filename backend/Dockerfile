@@ -2,7 +2,7 @@
 
 # Image de l'API Heros-SOS : compilation statique, puis image `scratch` (ni shell, ni paquets, ni
 # gestionnaire d'identités) exécutée par un utilisateur non privilégié. La surface d'attaque se
-# réduit à deux binaires et aux certificats racine.
+# réduit à trois binaires et aux certificats racine.
 
 ARG GO_IMAGE=golang:1.26-alpine3.23
 
@@ -21,6 +21,7 @@ COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api && \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/createmoderator ./cmd/createmoderator && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/seed ./cmd/seed && \
     mkdir /out/avatars
 
 # ---- Image finale -----------------------------------------------------------------------------
@@ -30,7 +31,8 @@ FROM scratch
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 # `api` est le serveur ; `createmoderator` crée le premier modérateur :
 #   docker compose run --rm --entrypoint /createmoderator api -email … -first-name … -last-name … -birth-date …
-COPY --from=builder /out/api /out/createmoderator /
+# `seed` remplit une base de démonstration (refusé en production) : make seed
+COPY --from=builder /out/api /out/createmoderator /out/seed /
 
 LABEL org.opencontainers.image.title="heros-sos-api" \
       org.opencontainers.image.description="API REST de la plateforme Heros-SOS" \

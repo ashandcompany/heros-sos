@@ -59,29 +59,30 @@ Complète `users` pour les super-héros. La ligne existe dès la demande, avant 
 | `reviewed_by` | uuid | FK `users`, ON DELETE SET NULL |
 | `reviewed_at` | timestamptz | |
 | `rejection_reason` | text | |
+| `location_consent_at` | timestamptz | Date du consentement au partage de position, NULL = pas de consentement (voir [`hero_locations`](#hero_locations)) |
 | `created_at` | timestamptz | |
 
 Tout ce qui est propre à un héros s'accroche à cette table plutôt qu'à `users` : `hero_films` (vidéothèque), `intervention_heroes`, `hero_reviews` et `hero_review_replies`. Comme la clé primaire est `user_id`, l'identifiant d'un héros reste celui de son compte. Côté GORM, `HeroProfile` porte les relations (`Films`, `InterventionHeroes`).
 
 **Données publiques d'un héros** (page d'accueil §5.1 et liste §5.5, visibles par tous) : photo de profil (`users.avatar_path`), alias, description (`bio`) et note moyenne (calculée). Le nom civil, l'email et le téléphone ne sont visibles que par le héros lui-même et par les modérateurs.
 
-## `hero_locations` (optionnelle)
+## `hero_locations`
 
-À créer seulement si la proximité est retenue avec le client (voir les [points ouverts](points-ouverts.md)). Elle donne **la position actuelle d'un héros, là où il se trouve**, et non son adresse de domicile, qui reste chiffrée dans `users`.
+Elle donne **la position actuelle d'un héros, là où il se trouve**, et non son adresse de domicile, qui reste chiffrée dans `users`.
 
 | Colonne | Type | Contraintes et notes |
 |---|---|---|
 | `hero_id` | uuid | PK, FK `hero_profiles(user_id)` ON DELETE CASCADE : une seule ligne par héros |
 | `latitude`, `longitude` | numeric(9,6) | NOT NULL. En clair, car nécessaires aux calculs de distance. |
 | `accuracy_m` | integer | Précision de la mesure en mètres, facultatif |
-| `updated_at` | timestamptz | NOT NULL. Une position plus ancienne que le délai de péremption (à fixer, par exemple 30 min) est ignorée et supprimée par une tâche de nettoyage. |
+| `updated_at` | timestamptz | NOT NULL. Une position plus ancienne que le délai de péremption (30 min, `HEROS_LOCATION_TTL`) est ignorée et supprimée par la tâche de nettoyage. |
 
 Règles :
-- **Consentement :** le héros active lui-même « Partager ma position » dans son espace professionnel et peut la couper à tout moment : la ligne est alors supprimée.
-- **Pas d'historique :** chaque mise à jour remplace la précédente, on ne garde aucune trace des déplacements.
-- **Qui voit quoi :** les modérateurs (tableau de bord admin, pour savoir où sont les héros) et le serveur (pour choisir les héros à prévenir). Jamais les citoyens, les autres héros ni le public. Chaque consultation par un modérateur est tracée dans `audit_logs` (`hero.location.view`).
+- **Consentement :** stocké sur `hero_profiles.location_consent_at` (timestamptz, NULL = pas de consentement). Le héros le donne par `PUT /hero/location/consent` (bouton « Partager ma position ») et le retire par `DELETE /hero/location/consent`, ce qui remet la colonne à NULL et supprime la position dans la même transaction. `PUT /hero/location` répond 409 (`hero_location_consent_required`) sans consentement : le contrôle et l'écriture sont une seule requête verrouillée, donc un envoi tardif après un retrait ne recrée jamais de position. `DELETE /hero/location` ne supprime que la position. L'alerte ne retient que les héros ayant consenti.
+- **Pas d'historique :** chaque mise à jour remplace la précédente (upsert sur `hero_id`), on ne garde aucune trace des déplacements. Les coordonnées sont arrondies à 3 décimales (~110 m) avant stockage.
+- **Qui voit quoi :** seul le serveur lit la position (pour choisir les héros à prévenir). Aucune route ne la renvoie, ni aux citoyens, ni aux autres héros, ni aux modérateurs.
 - **Limite du web :** un site ne lit la position qu'au premier plan, donc elle n'est à jour que tant que l'espace héros est ouvert.
-- **Alerte de proximité :** à la déclaration d'un incident avec coordonnées, le mail du §4.3.3 part aux héros dont la position est fraîche et à moins du rayon fixé (valeur de configuration, à décider), en plus des modérateurs. Si aucun héros n'est proche, repli sur tous les héros (à confirmer).
+- **Alerte de proximité :** à la déclaration d'un incident, le mail du §4.3.3 part aux modérateurs, plus aux héros dont la position est fraîche et à moins de 10 km (`HEROS_ALERT_RADIUS_KM`) si l'incident a des coordonnées. Sans héros proche, ou sans coordonnées, tous les héros actifs sont prévenus.
 - **Requête :** pré-filtre par rectangle sur `(latitude, longitude)`, puis distance de Haversine en SQL. PostGIS ne serait utile qu'avec beaucoup de héros.
 
 ## `sessions`

@@ -91,6 +91,9 @@ const (
 	defaultCleanupTimeout   = 2 * time.Minute
 	defaultSessionRetention = 7 * 24 * time.Hour
 	defaultTokenRetention   = 7 * 24 * time.Hour
+
+	defaultLocationTTL   = 30 * time.Minute
+	defaultAlertRadiusKm = 10
 )
 
 // Règles de limitation de débit par défaut (maximum de requêtes par fenêtre).

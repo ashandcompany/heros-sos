@@ -1,4 +1,4 @@
-# Tables de la base de données
+﻿# Tables de la base de données
 
 Schéma PostgreSQL de Heros-SOS, déduit du cahier des charges et des choix de [STACK.md](STACK.md) (GORM, migrations `golang-migrate`, sessions en base, chiffrement des champs sensibles).
 
@@ -45,7 +45,7 @@ flowchart TB
 ## Les domaines
 
 - **[1. Comptes et accès](tables/comptes.md)** : Les utilisateurs, les profils de héros, les sessions, les jetons à usage unique, les changements d'email et la double authentification.  
-  Tables : [`users`](tables/comptes.md#users), [`hero_profiles`](tables/comptes.md#hero_profiles), [`hero_locations`](tables/comptes.md#hero_locations-optionnelle), [`sessions`](tables/comptes.md#sessions), [`user_tokens`](tables/comptes.md#user_tokens), [`email_change_requests`](tables/comptes.md#email_change_requests), [`user_mfa`](tables/comptes.md#user_mfa-et-mfa_recovery_codes), [`mfa_recovery_codes`](tables/comptes.md#user_mfa-et-mfa_recovery_codes)
+  Tables : [`users`](tables/comptes.md#users), [`hero_profiles`](tables/comptes.md#hero_profiles), [`hero_locations`](tables/comptes.md#hero_locations), [`sessions`](tables/comptes.md#sessions), [`user_tokens`](tables/comptes.md#user_tokens), [`email_change_requests`](tables/comptes.md#email_change_requests), [`user_mfa`](tables/comptes.md#user_mfa-et-mfa_recovery_codes), [`mfa_recovery_codes`](tables/comptes.md#user_mfa-et-mfa_recovery_codes)
 - **[2. Incidents](tables/incidents.md)** : Les incidents signalés, leurs types et les interventions des héros.  
   Tables : [`incident_types`](tables/incidents.md#incident_types), [`incidents`](tables/incidents.md#incidents), [`interventions`](tables/incidents.md#interventions), [`intervention_heroes`](tables/incidents.md#intervention_heroes)
 - **[3. Super-héros et super-vilains](tables/vilains.md)** : L'encyclopédie des super-vilains, leurs spécialités et leur lien avec les incidents.  

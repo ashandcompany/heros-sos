@@ -45,10 +45,23 @@ type record struct {
 }
 
 type joinedRecord struct {
-	Record    record `gorm:"embedded"`
-	TypeCode  string
-	TypeLabel string
+	Record               record `gorm:"embedded"`
+	TypeCode             string
+	TypeLabel            string
+	ResolvedAt           *time.Time
+	LatestInterventionID *uuid.UUID
 }
+
+// latestInterventionJoin rattache à chaque incident sa dernière intervention (alias `latest`) : elle donne le lead.
+// Elle ne se calcule que pour les lignes de la page (la jointure vient après le tri et la limite).
+const latestInterventionJoin = `LEFT JOIN LATERAL (
+	SELECT id, ended_at FROM interventions WHERE interventions.incident_id = incidents.id
+	ORDER BY started_at DESC NULLS LAST, id DESC LIMIT 1) AS latest ON TRUE`
+
+// resolvedAtExpression est la date de résolution : fin de la dernière intervention, si elle a réussi. C'est une
+// colonne dénormalisée, tenue par trigger (migration add_incident_resolved_at) : la calculer pour trier ou filtrer
+// obligeait à joindre la dernière intervention de chaque incident de la table.
+const resolvedAtExpression = "incidents.resolved_at"
 
 func (record) TableName() string { return tableIncidents }
 
@@ -122,11 +135,13 @@ type ListFilter struct {
 	// confirmée à l'intervention en cours (un héros n'en a jamais plus d'une). Contrairement à HeroIDs, les
 	// interventions terminées ne comptent pas. Critère interne, non exposé par l'API.
 	ActiveHeroID *uuid.UUID
-	// After reprend la liste après cet incident (pagination par curseur) ; il remplace le décalage.
+	// After reprend la liste après cet incident (pagination par curseur) ; il remplace le décalage. Le curseur est celui
+	// de l'ordre par date de déclaration : il ne se combine pas avec le tri par résolution.
 	After *Cursor
 	// SkipTotal dispense de calculer le total (Total reste à zéro) : pour les appelants qui n'affichent pas de
 	// pagination (tableau de bord), un total exact peut coûter un comptage de toute la table.
 	SkipTotal bool
+	Sort      ListSort
 }
 
 // ListResult est une page d'incidents : le total correspondant au filtre (hors curseur) et, s'il reste des
@@ -135,6 +150,34 @@ type ListResult struct {
 	Items []Incident
 	Total int64
 	Next  *Cursor
+}
+
+// ListSort est l'ordre de la liste des incidents (valeur du paramètre `sort`).
+type ListSort string
+
+const (
+	// SortCreatedAt : les plus récemment déclarés d'abord (ordre par défaut).
+	SortCreatedAt ListSort = "-createdAt"
+	// SortResolvedAt : les plus récemment résolus d'abord, les incidents non résolus en dernier.
+	SortResolvedAt ListSort = "-resolvedAt"
+)
+
+// ParseListSort valide un ordre reçu en paramètre ; vide, l'ordre par défaut.
+func ParseListSort(raw string) (ListSort, bool) {
+	switch sort := ListSort(raw); sort {
+	case "":
+		return SortCreatedAt, true
+	case SortCreatedAt, SortResolvedAt:
+		return sort, true
+	}
+	return "", false
+}
+
+func (s ListSort) orderClause() string {
+	if s == SortResolvedAt {
+		return resolvedAtExpression + " DESC NULLS LAST, incidents.created_at DESC, incidents.id DESC"
+	}
+	return "incidents.created_at DESC, incidents.id DESC"
 }
 
 type gormRepository struct {
@@ -317,7 +360,7 @@ func (r *gormRepository) SetPriority(ctx context.Context, id uuid.UUID, priority
 
 func (r *gormRepository) Find(ctx context.Context, id uuid.UUID) (*Incident, error) {
 	var joined joinedRecord
-	err := r.incidentQuery(ctx).Where("incidents.id = ?", id).Take(&joined).Error
+	err := withResolution(r.incidentQuery(ctx)).Where("incidents.id = ?", id).Take(&joined).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrNotFound
 	}
@@ -338,20 +381,27 @@ func (r *gormRepository) List(ctx context.Context, filter ListFilter, limit, off
 	}
 	query := r.filteredQuery(ctx, filter)
 	if filter.After != nil {
+		// Le curseur est (date de déclaration, identifiant) : il n'a pas de sens pour un autre ordre.
+		if filter.Sort == SortResolvedAt {
+			return ListResult{}, ErrInvalidCursor
+		}
 		// Comparaison de ligne : PostgreSQL la lit directement dans l'index (created_at, id).
 		query = query.Where("(incidents.created_at, incidents.id) < (?, ?)", filter.After.CreatedAt, filter.After.ID)
 	}
 	var rows []joinedRecord
 	// Une ligne de plus que demandé : si elle existe, il y a une page suivante, sans compter pour le savoir.
-	err = query.Order("incidents.created_at DESC, incidents.id DESC").Limit(limit + 1).Offset(offset).Find(&rows).Error
+	err = withResolution(query).Order(filter.Sort.orderClause()).Limit(limit + 1).Offset(offset).Find(&rows).Error
 	if err != nil {
 		return ListResult{}, fmt.Errorf("incident : liste : %w", err)
 	}
 	var next *Cursor
 	if len(rows) > limit {
 		rows = rows[:limit]
-		last := Cursor{CreatedAt: rows[limit-1].Record.CreatedAt, ID: rows[limit-1].Record.ID}
-		next = &last
+		// Pas de curseur de page suivante pour le tri par résolution : il se pagine par décalage (offset).
+		if filter.Sort != SortResolvedAt {
+			last := Cursor{CreatedAt: rows[limit-1].Record.CreatedAt, ID: rows[limit-1].Record.ID}
+			next = &last
+		}
 	}
 	items, err := r.hydrate(ctx, rows)
 	if err != nil {
@@ -458,6 +508,14 @@ func (r *gormRepository) incidentQuery(ctx context.Context) *gorm.DB {
 		Joins("JOIN incident_types ON incident_types.id = incidents.type_id")
 }
 
+// withResolution ajoute la dernière intervention (date de résolution, lead) à une requête
+// d'incidents. Appliquée après le comptage : la jointure ne change pas le nombre de lignes.
+func withResolution(query *gorm.DB) *gorm.DB {
+	return query.Joins(latestInterventionJoin).
+		Select(`incidents.*, incident_types.code AS type_code, incident_types.label AS type_label, ` +
+			`latest.id AS latest_intervention_id`)
+}
+
 func (r *gormRepository) hydrate(ctx context.Context, rows []joinedRecord) ([]Incident, error) {
 	items := make([]Incident, len(rows))
 	ids := make([]uuid.UUID, len(rows))
@@ -521,5 +579,51 @@ func (r *gormRepository) hydrate(ctx context.Context, rows []joinedRecord) ([]In
 		interventionID := row.ID
 		items[byIncident[row.IncidentID]].InterventionID = &interventionID
 	}
+
+	byLatest := make(map[uuid.UUID]int, len(rows))
+	for i, row := range rows {
+		items[i].ResolvedAt = row.ResolvedAt
+		if row.LatestInterventionID != nil {
+			byLatest[*row.LatestInterventionID] = i
+		}
+	}
+	leads, err := r.publicLeads(ctx, byLatest)
+	if err != nil {
+		return nil, err
+	}
+	for interventionID, lead := range leads {
+		items[byLatest[interventionID]].Lead = lead
+	}
 	return items, nil
+}
+
+// publicLeads retourne le lead de chaque intervention demandée (clés de `interventions`). Seuls
+// les héros encore publics sont nommés : leur fiche doit exister.
+func (r *gormRepository) publicLeads(ctx context.Context, interventions map[uuid.UUID]int) (map[uuid.UUID]*HeroReference, error) {
+	if len(interventions) == 0 {
+		return nil, nil
+	}
+	ids := make([]uuid.UUID, 0, len(interventions))
+	for id := range interventions {
+		ids = append(ids, id)
+	}
+	var rows []struct {
+		InterventionID uuid.UUID
+		HeroID         uuid.UUID
+		Alias          string
+	}
+	if err := r.conn(ctx).Table("intervention_heroes").
+		Select("intervention_heroes.intervention_id, hero_profiles.user_id AS hero_id, hero_profiles.alias").
+		Joins("JOIN hero_profiles ON hero_profiles.user_id = intervention_heroes.hero_id").
+		Joins("JOIN users ON users.id = hero_profiles.user_id").
+		Where(`intervention_heroes.intervention_id IN ? AND intervention_heroes.role = 'lead'
+			AND hero_profiles.verification_status = 'approved' AND users.role = 'hero' AND users.status = 'active'`, ids).
+		Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("incident : lecture des leads : %w", err)
+	}
+	leads := make(map[uuid.UUID]*HeroReference, len(rows))
+	for _, row := range rows {
+		leads[row.InterventionID] = &HeroReference{ID: row.HeroID, Alias: row.Alias}
+	}
+	return leads, nil
 }

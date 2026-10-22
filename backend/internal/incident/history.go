@@ -147,7 +147,6 @@ func (r *gormRepository) ListByVillain(ctx context.Context, villainID uuid.UUID,
 func (r *gormRepository) hydrateSummaries(ctx context.Context, rows []summaryRow) ([]Summary, error) {
 	items := make([]Summary, len(rows))
 	incidentIDs := make([]uuid.UUID, len(rows))
-	var interventionIDs []uuid.UUID
 	byIncident := make(map[uuid.UUID]int, len(rows))
 	byIntervention := make(map[uuid.UUID]int, len(rows))
 	for i, row := range rows {
@@ -158,7 +157,6 @@ func (r *gormRepository) hydrateSummaries(ctx context.Context, rows []summaryRow
 		}
 		incidentIDs[i], byIncident[row.ID] = row.ID, i
 		if row.InterventionID != nil {
-			interventionIDs = append(interventionIDs, *row.InterventionID)
 			byIntervention[*row.InterventionID] = i
 		}
 	}
@@ -182,27 +180,12 @@ func (r *gormRepository) hydrateSummaries(ctx context.Context, rows []summaryRow
 		items[index].Villains = append(items[index].Villains, VillainReference{ID: link.VillainID, Alias: link.Alias})
 	}
 
-	if len(interventionIDs) == 0 {
-		return items, nil
+	leads, err := r.publicLeads(ctx, byIntervention)
+	if err != nil {
+		return nil, err
 	}
-	var leads []struct {
-		InterventionID uuid.UUID
-		HeroID         uuid.UUID
-		Alias          string
-	}
-	// Seuls les héros encore publics sont nommés : leur fiche doit exister.
-	if err := r.conn(ctx).Table("intervention_heroes").
-		Select("intervention_heroes.intervention_id, hero_profiles.user_id AS hero_id, hero_profiles.alias").
-		Joins("JOIN hero_profiles ON hero_profiles.user_id = intervention_heroes.hero_id").
-		Joins("JOIN users ON users.id = hero_profiles.user_id").
-		Where(`intervention_heroes.intervention_id IN ? AND intervention_heroes.role = 'lead'
-			AND hero_profiles.verification_status = 'approved' AND users.role = 'hero' AND users.status = 'active'`,
-			interventionIDs).
-		Scan(&leads).Error; err != nil {
-		return nil, fmt.Errorf("incident : lecture des leads : %w", err)
-	}
-	for _, lead := range leads {
-		items[byIntervention[lead.InterventionID]].Lead = &HeroReference{ID: lead.HeroID, Alias: lead.Alias}
+	for interventionID, lead := range leads {
+		items[byIntervention[interventionID]].Lead = lead
 	}
 	return items, nil
 }

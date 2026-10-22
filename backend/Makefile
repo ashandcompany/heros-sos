@@ -82,15 +82,18 @@ PERF_USER         ?= jane.foster@heros-sos.local
 # Les index de lecture sont seuls dans leur migration : les retirer puis les recréer (sans toucher aux données)
 # rejoue en direct la lenteur d'origine, puis le gain. psql lit l'URL de la base de mesures.
 PERF_PSQL         ?= psql '$(PERF_DATABASE_URL)' -v ON_ERROR_STOP=1 -q
+# Les deux migrations « que des index » : les listes, puis les derniers incidents résolus (qui demande une colonne ajoutée
+# entre les deux). Retirées dans l'ordre inverse de leur création.
 PERF_INDEXES_SQL  ?= migrations/20261022142000_add_incident_perf_indexes
+PERF_RESOLVED_SQL ?= migrations/20261022146000_add_incident_resolved_index
 
 .PHONY: perf-indexes-off
 perf-indexes-off: ## Démonstration : retire les index de lecture de la base de mesures (lenteur d'origine)
-	@$(PERF_PSQL) -f $(PERF_INDEXES_SQL).down.sql && echo "Index de lecture retirés : lancez make perf pour voir la lenteur d'origine."
+	@$(PERF_PSQL) -f $(PERF_RESOLVED_SQL).down.sql && $(PERF_PSQL) -f $(PERF_INDEXES_SQL).down.sql && echo "Index de lecture retirés : lancez make perf pour voir la lenteur d'origine."
 
 .PHONY: perf-indexes-on
 perf-indexes-on: ## Démonstration : recrée les index de lecture de la base de mesures
-	@$(PERF_PSQL) -f $(PERF_INDEXES_SQL).up.sql && echo "Index de lecture recréés."
+	@$(PERF_PSQL) -f $(PERF_INDEXES_SQL).up.sql && $(PERF_PSQL) -f $(PERF_RESOLVED_SQL).up.sql && echo "Index de lecture recréés."
 
 .PHONY: perf-db
 perf-db: ## Crée la base de mesures dans la base de la pile de développement (Docker)

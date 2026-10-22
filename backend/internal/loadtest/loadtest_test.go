@@ -87,7 +87,7 @@ func TestScenariosSkipWhatTheTargetsCannotServe(t *testing.T) {
 		}
 		return got
 	}
-	if got := strings.Join(names(Targets{}), ","); got != "list,list-open,heroes,villains" {
+	if got := strings.Join(names(Targets{}), ","); got != "list,list-open,latest-resolved,heroes,villains" {
 		t.Errorf("sans cible : %s", got)
 	}
 	all := names(Targets{HeroID: "h", VillainID: "v", ReporterID: "r"})
@@ -100,7 +100,7 @@ func TestScenariosSkipWhatTheTargetsCannotServe(t *testing.T) {
 			t.Errorf("scénario %q absent : %v", want, all)
 		}
 	}
-	mine := Scenarios(Targets{ReporterID: "a b"})[2]
+	mine := Scenarios(Targets{ReporterID: "a b"})[3]
 	if got := mine.Path(1); got != "/incidents?limit=20&reporterId=a+b" {
 		t.Errorf("chemin de « mine » = %s : l'identifiant doit être échappé", got)
 	}

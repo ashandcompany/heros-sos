@@ -229,9 +229,10 @@ func Sizes(ctx context.Context, db *gorm.DB) ([]TableSize, error) {
 // active : un héros n'en mène qu'une à la fois. Six incidents sur dix ont un vilain.
 //
 // Les identifiants sont des UUID v7 comme ceux de l'application. hashint8 donne un entier stable par
-// ligne : la même base se régénère à l'identique. incident_created_at, incident_approved et resolved_at sont
-// fournis : les triggers qui les remplissent d'habitude ne voient pas les lignes insérées par la même instruction. Les
-// compteurs (incident_stats, villain_stats, hero_stats) se mettent à jour d'eux-mêmes, une fois par lot.
+// ligne : la même base se régénère à l'identique. incident_created_at, incident_approved et resolved_at (de
+// l'incident comme des héros) sont fournis : les triggers qui les remplissent d'habitude ne voient pas les lignes
+// insérées par la même instruction. Les compteurs (incident_stats, villain_stats, hero_stats) se mettent à jour
+// d'eux-mêmes, une fois par lot.
 const loadBatchSQL = `
 WITH ref AS MATERIALIZED (
 	SELECT $1::bigint AS lo, $2::bigint AS hi, $3::bigint AS total, $4::timestamptz AS start, $5::bigint AS step,
@@ -275,7 +276,7 @@ WITH ref AS MATERIALIZED (
 	FROM gen0
 ), ins_incidents AS (
 	INSERT INTO incidents (id, reporter_id, type_id, title, description, status, priority, moderation, citizens_rescued,
-		street, postal_code, city, country, latitude, longitude, occurred_at, created_at, updated_at)
+		street, postal_code, city, country, latitude, longitude, occurred_at, created_at, updated_at, resolved_at)
 	SELECT id, reporter_id, type_id,
 	       'Incident de charge n° ' || g,
 	       'Signalement généré pour les mesures de performance : ' || md5(g::text) || md5((g + 1)::text),
@@ -291,7 +292,8 @@ WITH ref AS MATERIALIZED (
 	       (-1 + (h % 7000) / 700.0)::numeric(9, 6),
 	       created_at - interval '10 minutes',
 	       created_at,
-	       CASE WHEN status IN ('succeeded', 'failed') THEN ended_at ELSE created_at END
+	       CASE WHEN status IN ('succeeded', 'failed') THEN ended_at ELSE created_at END,
+	       CASE WHEN status = 'succeeded' THEN ended_at END
 	FROM gen
 ), ins_interventions AS (
 	INSERT INTO interventions (id, incident_id, status, started_at, ended_at)

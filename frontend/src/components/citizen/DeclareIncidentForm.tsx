@@ -32,16 +32,12 @@ interface DeclareIncidentFormProps {
   types: Array<Pick<IncidentTypeDefinition, "id" | "label">>;
   /** Action de déclaration : citoyen (espace personnel) ou modérateur (back-office). */
   action: DeclareIncidentFormAction;
-  /** Demande « témoin ou victime » (seulement sans l'API, qui ne le connaît pas). */
-  askReporterRole: boolean;
 }
 
-export function DeclareIncidentForm({
-  villains,
-  types,
-  action,
-  askReporterRole,
-}: DeclareIncidentFormProps) {
+/** « Témoin » ou « victime » dans le vocabulaire de l'API (schéma `IncidentPayload`). */
+const apiReporterRole = { temoin: "witness", victime: "victim" } as const;
+
+export function DeclareIncidentForm({ villains, types, action }: DeclareIncidentFormProps) {
   // Hors ligne (ou réseau coupé pendant l'envoi), la déclaration est gardée sur l'appareil et partira au retour du
   // réseau : même validation que côté serveur, sur les types et vilains que le formulaire affiche.
   const buildOffline = useCallback(
@@ -52,7 +48,6 @@ export function DeclareIncidentForm({
       const fieldErrors = validateDeclaration(validated, {
         villainIds: villains.map(({ id }) => id),
         typeIds: types.map(({ id }) => id),
-        askReporterRole,
       });
       if (hasFieldErrors(fieldErrors)) {
         return { ok: false, state: { status: "error", fieldErrors, values } };
@@ -73,6 +68,7 @@ export function DeclareIncidentForm({
         },
         occurredAt: declaration.occurredAt,
         villainIds: declaration.villainId ? [declaration.villainId] : [],
+        reporterRole: declaration.reporterRole ? apiReporterRole[declaration.reporterRole] : null,
       });
       if (!draft) {
         return {
@@ -82,7 +78,7 @@ export function DeclareIncidentForm({
       }
       return { ok: true, draft, message: "Incident enregistré sur cet appareil." };
     },
-    [villains, types, askReporterRole],
+    [villains, types],
   );
   const submit = useOfflineAction(action, buildOffline);
   const [state, formAction] = useActionState(submit, idleFormState as FormState<DeclarationField>);
@@ -135,16 +131,14 @@ export function DeclareIncidentForm({
       <input ref={occurredAtIsoRef} type="hidden" name="occurredAtIso" />
       <input ref={incidentIdRef} type="hidden" name="incidentId" />
 
-      {askReporterRole && (
-        <RadioGroup
-          legend="Vous êtes"
-          name="reporterRole"
-          options={reporterRoleOptions}
-          defaultValue={values.reporterRole}
-          error={errors.reporterRole}
-          required
-        />
-      )}
+      <RadioGroup
+        legend="Vous êtes"
+        name="reporterRole"
+        options={reporterRoleOptions}
+        defaultValue={values.reporterRole}
+        error={errors.reporterRole}
+        required
+      />
 
       <SelectField
         label="Type d'incident"

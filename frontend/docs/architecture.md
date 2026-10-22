@@ -136,8 +136,10 @@ Un `401` de l'API sur un appel authentifié (session expirée ou révoquée) red
 - Les fonctions branchées choisissent selon `isApiEnabled` : `apiFetch()`
   ([http.ts](../src/lib/api/http.ts)) si `API_URL` est renseignée, le mock sinon. L'application
   démarre donc toujours sans backend.
-- Chaque fonction mockée documente en commentaire l'endpoint futur
-  (« Future implémentation : `GET ${API_URL}/incidents` … »). C'est la spec du branchement.
+- Chaque fonction branchée indique en commentaire la route appelée (« API :
+  `GET /admin/moderation/summary` »). Une fonction encore mockée pour un domaine sans contrat
+  documenterait la route supposée (« Future implémentation : `GET ${API_URL}/…` ») : une
+  hypothèse à faire valider par le backend. Il n'en reste plus : tous les domaines sont branchés.
 - Les mutations renvoient un résultat typé plutôt que de lever une exception :
   `{ ok: true, … } | { ok: false, error }` (ex : `LoginResult`). Les actions transforment `error`
   en message affiché.
@@ -290,6 +292,15 @@ limites) est dans `backend/stack/performance-et-synchronisation.md`.
 - **Espace pro** : position exacte, adresse, héros en intervention (position = lieu de
   l'intervention, aucun suivi GPS).
 - **Carte publique** : incidents validés seulement, position arrondie à ~1 km, ni adresse ni héros.
+- **`IncidentMapExplorer`** (client) : la carte et sa liste, synchronisées, utilisées par les deux
+  pages. Filtres par priorité et statut (appliqués à la liste et aux repères), couches « Zones
+  touchées » et « Super-héros » (espace pro). Choisir un incident dans la liste recadre la carte
+  et ouvre sa bulle ; cliquer un repère le met en évidence dans la liste. Le bouton « Vue
+  d'ensemble » revient au cadrage initial, qui ignore les incidents isolés à plus de 1 200 km du
+  point médian (ils restent sur la carte et dans la liste). Squelette : `MapExplorerSkeleton`.
+- **`IncidentMap`** ne gère plus ses couches ni sa sélection : il reçoit `visibleIds`,
+  `showZones`, `showTeams`, `selectedId` et `onSelect` de l'explorateur. La légende
+  (`MapLegend`, repliable) est posée sur la carte.
 
 ### Assainissement HTML
 
@@ -325,6 +336,21 @@ modification du texte.
 **Où :** `app/contact`, `actions/contact.ts`, `lib/validation/contact.ts`.
 
 Public (sans session). `sendContactMessage` envoie le message par mail à l'équipe via l'API (limité par IP) ; mocké sans `API_URL`, rien n'est alors envoyé.
+
+### Référencement : sitemap, robots.txt, Open Graph
+
+- `src/app/robots.ts` et `src/app/sitemap.ts` (pages publiques, articles publiés, fiches de
+  l'encyclopédie) sont rendus **à la requête** (`await connection()`) : `SITE_URL`
+  ([src/lib/site.ts](../src/lib/site.ts)) et les données sont lues au démarrage, jamais figées
+  au build. Une liste indisponible (API injoignable) est omise du sitemap.
+- Aperçus Open Graph générés (`opengraph-image.tsx`, gabarit commun
+  [src/lib/og.tsx](../src/lib/og.tsx)) pour les articles et les fiches de héros et de vilains.
+  Leurs `generateMetadata` posent `metadataBase` (depuis `SITE_URL`), `openGraph` et l'URL
+  canonique.
+- **Pas d'image par défaut à la racine** : le `metadata` du layout racine est évalué au build,
+  où `SITE_URL` n'est pas connue. Une image racine aurait une URL `http://localhost:3000` sur
+  toutes les pages statiques. Pour l'ajouter, il faudrait figer `SITE_URL` au build (argument
+  Docker) et poser `metadataBase` dans le layout racine.
 
 ## Checklists
 

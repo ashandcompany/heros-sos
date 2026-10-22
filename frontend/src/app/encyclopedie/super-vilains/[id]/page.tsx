@@ -11,15 +11,23 @@ import { Container } from "@/components/ui/Container";
 import { getIncidentsByVillain, getVillain, getVillainFilms } from "@/lib/api";
 import { dossierNumber } from "@/lib/dossier";
 import { formatDate, formatInteger, formatLocation } from "@/lib/format";
-import { heroSheetRoute, routes } from "@/lib/routes";
+import { encyclopediaVillainsRoute, heroSheetRoute, routes, villainSheetRoute } from "@/lib/routes";
+import { getSiteUrl } from "@/lib/site";
 
 export async function generateMetadata({
   params,
 }: PageProps<"/encyclopedie/super-vilains/[id]">): Promise<Metadata> {
   const villain = await getVillain((await params).id);
-  return villain
-    ? { title: villain.alias, description: villain.description }
-    : { title: "Super-vilain introuvable" };
+  if (!villain) return { title: "Super-vilain introuvable" };
+
+  // Rendu à la requête (paramètre d'URL) : SITE_URL n'est pas figée au build.
+  return {
+    metadataBase: new URL(getSiteUrl()),
+    title: villain.alias,
+    description: villain.description,
+    alternates: { canonical: villainSheetRoute(villain.id) },
+    openGraph: { type: "profile", title: villain.alias, description: villain.description },
+  };
 }
 
 /** Lit les paramètres d'URL : rendu sous <Suspense>. */
@@ -218,7 +226,7 @@ export default function VillainSheetPage({
   return (
     <Container className="py-10 sm:py-14">
       <p className="mb-6 text-sm">
-        <Link href={`${routes.encyclopedia}#super-vilains`} className="text-accent hover:underline">
+        <Link href={encyclopediaVillainsRoute} className="text-accent hover:underline">
           ← Tous les super-vilains
         </Link>
       </p>

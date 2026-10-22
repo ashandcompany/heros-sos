@@ -117,23 +117,6 @@ export async function getAllArticles(token: string): Promise<BlogArticleSummary[
   );
 }
 
-/**
- * Nombre d'articles en brouillon (tableau de bord).
- * API : `total` de `GET /admin/articles?status=brouillon`.
- */
-export async function countDraftArticles(token: string): Promise<number> {
-  if (isApiEnabled) {
-    const response = await apiFetch(
-      `/admin/articles${pageQuery({ limit: 1 }, { status: "brouillon" })}`,
-      { sessionToken: token },
-    );
-    return ((await response.json()) as ApiSchema<"ArticleSummaryPage">).total;
-  }
-
-  await userFromToken(token, "admin");
-  return mockResponse(articlesMock.filter(({ status }) => status === "brouillon").length);
-}
-
 /** Un article, brouillon compris. API : `GET /admin/articles/{id}` (404 → `null`). */
 export async function getArticle(token: string, id: string): Promise<BlogArticle | null> {
   if (isApiEnabled) return fetchArticle(`/admin/articles/${encodeURIComponent(id)}`, token);

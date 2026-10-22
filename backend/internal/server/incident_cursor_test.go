@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"testing"
 	"time"
+
+	"github.com/ashandcompany/heros-sos/backend/internal/testutil"
 )
 
 type incidentCursorPage struct {
@@ -147,5 +149,74 @@ func TestIncidentTotalsFollowTheStatusFilter(t *testing.T) {
 		if got := e.incidentPage(want.viewer, "&limit=1").Total; got != want.total {
 			t.Errorf("total vu par le %s = %d, attendu %d", name, got, want.total)
 		}
+	}
+}
+
+// Le tri par résolution (les derniers incidents résolus, la page d'accueil) lit la date de résolution recopiée sur
+// l'incident et se pagine par décalage : son curseur serait celui d'un autre ordre, il est refusé. La colonne suit
+// le cycle de vie (déclaration, intervention, clôture, nouvelle tentative) : AssertReadCounters la recalcule depuis
+// les interventions à chaque étape.
+func TestTheResolutionSortIsPaginatedByOffsetAndTheColumnFollowsTheLifecycle(t *testing.T) {
+	e := newE2E(t, nil)
+	reporter := e.signUpAndLogin("reporter@example.org")
+	moderator := e.newModerator("mod@shield.example")
+	hero := e.approvedHero(moderator, "hero@example.org", "Lumen")
+	anonymous := e.newActor()
+	typeID := e.createType(moderator, "theft", "Vol", false).ID
+
+	declare := func() string {
+		e.clock.Advance(time.Minute)
+		return e.declareIncidentOfType(reporter, moderator, typeID)
+	}
+	resolve := func(incidentID, status string) {
+		t.Helper()
+		started := e.startIntervention(hero, incidentID)
+		e.clock.Advance(time.Minute)
+		e.mustPost(hero, "/interventions/"+started.ID+"/outcome", map[string]string{"status": status}, http.StatusNoContent)
+		testutil.AssertReadCounters(t, e.db)
+	}
+	first, second, retried, open := declare(), declare(), declare(), declare()
+	testutil.AssertReadCounters(t, e.db)
+	if e.count("incidents", "resolved_at IS NOT NULL") != 0 {
+		t.Fatal("aucun incident n'est résolu")
+	}
+	resolve(first, "succeeded")
+	resolve(second, "succeeded")
+	// Un échec puis une nouvelle tentative réussie : la date est celle de la dernière intervention.
+	resolve(retried, "failed")
+	if e.count("incidents", "id = ? AND resolved_at IS NULL", retried) != 1 {
+		t.Fatal("un incident échoué n'a pas de date de résolution")
+	}
+	resolve(retried, "succeeded")
+	if e.count("incidents", "resolved_at IS NOT NULL") != 3 {
+		t.Fatalf("trois incidents résolus attendus, %d", e.count("incidents", "resolved_at IS NOT NULL"))
+	}
+
+	// Les plus récemment résolus d'abord ; l'incident encore ouvert n'est pas dans une liste de résolus.
+	all := e.incidentPage(anonymous, "status=succeeded&sort=-resolvedAt&limit=10")
+	if len(all.Items) != 3 || all.Items[0].ID != retried || all.Items[1].ID != second || all.Items[2].ID != first {
+		t.Fatalf("ordre par résolution : %+v", all.Items)
+	}
+	for _, item := range all.Items {
+		if item.ID == open {
+			t.Fatal("un incident ouvert n'est pas résolu")
+		}
+	}
+
+	// Pagination par décalage : pas de curseur de page suivante, mais le total et la suite par offset.
+	page := e.incidentPage(anonymous, "status=succeeded&sort=-resolvedAt&limit=1")
+	if len(page.Items) != 1 || page.Items[0].ID != retried || page.Total != 3 || page.NextCursor != "" {
+		t.Fatalf("première page : %+v", page)
+	}
+	next := e.incidentPage(anonymous, "status=succeeded&sort=-resolvedAt&limit=1&offset=1")
+	if len(next.Items) != 1 || next.Items[0].ID != second {
+		t.Fatalf("page suivante par décalage : %+v", next.Items)
+	}
+
+	// Un curseur (celui de l'ordre par déclaration) n'a pas de sens avec ce tri.
+	cursor := e.incidentPage(anonymous, "limit=1").NextCursor
+	got := anonymous.get("/incidents?sort=-resolvedAt&cursor=" + url.QueryEscape(cursor))
+	if got.status != http.StatusUnprocessableEntity || got.fields()["cursor"] != "invalid" {
+		t.Errorf("curseur avec le tri par résolution : %d %s, attendu un 422 sur cursor", got.status, got.body)
 	}
 }

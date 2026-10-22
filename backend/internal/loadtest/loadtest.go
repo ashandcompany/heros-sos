@@ -159,6 +159,8 @@ func Scenarios(targets Targets) []Scenario {
 	scenarios := []Scenario{
 		fixed("list", "/incidents?limit=20"),
 		fixed("list-open", "/incidents?limit=20&status=reported&status=in_progress"),
+		// La page d'accueil : les derniers incidents résolus.
+		fixed("latest-resolved", "/incidents?limit=6&status=succeeded&sort=-resolvedAt"),
 	}
 	if targets.ReporterID != "" {
 		scenarios = append(scenarios, authenticated("mine", "/incidents?limit=20&reporterId="+url.QueryEscape(targets.ReporterID)))

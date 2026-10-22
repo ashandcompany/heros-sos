@@ -57,9 +57,10 @@ func TestReadQueriesUseTheirIndexes(t *testing.T) {
 	}
 
 	repo := NewRepository(db).(*gormRepository)
+	// La vraie requête de GET /incidents : le filtre, la jointure de la dernière intervention (pour le lead), l'ordre.
 	listSQL := func(filter ListFilter) (string, []any) {
-		statement := repo.filteredQuery(ctx, filter).
-			Order("incidents.created_at DESC, incidents.id DESC").Limit(DefaultListLimitForPlans).
+		statement := withResolution(repo.filteredQuery(ctx, filter)).
+			Order(filter.Sort.orderClause()).Limit(DefaultListLimitForPlans).
 			Session(&gorm.Session{DryRun: true}).Find(&[]joinedRecord{}).Statement
 		return statement.SQL.String(), statement.Vars
 	}
@@ -71,6 +72,10 @@ func TestReadQueriesUseTheirIndexes(t *testing.T) {
 	publicStatusSQL, publicStatusArgs := listSQL(ListFilter{ApprovedOnly: true, Statuses: []Status{StatusReported, StatusInProgress}})
 	recentSQL, recentArgs := listSQL(ListFilter{ApprovedOnly: true, Statuses: []Status{StatusReported, StatusInProgress, StatusFailed}})
 	ongoingSQL, ongoingArgs := listSQL(ListFilter{ApprovedOnly: true, ActiveHeroID: &heroID})
+	// La page d'accueil : les derniers incidents résolus (public, sans session).
+	latestResolvedSQL, latestResolvedArgs := listSQL(ListFilter{
+		ApprovedOnly: true, Statuses: []Status{StatusSucceeded}, Sort: SortResolvedAt,
+	})
 
 	for _, tc := range []struct {
 		name  string
@@ -89,6 +94,8 @@ func TestReadQueriesUseTheirIndexes(t *testing.T) {
 		{"liste sans filtre", globalSQL, globalArgs, "incidents_created_idx", []string{"incidents"}, true},
 		{"liste par statut", statusSQL, statusArgs, "", []string{"incidents"}, false},
 		{"liste publique (approuvés)", publicSQL, publicArgs, "incidents_approved_created_idx", []string{"incidents"}, true},
+		{"derniers incidents résolus (page d'accueil)", latestResolvedSQL, latestResolvedArgs,
+			"incidents_approved_resolved_idx", []string{"incidents"}, true},
 		{"liste publique par statut", publicStatusSQL, publicStatusArgs, "", []string{"incidents"}, false},
 		{"derniers incidents non résolus (tableau de bord)", recentSQL, recentArgs, "", []string{"incidents"}, false},
 		{"incident en cours d'un héros (tableau de bord)", ongoingSQL, ongoingArgs, "",

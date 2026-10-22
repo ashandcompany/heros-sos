@@ -1,6 +1,6 @@
 # Performance, synchronisation hors ligne et journalisation
 
-**Statut : implémenté et mesuré, sauf ce qui est listé dans [Ce qui n'a pas été vérifié](#4-ce-qui-na-pas-été-vérifié).** Établi le 22/10/2026 sur `develop` (commit `e9292b4`), avec une base PostgreSQL 18 de 5 millions d'incidents. Remis à niveau le même jour sur `develop` après la modération des incidents et le tableau de bord des héros (commit `0dbabc0`) : voir [Mise à jour après la modération des incidents](#mise-à-jour-après-la-modération-des-incidents).
+**Statut : implémenté et mesuré, sauf ce qui est listé dans [Ce qui n'a pas été vérifié](#4-ce-qui-na-pas-été-vérifié).** Établi le 22/10/2026 sur `develop` (commit `e9292b4`), avec une base PostgreSQL 18 de 5 millions d'incidents. Remis à niveau le même jour sur `develop` après la modération des incidents et le tableau de bord des héros (commit `0dbabc0`), puis après le tri par date de résolution de la page d'accueil et le passage des tests du frontend à Vitest (commit `034afef`) : voir [Mise à jour après la modération des incidents](#mise-à-jour-après-la-modération-des-incidents).
 
 ## Le défi
 
@@ -55,26 +55,30 @@ Ce que `pg_stat_statements` a désigné avant correction, une requête à froid 
 | Journal d'événements | Les trois routes ajoutées par `develop` écrivent leur événement dans la même transaction : `incident.moderated`, `incident.corrected` (le résultat d'une correction de statut, que `cmd/replay` relit comme dernier statut de l'incident) et `incident.priority_changed` |
 | Flux temps réel | Un incident non approuvé **ne se devinait pas** dans `GET /incidents`, mais sa déclaration (ville, vilains liés) passait dans le flux d'un héros. Corrigé : un héros ne reçoit que les événements d'un incident **actuellement approuvé** ; l'auteur et les modérateurs voient tout |
 | Tableau de bord | Ses agrégats parcouraient toute la table des incidents : **p95 de 7,4 s** sur 1 million d'incidents avant correction. Les incidents par type et les citoyens secourus se lisent maintenant dans `incident_stats` ; les statistiques (globales et par héros) passent par un cache qui ne fait jamais attendre un recalcul (voir ci-dessous) |
+| Tri par résolution (page d'accueil) | `GET /incidents?status=succeeded&sort=-resolvedAt&limit=6`, appelé sans session par la page d'accueil, calculait la date de résolution de **chaque incident de la table** (jointure sur sa dernière intervention) avant de trier : de 0,9 à 1,4 s sur 1 million d'incidents, proportionnel à la taille de la table. La date est maintenant la colonne `incidents.resolved_at`, tenue par trigger (migration `add_incident_resolved_at`) et lue dans l'ordre d'un index partiel (`add_incident_resolved_index`) : **1,5 ms** pour la même requête. Le curseur est celui de l'ordre par date de déclaration : ce tri se pagine par `offset`, et un `cursor` avec lui est refusé (422) |
+| Hors ligne et formulaire | `develop` demande désormais « témoin ou victime » à la déclaration : la commande mise en file le transporte (`reporterRole`), sinon la réponse de l'utilisateur serait perdue au retour du réseau |
+| Tests du frontend | `develop` a adopté Vitest (et Playwright pour les parcours) : les tests de la file hors ligne sont convertis, 22 avant et 22 après (un changement volontaire du relais est toujours détecté), et il n'y a plus qu'un lanceur de tests (`npm test`) |
 | Jeux de données | `cmd/seed` écrit `moderation = 'approved'` (sans cela, après le seed, aucun incident n'était visible des héros). `cmd/seedperf` aussi, avec un peu d'incidents « signalés » en attente ou rejetés pour exercer les filtres |
 
 **Cache des statistiques du tableau de bord** (`herodashboard/cache.go`, `HEROS_DASHBOARD_STATS_TTL`, 30 s par défaut, 0 désactive). Une valeur plus jeune que le délai est servie telle quelle ; une valeur plus vieille est **servie quand même, tout de suite**, pendant qu'une nouvelle se calcule en arrière-plan (un calcul à la fois par clé) ; seul le premier appel d'une clé calcule en direct, et les appels simultanés partagent ce calcul. Les deux listes (incident en cours du héros, derniers incidents non résolus) ne sont **pas** mises en cache : elles se lisent dans des index et restent à jour. Conséquence assumée : les statistiques peuvent retarder de 30 s sur un héros qui vient de clore une intervention. Un compteur exact par trigger aurait demandé, pour les « principaux ennemis » (comptage distinct par héros et par vilain, qui dépend de la modération et des vilains liés), une mécanique disproportionnée pour une page de statistiques.
 
-Mesures sur le code actuel, `make seed-perf` avec 1 000 038 incidents (999 640 approuvés, 182 en attente, 216 rejetés), base de 1,6 Go, PostgreSQL 18 local, 16 clients en parallèle pendant 10 s par scénario, aucune erreur :
+Mesures sur le code actuel, `make seed-perf` avec 1 000 038 incidents (999 640 approuvés, 182 en attente, 216 rejetés), base de 1,7 Go, PostgreSQL 18 local, 16 clients en parallèle pendant 10 s par scénario, aucune erreur :
 
 | Scénario | p50 | p95 |
 |---|---|---|
-| Liste des incidents (public, approuvés) | 2,4 ms | 5,1 ms |
-| Liste des incidents ouverts | 2,3 ms | 4,5 ms |
-| Mes incidents (compte héros) | 0,8 ms | 2,5 ms |
-| **Tableau de bord d'un héros** | 2,3 ms | 5,7 ms |
-| Historique d'un héros | 2,2 ms | 7,7 ms |
-| Fiche d'un héros | 0,5 ms | 1,3 ms |
-| Historique d'un vilain | 2,1 ms | 5,3 ms |
-| Fiche d'un vilain | 0,6 ms | 1,6 ms |
-| Liste des héros | 0,9 ms | 3,3 ms |
-| Liste des vilains | 1,6 ms | 3,5 ms |
+| Liste des incidents (public, approuvés) | 2,9 ms | 5,8 ms |
+| Liste des incidents ouverts | 2,9 ms | 5,7 ms |
+| **Derniers incidents résolus (page d'accueil)** | 2,0 ms | 4,6 ms |
+| Mes incidents (compte héros) | 0,9 ms | 2,6 ms |
+| **Tableau de bord d'un héros** | 3,1 ms | 7,3 ms |
+| Historique d'un héros | 2,3 ms | 7,6 ms |
+| Fiche d'un héros | 0,5 ms | 1,1 ms |
+| Historique d'un vilain | 2,1 ms | 5,2 ms |
+| Fiche d'un vilain | 0,6 ms | 1,3 ms |
+| Liste des héros | 0,8 ms | 2,6 ms |
+| Liste des vilains | 1,6 ms | 3,3 ms |
 
-Le tableau de bord, avant correction, sur le même jeu (8 clients, il a fallu attendre 16 réponses) : p50 de 3,96 s et p95 de 7,44 s. Les compteurs, recomptés ensuite sur ces 1 million de lignes, égalent un comptage complet des tables (0 écart, y compris pour les colonnes dénormalisées).
+Les deux lignes en gras sont celles que `develop` a ajoutées sans que le volume ait été pris en compte. Avant correction, sur le même jeu : le tableau de bord (8 clients, il a fallu attendre 16 réponses) à **3,96 s** de p50 et **7,44 s** de p95 ; la requête de la page d'accueil, chronométrée seule, à **0,9 à 1,4 s**. Les compteurs et les colonnes dénormalisées (dont `incidents.resolved_at`), recomptés ensuite sur ces 1 million de lignes, égalent un comptage complet des tables (0 écart).
 
 **Limites de ces mesures** : 1 million d'incidents et non 5 (le disque de la machine ne laissait pas la place d'en charger davantage) ; le premier appel d'un héros après le démarrage calcule en direct (de l'ordre de la seconde à ce volume, davantage à 5 millions : `COUNT` des interventions terminées et jointures de ses interventions) ; le nombre d'interventions terminées n'a pas de compteur.
 
@@ -135,11 +139,13 @@ Depuis la fusion de la PR #37, `GET /incidents` renvoie **tous les statuts** sau
 
 ### P1 : performance
 
-Trois migrations, dans l'ordre (`20261022140000` à `142000`, après celle de la modération) :
+Cinq migrations, dans l'ordre (`20261022140000` à `146000`, après celle de la modération ; les numéros `143000` et `144000` sont ceux du journal et des commandes, plus bas) :
 
 1. `denormalize_history_columns` : `incident_villains.incident_created_at` et `incident_approved`, et `intervention_heroes.resolved_at` (date de la résolution réussie d'un incident approuvé, pour un héros confirmé). Des triggers les remplissent à l'insertion, suivent le changement de statut d'une intervention et répercutent une décision de modération : aucun chemin d'écriture ne peut les oublier.
 2. `create_read_counters` : `incident_stats` (par modération, statut et type), `reporter_stats` (par déclarant et statut), `villain_stats` (incidents approuvés) et `hero_stats` (interventions et résolutions de chaque héros). Tenus à jour par des **triggers de niveau instruction** (`REFERENCING … TABLE`), et recalculables par `rebuild_read_counters()`, qui sert aussi au rattrapage initial. `TRUNCATE` les vide avec les tables.
 3. `add_incident_perf_indexes` : **que des index**, sans toucher aux données. `make perf-indexes-off` les retire et `make perf-indexes-on` les recrée : c'est ce qui rend la lenteur d'origine rejouable en direct. Sur une base de production volumineuse, `CREATE INDEX` bloque les écritures pendant sa construction : à lancer en période creuse.
+4. `add_incident_resolved_at` (`145000`) : la colonne `incidents.resolved_at`, la fin de la dernière intervention d'un incident réussi, avec son rattrapage et ses triggers (un incident change de statut ; une intervention est créée ou modifiée). Placée après les index : le rattrapage cherche la dernière intervention de chaque incident avec `interventions_incident_idx`. Un trigger de niveau instruction se déclenche **même quand l'`UPDATE` ne touche aucune ligne** : celui qui écrit dans `incidents` a une garde en tête de fonction, sans quoi son propre `UPDATE` le redéclencherait à l'infini (`stack depth limit exceeded`).
+5. `add_incident_resolved_index` (`146000`) : l'index des derniers incidents résolus, lui aussi **que des index**, retiré et recréé par `make perf-indexes-off` et `make perf-indexes-on` avec les précédents.
 
 Côté code :
 
@@ -170,7 +176,7 @@ Côté code :
 
 ### P4 : front hors ligne
 
-- **File IndexedDB** (`src/lib/offline/`) : chaque action est rangée avec son identifiant et la date de sa création, **le corps chiffré** (AES-GCM, clé non exportable), puis envoyée une à une, dans l'ordre. Le module est indépendant du navigateur (stockage, chiffrement et envoi sont des paramètres) et testé avec `npm test` : ordre de rejeu, arrêt sur coupure réseau puis reprise sans doublon, refus du serveur conservé avec sa raison, session expirée, isolation entre comptes, un seul envoi à la fois.
+- **File IndexedDB** (`src/lib/offline/`) : chaque action est rangée avec son identifiant et la date de sa création, **le corps chiffré** (AES-GCM, clé non exportable), puis envoyée une à une, dans l'ordre. Le module est indépendant du navigateur (stockage, chiffrement et envoi sont des paramètres) et testé avec `npm test` (Vitest, comme le reste du frontend) : ordre de rejeu, arrêt sur coupure réseau puis reprise sans doublon, refus du serveur conservé avec sa raison, session expirée, isolation entre comptes, un seul envoi à la fois.
 - **Route `/api/sync`** : relaie une commande vers l'API avec la session, le jeton CSRF, `Idempotency-Key` et `X-Client-Created-At`. Elle n'accepte que les huit écritures de `lib/offline/commands.ts` (jamais un relais vers n'importe quelle écriture), vérifie l'origine, et plafonne la taille.
 - **Actions couvertes** : déclarer un incident (citoyen, héros, modérateur) ; prendre en charge, rejoindre, inviter, répondre à une invitation, proposer et voter un résultat (héros). Hors ligne, ou si l'envoi échoue faute de réseau, l'action est rangée et le formulaire le confirme ; sans file disponible, la Server Action s'exécute comme avant.
 - **Refus** : une action refusée (un autre héros est déjà sur place…) est conservée avec sa raison, affichée en bas de l'écran, et fermée par l'utilisateur. Les dépendances sont rejouées dans l'ordre ; si la première est refusée, les suivantes le sont à leur tour par le serveur.

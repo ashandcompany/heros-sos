@@ -11,18 +11,18 @@ branchement. À mettre à jour à chaque fonction branchée.
 > d'incident, incidents et interventions (y compris incidents en cours, carte publique et historique public
 > des héros et des vilains), vidéothèque (paginée et filtrable), avis, blog, films des super-vilains, compte
 > (profil, photo, changement d'e-mail confirmé par lien), contact, newsletter (confirmation et
-> désinscription), « déconnexion de tous les appareils » et double authentification des modérateurs sont
-> branchés** sur l'API dès que `API_URL` est renseignée (tableau ci-dessous). Le reste fonctionne encore sur
+> désinscription), « déconnexion de tous les appareils », double authentification des modérateurs et
+> compteurs du tableau de bord de modération sont branchés** sur l'API dès que `API_URL` est renseignée (tableau ci-dessous). Le reste fonctionne encore sur
 > des mocks, y compris avec l'API.
 
 ## 1. Couverture : ce qui est dans le contrat, et le reste
 
-Le contrat décrit aujourd'hui **94 opérations** (plus `/health` et `/ready`) : identité (dont la double
+Le contrat décrit aujourd'hui **95 opérations** (plus `/health` et `/ready`) : identité (dont la double
 authentification des modérateurs) et modération des comptes, annuaire des héros, profil du compte (`/me`,
 photo, changements d'e-mail confirmés par lien), incidents (dont l'historique public d'un héros et d'un
 vilain), interventions, types d'incident, super-vilains, avis sur les interventions, vidéothèque (films), blog
-(articles), contact et newsletter. Les autres domaines du frontend (derniers incidents résolus de l'accueil,
-tableaux de bord) n'ont pas encore de contrat.
+(articles), contact, newsletter et compteurs du tableau de bord de modération. Seul le tableau de bord
+des super-héros n'a pas encore de contrat.
 
 ### ✅ Branché sur l'API
 
@@ -35,7 +35,7 @@ tableaux de bord) n'ont pas encore de contrat.
 | Mot de passe oublié (demande, jeton)  | `auth.ts`                                          | `/auth/password-reset`, `/auth/password-reset/confirm`                                                                                 |
 | Demande de statut super-héros         | `hero-requests.ts`                                 | `/heroes/requests`, `/heroes/requests/me`, `/admin/hero-requests/*`                                                                    |
 | Comptes (désactivation, vérification) | `user-moderation.ts`                               | `/admin/users`, `/admin/users/{id}/deactivate`, `…/reactivate`, `…/verify`                                                             |
-| Incidents, interventions, équipes     | `incidents.ts`, `interventions.ts` (§ 3)           | `/incidents/*`, `/interventions/*`, `/admin/interventions/{id}/decision`                                                               |
+| Incidents, interventions, équipes     | `incidents.ts`, `interventions.ts` (§ 3)           | `/incidents/*`, `/interventions/*`, `/admin/interventions/{id}/decision`, `/admin/incidents/*`, `/hero/incidents/{id}/priority`        |
 | Historique public (héros, vilains)    | `incidents.ts` (§ 3)                               | `GET /heroes/{heroId}/incidents`, `GET /villains/{id}/incidents` (publics)                                                             |
 | Tableau de bord héros                 | `hero-dashboard.ts` (§ 3)                          | `GET /hero/dashboard`                                                                                                                  |
 | Types d'incident                      | `incident-types.ts`                                | `/intervention-types`, `/admin/intervention-types`                                                                                     |
@@ -49,6 +49,7 @@ tableaux de bord) n'ont pas encore de contrat.
 | Vidéothèque (films)                   | `videos.ts`, `imdb.ts` (§ 3)                       | `/films`, `/films/heroes`, `/heroes/{heroId}/films`, `/hero/films*`, `/admin/hero-films*`, `/imdb/titles*`                             |
 | Films des super-vilains               | `videos.ts` (§ 3)                                  | `GET /villains/{villainId}/films` (public), `POST /admin/villain-films`, `DELETE /admin/villains/{villainId}/films/*`                  |
 | Blog                                  | `blog.ts` (§ 3)                                    | `GET /articles`, `GET /articles/{slug}` (publics), `/admin/articles`, `/admin/articles/{id}`                                           |
+| Tableau de bord de modération         | `moderation.ts`                                    | `GET /admin/moderation/summary`                                                                                                        |
 
 Fonctions de chaque fichier :
 
@@ -78,14 +79,15 @@ Fonctions de chaque fichier :
   `getPublishedVideos`, `getHeroesForVideos`, `addHeroVideo`, `getVillainFilms`, `addVillainFilm`,
   `deleteVillainFilm` ; `imdb.ts` : `searchImdbTitles`, `getImdbTitle`.
 - `blog.ts` : `getPublishedArticles`, `getPublishedArticle`, `getAllArticles`, `getArticle`,
-  `countDraftArticles`, `createArticle`, `updateArticle`, `deleteArticle`.
+  `createArticle`, `updateArticle`, `deleteArticle`.
+- `moderation.ts` : `getModerationSummary` (« Comptes à contrôler » n'a pas d'équivalent :
+  `accounts: null`, tuile masquée).
 
 ### ⏳ Encore sur les mocks (ou à faire)
 
-| Domaine frontend                     | Fonctions `lib/api/`                          | Contrat OpenAPI                                               | État |
-| ------------------------------------ | --------------------------------------------- | ------------------------------------------------------------- | ---- |
-| Derniers incidents résolus (accueil) | `incidents.ts` : `getLatestResolvedIncidents` | ❌ aucun (`GET /incidents` public ne renvoie pas les résolus) | mock |
-| Tableau de bord de modération        | `moderation.ts`                               | ❌ `GET /admin/moderation/summary` pas encore utilisé         | mock |
+Tous les domaines sont branchés : tableau de bord des héros, derniers incidents résolus de l'accueil
+et tableau de bord de modération compris (§ 3). Restent masqués avec l'API deux points d'incidents
+sans décision côté backend (§ 3, « Incidents et interventions »).
 
 > [!WARNING]
 > Les « Future implémentation » écrites dans les commentaires de `lib/api/` pour les domaines non
@@ -311,10 +313,10 @@ qu'un seul `GET /auth/me`.
   adresse). La fiche d'un vilain (`getIncidentsByVillain`) lit `GET /villains/{id}/incidents`, tous
   états confondus ; « Ils l'ont affronté » y liste les leads de ces incidents. Avis et films
   viennent aussi de l'API.
-- **Incidents mockés** : la correction d'un incident par la modération (`/admin/incidents/{id}`,
-  `updateIncidentAction`) prend ses héros dans `getIncidentHeroes` (mocks), pas dans
-  `getSuperHeroes` : les incidents mockés référencent les identifiants mock. À supprimer en
-  branchant les incidents.
+- **Correction d'un incident** (`/admin/incidents/{id}`, `updateIncidentAction`) : `PATCH
+/admin/incidents/{id}`, précédé de `GET /incidents/{id}` pour garder la position si le lieu ne change
+  pas (sinon il est géocodé de nouveau). Le héros vient de `getSuperHeroes` (identifiant utilisateur,
+  celui qu'attend l'API) ; l'API reporte héros et statut sur l'intervention en cours.
 - **Espace héros et annuaire du back-office** : `getMyHeroProfile`, les coordonnées, la photo et le
   changement d'email passent par `/me`, `/me/avatar` et `/me/email-change-requests` ; l'annuaire
   (`getSuperHeroProfiles`) par `GET /admin/heroes` (voir « Profil, photo, email, newsletter et contact »).
@@ -393,8 +395,8 @@ Types dans [src/types/review.ts](../src/types/review.ts) (`HeroReview`, `ReviewR
 - **Back-office** (`/admin/commentaires`) : deux onglets, « Avis des citoyens »
   (`/admin/hero-reviews`, filtre Publiés / Masqués, seuls les avis commentés sont listés) et
   « Réponses des super-héros » (`?type=reponses`, `/admin/hero-review-replies`, « À vérifier » par
-  défaut). La tuile du tableau de bord compte les réponses à vérifier (`total` de
-  `?status=pending`), puisqu'aucun avis n'attend de décision.
+  défaut). La tuile du tableau de bord compte les réponses à vérifier (`comments` de
+  `GET /admin/moderation/summary`), puisqu'aucun avis n'attend de décision.
 - **Pas de titre d'incident** : l'API n'en a pas (le schéma `Incident` n'a que type,
   description et lieu) et les avis ne portent que l'intervention. La liste du citoyen lit
   `GET /incidents/{id}` pour afficher « type · ville » (une requête par incident, `null` en cas
@@ -492,23 +494,6 @@ Types dans [src/types/review.ts](../src/types/review.ts) (`HeroReview`, `ReviewR
   413, 415, 429 (avec `Retry-After`) et API indisponible passent par `toApiFailure` et
   `apiFailureMessage`.
 
-### Incidents, interventions et super-vilains : modèles différents
-
-Le contrat existe désormais, mais les « Future implémentation » de `lib/api/` ont été écrites
-avant lui et ne lui correspondent pas. Il faudra **réécrire les fonctions d'après `openapi.yaml`**,
-pas seulement changer les URL.
-
-| Sujet           | Frontend actuel (hypothèses)                                                             | Contrat                                                                                                                                          |
-| --------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Espaces         | Routes par rôle : `/hero/incidents…`, `/me/incidents`, `/admin/incidents…`               | Routes communes à tous les rôles (`/incidents`, `/interventions/{id}`) ; « mes incidents » = `GET /incidents?reporterId=…`                       |
-| Intervention    | `POST` / `PUT /hero/incidents/{id}/intervention` : un héros se positionne sur l'incident | Ressource à part : `POST /incidents/{incidentId}/interventions`, puis `join`, invitations (`confirm` / `decline`), `outcome`, `outcome/validate` |
-| Carte, priorité | `GET /incidents/map`, `GET /hero/incidents/map`, `PUT /hero/incidents/{id}/priority`     | Absents du contrat                                                                                                                               |
-| Modération      | `PUT /admin/incidents/{id}/moderation`, `PATCH /admin/incidents/{id}`                    | Absente du contrat (seul l'arbitrage du résultat d'une intervention existe)                                                                      |
-
-À trancher avec le backend : ce qui manque au contrat (carte, priorité, modération des incidents)
-est-il à ajouter, ou les écrans du frontend doivent-ils changer ? Les incidents d'un vilain et d'un
-héros ont été ajoutés (`GET /villains/{id}/incidents`, `GET /heroes/{heroId}/incidents`, branchés).
-
 ### Hors ligne, rejeu et temps réel
 
 Ajouts du contrat, tous facultatifs : le branchement existant ne change pas.
@@ -522,8 +507,13 @@ Ajouts du contrat, tous facultatifs : le branchement existant ne change pas.
   une action faite sur une lecture périmée est refusée (409 `intervention_version_conflict`). Pas encore utilisé
   par l'interface.
 - **`cursor`** / **`nextCursor`** sur `GET /incidents` : pagination qui garde le même coût à toute profondeur
-  (`offset` reste accepté, mais pas avec `cursor`).
-- **`GET /events/stream`** : flux temps réel (SSE) des événements du journal, filtré par rôle.
+  (`offset` reste accepté, mais pas avec `cursor`). Le curseur est celui de l'ordre par date de déclaration : avec
+  `sort=-resolvedAt` (les derniers incidents résolus), la liste se pagine par `offset`, et un `cursor` est refusé (422).
+- **`reporterRole`** (`witness` ou `victim`) dans `IncidentPayload` : le formulaire de déclaration le demande, hors ligne
+  comme en ligne ; la commande mise en file le transporte.
+- **`GET /events/stream`** : flux temps réel (SSE) des événements du journal, filtré par rôle **et par modération** : un
+  héros ne reçoit que ceux des incidents approuvés (comme `GET /incidents`), l'auteur d'un incident reçoit les siens
+  quel que soit leur état.
 
 ### Incidents et interventions : choix du branchement
 
@@ -550,9 +540,19 @@ demandent une session.
   affiche « type · ville ».
 - **Statuts** : `reported` → `signale`, `in_progress` → `en-cours`, `succeeded` → `resolu`,
   `failed` → `signale` (un incident en échec redevient disponible). Priorités : `high` → `haute`,
-  `normal` → `normale`, `low` → `basse` (`critique` n'existe pas dans l'API).
-- **Pas de modération des déclarations** : l'API diffuse un incident dès sa déclaration et prévient
-  héros et modérateurs. `moderation` vaut `valide` ; le suivi du citoyen n'a pas d'étape « vérification ».
+  `normal` → `normale`, `low` → `basse`, `critical` → `critique` (ajouté par l'API).
+- **Modération des déclarations** : l'API crée un incident `pending` (`approved` s'il est déclaré par
+  un modérateur). `GET /incidents` ne renvoie aux héros et sans session que les incidents `approved` ;
+  le citoyen voit tous les siens, le modérateur tout. `moderation` est converti (`pending` →
+  `en-attente`, `approved` → `valide`, `rejected` → `rejete`) ; la file de modération filtre par
+  décision côté frontend (l'API n'a pas ce filtre). Décision : `PUT /admin/incidents/{id}/moderation`,
+  qui n'accepte que `approved` ou `rejected` (pas de remise en attente). Les mails partent toujours à
+  la déclaration, avant la décision.
+- **Priorité** : `PUT /hero/incidents/{id}/priority`, pour un incident validé sans intervention en
+  cours (`409 incident_not_available` sinon). L'écran ne la propose que pour un incident signalé
+  (`canSetPriority`), mock compris.
+- **Témoin ou victime** : `reporterRole` (`witness` ↔ `temoin`, `victim` ↔ `victime`), demandé dans
+  tous les formulaires de déclaration et lu sur l'incident.
 - **Vilains** : l'API en accepte plusieurs ; le formulaire en envoie un (`villainIds: [id]`) et
   l'écran affiche le premier.
 - **Équipe** : le héros connecté est reconnu côté serveur (`isMe`, d'après le vrai identifiant de
@@ -577,19 +577,23 @@ demandent une session.
   `InterventionRef`) : l'API utilise l'intervention, le mock l'incident. Sans API, les actions
   d'équipe répondent qu'elles demandent l'API (le mock n'a qu'un héros par intervention).
 
-**Absent du contrat**, masqué avec l'API (`incidentFeatures` dans `incidents.ts`) :
+**Masqué avec l'API** (`incidentFeatures` dans `incidents.ts`), en attente d'une décision côté
+backend ; seul le mock applique ces fonctions.
 
-| Fonction                                        | Frontend (hypothèse)                                                   | Avec l'API                                  |
-| ----------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------- |
-| Validation, rejet, correction d'une déclaration | `PUT /admin/incidents/{id}/moderation`, `PATCH /admin/incidents/{id}`  | Masquées : fiche en lecture seule           |
-| Priorité                                        | `PUT /hero/incidents/{id}/priority`                                    | Masquée (lue, jamais modifiable)            |
-| « Témoin » ou « victime »                       | `reporterRole` de la déclaration                                       | Champ retiré du formulaire                  |
-| Incidents résolus dans les listes               | Non demandés (`status`), en attendant une décision sur leur exposition | Filtre « Résolus » retiré de l'espace héros |
-| Historique des interventions terminées          | `incident.interventionId` ne désigne que l'intervention en cours       | Section « Interventions précédentes » vide  |
+| Fonction                               | Frontend                                                               | Avec l'API                                  |
+| -------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------- |
+| Incidents résolus dans les listes      | Non demandés (`status`), en attendant une décision sur leur exposition | Filtre « Résolus » retiré de l'espace héros |
+| Historique des interventions terminées | `incident.interventionId` ne désigne que l'intervention en cours       | Section « Interventions précédentes » vide  |
 
-**Encore sur les mocks avec l'API** : derniers incidents résolus de l'accueil
-(`getLatestResolvedIncidents`, faisable avec `GET /incidents?status=succeeded` mais sans tri par
-date de résolution), tableau de bord de modération (`moderation.ts`).
+**Date de résolution et lead** : chaque `Incident` porte `resolvedAt` (fin de l'intervention
+réussie, sinon `null`) et `lead` (héros qui mène la dernière intervention, `null` sans intervention
+ou si son profil n'est plus public). `GET /incidents` accepte `sort=-resolvedAt` (non résolus en
+dernier). `resolvedAt` est repris partout ; `lead` **seulement** par l'accueil : dans
+`fromApiIncident`, `hero` vient toujours de l'équipe lue, car avec un héros la fiche du citoyen
+proposerait de noter depuis l'incident au lieu de « Mes interventions ».
+
+**Derniers incidents résolus de l'accueil** (`getLatestResolvedIncidents`) : un seul appel,
+`GET /incidents?status=succeeded&sort=-resolvedAt&limit=6`, sans session.
 
 ### Tableau de bord héros : choix du branchement
 
@@ -624,8 +628,8 @@ affiche « Vous intervenez » ou « Pris en charge par … ».
   page publique assainit de nouveau le contenu (`sanitizeArticleHtml`).
 - **Lecture publique** : sans session ; un brouillon ou un slug inconnu répond 404 (`null`, page
   introuvable). `getPublishedArticle` est mémorisé le temps d'un rendu (page et métadonnées).
-- **Tableau de bord** : « Articles en brouillon » vient du `total` de
-  `GET /admin/articles?status=brouillon` (`countDraftArticles`).
+- **Tableau de bord** : « Articles en brouillon » vient de `draftArticles` dans
+  `GET /admin/moderation/summary` (`getModerationSummary`).
 - **Erreurs** (les fonctions renvoient un `MutationResult`, message prêt à afficher) :
 
   | Code API (statut)                 | Message affiché                                                               |

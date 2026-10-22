@@ -112,6 +112,8 @@ type Response struct {
 	VillainIDs      []string         `json:"villainIds"`
 	Villains        []villainSummary `json:"villains"`
 	InterventionID  *uuid.UUID       `json:"interventionId,omitempty"`
+	ResolvedAt      *time.Time       `json:"resolvedAt"`
+	Lead            *heroSummary     `json:"lead"`
 	CreatedAt       time.Time        `json:"createdAt"`
 }
 
@@ -140,6 +142,10 @@ func NewResponse(in Incident) Response {
 	for i, villain := range in.Villains {
 		villains[i] = villainSummary{ID: villain.ID, Alias: villain.Alias}
 	}
+	var lead *heroSummary
+	if in.Lead != nil {
+		lead = &heroSummary{ID: in.Lead.ID, Alias: in.Lead.Alias}
+	}
 	var reporterRole *string
 	if in.ReporterRole != nil {
 		value := string(*in.ReporterRole)
@@ -154,7 +160,8 @@ func NewResponse(in Incident) Response {
 			Address: in.Street, City: in.City, PostalCode: in.PostalCode, Country: in.Country,
 			AddressComplement: in.AddressComplement, Latitude: in.Latitude, Longitude: in.Longitude,
 		}, OccurredAt: in.OccurredAt,
-		VillainIDs: villainIDs, Villains: villains, InterventionID: in.InterventionID, CreatedAt: in.CreatedAt,
+		VillainIDs: villainIDs, Villains: villains, InterventionID: in.InterventionID,
+		ResolvedAt: in.ResolvedAt, Lead: lead, CreatedAt: in.CreatedAt,
 	}
 }
 
@@ -201,6 +208,11 @@ func parseListFilter(r *http.Request) (ListFilter, error) {
 		}
 		filter.Statuses = append(filter.Statuses, status)
 	}
+	sort, ok := ParseListSort(strings.TrimSpace(query.Get("sort")))
+	if !ok {
+		invalid["sort"] = "invalid"
+	}
+	filter.Sort = sort
 	if len(invalid) > 0 {
 		return ListFilter{}, &httpx.Error{
 			Status: http.StatusUnprocessableEntity, Code: httpx.CodeValidationFailed,
@@ -210,8 +222,9 @@ func parseListFilter(r *http.Request) (ListFilter, error) {
 	return filter, nil
 }
 
-// parseCursorParam lit le paramètre cursor. Il remplace offset : les deux ensemble n'ont pas de sens.
-func parseCursorParam(r *http.Request) (*Cursor, error) {
+// parseCursorParam lit le paramètre cursor. Il remplace offset : les deux ensemble n'ont pas de sens. Le curseur est
+// celui de l'ordre par date de déclaration : le tri par résolution se pagine par décalage (offset).
+func parseCursorParam(r *http.Request, sort ListSort) (*Cursor, error) {
 	query := r.URL.Query()
 	raw := query.Get("cursor")
 	if raw == "" {
@@ -227,7 +240,7 @@ func parseCursorParam(r *http.Request) (*Cursor, error) {
 		return nil, invalid("offset")
 	}
 	cursor, err := ParseCursor(raw)
-	if err != nil {
+	if err != nil || sort == SortResolvedAt {
 		return nil, invalid("cursor")
 	}
 	return &cursor, nil
@@ -246,7 +259,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	if filter.After, err = parseCursorParam(r); err != nil {
+	if filter.After, err = parseCursorParam(r, filter.Sort); err != nil {
 		h.fail(w, r, err)
 		return
 	}

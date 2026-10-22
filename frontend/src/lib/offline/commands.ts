@@ -4,7 +4,7 @@
  * nom lisible pour l'utilisateur. Seules celles de cette liste sont acceptées par `/api/sync` : la route ne doit
  * pas devenir un relais vers n'importe quelle écriture de l'API avec la session de l'utilisateur.
  *
- * Aucun import à l'exécution : le module sert aussi aux tests (`npm test`, sans bundler).
+ * Aucun import à l'exécution : le module reste du TypeScript pur, testable sans navigateur ni bundler.
  */
 
 /** Une action prête à être envoyée à l'API. */
@@ -49,6 +49,8 @@ export interface IncidentDeclarationBody {
   location: { address: string; city: string; latitude: null; longitude: null };
   occurredAt: string | null;
   villainIds: string[];
+  /** « Témoin » ou « victime », tel que l'API le nomme ; `null` si le formulaire ne l'a pas demandé. */
+  reporterRole?: "witness" | "victim" | null;
 }
 
 /**

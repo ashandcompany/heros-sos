@@ -1,10 +1,14 @@
-import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, expect, it } from "vitest";
 import { commands, isAllowedCommandPath } from "./commands.ts";
 import { createOutbox, type SendableCommand, type SendOutcome } from "./outbox.ts";
 import { createSealer } from "./seal.ts";
 import { refusalMessage, sendCommand, SYNC_ENDPOINT } from "./sender.ts";
 import { createMemoryStores } from "./store.ts";
+
+/** Comme `assert.ok` de Node : échoue si la valeur est fausse, et affine son type pour la suite du test. */
+function ok(value: unknown, message?: string): asserts value {
+  expect(value, message).toBeTruthy();
+}
 
 const incidentId = "0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10";
 const interventionId = "5c1d7e92-3a40-4b86-9f0e-6d8a2b4c1e75";
@@ -37,9 +41,9 @@ describe("seal", () => {
     const first = await sealer.seal(value);
     const second = await sealer.seal(value);
 
-    assert.deepEqual(await sealer.open(first), value);
-    assert.notDeepEqual(new Uint8Array(first.iv), new Uint8Array(second.iv));
-    assert.ok(
+    expect(await sealer.open(first)).toEqual(value);
+    expect(new Uint8Array(first.iv)).not.toEqual(new Uint8Array(second.iv));
+    ok(
       !new TextDecoder().decode(first.data).includes("Lyon"),
       "le texte ne doit pas rester en clair",
     );
@@ -55,18 +59,18 @@ describe("seal", () => {
 
     const sealer = createSealer(keys);
     const [a, b] = await Promise.all([sealer.seal("a"), sealer.seal("b")]);
-    assert.equal(saved, 1);
+    expect(saved).toBe(1);
 
     // Une nouvelle visite : un autre sealer retrouve la clé et lit ce qui a été chiffré avant.
-    assert.equal(await createSealer(stores.keys).open(a), "a");
-    assert.equal(await createSealer(stores.keys).open(b), "b");
+    expect(await createSealer(stores.keys).open(a)).toBe("a");
+    expect(await createSealer(stores.keys).open(b)).toBe("b");
   });
 
   it("refuse un contenu altéré", async () => {
     const sealer = createSealer(createMemoryStores().keys);
     const sealed = await sealer.seal({ ok: true });
     new Uint8Array(sealed.data)[0] ^= 0xff;
-    await assert.rejects(() => sealer.open(sealed));
+    await expect(sealer.open(sealed)).rejects.toThrow();
   });
 });
 
@@ -92,7 +96,7 @@ describe("commands", () => {
       }),
     ];
     for (const draft of drafts) {
-      assert.ok(draft && isAllowedCommandPath(draft.path), `chemin refusé : ${draft?.path}`);
+      ok(draft && isAllowedCommandPath(draft.path), `chemin refusé : ${draft?.path}`);
     }
   });
 
@@ -106,22 +110,22 @@ describe("commands", () => {
       "/interventions/x/join",
       `/interventions/${interventionId}/join/extra`,
     ]) {
-      assert.equal(isAllowedCommandPath(path), false, path);
+      expect(isAllowedCommandPath(path), path).toBe(false);
     }
   });
 
   it("refuse un identifiant qui n'est pas un UUID, sans attendre le réseau", () => {
-    assert.equal(commands.takeCharge("incident-1"), null);
-    assert.equal(commands.join("../etc"), null);
-    assert.equal(commands.invite(interventionId, []), null);
-    assert.equal(commands.invite(interventionId, ["pas-un-uuid"]), null);
+    expect(commands.takeCharge("incident-1")).toBe(null);
+    expect(commands.join("../etc")).toBe(null);
+    expect(commands.invite(interventionId, [])).toBe(null);
+    expect(commands.invite(interventionId, ["pas-un-uuid"])).toBe(null);
   });
 
   it("n'envoie les notes que si elles existent", () => {
-    assert.deepEqual(commands.proposeOutcome(interventionId, "failed", "")?.body, {
+    expect(commands.proposeOutcome(interventionId, "failed", "")?.body).toEqual({
       status: "failed",
     });
-    assert.deepEqual(commands.proposeOutcome(interventionId, "failed", "Trop tard")?.body, {
+    expect(commands.proposeOutcome(interventionId, "failed", "Trop tard")?.body).toEqual({
       status: "failed",
       notes: "Trop tard",
     });
@@ -139,7 +143,7 @@ describe("outbox", () => {
     );
 
     const stored = await stores.commands.all();
-    assert.ok(stored.every((command) => !JSON.stringify(command).includes("Tout va bien")));
+    ok(stored.every((command) => !JSON.stringify(command).includes("Tout va bien")));
 
     const { sent, record } = sentLog();
     const report = await outbox.flush(
@@ -147,14 +151,11 @@ describe("outbox", () => {
       async (command) => (record(command), { kind: "done" }),
     );
 
-    assert.deepEqual(report, { synced: 3, rejected: 0 });
-    assert.deepEqual(
-      sent.map((command) => command.id),
-      ["command-1", "command-2", "command-3"],
-    );
-    assert.deepEqual(sent[2]?.body, { status: "succeeded", notes: "Tout va bien" });
-    assert.equal(sent[0]?.createdAt, "2026-10-22T10:00:00.000Z");
-    assert.deepEqual(await outbox.list("user-1"), [], "une commande envoyée sort de la file");
+    expect(report).toEqual({ synced: 3, rejected: 0 });
+    expect(sent.map((command) => command.id)).toEqual(["command-1", "command-2", "command-3"]);
+    expect(sent[2]?.body).toEqual({ status: "succeeded", notes: "Tout va bien" });
+    expect(sent[0]?.createdAt).toBe("2026-10-22T10:00:00.000Z");
+    expect(await outbox.list("user-1"), "une commande envoyée sort de la file").toEqual([]);
   });
 
   it("s'arrête au premier échec réseau et reprend au même endroit, sans rien perdre ni doubler", async () => {
@@ -171,23 +172,22 @@ describe("outbox", () => {
     const flaky = async (): Promise<SendOutcome> =>
       ++calls === 2 ? { kind: "retry" } : { kind: "done" };
     const first = await outbox.flush("user-1", flaky);
-    assert.deepEqual(first, { synced: 1, rejected: 0, stoppedBy: "retry" });
-    assert.deepEqual(
-      (await outbox.list("user-1")).map((entry) => entry.id),
-      ["command-2", "command-3"],
-    );
+    expect(first).toEqual({ synced: 1, rejected: 0, stoppedBy: "retry" });
+    expect((await outbox.list("user-1")).map((entry) => entry.id)).toEqual([
+      "command-2",
+      "command-3",
+    ]);
 
     const { sent, record } = sentLog();
     const second = await outbox.flush(
       "user-1",
       async (command) => (record(command), { kind: "done" }),
     );
-    assert.deepEqual(second, { synced: 2, rejected: 0 });
-    assert.deepEqual(
+    expect(second).toEqual({ synced: 2, rejected: 0 });
+    expect(
       sent.map((command) => command.id),
-      ["command-2", "command-3"],
       "la commande déjà envoyée n'est pas renvoyée, l'ordre est conservé",
-    );
+    ).toEqual(["command-2", "command-3"]);
   });
 
   it("garde une commande refusée avec sa raison, et continue avec les suivantes", async () => {
@@ -201,18 +201,18 @@ describe("outbox", () => {
         : { kind: "done" },
     );
 
-    assert.deepEqual(report, { synced: 1, rejected: 1 });
+    expect(report).toEqual({ synced: 1, rejected: 1 });
     const left = await outbox.list("user-1");
-    assert.equal(left.length, 1);
-    assert.equal(left[0]?.state, "rejected");
-    assert.equal(left[0]?.error, "Un autre héros est déjà sur place.");
+    expect(left.length).toBe(1);
+    expect(left[0]?.state).toBe("rejected");
+    expect(left[0]?.error).toBe("Un autre héros est déjà sur place.");
 
     // Une commande refusée n'est jamais renvoyée toute seule ; l'utilisateur la ferme.
     const { sent, record } = sentLog();
     await outbox.flush("user-1", async (command) => (record(command), { kind: "done" }));
-    assert.equal(sent.length, 0);
+    expect(sent.length).toBe(0);
     await outbox.dismiss("command-1");
-    assert.deepEqual(await outbox.list("user-1"), []);
+    expect(await outbox.list("user-1")).toEqual([]);
   });
 
   it("s'arrête quand la session a expiré, sans rien refuser", async () => {
@@ -222,9 +222,8 @@ describe("outbox", () => {
 
     const report = await outbox.flush("user-1", async () => ({ kind: "unauthenticated" }));
 
-    assert.deepEqual(report, { synced: 0, rejected: 0, stoppedBy: "unauthenticated" });
-    assert.equal(
-      (await outbox.list("user-1")).filter((entry) => entry.state === "pending").length,
+    expect(report).toEqual({ synced: 0, rejected: 0, stoppedBy: "unauthenticated" });
+    expect((await outbox.list("user-1")).filter((entry) => entry.state === "pending").length).toBe(
       2,
     );
   });
@@ -237,15 +236,11 @@ describe("outbox", () => {
     const { sent, record } = sentLog();
     await outbox.flush("bob", async (command) => (record(command), { kind: "done" }));
 
-    assert.deepEqual(
-      sent.map((command) => command.path),
-      [`/interventions/${interventionId}/join`],
-    );
-    assert.equal(
+    expect(sent.map((command) => command.path)).toEqual([`/interventions/${interventionId}/join`]);
+    expect(
       (await outbox.list("alice")).length,
-      1,
       "la commande d'Alice attend sa prochaine connexion",
-    );
+    ).toBe(1);
   });
 
   it("ne lance pas deux envois à la fois", async () => {
@@ -260,8 +255,8 @@ describe("outbox", () => {
     const second = outbox.flush("user-1", slow);
     release();
 
-    assert.deepEqual(await first, await second);
-    assert.equal(calls, 1);
+    expect(await first).toEqual(await second);
+    expect(calls).toBe(1);
   });
 });
 
@@ -287,10 +282,10 @@ describe("sender", () => {
       return new Response("{}", { status: 200 });
     });
 
-    assert.deepEqual(outcome, { kind: "done" });
-    assert.equal(seen?.url, SYNC_ENDPOINT);
-    assert.equal(seen?.init.method, "POST");
-    assert.deepEqual(JSON.parse(String(seen?.init.body)), {
+    expect(outcome).toEqual({ kind: "done" });
+    expect(seen?.url).toBe(SYNC_ENDPOINT);
+    expect(seen?.init.method).toBe("POST");
+    expect(JSON.parse(String(seen?.init.body))).toEqual({
       commandId: "command-1",
       path: "/incidents",
       body: { title: "Titre" },
@@ -302,35 +297,31 @@ describe("sender", () => {
     const network = async (): Promise<Response> => {
       throw new TypeError("Failed to fetch");
     };
-    assert.deepEqual(await sendCommand(command, network), { kind: "retry" });
+    expect(await sendCommand(command, network)).toEqual({ kind: "retry" });
     for (const status of [429, 500, 502, 503, 504]) {
-      assert.deepEqual(
-        await sendCommand(command, answer(status)),
-        { kind: "retry" },
-        String(status),
-      );
+      expect(await sendCommand(command, answer(status)), String(status)).toEqual({ kind: "retry" });
     }
-    assert.deepEqual(await sendCommand(command, answer(401)), { kind: "unauthenticated" });
+    expect(await sendCommand(command, answer(401))).toEqual({ kind: "unauthenticated" });
 
     const refused = await sendCommand(
       command,
       answer(409, { code: "intervention_already_active" }),
     );
-    assert.deepEqual(refused, {
+    expect(refused).toEqual({
       kind: "rejected",
       message: "Un autre héros est déjà sur place : rejoignez son équipe.",
     });
   });
 
   it("tient un incident déjà enregistré pour livré : le même envoi avait déjà abouti", async () => {
-    assert.deepEqual(await sendCommand(command, answer(409, { code: "incident_already_exists" })), {
+    expect(await sendCommand(command, answer(409, { code: "incident_already_exists" }))).toEqual({
       kind: "done",
     });
   });
 
   it("explique un refus inconnu sans inventer", () => {
-    assert.equal(refusalMessage("code_inconnu", 409), "Refusée par le serveur (code_inconnu).");
-    assert.equal(refusalMessage(undefined, 418), "Refusée par le serveur (statut 418).");
+    expect(refusalMessage("code_inconnu", 409)).toBe("Refusée par le serveur (code_inconnu).");
+    expect(refusalMessage(undefined, 418)).toBe("Refusée par le serveur (statut 418).");
   });
 });
 
@@ -346,9 +337,9 @@ describe("forms", () => {
   it("lit une prise en charge comme la Server Action", async () => {
     const { heroForms } = await import("./forms.ts");
     const built = heroForms.takeCharge(fields({ id: incidentId }));
-    assert.ok(built.ok);
-    assert.equal(built.draft.path, `/incidents/${incidentId}/interventions`);
-    assert.match(built.message, /enregistrée sur cet appareil/);
+    ok(built.ok);
+    expect(built.draft.path).toBe(`/incidents/${incidentId}/interventions`);
+    expect(built.message).toMatch(/enregistrée sur cet appareil/);
   });
 
   it("traduit le résultat « réussi » ou « échoué » de l'interface en statut de l'API", async () => {
@@ -356,11 +347,11 @@ describe("forms", () => {
     const success = heroForms.finish(
       fields({ interventionId, outcome: "reussi", notes: "  Tout va bien " }),
     );
-    assert.ok(success.ok);
-    assert.deepEqual(success.draft.body, { status: "succeeded", notes: "Tout va bien" });
+    ok(success.ok);
+    expect(success.draft.body).toEqual({ status: "succeeded", notes: "Tout va bien" });
     const failure = heroForms.finish(fields({ interventionId, outcome: "echoue" }));
-    assert.ok(failure.ok);
-    assert.deepEqual(failure.draft.body, { status: "failed" });
+    ok(failure.ok);
+    expect(failure.draft.body).toEqual({ status: "failed" });
   });
 
   it("refuse la saisie que la Server Action refuserait, sans rien ranger", async () => {
@@ -373,27 +364,27 @@ describe("forms", () => {
       heroForms.finish(fields({ interventionId, outcome: "reussi", notes: "x".repeat(1001) })),
       heroForms.finish(fields({ interventionId, outcome: "mitigé" })),
     ]) {
-      assert.equal(built.ok, false);
-      assert.ok(!built.ok && built.state.status === "error");
+      expect(built.ok).toBe(false);
+      ok(!built.ok && built.state.status === "error");
     }
   });
 
   it("demande au moins un héros à inviter, et ne l'invite qu'une fois", async () => {
     const { heroForms } = await import("./forms.ts");
     const none = heroForms.invite(fields({ interventionId }));
-    assert.ok(!none.ok && none.state.message === "Choisissez au moins un super-héros.");
+    ok(!none.ok && none.state.message === "Choisissez au moins un super-héros.");
 
     const twice = heroForms.invite(fields({ interventionId, heroIds: [incidentId, incidentId] }));
-    assert.ok(twice.ok);
-    assert.deepEqual(twice.draft.body, { heroIds: [incidentId] });
+    ok(twice.ok);
+    expect(twice.draft.body).toEqual({ heroIds: [incidentId] });
   });
 
   it("traduit « Je viens » et « Je ne peux pas » en confirmation et refus", async () => {
     const { heroForms } = await import("./forms.ts");
     const accept = heroForms.respondToInvitation(fields({ interventionId, answer: "accept" }));
     const decline = heroForms.respondToInvitation(fields({ interventionId, answer: "decline" }));
-    assert.ok(accept.ok && decline.ok);
-    assert.ok(accept.draft.path.endsWith("/invitations/me/confirm"));
-    assert.ok(decline.draft.path.endsWith("/invitations/me/decline"));
+    ok(accept.ok && decline.ok);
+    ok(accept.draft.path.endsWith("/invitations/me/confirm"));
+    ok(decline.draft.path.endsWith("/invitations/me/decline"));
   });
 });

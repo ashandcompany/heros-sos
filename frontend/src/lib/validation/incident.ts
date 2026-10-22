@@ -37,21 +37,15 @@ export function readDeclarationValues(formData: FormData): DeclarationValues {
 /**
  * `occurredAt` est la valeur d'un champ datetime-local, convertie en ISO par le navigateur
  * (fuseau de l'utilisateur) dans le champ caché `occurredAtIso`.
- * `askReporterRole` : le formulaire demande « témoin ou victime » (inconnu de l'API).
  */
 export function validateDeclaration(
   values: DeclarationValues,
-  {
-    villainIds,
-    typeIds,
-    askReporterRole = true,
-  }: { villainIds: string[]; typeIds: number[]; askReporterRole?: boolean },
+  { villainIds, typeIds }: { villainIds: string[]; typeIds: number[] },
 ): Partial<Record<DeclarationField, string>> {
   return {
-    reporterRole:
-      !askReporterRole || reporterRoleOptions.some((option) => option.value === values.reporterRole)
-        ? undefined
-        : "Précisez si vous êtes témoin ou victime.",
+    reporterRole: reporterRoleOptions.some((option) => option.value === values.reporterRole)
+      ? undefined
+      : "Précisez si vous êtes témoin ou victime.",
     type: isKnownTypeId(values.type, typeIds) ? undefined : "Choisissez le type d'incident.",
     title: values.title
       ? length(values.title, 5, TITLE_MAX_LENGTH, "Le titre")

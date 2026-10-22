@@ -31,6 +31,17 @@ var counterChecks = []struct{ name, expected, stored string }{
 		stored: `SELECT villain_id, incidents FROM villain_stats WHERE incidents <> 0`,
 	},
 	{
+		// Colonne dénormalisée plutôt que compteur, mais même contrôle : la date de résolution d'un incident est la fin
+		// de sa dernière intervention (la plus récemment démarrée) s'il est réussi, recalculée ici depuis les
+		// interventions et non lue dans les triggers.
+		name: "incidents.resolved_at",
+		expected: `SELECT i.id, CASE WHEN i.status = 'succeeded' THEN (
+				SELECT n.ended_at FROM interventions n WHERE n.incident_id = i.id
+				ORDER BY n.started_at DESC NULLS LAST, n.id DESC LIMIT 1) END AS resolved_at
+			FROM incidents i`,
+		stored: `SELECT id, resolved_at FROM incidents`,
+	},
+	{
 		// Idem : les interventions réussies d'un incident approuvé, pas intervention_heroes.resolved_at.
 		name: "hero_stats",
 		expected: `SELECT ih.hero_id, count(*) AS interventions,

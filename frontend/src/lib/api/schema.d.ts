@@ -2682,6 +2682,20 @@ export interface components {
                 id: string;
                 alias: string;
             }[];
+            /**
+             * Format: date-time
+             * @description Fin de l'intervention réussie ; `null` si l'incident n'est pas résolu.
+             */
+            resolvedAt: string | null;
+            /**
+             * @description Héros qui mène la dernière intervention (en cours ou terminée) ; `null` sans intervention
+             *     ou si son profil n'est plus public. Mêmes règles que l'historique d'un vilain.
+             */
+            lead: {
+                /** Format: uuid */
+                id: string;
+                alias: string;
+            } | null;
             /** Format: date-time */
             createdAt: string;
         };
@@ -5669,6 +5683,12 @@ export interface operations {
                 heroId?: string[];
                 /** @description Incidents liés à au moins un de ces vilains. */
                 villainId?: string[];
+                /**
+                 * @description Ordre : les plus récemment déclarés d'abord (`-createdAt`, par défaut), ou les plus
+                 *     récemment résolus d'abord (`-resolvedAt`, les incidents non résolus en dernier). Le tri par résolution se
+                 *     pagine par `offset` : il n'a pas de `nextCursor`, et un `cursor` avec lui est refusé (422).
+                 */
+                sort?: "-createdAt" | "-resolvedAt";
                 /** @description Nombre d'éléments par page (1 à 100, 20 par défaut). */
                 limit?: components["parameters"]["Limit"];
                 /** @description Nombre d'éléments à sauter. */
@@ -5677,7 +5697,8 @@ export interface operations {
                  * @description Position de la page à lire, telle que renvoyée par `nextCursor` de la page précédente (valeur opaque,
                  *     à renvoyer telle quelle). Elle remplace `offset` (les deux ensemble sont refusés) et coûte autant à la
                  *     millionième page qu'à la première ; elle ne saute ni ne répète d'incident quand de nouveaux incidents
-                 *     arrivent entre deux pages.
+                 *     arrivent entre deux pages. C'est la position dans l'ordre par date de déclaration : elle ne se combine pas
+                 *     avec `sort=-resolvedAt`.
                  */
                 cursor?: string;
             };

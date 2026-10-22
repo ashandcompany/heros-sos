@@ -2,13 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { routes } from "@/lib/routes";
-import {
-  declareIncident,
-  getIncidentTypes,
-  getVillains,
-  incidentFeatures,
-  rateIntervention,
-} from "@/lib/api";
+import { declareIncident, getIncidentTypes, getVillains, rateIntervention } from "@/lib/api";
 import {
   requireAdminSession,
   requireCitizenSession,
@@ -62,7 +56,6 @@ async function submitDeclaration(
   const fieldErrors = validateDeclaration(validated, {
     villainIds: villains.map(({ id }) => id),
     typeIds: types.map(({ id }) => id),
-    askReporterRole: incidentFeatures.reporterRole,
   });
 
   if (hasFieldErrors(fieldErrors)) return { status: "error", fieldErrors, values };

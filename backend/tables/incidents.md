@@ -43,16 +43,18 @@ Table de référence (§1.3, §5.8.1).
 | `latitude`, `longitude` | numeric(9,6) | Facultatifs, pour une éventuelle recherche de proximité |
 | `occurred_at` | timestamptz | |
 | `created_at`, `updated_at` | timestamptz | |
+| `resolved_at` | timestamptz | **Dénormalisée, remplie par trigger** (migration `add_incident_resolved_at`, jamais par le code) : la fin de la dernière intervention (la plus récemment démarrée) si l'incident est réussi, `NULL` sinon. Sert au tri `sort=-resolvedAt` de `GET /incidents` (« derniers incidents résolus », page d'accueil), qui devait sinon joindre la dernière intervention de chaque incident de la table. |
 
 Index :
 - `(created_at DESC, id DESC)` : la liste sans filtre, les plus récents d'abord (le tri de `GET /incidents`) ;
 - `(status, created_at DESC, id DESC)` : la liste filtrée par statut ;
 - `(created_at DESC, id DESC)` et `(status, created_at DESC, id DESC)`, **partiels** `WHERE moderation = 'approved'` : les listes du public et des héros, qui ne voient que les incidents approuvés (la requête doit écrire `'approved'` en toutes lettres pour qu'ils servent) ;
+- `(resolved_at DESC NULLS LAST, created_at DESC, id DESC)`, **partiel** `WHERE moderation = 'approved'` (migration `add_incident_resolved_index`) : les derniers incidents résolus du public et des héros, lus dans l'ordre de l'index ;
 - `(reporter_id, created_at DESC, id DESC)` : « mes incidents » (une clé étrangère ne crée pas d'index dans PostgreSQL) ;
 - `(status, priority, created_at DESC)` : l'index d'origine des listes ;
 - `(lower(city), postal_code, lower(street))` : les doublons.
 
-Les quatre premiers sont posés par la migration `add_incident_perf_indexes`, après mesure sur 5 millions d'incidents (voir [Performance et synchronisation](../stack/performance-et-synchronisation.md)). Un doublon se supprime réellement (§4.1.1) et l'action est tracée dans `audit_logs`.
+Les cinq premiers sont posés par les migrations `add_incident_perf_indexes` et `add_incident_resolved_index`, après mesure sur 5 millions d'incidents (le dernier, sur 1 million) (voir [Performance et synchronisation](../stack/performance-et-synchronisation.md)). Un doublon se supprime réellement (§4.1.1) et l'action est tracée dans `audit_logs`.
 
 La décision de modération et les corrections de données sont réservées aux modérateurs et tracées dans `audit_logs`. La correction synchronise le statut et le héros principal avec l'intervention correspondante.
 

@@ -66,6 +66,11 @@ func TestReadQueriesUseTheirIndexes(t *testing.T) {
 	globalSQL, globalArgs := listSQL(ListFilter{})
 	statusSQL, statusArgs := listSQL(ListFilter{Statuses: []Status{StatusReported, StatusInProgress}})
 	reporterSQL, reporterArgs := listSQL(ListFilter{ReporterID: &reporterID})
+	// Ce que voient le public et les héros (les incidents approuvés) et les deux listes du tableau de bord.
+	publicSQL, publicArgs := listSQL(ListFilter{ApprovedOnly: true})
+	publicStatusSQL, publicStatusArgs := listSQL(ListFilter{ApprovedOnly: true, Statuses: []Status{StatusReported, StatusInProgress}})
+	recentSQL, recentArgs := listSQL(ListFilter{ApprovedOnly: true, Statuses: []Status{StatusReported, StatusInProgress, StatusFailed}})
+	ongoingSQL, ongoingArgs := listSQL(ListFilter{ApprovedOnly: true, ActiveHeroID: &heroID})
 
 	for _, tc := range []struct {
 		name  string
@@ -83,6 +88,11 @@ func TestReadQueriesUseTheirIndexes(t *testing.T) {
 	}{
 		{"liste sans filtre", globalSQL, globalArgs, "incidents_created_idx", []string{"incidents"}, true},
 		{"liste par statut", statusSQL, statusArgs, "", []string{"incidents"}, false},
+		{"liste publique (approuvés)", publicSQL, publicArgs, "incidents_approved_created_idx", []string{"incidents"}, true},
+		{"liste publique par statut", publicStatusSQL, publicStatusArgs, "", []string{"incidents"}, false},
+		{"derniers incidents non résolus (tableau de bord)", recentSQL, recentArgs, "", []string{"incidents"}, false},
+		{"incident en cours d'un héros (tableau de bord)", ongoingSQL, ongoingArgs, "",
+			[]string{"intervention_heroes", "interventions"}, false},
 		{"mes incidents", reporterSQL, reporterArgs, "incidents_reporter_created_idx", []string{"incidents"}, false},
 		{"historique d'un héros", positional(resolvedByHeroSQL), []any{heroID, DefaultListLimitForPlans, 0},
 			"intervention_heroes_resolved_idx", []string{"intervention_heroes", "interventions"}, false},

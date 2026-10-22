@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { formatDateTime } from "@/lib/format";
 import { heroIncidentRoute } from "@/lib/routes";
-import type { Incident, InterventionTeam } from "@/types";
+import type { DashboardIncident } from "@/types";
 import { PriorityBadge, StatusBadge } from "./IncidentBadges";
 
 /**
@@ -9,8 +9,8 @@ import { PriorityBadge, StatusBadge } from "./IncidentBadges";
  * Le titre est un lien vers le détail ; la carte entière est cliquable.
  */
 interface HeroIncidentCardProps {
-  incident: Incident & { team?: InterventionTeam | null };
-  /** Tableau de bord (mocké) : héros connecté, quand l'incident n'embarque pas son équipe. */
+  incident: DashboardIncident;
+  /** Tableau de bord sans API (mocks) : héros connecté, quand l'incident n'embarque pas son équipe. */
   heroId?: string;
 }
 

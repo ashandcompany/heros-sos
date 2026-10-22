@@ -216,6 +216,28 @@ paths:
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/InternalError" }
 
+  /hero/dashboard:
+    get:
+      tags: [Super-héros]
+      summary: Tableau de bord du héros connecté
+      description: >-
+        Réservé aux super-héros. Statistiques de toute la plateforme (interventions terminées, incidents par type,
+        citoyens secourus, vilains identifiés et emprisonnés), statistiques personnelles du héros (interventions
+        réussies et échouées, avis publiés, films, vilains les plus affrontés), l'incident sur lequel il intervient
+        en ce moment et les derniers incidents non résolus. Calculé à la demande, en lecture seule. Seuls les incidents
+        approuvés par la modération sont comptés et listés, comme dans `GET /incidents` pour un héros.
+      operationId: getHeroDashboard
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Le tableau de bord.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HeroDashboard" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
   /hero/reviews:
     get:
       tags: [Réputation]
@@ -2282,8 +2304,10 @@ paths:
       tags: [Incidents]
       summary: Liste publique des incidents
       description: |
-        Accessible sans session. Liste tous les incidents (résolus ou non) sans identité civile du
-        déclarant. Les valeurs d'un même filtre sont combinées par OU, les filtres entre eux par ET.
+        Accessible sans session. Ne renvoie que les incidents approuvés, sans identité civile du
+        déclarant. Un déclarant connecté peut consulter ses propres incidents quel que soit leur
+        statut de modération; un modérateur peut tous les consulter. Les valeurs d'un même filtre
+        sont combinées par OU, les filtres entre eux par ET.
         Les filtres multiples s'écrivent avec un paramètre répété (?status=a&status=b)
         (20 identifiants au maximum pour heroId et villainId).
       operationId: listIncidents
@@ -2343,7 +2367,8 @@ paths:
       description: |
         Tout utilisateur connecté peut déclarer un incident classé par un type existant. Les vilains
         sont facultatifs et plusieurs vilains peuvent être associés. L'adresse est conservée en clair
-        pour permettre la détection des doublons prévue par le schéma.
+        pour permettre la détection des doublons prévue par le schéma. Les déclarations de citoyens et
+        de héros sont en attente de modération; celles des modérateurs sont approuvées d'office.
       operationId: createIncident
       security: [{ sessionCookie: [], csrfToken: [] }]
       parameters:
@@ -2378,7 +2403,10 @@ paths:
     get:
       tags: [Incidents]
       summary: Détail public d'un incident
-      description: Accessible sans session.
+      description: |
+        Accessible sans session pour les incidents approuvés. Le déclarant connecté peut aussi
+        consulter son propre signalement quel que soit son statut de modération; les modérateurs
+        peuvent consulter tous les incidents.
       operationId: getIncident
       parameters:
         - { $ref: "#/components/parameters/Id" }
@@ -2389,6 +2417,97 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Incident" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/incidents/{id}/moderation:
+    put:
+      tags: [Incidents]
+      summary: Modérer un incident
+      description: Réservé aux modérateurs. Approuve ou rejette le signalement.
+      operationId: moderateIncident
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IncidentModerationPayload" }
+      responses:
+        "204": { description: Décision enregistrée. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/incidents/{id}:
+    patch:
+      tags: [Incidents]
+      summary: Corriger un incident
+      description: |
+        Réservé aux modérateurs. Remplace les informations éditables et synchronise le héros et
+        le statut de l'intervention. Les coordonnées géographiques sont fournies par le client.
+      operationId: updateIncident
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IncidentUpdatePayload" }
+      responses:
+        "200":
+          description: Incident corrigé.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Incident" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: L'intervention ou le héros ne peut pas être synchronisé.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /hero/incidents/{id}/priority:
+    put:
+      tags: [Incidents]
+      summary: Modifier la priorité d'un incident
+      description: Réservé aux héros. Disponible uniquement pour un incident approuvé qui n'a pas d'intervention active.
+      operationId: setIncidentPriority
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IncidentPriorityPayload" }
+      responses:
+        "204": { description: Priorité modifiée. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: L'incident n'est pas disponible pour une modification de priorité.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   /heroes/{heroId}/incidents:
@@ -2444,12 +2563,15 @@ paths:
       summary: Flux temps réel des événements (SSE)
       description: |
         Flux Server-Sent Events : la réponse reste ouverte et le serveur y écrit chaque événement du journal dès
-        qu'il est enregistré (déclaration d'un incident, démarrage d'une intervention, résultat…). Chaque message
-        porte `id` (numéro de l'événement), `event` (type, par exemple `incident.declared`) et `data` (JSON : `seq`,
-        `type`, `aggregateType`, `aggregateId`, `incidentId`, `version`, `actorId`, `payload`, `recordedAt`).
-        Le contenu ne comporte que des identifiants et des états.
+        qu'il est enregistré (déclaration, modération, correction ou priorité d'un incident, démarrage d'une
+        intervention, résultat…). Chaque message porte `id` (numéro de l'événement), `event` (type, par exemple
+        `incident.declared`) et `data` (JSON : `seq`, `type`, `aggregateType`, `aggregateId`, `incidentId`, `version`,
+        `actorId`, `payload`, `recordedAt`). Le contenu ne comporte que des identifiants et des états.
 
-        Un modérateur ou un héros reçoit tous les événements ; un citoyen, ceux des incidents qu'il a déclarés.
+        Visibilité : un modérateur reçoit tout ; un héros ne reçoit que les événements des incidents approuvés par la
+        modération (comme `GET /incidents`) ; un citoyen ne reçoit que ceux de ses propres incidents, quel que soit
+        leur état de modération.
+
         L'auteur d'une déclaration n'est révélé qu'à lui et aux modérateurs.
 
         À la reconnexion, le navigateur renvoie l'en-tête `Last-Event-ID` : le serveur rejoue d'abord les événements
@@ -4505,6 +4627,11 @@ components:
           maxLength: 80
           description: Titre court, affiché dans les listes.
         description: { type: string }
+        reporterRole:
+          type: string
+          enum: [witness, victim]
+          nullable: true
+          description: Rôle du déclarant au moment des faits.
         citizensRescued:
           { type: integer, format: int32, minimum: 0, default: 0 }
         location:
@@ -4534,6 +4661,7 @@ components:
           description,
           status,
           priority,
+          moderation,
           citizensRescued,
           location,
           villainIds,
@@ -4550,7 +4678,12 @@ components:
         description: { type: string }
         status:
           { type: string, enum: [reported, in_progress, succeeded, failed] }
-        priority: { type: string, enum: [high, normal, low] }
+        priority: { type: string, enum: [critical, high, normal, low] }
+        moderation: { type: string, enum: [pending, approved, rejected] }
+        reporterRole:
+          type: string
+          enum: [witness, victim]
+          nullable: true
         citizensRescued: { type: integer, format: int32 }
         location:
           type: object
@@ -4577,6 +4710,41 @@ components:
               id: { type: string, format: uuid }
               alias: { type: string }
         createdAt: { type: string, format: date-time }
+
+    IncidentModerationPayload:
+      type: object
+      required: [decision]
+      additionalProperties: false
+      properties:
+        decision: { type: string, enum: [approved, rejected] }
+
+    IncidentPriorityPayload:
+      type: object
+      required: [priority]
+      additionalProperties: false
+      properties:
+        priority: { type: string, enum: [critical, high, normal, low] }
+
+    IncidentUpdatePayload:
+      type: object
+      required: [typeId, title, description, status, location, villainId, heroId]
+      additionalProperties: false
+      properties:
+        typeId: { type: integer, format: int32 }
+        title: { type: string, maxLength: 80 }
+        description: { type: string }
+        status: { type: string, enum: [reported, in_progress, succeeded, failed] }
+        location:
+          type: object
+          required: [address, city, latitude, longitude]
+          additionalProperties: false
+          properties:
+            address: { type: string }
+            city: { type: string }
+            latitude: { type: number, format: double, nullable: true }
+            longitude: { type: number, format: double, nullable: true }
+        villainId: { type: string, format: uuid, nullable: true }
+        heroId: { type: string, format: uuid, nullable: true }
 
     IncidentPage:
       type: object
@@ -4728,6 +4896,94 @@ components:
         total: { type: integer }
         limit: { type: integer }
         offset: { type: integer }
+
+    HeroDashboard:
+      type: object
+      required: [global, personal, myOngoingIncidents, recentIncidents]
+      properties:
+        global:
+          type: object
+          description: Statistiques de toute la plateforme.
+          required: [interventions, incidentsByType, rescuedCitizens, villainsIdentified, villainsImprisoned]
+          properties:
+            interventions:
+              type: integer
+              minimum: 0
+              description: "Interventions terminées (réussies ou échouées) : une par équipe, pas une par héros."
+            incidentsByType:
+              type: array
+              description: Tous les types du catalogue, y compris ceux sans incident, du plus fréquent au moins fréquent.
+              items: { $ref: "#/components/schemas/HeroDashboardTypeCount" }
+            rescuedCitizens:
+              type: integer
+              minimum: 0
+              description: "Citoyens secourus : somme des incidents réussis, une seule fois par incident."
+            villainsIdentified: { type: integer, minimum: 0, description: "Vilains connus de la plateforme." }
+            villainsImprisoned: { type: integer, minimum: 0, description: "Vilains dont le statut est `emprisonne`." }
+        personal:
+          type: object
+          description: Statistiques du héros connecté.
+          required:
+            [
+              interventions,
+              successfulInterventions,
+              failedInterventions,
+              averageRating,
+              ratingsCount,
+              videos,
+              publishedVideos,
+              mainEnemies,
+            ]
+          properties:
+            interventions:
+              type: integer
+              minimum: 0
+              description: Interventions terminées auxquelles le héros a participé (participation confirmée).
+            successfulInterventions: { type: integer, minimum: 0 }
+            failedInterventions: { type: integer, minimum: 0 }
+            averageRating:
+              type: number
+              format: double
+              minimum: 0
+              maximum: 5
+              description: Moyenne des avis publiés; 0 sans avis.
+            ratingsCount: { type: integer, minimum: 0, description: "Nombre d'avis publiés." }
+            videos: { type: integer, minimum: 0, description: "Films liés au héros, tous statuts de modération confondus." }
+            publishedVideos: { type: integer, minimum: 0, description: Films approuvés par la modération. }
+            mainEnemies:
+              type: array
+              maxItems: 3
+              description: Vilains les plus souvent affrontés, du plus fréquent au moins fréquent.
+              items: { $ref: "#/components/schemas/HeroDashboardEnemy" }
+        myOngoingIncidents:
+          type: array
+          description: Incidents sur lesquels le héros intervient en ce moment (au plus un en pratique).
+          items: { $ref: "#/components/schemas/Incident" }
+        recentIncidents:
+          type: array
+          maxItems: 5
+          description: "Derniers incidents non résolus (signalés, en cours ou échoués : un incident échoué peut être repris), tous héros confondus, du plus récent au plus ancien."
+          items: { $ref: "#/components/schemas/Incident" }
+
+    HeroDashboardTypeCount:
+      type: object
+      required: [type, count]
+      properties:
+        type:
+          type: object
+          required: [code, label]
+          properties:
+            code: { type: string }
+            label: { type: string }
+        count: { type: integer, minimum: 0 }
+
+    HeroDashboardEnemy:
+      type: object
+      required: [id, alias, encounters]
+      properties:
+        id: { type: string, format: uuid }
+        alias: { type: string }
+        encounters: { type: integer, minimum: 1, description: "Nombre d'incidents où le héros a affronté ce vilain." }
 
     HeroReputation:
       type: object

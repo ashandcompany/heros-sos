@@ -26,6 +26,7 @@ import (
 	"github.com/ashandcompany/heros-sos/backend/internal/events"
 	"github.com/ashandcompany/heros-sos/backend/internal/film"
 	"github.com/ashandcompany/heros-sos/backend/internal/hero"
+	"github.com/ashandcompany/heros-sos/backend/internal/herodashboard"
 	"github.com/ashandcompany/heros-sos/backend/internal/httpx"
 	"github.com/ashandcompany/heros-sos/backend/internal/idempotency"
 	"github.com/ashandcompany/heros-sos/backend/internal/incident"
@@ -67,6 +68,7 @@ type components struct {
 	authMiddleware      *auth.Middleware
 	authHandler         *auth.Handler
 	heroHandler         *hero.Handler
+	dashboardHandler    *herodashboard.Handler
 	moderationHandler   *moderation.Handler
 	incidentHandler     *incident.Handler
 	interventionHandler *intervention.Handler
@@ -209,13 +211,16 @@ func NewWithDB(cfg config.Config, logger *slog.Logger, db *gorm.DB, opts ...Opti
 		interventiontype.NewService(types, c.audit, c.tx, c.clock), logger, cfg.HTTP)
 	c.villainHandler = villain.NewHandler(
 		villain.NewService(villains, c.audit, c.tx, c.clock, types), logger, cfg.HTTP)
-	c.incidentHandler = incident.NewHandler(incident.HandlerDeps{
-		Service: incident.NewService(incident.ServiceDeps{
-			Repo: incident.NewRepository(db), Types: types, Villains: villains, Users: c.users,
-			Notifier: mailService, Audit: c.audit, Events: c.events, Tx: c.tx, Clock: c.clock, Logger: logger,
-		}),
-		Logger: logger, HTTP: cfg.HTTP, Limits: cfg.Security.RateLimits, Clock: c.clock,
+	incidentService := incident.NewService(incident.ServiceDeps{
+		Repo: incident.NewRepository(db), Types: types, Villains: villains, Users: c.users,
+		Notifier: mailService, Audit: c.audit, Events: c.events, Tx: c.tx, Clock: c.clock, Logger: logger,
 	})
+	c.incidentHandler = incident.NewHandler(incident.HandlerDeps{
+		Service: incidentService,
+		Logger:  logger, HTTP: cfg.HTTP, Limits: cfg.Security.RateLimits, Clock: c.clock,
+	})
+	c.dashboardHandler = herodashboard.NewHandler(
+		herodashboard.NewService(herodashboard.NewRepository(db), incidentService), logger)
 	c.interventionHandler = intervention.NewHandler(intervention.NewService(intervention.ServiceDeps{
 		Repo: intervention.NewRepository(db), Users: c.users, Heroes: heroProfiles,
 		Audit: c.audit, Events: c.events, Tx: c.tx, Clock: c.clock, App: cfg.App, Notifier: mailService, Logger: logger,

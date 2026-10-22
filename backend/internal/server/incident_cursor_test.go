@@ -115,6 +115,7 @@ func TestIncidentTotalsFollowTheStatusFilter(t *testing.T) {
 		if n == 0 {
 			firstID = created.ID
 		}
+		e.moderateIncident(moderator, created.ID, "approved")
 	}
 	if got := hero.post("/incidents/"+firstID+"/interventions", nil); got.status != http.StatusCreated {
 		t.Fatalf("démarrage : %d %s", got.status, got.body)
@@ -130,6 +131,21 @@ func TestIncidentTotalsFollowTheStatusFilter(t *testing.T) {
 	} {
 		if got := e.incidentPage(hero, query+"&limit=1").Total; got != want {
 			t.Errorf("total de %q = %d, attendu %d", query, got, want)
+		}
+	}
+
+	// Un incident en attente de modération : son auteur et un modérateur le comptent, un héros non.
+	if got := reporter.post("/incidents", validIncident(typeID)); got.status != http.StatusCreated {
+		t.Fatalf("déclaration : %d %s", got.status, got.body)
+	}
+	for name, want := range map[string]struct {
+		viewer *actor
+		total  int
+	}{
+		"héros": {hero, 3}, "auteur": {reporter, 4}, "modérateur": {moderator, 4},
+	} {
+		if got := e.incidentPage(want.viewer, "&limit=1").Total; got != want.total {
+			t.Errorf("total vu par le %s = %d, attendu %d", name, got, want.total)
 		}
 	}
 }

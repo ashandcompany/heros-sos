@@ -50,13 +50,17 @@ type eventView struct {
 	RecordedAt    time.Time      `json:"recordedAt"`
 }
 
-// visibleTo dit si le lecteur reçoit l'événement, et sous quelle forme. Les modérateurs et les héros voient tous
-// les événements (les incidents sont publics, ainsi que les héros). Un citoyen ne voit que ceux des incidents
-// qu'il a déclarés. L'auteur de la déclaration n'est jamais révélé à un autre que lui et les modérateurs :
-// l'identité du déclarant n'est pas publique.
+// visibleTo dit si le lecteur reçoit l'événement, et sous quelle forme. Les modérateurs voient tous les événements.
+// Un héros voit ceux des incidents approuvés par la modération, comme il ne voit qu'eux dans GET /incidents : un
+// incident en attente ou rejeté ne se devine pas dans le flux (ville, vilains liés). Un citoyen ne voit que ceux
+// des incidents qu'il a déclarés, quel que soit leur état. L'auteur de la déclaration n'est jamais révélé à un
+// autre que lui et les modérateurs : l'identité du déclarant n'est pas publique.
 func visibleTo(principal auth.Principal, event StreamEvent) (eventView, bool) {
 	isReporter := event.ReporterID != nil && *event.ReporterID == principal.UserID
 	if principal.Role == user.RoleCitizen && !isReporter {
+		return eventView{}, false
+	}
+	if principal.Role != user.RoleModerator && !isReporter && !event.Approved {
 		return eventView{}, false
 	}
 	view := eventView{
@@ -101,6 +105,20 @@ func (h *Handler) Stream(w http.ResponseWriter, r *http.Request) {
 	}
 	defer subscription.Close()
 
+	// Première connexion : seuls comptent les événements qui suivent. Ceux déjà enregistrés mais pas encore remis par
+	// la lecture continue sont donc écartés, par leur numéro. Ce point de départ est fixé AVANT d'annoncer que le flux
+	// est ouvert : un client qui a reçu les premiers octets est ainsi sûr de recevoir tout ce qui suit, et un événement
+	// enregistré juste après l'ouverture n'est jamais pris pour un événement déjà vu.
+	sent, resuming := lastEventID(r)
+	if !resuming {
+		var err error
+		if sent, err = h.store.LatestSeq(r.Context()); err != nil {
+			h.logger.ErrorContext(r.Context(), "flux temps réel : dernier événement illisible", "error", err)
+			httpx.WriteError(w, httpx.NewError(http.StatusInternalServerError, httpx.CodeInternal, "Le flux est indisponible."))
+			return
+		}
+	}
+
 	header := w.Header()
 	header.Set("Content-Type", "text/event-stream")
 	header.Set("Cache-Control", "no-cache, no-transform")
@@ -113,20 +131,11 @@ func (h *Handler) Stream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Rattrapage depuis le journal, APRÈS l'abonnement : ce qui arrive pendant le rattrapage attend dans la file du
-	// flux, et les numéros déjà envoyés sont écartés ensuite.
-	sent, resuming := lastEventID(r)
+	// Reprise : rattrapage depuis le journal, APRÈS l'abonnement : ce qui arrive pendant le rattrapage attend dans la
+	// file du flux, et les numéros déjà envoyés sont écartés ensuite.
 	if resuming {
 		var ok bool
 		if sent, ok = h.catchUp(r.Context(), principal, stream, sent); !ok {
-			return
-		}
-	} else {
-		// Première connexion : seuls comptent les événements qui suivent. Ceux déjà enregistrés mais pas encore
-		// remis par la lecture continue sont donc écartés, par leur numéro.
-		var err error
-		if sent, err = h.store.LatestSeq(r.Context()); err != nil {
-			h.logger.ErrorContext(r.Context(), "flux temps réel : dernier événement illisible", "error", err)
 			return
 		}
 	}

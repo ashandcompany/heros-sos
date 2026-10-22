@@ -1,6 +1,6 @@
 # Performance, synchronisation hors ligne et journalisation
 
-**Statut : implémenté et mesuré, sauf ce qui est listé dans [Ce qui n'a pas été vérifié](#4-ce-qui-na-pas-été-vérifié).** Établi le 22/10/2026 sur `develop` (commit `e9292b4`), avec une base PostgreSQL 18 de 5 millions d'incidents.
+**Statut : implémenté et mesuré, sauf ce qui est listé dans [Ce qui n'a pas été vérifié](#4-ce-qui-na-pas-été-vérifié).** Établi le 22/10/2026 sur `develop` (commit `e9292b4`), avec une base PostgreSQL 18 de 5 millions d'incidents. Remis à niveau le même jour sur `develop` après la modération des incidents et le tableau de bord des héros (commit `0dbabc0`) : voir [Mise à jour après la modération des incidents](#mise-à-jour-après-la-modération-des-incidents).
 
 ## Le défi
 
@@ -27,6 +27,8 @@ Mesurés avec `make perf` (commande `cmd/loadtest`) sur la même base de 5 milli
 | Liste des héros | 6,12 s | 3,3 ms |
 | Liste des vilains | 710,7 ms | 2,9 ms |
 
+Ces mesures à 5 millions datent d'avant la modération des incidents : celles faites ensuite sur le code actuel (1 million d'incidents, faute de place sur le disque) sont dans la section suivante.
+
 Le « 12 s » du sujet n'est pas reproduit à l'identique : la base de mesure est locale, sur un disque rapide et avec un cache chaud. Les ordres de grandeur sont les mêmes (jusqu'à 9 s au p95), et c'est le rapport avant/après qui compte. Un clone neuf avec `make up` donnera des temps plus élevés des deux côtés (PostgreSQL non réglé, disque de la machine virtuelle de Docker).
 
 Ce que `pg_stat_statements` a désigné avant correction, une requête à froid :
@@ -39,6 +41,42 @@ Ce que `pg_stat_statements` a désigné avant correction, une requête à froid 
 | Total de l'historique d'un héros | 675 ms |
 | Liste des vilains (agrégat sur `incident_villains`) | 501 ms |
 | `COUNT(*)` des incidents, sans filtre | 230 ms |
+
+## Mise à jour après la modération des incidents
+
+`develop` a ajouté, après la première version de ce travail, la **modération des incidents** (`incidents.moderation` : `pending`, `approved`, `rejected`, `pending` par défaut ; le public et les héros ne voient que les incidents `approved`) et le **tableau de bord des héros** (`GET /hero/dashboard`). Les deux touchent à ce qui est décrit ici ; la fusion a demandé plus que résoudre des conflits.
+
+| Point | Ce qui a changé |
+|---|---|
+| Numéros de migration | Celle de `develop` (`20261022130000_extend_incident_moderation`) prenait le numéro de la première des nôtres : les cinq migrations de ce travail sont renumérotées `20261022140000` à `144000` |
+| Compteurs | `incident_stats` garde la **modération** comme dimension (listes publiques : ligne `approved` ; modérateur : toutes ; « mes incidents » : `reporter_stats`, tous états). `villain_stats` ne compte que les liens vers un incident approuvé, et `hero_stats.resolved` que les interventions réussies d'un incident approuvé, comme leurs historiques publics |
+| Colonnes dénormalisées | Nouvelle `incident_villains.incident_approved`. `intervention_heroes.resolved_at` n'est renseignée que pour un incident approuvé. Un trigger (`incidents_sync_moderation`) répercute une décision de modération sur ces colonnes, donc sur les compteurs, **dans les deux sens** (rejet d'un incident déjà résolu, puis ré-approbation) |
+| Index | Index **partiels** `WHERE moderation = 'approved'` pour les listes publiques, et `incident_villains_villain_idx` partiel sur `incident_approved`. Ils ne servent que si la requête écrit `'approved'` en toutes lettres (un paramètre l'en empêcherait) |
+| Journal d'événements | Les trois routes ajoutées par `develop` écrivent leur événement dans la même transaction : `incident.moderated`, `incident.corrected` (le résultat d'une correction de statut, que `cmd/replay` relit comme dernier statut de l'incident) et `incident.priority_changed` |
+| Flux temps réel | Un incident non approuvé **ne se devinait pas** dans `GET /incidents`, mais sa déclaration (ville, vilains liés) passait dans le flux d'un héros. Corrigé : un héros ne reçoit que les événements d'un incident **actuellement approuvé** ; l'auteur et les modérateurs voient tout |
+| Tableau de bord | Ses agrégats parcouraient toute la table des incidents : **p95 de 7,4 s** sur 1 million d'incidents avant correction. Les incidents par type et les citoyens secourus se lisent maintenant dans `incident_stats` ; les statistiques (globales et par héros) passent par un cache qui ne fait jamais attendre un recalcul (voir ci-dessous) |
+| Jeux de données | `cmd/seed` écrit `moderation = 'approved'` (sans cela, après le seed, aucun incident n'était visible des héros). `cmd/seedperf` aussi, avec un peu d'incidents « signalés » en attente ou rejetés pour exercer les filtres |
+
+**Cache des statistiques du tableau de bord** (`herodashboard/cache.go`, `HEROS_DASHBOARD_STATS_TTL`, 30 s par défaut, 0 désactive). Une valeur plus jeune que le délai est servie telle quelle ; une valeur plus vieille est **servie quand même, tout de suite**, pendant qu'une nouvelle se calcule en arrière-plan (un calcul à la fois par clé) ; seul le premier appel d'une clé calcule en direct, et les appels simultanés partagent ce calcul. Les deux listes (incident en cours du héros, derniers incidents non résolus) ne sont **pas** mises en cache : elles se lisent dans des index et restent à jour. Conséquence assumée : les statistiques peuvent retarder de 30 s sur un héros qui vient de clore une intervention. Un compteur exact par trigger aurait demandé, pour les « principaux ennemis » (comptage distinct par héros et par vilain, qui dépend de la modération et des vilains liés), une mécanique disproportionnée pour une page de statistiques.
+
+Mesures sur le code actuel, `make seed-perf` avec 1 000 038 incidents (999 640 approuvés, 182 en attente, 216 rejetés), base de 1,6 Go, PostgreSQL 18 local, 16 clients en parallèle pendant 10 s par scénario, aucune erreur :
+
+| Scénario | p50 | p95 |
+|---|---|---|
+| Liste des incidents (public, approuvés) | 2,4 ms | 5,1 ms |
+| Liste des incidents ouverts | 2,3 ms | 4,5 ms |
+| Mes incidents (compte héros) | 0,8 ms | 2,5 ms |
+| **Tableau de bord d'un héros** | 2,3 ms | 5,7 ms |
+| Historique d'un héros | 2,2 ms | 7,7 ms |
+| Fiche d'un héros | 0,5 ms | 1,3 ms |
+| Historique d'un vilain | 2,1 ms | 5,3 ms |
+| Fiche d'un vilain | 0,6 ms | 1,6 ms |
+| Liste des héros | 0,9 ms | 3,3 ms |
+| Liste des vilains | 1,6 ms | 3,5 ms |
+
+Le tableau de bord, avant correction, sur le même jeu (8 clients, il a fallu attendre 16 réponses) : p50 de 3,96 s et p95 de 7,44 s. Les compteurs, recomptés ensuite sur ces 1 million de lignes, égalent un comptage complet des tables (0 écart, y compris pour les colonnes dénormalisées).
+
+**Limites de ces mesures** : 1 million d'incidents et non 5 (le disque de la machine ne laissait pas la place d'en charger davantage) ; le premier appel d'un héros après le démarrage calcule en direct (de l'ordre de la seconde à ce volume, davantage à 5 millions : `COUNT` des interventions terminées et jointures de ses interventions) ; le nombre d'interventions terminées n'a pas de compteur.
 
 ## Décisions retenues
 
@@ -97,15 +135,15 @@ Depuis la fusion de la PR #37, `GET /incidents` renvoie **tous les statuts** sau
 
 ### P1 : performance
 
-Trois migrations, dans l'ordre :
+Trois migrations, dans l'ordre (`20261022140000` à `142000`, après celle de la modération) :
 
-1. `denormalize_history_columns` : `incident_villains.incident_created_at` et `intervention_heroes.resolved_at` (date de la résolution réussie, pour un héros confirmé). Des triggers les remplissent à l'insertion et suivent le changement de statut d'une intervention : aucun chemin d'écriture ne peut les oublier.
-2. `create_read_counters` : `incident_stats` (par statut et type), `reporter_stats` (par déclarant et statut), `villain_stats` et `hero_stats` (interventions et résolutions de chaque héros). Tenus à jour par des **triggers de niveau instruction** (`REFERENCING … TABLE`), et recalculables par `rebuild_read_counters()`, qui sert aussi au rattrapage initial. `TRUNCATE` les vide avec les tables.
+1. `denormalize_history_columns` : `incident_villains.incident_created_at` et `incident_approved`, et `intervention_heroes.resolved_at` (date de la résolution réussie d'un incident approuvé, pour un héros confirmé). Des triggers les remplissent à l'insertion, suivent le changement de statut d'une intervention et répercutent une décision de modération : aucun chemin d'écriture ne peut les oublier.
+2. `create_read_counters` : `incident_stats` (par modération, statut et type), `reporter_stats` (par déclarant et statut), `villain_stats` (incidents approuvés) et `hero_stats` (interventions et résolutions de chaque héros). Tenus à jour par des **triggers de niveau instruction** (`REFERENCING … TABLE`), et recalculables par `rebuild_read_counters()`, qui sert aussi au rattrapage initial. `TRUNCATE` les vide avec les tables.
 3. `add_incident_perf_indexes` : **que des index**, sans toucher aux données. `make perf-indexes-off` les retire et `make perf-indexes-on` les recrée : c'est ce qui rend la lenteur d'origine rejouable en direct. Sur une base de production volumineuse, `CREATE INDEX` bloque les écritures pendant sa construction : à lancer en période creuse.
 
 Côté code :
 
-- `incident/repository.go` : le total d'une liste se lit dans les compteurs (sans héros ni vilain dans le filtre, ou un vilain seul) ; les autres filtres se comptent directement.
+- `incident/repository.go` : le total d'une liste se lit dans les compteurs quand un compteur a exactement la définition du filtre (sans héros ni vilain ; un vilain seul, approuvés) ; les autres combinaisons se comptent directement. `ListFilter.SkipTotal` dispense du total les appelants sans pagination (le tableau de bord).
 - **Pagination par curseur** sur `GET /incidents` (`cursor`, et `nextCursor` dans la réponse) : le coût de la millionième page est celui de la première, et un incident déclaré entre deux pages ne décale pas la suite. `offset` reste accepté, mais pas avec `cursor` (422). Le curseur est opaque (date et identifiant, en base64 URL) et refuse toute altération.
 - `incident/history.go` : les requêtes de page des historiques sont des constantes, choisies avant les jointures.
 - `hero/repository.go` et `villain/repository.go` : leurs statistiques lisent `hero_stats` et `villain_stats`. Seul l'annuaire des modérateurs compte encore les interventions d'un héros, avec la date de la dernière.
@@ -115,7 +153,7 @@ Côté code :
 ### P2 : journal d'événements (event sourcing limité)
 
 - **Migration `events`**, en ajout seul (un trigger refuse tout `UPDATE` et `DELETE`) : `seq` (ordre global), `event_id`, `aggregate_type`, `aggregate_id`, `version`, `incident_id`, `type`, `payload`, `actor_id`, `command_id`, `occurred_at` (horloge du client), `recorded_at` (horloge du serveur), avec `UNIQUE (aggregate_id, version)` (concurrence optimiste).
-- **Package `internal/events`** : `Append` participe à la transaction du contexte (`ErrNoTransaction` sinon). Il est appelé par `incident.Service.Create` et par les huit actions de `intervention.Service`, dans la transaction qui écrit déjà l'état. Les tables `incidents` et `interventions` restent la source des lectures. Un événement ne porte que des identifiants et des états (jamais d'adresse ni de description), si bien qu'il peut partir tel quel vers le monitoring.
+- **Package `internal/events`** : `Append` participe à la transaction du contexte (`ErrNoTransaction` sinon). Il est appelé par `incident.Service` (déclaration, modération, correction, priorité) et par les huit actions de `intervention.Service`, dans la transaction qui écrit déjà l'état. Les tables `incidents` et `interventions` restent la source des lectures. Un événement ne porte que des identifiants et des états (jamais d'adresse ni de description), si bien qu'il peut partir tel quel vers le monitoring.
 - **Écritures sérialisées.** Un verrou consultatif pris en début de transaction ordonne les écritures : les numéros `seq` suivent l'ordre des validations, et un lecteur qui a vu le numéro N a vu tous les précédents. Sans lui, une transaction lente pourrait valider le numéro 10 après qu'un lecteur a passé le 11. Le prix : deux transactions qui écrivent des événements ne s'exécutent pas en parallèle (quelques millisecondes chacune), ce qui suffit au rythme des déclarations et des interventions.
 - **`Shipper`** : écrit chaque événement dans les logs (une ligne JSON, `event_type`, `command_id`, `sync_delay_ms`…), d'où Filebeat les prend. Son avancement est en base (`event_publication`) ; avec plusieurs serveurs, un seul journalise (verrou consultatif). La journalisation est « au moins une fois » : Logstash donne à chaque document l'identifiant de l'événement, un doublon remplace donc l'original.
 - **`cmd/replay`** : rejoue tout le journal et compare, pour chaque incident, le statut obtenu à celui de la table `incidents` (`go run ./cmd/replay` ; code 1 en cas d'écart). Un statut changé sans passer par l'application, donc sans événement, y apparaît. `-rebuild-counters` recalcule les compteurs de lecture. Les incidents sans événement (les 5 M du seed) ne sont pas vérifiés : le journal commence avec la fonctionnalité.
@@ -144,7 +182,7 @@ Côté code :
 
 - **`GET /events/stream`** (`internal/realtime`) : une réponse `text/event-stream` qui reste ouverte. Chaque message porte `id` (le numéro de l'événement), `event` (son type) et `data` (JSON). Un lecteur trop lent est déconnecté plutôt que de ralentir les autres ; chaque flux est fermé au bout de `HEROS_EVENTS_STREAM_MAX_AGE` (le navigateur se reconnecte et la session est revérifiée) ; un signal de vie part régulièrement ; un utilisateur ne peut ouvrir que `HEROS_EVENTS_MAX_STREAMS_PER_USER` flux.
 - **Reprise** : à la reconnexion, `EventSource` renvoie `Last-Event-ID`. Le serveur rejoue d'abord ce qui a été manqué depuis le journal, puis continue en direct, sans doublon. À la première connexion, seuls les événements qui suivent arrivent.
-- **Qui voit quoi** : un modérateur ou un héros reçoit tous les événements (les incidents et les héros sont publics) ; un citoyen, ceux des incidents qu'il a déclarés. L'auteur d'une déclaration n'est jamais révélé qu'à lui et aux modérateurs : l'identité du déclarant n'est pas publique.
+- **Qui voit quoi** : un modérateur reçoit tous les événements ; un héros, ceux des incidents **approuvés** par la modération (comme `GET /incidents`) ; un citoyen, ceux des incidents qu'il a déclarés, quel que soit leur état. L'auteur d'une déclaration n'est jamais révélé qu'à lui et aux modérateurs : l'identité du déclarant n'est pas publique.
 - **Front** : `LiveEvents` rafraîchit la page (`router.refresh()`) à chaque événement, au plus une fois par rafale. Il passe par le reverse proxy (`/api/v1/*` va à l'API) ; front lancé seul sur le port 3000, la connexion échoue sans bruit et la page reste simplement non rafraîchie.
 - **Arrêt** : l'arrêt du serveur ferme d'abord les flux, que l'arrêt HTTP attendrait sinon.
 
@@ -205,6 +243,7 @@ Ce document décrit ce qui a été **exécuté**. Le reste est écrit mais n'a p
 - **Le parcours dans un vrai navigateur** : service worker, IndexedDB et `EventSource` n'ont pas été exercés dans un navigateur. Ce qui l'a été : la logique de la file (22 tests, avec le vrai chiffrement), la route `/api/sync` contre la vraie API (envoi, rejeu, refus, chemin interdit, session absente, mauvaise origine), et le flux SSE contre la vraie API avec trois comptes. Les formulaires compilent, passent ESLint et le build.
 - **Le comportement d'un navigateur coupé du réseau** : une Server Action qui échoue hors ligne lève une `TypeError` (comportement de `fetch`), c'est ce que le code intercepte. À confirmer dans chaque navigateur visé.
 - **Plusieurs instances de l'API** : les verrous consultatifs (écriture des événements, journalisation) sont prévus pour, mais seul un serveur a été lancé.
+- **5 millions d'incidents après la modération** : la mesure sur le code actuel a été faite avec 1 million (voir la mise à jour plus haut). Les plans d'exécution (`TestReadQueriesUseTheirIndexes`) et les compteurs sont vérifiés, mais le chiffre à 5 millions des listes publiques (index partiels) et du tableau de bord reste à constater.
 - **`make seed-perf` dans la base de la pile Docker** : exécuté avec une base PostgreSQL 18 locale (même version majeure que `postgres:18-alpine`), pas dans le conteneur.
 
 ## 5. Risques et points d'attention
@@ -213,6 +252,7 @@ Ce document décrit ce qui a été **exécuté**. Le reste est écrit mais n'a p
 - **Données personnelles.** Les adresses et descriptions d'incidents n'entrent jamais dans le journal d'événements ni dans ELK ; l'adresse IP est retirée par Logstash. Un journal immuable pose la question de l'effacement RGPD ; piste : chiffrer les champs sensibles du contenu avec `crypto/sealer` et détruire la clé.
 - **Compteurs.** Ils sont écrits par des triggers sur des lignes partagées : deux transactions qui touchent le même héros, vilain, déclarant ou statut se suivent. Sans objet à ce rythme d'écriture ; à mesurer si les écritures montent. `rebuild_read_counters()` les recalcule en cas de dérive, et `AssertReadCounters` les contrôle dans les tests. La suppression d'un incident (non implémentée aujourd'hui) est déjà couverte par les triggers.
 - **Commandes en transaction.** Une route idempotente exécute son handler dans la transaction de la clé : les mails qu'un handler met en file partent donc avant la validation finale. Une panne entre les deux est rare ; un rejeu ne renvoie aucun mail.
+- **Tableau de bord.** Ses statistiques peuvent retarder d'au plus `HEROS_DASHBOARD_STATS_TTL` (30 s). Le cache est propre à chaque instance de l'API (pas de partage entre instances) et en mémoire : un redémarrage le vide, et le premier appel de chaque héros calcule en direct. `0` le désactive.
 - **Compatibilité d'API.** Le curseur s'ajoute à `offset`, et tous les champs ajoutés sont facultatifs : le front actuel et `api:types:check` ne cassent pas.
 - **Répartition du travail.** Les incidents, interventions et l'infrastructure (P1, P2, P5, P6) relèvent de Dev B ; les sessions, le CSRF et le chiffrement de la file hors ligne (P3, P4) touchent à Dev A (voir `CONTRAT-MAXIME.md`). Les migrations et les tests de cette branche modifient des fichiers des deux côtés : une relecture croisée est nécessaire.
 - **Documents mis à jour avec ce travail** : [tables/incidents.md](../tables/incidents.md), [tables/technique.md](../tables/technique.md), [tables/statistiques.md](../tables/statistiques.md), [Docker](./docker.md).

@@ -14,12 +14,21 @@ CREATE INDEX incidents_created_idx ON incidents (created_at DESC, id DESC);
 -- priorité s'intercale entre le statut et la date.
 CREATE INDEX incidents_status_created_idx ON incidents (status, created_at DESC, id DESC);
 
+-- Les mêmes listes pour le public et les héros, qui ne voient que les incidents approuvés par la modération. Index
+-- partiels : ils n'indexent que ces incidents (les incidents en attente ou rejetés restent hors de la page), et ne
+-- servent que si la requête écrit la condition en toutes lettres (`moderation = 'approved'`).
+CREATE INDEX incidents_approved_created_idx ON incidents (created_at DESC, id DESC)
+    WHERE moderation = 'approved';
+CREATE INDEX incidents_approved_status_created_idx ON incidents (status, created_at DESC, id DESC)
+    WHERE moderation = 'approved';
+
 -- « Mes incidents », fiches de réputation : aucun index n'existait sur reporter_id (une clé étrangère n'en crée
 -- pas dans PostgreSQL), donc la suppression d'un compte parcourait elle aussi toute la table.
 CREATE INDEX incidents_reporter_created_idx ON incidents (reporter_id, created_at DESC, id DESC);
 
--- Historique d'un vilain : ses incidents, du plus récent au plus ancien, sans rien trier.
-CREATE INDEX incident_villains_villain_idx ON incident_villains (villain_id, incident_created_at DESC, incident_id DESC);
+-- Historique d'un vilain : ses incidents approuvés, du plus récent au plus ancien, sans rien trier.
+CREATE INDEX incident_villains_villain_idx ON incident_villains (villain_id, incident_created_at DESC, incident_id DESC)
+    WHERE incident_approved;
 
 -- Dernière intervention d'un incident (jointure latérale de l'historique des vilains) et recherche par incident.
 CREATE INDEX interventions_incident_idx ON interventions (incident_id, started_at DESC NULLS LAST, id DESC);

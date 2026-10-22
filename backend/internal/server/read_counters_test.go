@@ -43,13 +43,15 @@ func TestReadCountersFollowTheWholeLifecycle(t *testing.T) {
 		if got.status != http.StatusCreated {
 			t.Fatalf("déclaration : %d %s", got.status, got.body)
 		}
+		// Un héros n'intervient que sur un incident approuvé par la modération.
+		e.moderateIncident(moderator, incident.ID, "approved")
 		return incident.ID
 	}
 
 	first := declare("Premier", true)
 	second := declare("Second", false)
 	check("déclarations")
-	if got := e.count("incident_stats", "status = 'reported' AND type_id = ? AND incidents = 2", typeID); got != 1 {
+	if got := e.count("incident_stats", "moderation = 'approved' AND status = 'reported' AND type_id = ? AND incidents = 2", typeID); got != 1 {
 		t.Errorf("le compteur des incidents signalés doit valoir 2")
 	}
 
@@ -166,6 +168,8 @@ func TestDeletingAReporterKeepsCountersConsistent(t *testing.T) {
 			firstID = created.ID
 		}
 	}
+	// Seul le premier est approuvé : les deux autres restent en attente, mais comptent dans « mes incidents ».
+	e.moderateIncident(moderator, firstID, "approved")
 	if got := hero.post("/incidents/"+firstID+"/interventions", nil); got.status != http.StatusCreated {
 		t.Fatalf("démarrage : %d %s", got.status, got.body)
 	}
@@ -183,5 +187,80 @@ func TestDeletingAReporterKeepsCountersConsistent(t *testing.T) {
 	}
 	if got := e.count("reporter_stats", "incidents <> 0"); got != 0 {
 		t.Errorf("%d compteurs de déclarant non nuls pour un compte supprimé", got)
+	}
+}
+
+// Une décision de modération change ce que le public voit d'un incident : le compteur des vilains, celui des
+// résolutions des héros (et leur date), et la ligne de incident_stats qui compte l'incident doivent suivre, dans les
+// deux sens. Chaque étape est comparée à un recalcul depuis les tables (qui ne lit pas les copies dénormalisées).
+func TestReadCountersFollowModerationDecisions(t *testing.T) {
+	e := newE2E(t, nil)
+	reporter := e.signUpAndLogin("reporter@example.org")
+	moderator := e.newModerator("mod@shield.example")
+	lead := e.approvedHero(moderator, "lead@example.org", "Lead")
+	typeID := e.createType(moderator, "rescue", "Sauvetage", true).ID
+	villain := moderator.post("/villains", map[string]any{"alias": "Docteur Chaos"})
+	var villainBody struct{ ID string }
+	villain.decode(t, &villainBody)
+
+	body := validIncident(typeID)
+	body["villainIds"] = []string{villainBody.ID}
+	created := reporter.post("/incidents", body)
+	var incident struct{ ID string }
+	created.decode(t, &incident)
+	if created.status != http.StatusCreated {
+		t.Fatalf("déclaration : %d %s", created.status, created.body)
+	}
+	villainCount := func() int64 { return e.count("villain_stats", "villain_id = ? AND incidents = 1", villainBody.ID) }
+	resolved := func() int64 { return e.count("hero_stats", "hero_id = ? AND resolved = 1", lead.userID()) }
+	resolvedAt := func() int64 { return e.count("intervention_heroes", "resolved_at IS NOT NULL") }
+
+	// En attente : l'incident existe pour son auteur et la modération, pas pour les vilains ni les héros.
+	testutil.AssertReadCounters(t, e.db)
+	if villainCount() != 0 || e.count("incident_stats", "moderation = 'pending' AND status = 'reported' AND incidents = 1") != 1 {
+		t.Fatal("un incident en attente ne compte ni pour son vilain, ni dans les statistiques approuvées")
+	}
+
+	e.moderateIncident(moderator, incident.ID, "approved")
+	testutil.AssertReadCounters(t, e.db)
+	if villainCount() != 1 || e.count("incident_stats", "moderation = 'approved' AND status = 'reported' AND incidents = 1") != 1 {
+		t.Fatal("l'approbation doit compter l'incident pour son vilain et dans les statistiques approuvées")
+	}
+	if e.count("incident_stats", "moderation = 'pending' AND incidents <> 0") != 0 {
+		t.Fatal("l'incident ne doit plus être compté comme en attente")
+	}
+
+	started := lead.post("/incidents/"+incident.ID+"/interventions", nil)
+	var intervention interventionView
+	started.decode(t, &intervention)
+	if started.status != http.StatusCreated {
+		t.Fatalf("démarrage : %d %s", started.status, started.body)
+	}
+	if got := lead.post("/interventions/"+intervention.ID+"/outcome", map[string]string{"status": "succeeded"}); got.status != http.StatusNoContent {
+		t.Fatalf("clôture : %d %s", got.status, got.body)
+	}
+	testutil.AssertReadCounters(t, e.db)
+	if resolved() != 1 || resolvedAt() != 1 {
+		t.Fatal("un incident approuvé et réussi compte comme résolu pour son héros")
+	}
+
+	// Rejet après coup : l'historique public du héros et du vilain se vide, les copies dénormalisées aussi.
+	e.moderateIncident(moderator, incident.ID, "rejected")
+	testutil.AssertReadCounters(t, e.db)
+	if resolved() != 0 || resolvedAt() != 0 || villainCount() != 0 {
+		t.Fatalf("un incident rejeté ne compte plus : résolu=%d dates=%d vilain=%d", resolved(), resolvedAt(), villainCount())
+	}
+	if e.count("incident_villains", "incident_approved") != 0 {
+		t.Error("incident_villains.incident_approved doit suivre le rejet")
+	}
+	if got := e.count("hero_stats", "hero_id = ? AND interventions = 1", lead.userID()); got != 1 {
+		t.Error("le nombre d'interventions du héros ne dépend pas de la modération")
+	}
+
+	// Ré-approbation : tout revient.
+	e.moderateIncident(moderator, incident.ID, "approved")
+	testutil.AssertReadCounters(t, e.db)
+	if resolved() != 1 || resolvedAt() != 1 || villainCount() != 1 || e.count("incident_villains", "incident_approved") != 1 {
+		t.Fatalf("une ré-approbation doit tout restaurer : résolu=%d dates=%d vilain=%d", resolved(), resolvedAt(), villainCount())
 	}
 }

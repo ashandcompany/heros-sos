@@ -13,6 +13,7 @@ func registerRoutes(router *Router, c *components) {
 	registerHealthRoutes(router, c)
 	registerAuthRoutes(router, c)
 	registerHeroRoutes(router, c)
+	registerHeroDashboardRoutes(router, c)
 	registerModerationRoutes(router, c)
 	registerDocsRoutes(router, c)
 	registerInterventionTypeRoutes(router, c)

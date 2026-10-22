@@ -35,6 +35,8 @@ type world struct {
 
 	citizen, otherCitizen, hero, moderator uuid.UUID
 	incident, otherIncident                uuid.UUID
+	// pendingIncident attend la modération : les héros n'en voient rien.
+	pendingIncident uuid.UUID
 }
 
 func exec(t *testing.T, db *gorm.DB, sql string, args ...any) {
@@ -44,8 +46,8 @@ func exec(t *testing.T, db *gorm.DB, sql string, args ...any) {
 	}
 }
 
-// newWorld démarre le flux sur une vraie base : quatre comptes, deux incidents (chacun déclaré par un citoyen), le
-// journal, la lecture continue et un serveur HTTP qui prend l'identité du lecteur dans un en-tête de test.
+// newWorld démarre le flux sur une vraie base : quatre comptes, deux incidents approuvés et un en attente de
+// modération (chacun déclaré par un citoyen), le journal, la lecture continue et un serveur HTTP qui prend l'identité du lecteur dans un en-tête de test.
 func newWorld(t *testing.T, tune func(*config.Events)) *world {
 	t.Helper()
 	db := testutil.NewDB(t)
@@ -69,12 +71,14 @@ func newWorld(t *testing.T, tune func(*config.Events)) *world {
 	}
 	w.citizen, w.otherCitizen = account(user.RoleCitizen, "citizen@example.test"), account(user.RoleCitizen, "other@example.test")
 	w.hero, w.moderator = account(user.RoleHero, "hero@example.test"), account(user.RoleModerator, "mod@example.test")
-	declare := func(reporter uuid.UUID) uuid.UUID {
+	declare := func(reporter uuid.UUID, moderation string) uuid.UUID {
 		id := ids.New()
-		exec(t, db, `INSERT INTO incidents (id, reporter_id, type_id, title, description, status) VALUES (?, ?, 1, 'Incident', 'texte', 'reported')`, id, reporter)
+		exec(t, db, `INSERT INTO incidents (id, reporter_id, type_id, title, description, status, moderation) VALUES (?, ?, 1, 'Incident', 'texte', 'reported', ?)`,
+			id, reporter, moderation)
 		return id
 	}
-	w.incident, w.otherIncident = declare(w.citizen), declare(w.otherCitizen)
+	w.incident, w.otherIncident = declare(w.citizen, "approved"), declare(w.otherCitizen, "approved")
+	w.pendingIncident = declare(w.citizen, "pending")
 
 	w.hub = realtime.NewHub(w.cfg.StreamBuffer, w.cfg.MaxStreamsPerUser)
 	tailer := realtime.NewTailer(w.store, db, w.hub, discardLogger(), w.cfg)
@@ -238,6 +242,31 @@ func TestAHeroReceivesEventsLiveInOrderWithoutTheReportersIdentity(t *testing.T)
 	}
 	if started.Data["actorId"] != w.hero.String() || started.Data["incidentId"] != w.incident.String() || started.Data["version"] != float64(1) {
 		t.Errorf("données de l'événement d'intervention : %v", started.Data)
+	}
+}
+
+// Un incident que la modération n'a pas approuvé n'existe pas pour les héros (GET /incidents ne le liste pas) : ni sa
+// déclaration (ville, vilains liés), ni ce qui le concerne ne doit passer dans leur flux. L'auteur et les
+// modérateurs le voient ; une fois approuvé, les héros reçoivent la suite.
+func TestAHeroDoesNotSeeTheEventsOfAnIncidentTheModerationHasNotApproved(t *testing.T) {
+	w := newWorld(t, nil)
+	hero, owner, moderator := w.connect(t, w.hero, ""), w.connect(t, w.citizen, ""), w.connect(t, w.moderator, "")
+
+	declared := w.append(t, w.declared(w.pendingIncident, w.citizen))
+	for name, viewer := range map[string]*stream{"auteur": owner, "modérateur": moderator} {
+		if got := viewer.next(t); got.ID != strconv.FormatInt(declared, 10) || got.Event != events.IncidentDeclared {
+			t.Errorf("%s : %+v", name, got)
+		}
+	}
+	hero.expectNothing(t)
+
+	exec(t, w.db, `UPDATE incidents SET moderation = 'approved' WHERE id = ?`, w.pendingIncident)
+	moderated := w.append(t, events.Event{
+		Type: events.IncidentModerated, AggregateType: events.AggregateIncident, AggregateID: w.pendingIncident,
+		IncidentID: w.pendingIncident, ActorID: &w.moderator, Payload: map[string]any{"moderation": "approved"},
+	})
+	if got := hero.next(t); got.ID != strconv.FormatInt(moderated, 10) || got.Event != events.IncidentModerated {
+		t.Errorf("après l'approbation : %+v", got)
 	}
 }
 

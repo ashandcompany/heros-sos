@@ -26,6 +26,9 @@ const (
 // Types d'événements. Le préfixe est celui de l'agrégat.
 const (
 	IncidentDeclared                = "incident.declared"
+	IncidentModerated               = "incident.moderated"
+	IncidentCorrected               = "incident.corrected"
+	IncidentPriorityChanged         = "incident.priority_changed"
 	InterventionStarted             = "intervention.started"
 	InterventionJoined              = "intervention.joined"
 	InterventionInvited             = "intervention.invited"

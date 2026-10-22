@@ -19,11 +19,14 @@ import (
 // ErrTooManyStreams indique qu'un utilisateur a atteint son nombre maximal de flux ouverts.
 var ErrTooManyStreams = errors.New("realtime : trop de flux ouverts")
 
-// StreamEvent est un événement du journal prêt à être diffusé : le déclarant de l'incident y est ajouté, pour
-// que chaque lecteur sache sans requête si l'événement le concerne.
+// StreamEvent est un événement du journal prêt à être diffusé : le déclarant de l'incident et son état de
+// modération y sont ajoutés, pour que chaque lecteur sache sans requête si l'événement le concerne.
 type StreamEvent struct {
 	events.Recorded
 	ReporterID *uuid.UUID
+	// Approved dit si l'incident est approuvé par la modération au moment de la diffusion : seuls les incidents
+	// approuvés sont visibles des héros (comme dans GET /incidents).
+	Approved bool
 }
 
 // Hub répartit les événements entre les flux ouverts.

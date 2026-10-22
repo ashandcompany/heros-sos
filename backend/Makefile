@@ -82,7 +82,7 @@ PERF_USER         ?= jane.foster@heros-sos.local
 # Les index de lecture sont seuls dans leur migration : les retirer puis les recréer (sans toucher aux données)
 # rejoue en direct la lenteur d'origine, puis le gain. psql lit l'URL de la base de mesures.
 PERF_PSQL         ?= psql '$(PERF_DATABASE_URL)' -v ON_ERROR_STOP=1 -q
-PERF_INDEXES_SQL  ?= migrations/20261022132000_add_incident_perf_indexes
+PERF_INDEXES_SQL  ?= migrations/20261022142000_add_incident_perf_indexes
 
 .PHONY: perf-indexes-off
 perf-indexes-off: ## Démonstration : retire les index de lecture de la base de mesures (lenteur d'origine)

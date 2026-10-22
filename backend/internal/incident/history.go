@@ -90,7 +90,7 @@ const (
 
 	byVillainSQL = `WITH page AS (
 			SELECT incident_id, incident_created_at FROM incident_villains
-			WHERE villain_id = ?
+			WHERE villain_id = ? AND incident_approved
 			ORDER BY incident_created_at DESC, incident_id DESC
 			LIMIT ? OFFSET ?)
 		SELECT ` + summaryColumns + `,
@@ -105,8 +105,8 @@ const (
 		ORDER BY page.incident_created_at DESC, page.incident_id DESC`
 )
 
-// ListResolvedByHero retourne les incidents résolus par une intervention à laquelle le héros a participé, les
-// plus récemment résolus d'abord. L'index (hero_id, resolved_at DESC, intervention_id DESC) donne la page sans
+// ListResolvedByHero retourne les incidents approuvés résolus par une intervention à laquelle le héros a
+// participé, les plus récemment résolus d'abord (resolved_at n'est renseigné que pour un incident approuvé). L'index (hero_id, resolved_at DESC, intervention_id DESC) donne la page sans
 // aucun tri : seules les interventions de la page sont jointes à leurs incidents. Le total est le compteur
 // hero_stats (voir la migration create_read_counters).
 func (r *gormRepository) ListResolvedByHero(ctx context.Context, heroID uuid.UUID, limit, offset int) ([]Summary, int64, error) {
@@ -124,8 +124,8 @@ func (r *gormRepository) ListResolvedByHero(ctx context.Context, heroID uuid.UUI
 	return items, total, err
 }
 
-// ListByVillain retourne les incidents auxquels le vilain est associé, quel que soit leur état, les plus récents
-// d'abord. Le lead est celui de la dernière intervention. La page est choisie dans l'index
+// ListByVillain retourne les incidents approuvés auxquels le vilain est associé, quel que soit leur état, les plus
+// récents d'abord. Le lead est celui de la dernière intervention. La page est choisie dans l'index
 // (villain_id, incident_created_at DESC, incident_id DESC) avant toute jointure : sans cela, la jointure latérale
 // vers la dernière intervention était calculée pour tous les incidents du vilain, pas pour les 20 affichés.
 func (r *gormRepository) ListByVillain(ctx context.Context, villainID uuid.UUID, limit, offset int) ([]Summary, int64, error) {

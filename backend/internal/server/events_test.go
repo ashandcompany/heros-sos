@@ -49,6 +49,7 @@ func TestEveryActionOfAnInterventionLeavesOneEvent(t *testing.T) {
 	created := reporter.post("/incidents", validIncident(typeID))
 	var incident struct{ ID string }
 	created.decode(t, &incident)
+	e.moderateIncident(moderator, incident.ID, "approved")
 
 	var intervention interventionView
 	started := lead.post("/incidents/"+incident.ID+"/interventions", nil)
@@ -84,7 +85,7 @@ func TestEveryActionOfAnInterventionLeavesOneEvent(t *testing.T) {
 	}
 
 	want := []string{
-		events.IncidentDeclared, events.InterventionStarted, events.InterventionJoined, events.InterventionInvited,
+		events.IncidentDeclared, events.IncidentModerated, events.InterventionStarted, events.InterventionJoined, events.InterventionInvited,
 		events.InterventionInvitationConfirmed, events.InterventionOutcomeProposed, events.InterventionOutcomeValidated,
 		events.InterventionOutcomeValidated, events.InterventionClosed,
 	}
@@ -104,9 +105,10 @@ func TestEveryActionOfAnInterventionLeavesOneEvent(t *testing.T) {
 			t.Errorf("%s : pas d'auteur", event.Type)
 		}
 	}
-	// Versions : par agrégat, sans trou. L'incident n'a que sa déclaration ; l'intervention compte le reste.
-	if history[0].Version != 1 || history[len(history)-1].Version != len(want)-1 {
-		t.Errorf("versions : déclaration %d, dernier événement %d", history[0].Version, history[len(history)-1].Version)
+	// Versions : par agrégat, sans trou. L'incident a sa déclaration et sa modération ; l'intervention compte le reste.
+	if history[0].Version != 1 || history[1].Version != 2 || history[len(history)-1].Version != len(want)-2 {
+		t.Errorf("versions : déclaration %d, modération %d, dernier événement %d",
+			history[0].Version, history[1].Version, history[len(history)-1].Version)
 	}
 	closed := history[len(history)-1]
 	if closed.Payload["status"] != "succeeded" || closed.Payload["incidentId"] != incident.ID || closed.Payload["interventionId"] != intervention.ID {
@@ -178,10 +180,12 @@ func TestTheShipperWritesTheJournalToTheLogs(t *testing.T) {
 	shipper := events.NewShipper(e.journal(), e.db, slog.New(slog.NewJSONHandler(&logs, nil)),
 		config.Events{PollInterval: 1, BatchSize: 100, Heartbeat: 1})
 	shipped, err := shipper.ShipOnce(context.Background())
-	if err != nil || shipped != 1 {
-		t.Fatalf("journalisés : %d, %v", shipped, err)
+	if err != nil || shipped != 2 {
+		t.Fatalf("journalisés : %d, %v (déclaration et modération attendues)", shipped, err)
 	}
-	for _, want := range []string{`"event_type":"incident.declared"`, `"aggregate_type":"incident"`, `"incident_id"`} {
+	for _, want := range []string{
+		`"event_type":"incident.declared"`, `"event_type":"incident.moderated"`, `"aggregate_type":"incident"`, `"incident_id"`,
+	} {
 		if !strings.Contains(logs.String(), want) {
 			t.Errorf("la ligne de log ne contient pas %s : %s", want, logs.String())
 		}

@@ -9,9 +9,11 @@ DROP FUNCTION hero_stats_after_insert();
 
 DROP TRIGGER villain_stats_after_truncate ON incident_villains;
 DROP TRIGGER villain_stats_after_delete ON incident_villains;
+DROP TRIGGER villain_stats_after_update ON incident_villains;
 DROP TRIGGER villain_stats_after_insert ON incident_villains;
 DROP FUNCTION villain_stats_after_truncate();
 DROP FUNCTION villain_stats_after_delete();
+DROP FUNCTION villain_stats_after_update();
 DROP FUNCTION villain_stats_after_insert();
 
 DROP TRIGGER incident_stats_after_truncate ON incidents;

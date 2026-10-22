@@ -226,8 +226,8 @@ func TestEveryActionOfAHeroCanBeReplayed(t *testing.T) {
 	if got := e.count("intervention_heroes", "intervention_id = ?", intervention.ID); got != 2 {
 		t.Errorf("%d participants, attendu 2", got)
 	}
-	if got := len(e.typesOfJournal()); got != 3 {
-		t.Errorf("%d événements (déclaration, démarrage, participation), attendu 3", got)
+	if got := len(e.typesOfJournal()); got != 4 {
+		t.Errorf("%d événements (déclaration, modération, démarrage, participation), attendu 4", got)
 	}
 	testutil.AssertReadCounters(t, e.db)
 }

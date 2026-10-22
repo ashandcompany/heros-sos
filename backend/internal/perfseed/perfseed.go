@@ -224,12 +224,13 @@ func Sizes(ctx context.Context, db *gorm.DB) ([]TableSize, error) {
 //
 // Un incident clos (92 % réussis, 8 % échoués) a une intervention terminée : un héros en tête, et un
 // deuxième dans trois cas sur dix. Les derniers incidents (un sur 500) sont « signalés », sans
-// intervention. Tout à la fin, un incident par héros libre est « en cours » avec une intervention
+// intervention : un sur dix attend la modération et un sur dix a été rejeté, les autres sont approuvés comme tous
+// les incidents qui ont une intervention. Tout à la fin, un incident par héros libre est « en cours » avec une intervention
 // active : un héros n'en mène qu'une à la fois. Six incidents sur dix ont un vilain.
 //
 // Les identifiants sont des UUID v7 comme ceux de l'application. hashint8 donne un entier stable par
-// ligne : la même base se régénère à l'identique. incident_created_at et resolved_at sont fournis : les
-// triggers qui les remplissent d'habitude ne voient pas les lignes insérées par la même instruction. Les
+// ligne : la même base se régénère à l'identique. incident_created_at, incident_approved et resolved_at sont
+// fournis : les triggers qui les remplissent d'habitude ne voient pas les lignes insérées par la même instruction. Les
 // compteurs (incident_stats, villain_stats, hero_stats) se mettent à jour d'eux-mêmes, une fois par lot.
 const loadBatchSQL = `
 WITH ref AS MATERIALIZED (
@@ -249,7 +250,7 @@ WITH ref AS MATERIALIZED (
 	       (hashint8(g)::bigint & 2147483647) AS h,
 	       ref.start + (g * ref.step)::float8 * interval '1 microsecond' AS created_at
 	FROM ref, generate_series(ref.lo, ref.hi - 1) AS g
-), gen AS MATERIALIZED (
+), gen0 AS MATERIALIZED (
 	SELECT base.*,
 	       ref.types[1 + (h % cardinality(ref.types))::int] AS type_id,
 	       ref.reporters[1 + (g % cardinality(ref.reporters))::int] AS reporter_id,
@@ -266,14 +267,21 @@ WITH ref AS MATERIALIZED (
 	       base.created_at + interval '10 minutes' AS started_at,
 	       base.created_at + interval '10 minutes' + (30 + h % 300) * interval '1 minute' AS ended_at
 	FROM base CROSS JOIN ref
+), gen AS MATERIALIZED (
+	SELECT gen0.*,
+	       CASE WHEN status = 'reported' AND h % 10 = 0 THEN 'pending'
+	            WHEN status = 'reported' AND h % 10 = 1 THEN 'rejected'
+	            ELSE 'approved' END AS moderation
+	FROM gen0
 ), ins_incidents AS (
-	INSERT INTO incidents (id, reporter_id, type_id, title, description, status, priority, citizens_rescued,
+	INSERT INTO incidents (id, reporter_id, type_id, title, description, status, priority, moderation, citizens_rescued,
 		street, postal_code, city, country, latitude, longitude, occurred_at, created_at, updated_at)
 	SELECT id, reporter_id, type_id,
 	       'Incident de charge n° ' || g,
 	       'Signalement généré pour les mesures de performance : ' || md5(g::text) || md5((g + 1)::text),
 	       status,
 	       CASE WHEN (h / 10) % 10 = 0 THEN 'high' WHEN (h / 10) % 10 = 1 THEN 'low' ELSE 'normal' END,
+	       moderation,
 	       CASE WHEN status = 'succeeded' THEN (h % 7)::smallint ELSE 0::smallint END,
 	       'Rue de la Charge ' || (h % 5000),
 	       lpad((10000 + h % 80000)::text, 5, '0'),
@@ -306,8 +314,8 @@ WITH ref AS MATERIALIZED (
 	FROM gen
 	WHERE status IN ('succeeded', 'failed') AND hero_count >= 2 AND h % 10 < 3
 ), ins_villains AS (
-	INSERT INTO incident_villains (incident_id, villain_id, arrested, incident_created_at)
-	SELECT id, villain_id, status = 'succeeded' AND h % 3 = 0, created_at
+	INSERT INTO incident_villains (incident_id, villain_id, arrested, incident_created_at, incident_approved)
+	SELECT id, villain_id, status = 'succeeded' AND h % 3 = 0, created_at, moderation = 'approved'
 	FROM gen
 	WHERE h % 10 < 6
 )

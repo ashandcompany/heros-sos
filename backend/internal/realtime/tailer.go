@@ -87,7 +87,8 @@ func (t *Tailer) publishFrom(ctx context.Context, afterSeq int64) (int64, error)
 	return afterSeq, nil
 }
 
-// Enrich ajoute à chaque événement le déclarant de son incident, en une requête pour tout le lot.
+// Enrich ajoute à chaque événement le déclarant de son incident et son état de modération courant, en une requête
+// pour tout le lot.
 func Enrich(ctx context.Context, db *gorm.DB, batch []events.Recorded) ([]StreamEvent, error) {
 	if len(batch) == 0 {
 		return nil, nil
@@ -103,17 +104,24 @@ func Enrich(ctx context.Context, db *gorm.DB, batch []events.Recorded) ([]Stream
 	var rows []struct {
 		ID         uuid.UUID
 		ReporterID *uuid.UUID
+		Approved   bool
 	}
-	if err := database.Conn(ctx, db).Table("incidents").Select("id, reporter_id").Where("id IN ?", incidentIDs).Scan(&rows).Error; err != nil {
+	if err := database.Conn(ctx, db).Table("incidents").Select("id, reporter_id, moderation = 'approved' AS approved").
+		Where("id IN ?", incidentIDs).Scan(&rows).Error; err != nil {
 		return nil, fmt.Errorf("realtime : lecture des déclarants : %w", err)
 	}
-	reporters := make(map[uuid.UUID]*uuid.UUID, len(rows))
+	type incidentInfo struct {
+		reporter *uuid.UUID
+		approved bool
+	}
+	infos := make(map[uuid.UUID]incidentInfo, len(rows))
 	for _, row := range rows {
-		reporters[row.ID] = row.ReporterID
+		infos[row.ID] = incidentInfo{reporter: row.ReporterID, approved: row.Approved}
 	}
 	enriched := make([]StreamEvent, len(batch))
 	for i, event := range batch {
-		enriched[i] = StreamEvent{Recorded: event, ReporterID: reporters[event.IncidentID]}
+		info := infos[event.IncidentID]
+		enriched[i] = StreamEvent{Recorded: event, ReporterID: info.reporter, Approved: info.approved}
 	}
 	return enriched, nil
 }

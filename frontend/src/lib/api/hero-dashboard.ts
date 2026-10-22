@@ -4,8 +4,11 @@ import { reviewsMock } from "@/mocks/reviews";
 import { superHeroesMock, superHeroProfilesMock } from "@/mocks/super-heroes";
 import { videosMock } from "@/mocks/videos";
 import type { HeroDashboard, VillainSummary } from "@/types";
-import { mockResponse } from "./config";
+import { isApiEnabled, mockResponse } from "./config";
+import { type ApiSchema, apiFetch } from "./http";
 import { getIncidentTypes } from "./incident-types";
+import { withTeams } from "./incidents";
+import { sessionUserId } from "./interventions";
 import { summarizeRatings } from "./reviews";
 import { userFromToken } from "./session-user";
 import { getVillains } from "./villains";
@@ -14,10 +17,30 @@ const MAIN_ENEMIES_LIMIT = 3;
 const RECENT_INCIDENTS_LIMIT = 5;
 
 /**
- * Statistiques globales et personnelles du tableau de bord professionnel.
- * Future implémentation : `GET ${API_URL}/hero/dashboard`
+ * Tableau de bord professionnel : statistiques globales et personnelles, incidents en cours du
+ * héros et derniers incidents non résolus.
+ * API : `GET /hero/dashboard`, puis l'équipe de chaque incident en cours (`GET /interventions/{id}`).
  */
 export async function getHeroDashboard(token: string): Promise<HeroDashboard> {
+  if (isApiEnabled) {
+    const [response, meId] = await Promise.all([
+      apiFetch("/hero/dashboard", { sessionToken: token }),
+      sessionUserId(token),
+    ]);
+    const dashboard = (await response.json()) as ApiSchema<"HeroDashboard">;
+    const [myOngoingIncidents, recentIncidents] = await Promise.all([
+      withTeams(token, dashboard.myOngoingIncidents, meId),
+      withTeams(token, dashboard.recentIncidents, meId),
+    ]);
+    // Statistiques : même forme que `HeroDashboard`, l'API n'a rien à convertir.
+    return {
+      global: dashboard.global,
+      personal: dashboard.personal,
+      myOngoingIncidents,
+      recentIncidents,
+    };
+  }
+
   const user = await userFromToken(token, "super-heros");
   const profile = superHeroProfilesMock.find(({ id }) => id === user.id);
   const incidents = incidentsMock.filter(({ moderation }) => moderation !== "rejete");

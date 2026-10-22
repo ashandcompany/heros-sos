@@ -71,11 +71,17 @@ func Verify(ctx context.Context, db *gorm.DB, store *Store, batch int) (checked 
 }
 
 // replayStatus applique un événement au statut d'un incident : déclaré, il est « signalé » ; ensuite, il suit le
-// statut de la dernière intervention (en cours, réussie, échouée) que les événements d'intervention portent.
+// statut de la dernière intervention (en cours, réussie, échouée) que les événements d'intervention portent, ou
+// celui qu'une correction de la modération lui a donné (incident.corrected). Les autres événements d'incident
+// (modération, priorité) ne changent pas le statut.
 func replayStatus(current string, event Recorded) string {
 	switch {
 	case event.Type == IncidentDeclared:
 		return statusReported
+	case event.Type == IncidentCorrected:
+		if status, ok := event.Payload["status"].(string); ok {
+			return status
+		}
 	case event.AggregateType == AggregateIntervention:
 		if status, ok := event.Payload["status"].(string); ok {
 			return status

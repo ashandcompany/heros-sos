@@ -64,6 +64,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/hero/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tableau de bord du héros connecté
+         * @description Réservé aux super-héros. Statistiques de toute la plateforme (interventions terminées, incidents par type, citoyens secourus, vilains identifiés et emprisonnés), statistiques personnelles du héros (interventions réussies et échouées, avis publiés, films, vilains les plus affrontés), l'incident sur lequel il intervient en ce moment et les derniers incidents non résolus. Calculé à la demande, en lecture seule. Seuls les incidents approuvés par la modération sont comptés et listés, comme dans `GET /incidents` pour un héros.
+         */
+        get: operations["getHeroDashboard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/hero/reviews": {
         parameters: {
             query?: never;
@@ -1271,8 +1291,10 @@ export interface paths {
         };
         /**
          * Liste publique des incidents
-         * @description Accessible sans session. Liste tous les incidents (résolus ou non) sans identité civile du
-         *     déclarant. Les valeurs d'un même filtre sont combinées par OU, les filtres entre eux par ET.
+         * @description Accessible sans session. Ne renvoie que les incidents approuvés, sans identité civile du
+         *     déclarant. Un déclarant connecté peut consulter ses propres incidents quel que soit leur
+         *     statut de modération; un modérateur peut tous les consulter. Les valeurs d'un même filtre
+         *     sont combinées par OU, les filtres entre eux par ET.
          *     Les filtres multiples s'écrivent avec un paramètre répété (?status=a&status=b)
          *     (20 identifiants au maximum pour heroId et villainId).
          */
@@ -1282,7 +1304,8 @@ export interface paths {
          * Déclarer un incident
          * @description Tout utilisateur connecté peut déclarer un incident classé par un type existant. Les vilains
          *     sont facultatifs et plusieurs vilains peuvent être associés. L'adresse est conservée en clair
-         *     pour permettre la détection des doublons prévue par le schéma.
+         *     pour permettre la détection des doublons prévue par le schéma. Les déclarations de citoyens et
+         *     de héros sont en attente de modération; celles des modérateurs sont approuvées d'office.
          */
         post: operations["createIncident"];
         delete?: never;
@@ -1300,10 +1323,73 @@ export interface paths {
         };
         /**
          * Détail public d'un incident
-         * @description Accessible sans session.
+         * @description Accessible sans session pour les incidents approuvés. Le déclarant connecté peut aussi
+         *     consulter son propre signalement quel que soit son statut de modération; les modérateurs
+         *     peuvent consulter tous les incidents.
          */
         get: operations["getIncident"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/incidents/{id}/moderation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Modérer un incident
+         * @description Réservé aux modérateurs. Approuve ou rejette le signalement.
+         */
+        put: operations["moderateIncident"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/incidents/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Corriger un incident
+         * @description Réservé aux modérateurs. Remplace les informations éditables et synchronise le héros et
+         *     le statut de l'intervention. Les coordonnées géographiques sont fournies par le client.
+         */
+        patch: operations["updateIncident"];
+        trace?: never;
+    };
+    "/hero/incidents/{id}/priority": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Modifier la priorité d'un incident
+         * @description Réservé aux héros. Disponible uniquement pour un incident approuvé qui n'a pas d'intervention active.
+         */
+        put: operations["setIncidentPriority"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1366,12 +1452,15 @@ export interface paths {
         /**
          * Flux temps réel des événements (SSE)
          * @description Flux Server-Sent Events : la réponse reste ouverte et le serveur y écrit chaque événement du journal dès
-         *     qu'il est enregistré (déclaration d'un incident, démarrage d'une intervention, résultat…). Chaque message
-         *     porte `id` (numéro de l'événement), `event` (type, par exemple `incident.declared`) et `data` (JSON : `seq`,
-         *     `type`, `aggregateType`, `aggregateId`, `incidentId`, `version`, `actorId`, `payload`, `recordedAt`).
-         *     Le contenu ne comporte que des identifiants et des états.
+         *     qu'il est enregistré (déclaration, modération, correction ou priorité d'un incident, démarrage d'une
+         *     intervention, résultat…). Chaque message porte `id` (numéro de l'événement), `event` (type, par exemple
+         *     `incident.declared`) et `data` (JSON : `seq`, `type`, `aggregateType`, `aggregateId`, `incidentId`, `version`,
+         *     `actorId`, `payload`, `recordedAt`). Le contenu ne comporte que des identifiants et des états.
          *
-         *     Un modérateur ou un héros reçoit tous les événements ; un citoyen, ceux des incidents qu'il a déclarés.
+         *     Visibilité : un modérateur reçoit tout ; un héros ne reçoit que les événements des incidents approuvés par la
+         *     modération (comme `GET /incidents`) ; un citoyen ne reçoit que ceux de ses propres incidents, quel que soit
+         *     leur état de modération.
+         *
          *     L'auteur d'une déclaration n'est révélé qu'à lui et aux modérateurs.
          *
          *     À la reconnexion, le navigateur renvoie l'en-tête `Last-Event-ID` : le serveur rejoue d'abord les événements
@@ -2528,6 +2617,11 @@ export interface components {
             title: string;
             description: string;
             /**
+             * @description Rôle du déclarant au moment des faits.
+             * @enum {string|null}
+             */
+            reporterRole?: "witness" | "victim" | null;
+            /**
              * Format: int32
              * @default 0
              */
@@ -2560,7 +2654,11 @@ export interface components {
             /** @enum {string} */
             status: "reported" | "in_progress" | "succeeded" | "failed";
             /** @enum {string} */
-            priority: "high" | "normal" | "low";
+            priority: "critical" | "high" | "normal" | "low";
+            /** @enum {string} */
+            moderation: "pending" | "approved" | "rejected";
+            /** @enum {string|null} */
+            reporterRole?: "witness" | "victim" | null;
             /** Format: int32 */
             citizensRescued: number;
             location: {
@@ -2586,6 +2684,34 @@ export interface components {
             }[];
             /** Format: date-time */
             createdAt: string;
+        };
+        IncidentModerationPayload: {
+            /** @enum {string} */
+            decision: "approved" | "rejected";
+        };
+        IncidentPriorityPayload: {
+            /** @enum {string} */
+            priority: "critical" | "high" | "normal" | "low";
+        };
+        IncidentUpdatePayload: {
+            /** Format: int32 */
+            typeId: number;
+            title: string;
+            description: string;
+            /** @enum {string} */
+            status: "reported" | "in_progress" | "succeeded" | "failed";
+            location: {
+                address: string;
+                city: string;
+                /** Format: double */
+                latitude: number | null;
+                /** Format: double */
+                longitude: number | null;
+            };
+            /** Format: uuid */
+            villainId: string | null;
+            /** Format: uuid */
+            heroId: string | null;
         };
         IncidentPage: {
             items: components["schemas"]["Incident"][];
@@ -2684,6 +2810,59 @@ export interface components {
             total: number;
             limit: number;
             offset: number;
+        };
+        HeroDashboard: {
+            /** @description Statistiques de toute la plateforme. */
+            global: {
+                /** @description Interventions terminées (réussies ou échouées) : une par équipe, pas une par héros. */
+                interventions: number;
+                /** @description Tous les types du catalogue, y compris ceux sans incident, du plus fréquent au moins fréquent. */
+                incidentsByType: components["schemas"]["HeroDashboardTypeCount"][];
+                /** @description Citoyens secourus : somme des incidents réussis, une seule fois par incident. */
+                rescuedCitizens: number;
+                /** @description Vilains connus de la plateforme. */
+                villainsIdentified: number;
+                /** @description Vilains dont le statut est `emprisonne`. */
+                villainsImprisoned: number;
+            };
+            /** @description Statistiques du héros connecté. */
+            personal: {
+                /** @description Interventions terminées auxquelles le héros a participé (participation confirmée). */
+                interventions: number;
+                successfulInterventions: number;
+                failedInterventions: number;
+                /**
+                 * Format: double
+                 * @description Moyenne des avis publiés; 0 sans avis.
+                 */
+                averageRating: number;
+                /** @description Nombre d'avis publiés. */
+                ratingsCount: number;
+                /** @description Films liés au héros, tous statuts de modération confondus. */
+                videos: number;
+                /** @description Films approuvés par la modération. */
+                publishedVideos: number;
+                /** @description Vilains les plus souvent affrontés, du plus fréquent au moins fréquent. */
+                mainEnemies: components["schemas"]["HeroDashboardEnemy"][];
+            };
+            /** @description Incidents sur lesquels le héros intervient en ce moment (au plus un en pratique). */
+            myOngoingIncidents: components["schemas"]["Incident"][];
+            /** @description Derniers incidents non résolus (signalés, en cours ou échoués : un incident échoué peut être repris), tous héros confondus, du plus récent au plus ancien. */
+            recentIncidents: components["schemas"]["Incident"][];
+        };
+        HeroDashboardTypeCount: {
+            type: {
+                code: string;
+                label: string;
+            };
+            count: number;
+        };
+        HeroDashboardEnemy: {
+            /** Format: uuid */
+            id: string;
+            alias: string;
+            /** @description Nombre d'incidents où le héros a affronté ce vilain. */
+            encounters: number;
         };
         HeroReputation: {
             /** Format: double */
@@ -3254,6 +3433,29 @@ export interface operations {
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getHeroDashboard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Le tableau de bord. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HeroDashboard"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -5580,6 +5782,134 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    moderateIncident: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identifiant de l'utilisateur (champ `id` de la liste des comptes).
+                 * @example 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
+                 */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IncidentModerationPayload"];
+            };
+        };
+        responses: {
+            /** @description Décision enregistrée. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateIncident: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identifiant de l'utilisateur (champ `id` de la liste des comptes).
+                 * @example 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
+                 */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IncidentUpdatePayload"];
+            };
+        };
+        responses: {
+            /** @description Incident corrigé. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Incident"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description L'intervention ou le héros ne peut pas être synchronisé. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    setIncidentPriority: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identifiant de l'utilisateur (champ `id` de la liste des comptes).
+                 * @example 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
+                 */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IncidentPriorityPayload"];
+            };
+        };
+        responses: {
+            /** @description Priorité modifiée. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description L'incident n'est pas disponible pour une modification de priorité. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["ValidationFailed"];
             500: components["responses"]["InternalError"];
         };
     };

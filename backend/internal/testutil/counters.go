@@ -11,9 +11,9 @@ import (
 var counterChecks = []struct{ name, expected, stored string }{
 	{
 		name: "incident_stats",
-		expected: `SELECT coalesce(status, 'reported') AS status, type_id, count(*) AS incidents, coalesce(sum(citizens_rescued), 0)::bigint AS rescued
-			FROM incidents GROUP BY coalesce(status, 'reported'), type_id`,
-		stored: `SELECT status, type_id, incidents, citizens_rescued FROM incident_stats WHERE incidents <> 0 OR citizens_rescued <> 0`,
+		expected: `SELECT moderation, coalesce(status, 'reported') AS status, type_id, count(*) AS incidents, coalesce(sum(citizens_rescued), 0)::bigint AS rescued
+			FROM incidents GROUP BY moderation, coalesce(status, 'reported'), type_id`,
+		stored: `SELECT moderation, status, type_id, incidents, citizens_rescued FROM incident_stats WHERE incidents <> 0 OR citizens_rescued <> 0`,
 	},
 	{
 		name: "reporter_stats",
@@ -22,14 +22,23 @@ var counterChecks = []struct{ name, expected, stored string }{
 		stored: `SELECT reporter_id, status, incidents FROM reporter_stats WHERE incidents <> 0`,
 	},
 	{
-		name:     "villain_stats",
-		expected: `SELECT villain_id, count(*) AS incidents FROM incident_villains GROUP BY villain_id`,
-		stored:   `SELECT villain_id, incidents FROM villain_stats WHERE incidents <> 0`,
+		// Recalculé depuis les incidents eux-mêmes, pas depuis incident_villains.incident_approved : une copie
+		// périmée de la modération serait vue ici.
+		name: "villain_stats",
+		expected: `SELECT iv.villain_id, count(*) AS incidents
+			FROM incident_villains iv JOIN incidents i ON i.id = iv.incident_id
+			WHERE i.moderation = 'approved' GROUP BY iv.villain_id`,
+		stored: `SELECT villain_id, incidents FROM villain_stats WHERE incidents <> 0`,
 	},
 	{
+		// Idem : les interventions réussies d'un incident approuvé, pas intervention_heroes.resolved_at.
 		name: "hero_stats",
-		expected: `SELECT hero_id, count(*) AS interventions, count(resolved_at) AS resolved
-			FROM intervention_heroes WHERE participation = 'confirmed' GROUP BY hero_id`,
+		expected: `SELECT ih.hero_id, count(*) AS interventions,
+				count(*) FILTER (WHERE n.status = 'succeeded' AND i.moderation = 'approved') AS resolved
+			FROM intervention_heroes ih
+			JOIN interventions n ON n.id = ih.intervention_id
+			JOIN incidents i ON i.id = n.incident_id
+			WHERE ih.participation = 'confirmed' GROUP BY ih.hero_id`,
 		stored: `SELECT hero_id, interventions, resolved FROM hero_stats WHERE interventions <> 0 OR resolved <> 0`,
 	},
 }

@@ -3,10 +3,15 @@
 -- À 5 millions d'incidents, compter coûtait de 150 ms à plusieurs secondes selon le filtre ; lire un compteur
 -- coûte une lecture d'index.
 --
---   incident_stats : incidents et citoyens secourus par (statut, type)   -> total des listes, statistiques
+--   incident_stats : incidents et citoyens secourus par (modération, statut, type) -> total des listes, statistiques
 --   reporter_stats : incidents de chaque déclarant, par statut           -> total de « mes incidents »
---   villain_stats  : incidents liés à chaque vilain                      -> fiche et liste des vilains
+--   villain_stats  : incidents approuvés liés à chaque vilain            -> fiche et liste des vilains
 --   hero_stats     : interventions confirmées et résolues de chaque héros -> fiche et liste des héros
+--
+-- La modération (incidents.moderation) décide de ce que le public voit : incident_stats la garde comme dimension
+-- (les listes publiques lisent la ligne « approved », un modérateur les additionne toutes), villain_stats ne
+-- compte que les liens approuvés (incident_villains.incident_approved) et hero_stats.resolved que les
+-- interventions réussies d'un incident approuvé (intervention_heroes.resolved_at), comme leurs historiques publics.
 --
 -- Ils sont tenus à jour par des triggers de niveau instruction (REFERENCING … TABLE) : une écriture en masse
 -- (100 000 lignes) ne produit qu'une mise à jour par compteur, pas une par ligne, et aucun chemin d'écriture (API,
@@ -14,12 +19,13 @@
 -- référence du calcul, utilisée ici pour le rattrapage initial, et pour corriger une dérive éventuelle.
 
 CREATE TABLE incident_stats (
+    moderation       text     NOT NULL,
     status           text     NOT NULL,
     type_id          smallint NOT NULL REFERENCES incident_types (id),
     incidents        bigint   NOT NULL DEFAULT 0,
     citizens_rescued bigint   NOT NULL DEFAULT 0,
 
-    CONSTRAINT incident_stats_pk PRIMARY KEY (status, type_id)
+    CONSTRAINT incident_stats_pk PRIMARY KEY (moderation, status, type_id)
 );
 
 -- Sans clé étrangère vers users : le déclarant d'un incident passe à NULL quand son compte est supprimé, et la
@@ -48,10 +54,10 @@ LANGUAGE plpgsql AS $$
 BEGIN
     TRUNCATE incident_stats, reporter_stats, villain_stats, hero_stats;
 
-    INSERT INTO incident_stats (status, type_id, incidents, citizens_rescued)
-    SELECT coalesce(status, 'reported'), type_id, count(*), coalesce(sum(citizens_rescued), 0)
+    INSERT INTO incident_stats (moderation, status, type_id, incidents, citizens_rescued)
+    SELECT moderation, coalesce(status, 'reported'), type_id, count(*), coalesce(sum(citizens_rescued), 0)
       FROM incidents
-     GROUP BY coalesce(status, 'reported'), type_id;
+     GROUP BY moderation, coalesce(status, 'reported'), type_id;
 
     INSERT INTO reporter_stats (reporter_id, status, incidents)
     SELECT reporter_id, coalesce(status, 'reported'), count(*)
@@ -60,7 +66,7 @@ BEGIN
      GROUP BY reporter_id, coalesce(status, 'reported');
 
     INSERT INTO villain_stats (villain_id, incidents)
-    SELECT villain_id, count(*) FROM incident_villains GROUP BY villain_id;
+    SELECT villain_id, count(*) FROM incident_villains WHERE incident_approved GROUP BY villain_id;
 
     INSERT INTO hero_stats (hero_id, interventions, resolved)
     SELECT hero_id, count(*), count(resolved_at)
@@ -76,11 +82,11 @@ SELECT rebuild_read_counters();
 CREATE FUNCTION incident_stats_after_insert() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
-    INSERT INTO incident_stats AS s (status, type_id, incidents, citizens_rescued)
-    SELECT coalesce(status, 'reported'), type_id, count(*), coalesce(sum(citizens_rescued), 0)
+    INSERT INTO incident_stats AS s (moderation, status, type_id, incidents, citizens_rescued)
+    SELECT moderation, coalesce(status, 'reported'), type_id, count(*), coalesce(sum(citizens_rescued), 0)
       FROM new_rows
-     GROUP BY coalesce(status, 'reported'), type_id
-    ON CONFLICT (status, type_id) DO UPDATE
+     GROUP BY moderation, coalesce(status, 'reported'), type_id
+    ON CONFLICT (moderation, status, type_id) DO UPDATE
         SET incidents = s.incidents + EXCLUDED.incidents,
             citizens_rescued = s.citizens_rescued + EXCLUDED.citizens_rescued;
 
@@ -93,21 +99,22 @@ BEGIN
     RETURN NULL;
 END $$;
 
--- Une mise à jour qui ne change ni le statut, ni le type, ni les citoyens secourus (updated_at seul, par exemple)
--- donne des deltas nuls : rien n'est écrit.
+-- Une mise à jour qui ne change ni la modération, ni le statut, ni le type, ni les citoyens secourus (updated_at
+-- seul, par exemple) donne des deltas nuls : rien n'est écrit.
 CREATE FUNCTION incident_stats_after_update() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
-    INSERT INTO incident_stats AS s (status, type_id, incidents, citizens_rescued)
-    SELECT status, type_id, sum(n), sum(rescued)
-      FROM (SELECT coalesce(status, 'reported') AS status, type_id, 1 AS n, coalesce(citizens_rescued, 0)::bigint AS rescued
+    INSERT INTO incident_stats AS s (moderation, status, type_id, incidents, citizens_rescued)
+    SELECT moderation, status, type_id, sum(n), sum(rescued)
+      FROM (SELECT moderation, coalesce(status, 'reported') AS status, type_id, 1 AS n,
+                   coalesce(citizens_rescued, 0)::bigint AS rescued
               FROM new_rows
             UNION ALL
-            SELECT coalesce(status, 'reported'), type_id, -1, -coalesce(citizens_rescued, 0)::bigint
+            SELECT moderation, coalesce(status, 'reported'), type_id, -1, -coalesce(citizens_rescued, 0)::bigint
               FROM old_rows) AS changes
-     GROUP BY status, type_id
+     GROUP BY moderation, status, type_id
     HAVING sum(n) <> 0 OR sum(rescued) <> 0
-    ON CONFLICT (status, type_id) DO UPDATE
+    ON CONFLICT (moderation, status, type_id) DO UPDATE
         SET incidents = s.incidents + EXCLUDED.incidents,
             citizens_rescued = s.citizens_rescued + EXCLUDED.citizens_rescued;
 
@@ -137,11 +144,11 @@ BEGIN
     UPDATE incident_stats AS s
        SET incidents = s.incidents - d.incidents,
            citizens_rescued = s.citizens_rescued - d.rescued
-      FROM (SELECT coalesce(status, 'reported') AS status, type_id, count(*) AS incidents,
+      FROM (SELECT moderation, coalesce(status, 'reported') AS status, type_id, count(*) AS incidents,
                    coalesce(sum(citizens_rescued), 0) AS rescued
               FROM old_rows
-             GROUP BY coalesce(status, 'reported'), type_id) AS d
-     WHERE s.status = d.status AND s.type_id = d.type_id;
+             GROUP BY moderation, coalesce(status, 'reported'), type_id) AS d
+     WHERE s.moderation = d.moderation AND s.status = d.status AND s.type_id = d.type_id;
 
     UPDATE reporter_stats AS s
        SET incidents = s.incidents - d.incidents
@@ -176,7 +183,22 @@ CREATE FUNCTION villain_stats_after_insert() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
     INSERT INTO villain_stats AS s (villain_id, incidents)
-    SELECT villain_id, count(*) FROM new_rows GROUP BY villain_id
+    SELECT villain_id, count(*) FROM new_rows WHERE incident_approved GROUP BY villain_id
+    ON CONFLICT (villain_id) DO UPDATE SET incidents = s.incidents + EXCLUDED.incidents;
+    RETURN NULL;
+END $$;
+
+-- Décision de modération : le lien devient (ou cesse d'être) approuvé, le compteur du vilain suit.
+CREATE FUNCTION villain_stats_after_update() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO villain_stats AS s (villain_id, incidents)
+    SELECT villain_id, sum(n)
+      FROM (SELECT villain_id, 1 AS n FROM new_rows WHERE incident_approved
+            UNION ALL
+            SELECT villain_id, -1 FROM old_rows WHERE incident_approved) AS changes
+     GROUP BY villain_id
+    HAVING sum(n) <> 0
     ON CONFLICT (villain_id) DO UPDATE SET incidents = s.incidents + EXCLUDED.incidents;
     RETURN NULL;
 END $$;
@@ -186,7 +208,7 @@ LANGUAGE plpgsql AS $$
 BEGIN
     UPDATE villain_stats AS s
        SET incidents = s.incidents - d.incidents
-      FROM (SELECT villain_id, count(*) AS incidents FROM old_rows GROUP BY villain_id) AS d
+      FROM (SELECT villain_id, count(*) AS incidents FROM old_rows WHERE incident_approved GROUP BY villain_id) AS d
      WHERE s.villain_id = d.villain_id;
     RETURN NULL;
 END $$;
@@ -200,6 +222,8 @@ END $$;
 
 CREATE TRIGGER villain_stats_after_insert AFTER INSERT ON incident_villains
     REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION villain_stats_after_insert();
+CREATE TRIGGER villain_stats_after_update AFTER UPDATE ON incident_villains
+    REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION villain_stats_after_update();
 CREATE TRIGGER villain_stats_after_delete AFTER DELETE ON incident_villains
     REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION villain_stats_after_delete();
 CREATE TRIGGER villain_stats_after_truncate AFTER TRUNCATE ON incident_villains

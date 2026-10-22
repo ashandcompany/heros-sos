@@ -94,16 +94,17 @@ func (r *gormRepository) conn(ctx context.Context) *gorm.DB { return database.Co
 
 func (r *gormRepository) Start(ctx context.Context, incidentID, leadID uuid.UUID, now time.Time) (*Intervention, error) {
 	var incident struct {
-		ID     uuid.UUID
-		Status string
+		ID         uuid.UUID
+		Status     string
+		Moderation string
 	}
-	if err := r.conn(ctx).Table("incidents").Select("id, status").Where("id = ?", incidentID).Take(&incident).Error; err != nil {
+	if err := r.conn(ctx).Table("incidents").Select("id, status, moderation").Where("id = ?", incidentID).Take(&incident).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("intervention : lecture de l'incident : %w", err)
 	}
-	if incident.Status != "reported" && incident.Status != "failed" {
+	if incident.Moderation != "approved" || incident.Status != "reported" && incident.Status != "failed" {
 		return nil, ErrIncidentNotAvailable
 	}
 

@@ -38,7 +38,7 @@ Journal des événements métier des incidents et des interventions (event sourc
 | `aggregate_id` | uuid | L'incident, ou l'intervention |
 | `version` | integer | Rang dans l'agrégat (1, 2, 3…). `UNIQUE (aggregate_id, version)` : la concurrence optimiste |
 | `incident_id` | uuid | L'incident concerné, pour filtrer les flux et les historiques. Pas de clé étrangère : l'histoire survit à l'incident |
-| `type` | text | `incident.declared`, `intervention.started`, `.joined`, `.invited`, `.invitation_confirmed`, `.invitation_declined`, `.outcome_proposed`, `.outcome_validated`, `.outcome_disputed`, `.closed`, `.arbitrated` |
+| `type` | text | `incident.declared`, `.moderated`, `.corrected`, `.priority_changed`, `intervention.started`, `.joined`, `.invited`, `.invitation_confirmed`, `.invitation_declined`, `.outcome_proposed`, `.outcome_validated`, `.outcome_disputed`, `.closed`, `.arbitrated` |
 | `payload` | jsonb | Identifiants et états seulement, jamais d'adresse ni de texte libre |
 | `actor_id` | uuid | Qui a agi |
 | `command_id` | uuid | Clé d'idempotence de la commande à l'origine de l'événement (NULL hors commande rejouable) |

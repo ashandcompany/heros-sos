@@ -10,7 +10,7 @@ const STREAM_URL = "/api/v1/events/stream";
 const REFRESH_DELAY_MS = 400;
 
 /**
- * Flux temps réel : à chaque événement du journal (incident déclaré, intervention démarrée, résultat…), la page
+ * Flux temps réel : à chaque événement du journal (incident déclaré ou modéré, intervention démarrée, résultat…), la page
  * se recharge avec les données à jour. `EventSource` se reconnecte seul après une coupure en renvoyant le numéro
  * du dernier événement reçu : le serveur rejoue ce qui a été manqué, rien n'est perdu.
  *
@@ -41,6 +41,9 @@ export function LiveEvents() {
 
 const eventTypes = [
   "incident.declared",
+  "incident.moderated",
+  "incident.corrected",
+  "incident.priority_changed",
   "intervention.started",
   "intervention.joined",
   "intervention.invited",

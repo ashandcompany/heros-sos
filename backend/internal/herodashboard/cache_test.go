@@ -216,11 +216,11 @@ func TestManyConcurrentCallersComputeEachKeyOnce(t *testing.T) {
 	const keys, callers = 300, 8
 	calls := make([]atomic.Int64, keys)
 	var wg sync.WaitGroup
-	for caller := 0; caller < callers; caller++ {
+	for range callers {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for key := 0; key < keys; key++ {
+			for key := range keys {
 				_, err := cache.get(context.Background(), strconv.Itoa(key), func(context.Context) (int, error) {
 					calls[key].Add(1)
 					return key, nil

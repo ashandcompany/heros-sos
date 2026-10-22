@@ -12,6 +12,19 @@ const nextConfig: NextConfig = {
       ? [{ source: "/api/v1/avatars/:name", destination: `${apiUrl}/avatars/:name` }]
       : [];
   },
+  // Le service worker (public/sw.js) ne doit jamais être servi depuis un cache : une version corrigée doit
+  // atteindre les navigateurs tout de suite, c'est lui qui contrôle ce qu'ils gardent hors ligne.
+  async headers() {
+    return [
+      {
+        source: "/sw.js",
+        headers: [
+          { key: "Content-Type", value: "application/javascript; charset=utf-8" },
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+        ],
+      },
+    ];
+  },
   cacheComponents: true,
   partialPrefetching: true,
   experimental: {

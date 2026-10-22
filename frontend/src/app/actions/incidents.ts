@@ -9,6 +9,7 @@ import {
   requireRole,
   requireHeroSession,
 } from "@/lib/server-session";
+import { isUuid } from "@/lib/offline/commands";
 import { hasFieldErrors, type FormState } from "@/lib/validation/form-state";
 import {
   readDeclarationValues,
@@ -59,7 +60,14 @@ async function submitDeclaration(
 
   if (hasFieldErrors(fieldErrors)) return { status: "error", fieldErrors, values };
 
-  const result = await declareIncident(token, toDeclaration(validated));
+  // Identifiant choisi par l'appareil (champ caché) : si la réponse se perd et que l'envoi est rejoué hors ligne,
+  // l'API reconnaît l'incident au lieu d'en créer un second.
+  const incidentId = String(formData.get("incidentId") ?? "");
+  const declaration = toDeclaration(validated);
+  const result = await declareIncident(
+    token,
+    isUuid(incidentId) ? { ...declaration, id: incidentId } : declaration,
+  );
   if (!result.ok) return { status: "error", message: result.error, fieldErrors: {}, values };
 
   revalidatePath(routes.profileIncidents);

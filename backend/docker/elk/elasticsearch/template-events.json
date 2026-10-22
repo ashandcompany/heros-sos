@@ -1,0 +1,36 @@
+{
+  "index_patterns": ["herossos-events-*"],
+  "priority": 200,
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "index.lifecycle.name": "herossos-7d"
+    },
+    "mappings": {
+      "dynamic_templates": [
+        { "strings_as_keywords": { "match_mapping_type": "string", "mapping": { "type": "keyword", "ignore_above": 1024 } } }
+      ],
+      "properties": {
+        "@timestamp": { "type": "date" },
+        "message": { "type": "text" },
+        "level": { "type": "keyword" },
+        "service": { "type": "keyword" },
+        "event": { "properties": { "dataset": { "type": "keyword" } } },
+        "event_type": { "type": "keyword" },
+        "event_seq": { "type": "long" },
+        "event_id": { "type": "keyword" },
+        "aggregate_type": { "type": "keyword" },
+        "aggregate_id": { "type": "keyword" },
+        "aggregate_version": { "type": "integer" },
+        "incident_id": { "type": "keyword" },
+        "actor_id": { "type": "keyword" },
+        "command_id": { "type": "keyword" },
+        "recorded_at": { "type": "date" },
+        "occurred_at": { "type": "date" },
+        "sync_delay_ms": { "type": "long" },
+        "payload": { "type": "object", "dynamic": true }
+      }
+    }
+  }
+}

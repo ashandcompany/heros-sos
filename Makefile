@@ -49,6 +49,37 @@ moderator: docker ## Crée un modérateur en dev : make moderator EMAIL=… FIRS
 seed: docker ## Remplit la base de dev avec des données Marvel (héros, vilains, incidents…) ; RESET=1 efface tout avant
 	@$(BACKEND) seed-dev
 
+# Monitoring ELK : Kibana sur http://localhost:5601 (3 à 4 Go de mémoire en plus).
+.PHONY: elk elk-down
+elk: docker ## Démarre le monitoring ELK (journaux de l'API en JSON, Kibana : http://localhost:5601)
+	@$(BACKEND) elk-dev
+
+elk-down: docker ## Arrête le monitoring ELK (V=1 supprime aussi ses données)
+	@$(BACKEND) elk-down-dev
+
+# Mesures de performance sur 5 millions d'incidents, dans une base dédiée (voir backend/Makefile).
+.PHONY: perf-db perf-prepare seed-perf perf-run perf perf-indexes-off perf-indexes-on
+perf-db: docker ## Crée la base de mesures herossos_perf dans la base de dev (Docker)
+	@$(BACKEND) perf-db
+
+perf-prepare: ## Migre la base de mesures et y charge les données Marvel
+	@$(BACKEND) perf-prepare
+
+seed-perf: ## Ajoute 5 000 000 d'incidents à la base de mesures (PERF_INCIDENTS=…, PERF_MAX_SIZE_GB=…)
+	@$(BACKEND) seed-perf
+
+perf-run: ## Lance l'API sur la base de mesures
+	@$(BACKEND) perf-run
+
+perf: ## Mesure les temps de réponse : échoue si le p95 dépasse 350 ms (LOADTEST_PASSWORD=… pour « mes incidents »)
+	@$(BACKEND) perf
+
+perf-indexes-off: ## Démonstration : retire les index de lecture de la base de mesures (lenteur d'origine)
+	@$(BACKEND) perf-indexes-off
+
+perf-indexes-on: ## Démonstration : recrée les index de lecture de la base de mesures
+	@$(BACKEND) perf-indexes-on
+
 .PHONY: resetmfa
 resetmfa: docker ## Réinitialise la 2FA d'un compte (appareil perdu) en dev : make resetmfa EMAIL=…
 	@$(BACKEND) resetmfa-dev

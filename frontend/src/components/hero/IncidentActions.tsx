@@ -11,6 +11,7 @@ import {
   takeChargeAction,
   voteOnOutcomeAction,
 } from "@/app/actions/hero";
+import { useOfflineAction } from "@/components/offline/useOfflineAction";
 import { buttonClasses } from "@/components/ui/ButtonLink";
 import { cn } from "@/components/ui/cn";
 import { FormMessage } from "@/components/ui/FormMessage";
@@ -18,6 +19,7 @@ import { SelectField } from "@/components/ui/SelectField";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { TextAreaField } from "@/components/ui/TextAreaField";
 import { incidentPriorityLabels } from "@/lib/format";
+import { heroForms } from "@/lib/offline/forms";
 import { idleFormState } from "@/lib/validation/form-state";
 import { OUTCOME_NOTES_MAX_LENGTH } from "@/lib/validation/hero";
 import type { IncidentPriority, InterventionRef, SuperHeroSummary } from "@/types";
@@ -52,7 +54,10 @@ export function PriorityForm({
 }
 
 export function TakeChargeForm({ incidentId }: { incidentId: string }) {
-  const [state, formAction] = useActionState(takeChargeAction, idleFormState);
+  const [state, formAction] = useActionState(
+    useOfflineAction(takeChargeAction, heroForms.takeCharge),
+    idleFormState,
+  );
 
   return (
     <form action={formAction} className="space-y-3">
@@ -119,7 +124,10 @@ export function FinishInterventionForm({
   interventionRef: InterventionRef;
   solo: boolean;
 }) {
-  const [state, formAction] = useActionState(finishInterventionAction, idleFormState);
+  const [state, formAction] = useActionState(
+    useOfflineAction(finishInterventionAction, heroForms.finish),
+    idleFormState,
+  );
 
   return (
     <form action={formAction} className="space-y-3">
@@ -147,7 +155,10 @@ export function FinishInterventionForm({
 }
 
 export function JoinTeamForm({ interventionRef }: { interventionRef: InterventionRef }) {
-  const [state, formAction] = useActionState(joinInterventionAction, idleFormState);
+  const [state, formAction] = useActionState(
+    useOfflineAction(joinInterventionAction, heroForms.join),
+    idleFormState,
+  );
 
   return (
     <form action={formAction} className="space-y-3">
@@ -161,7 +172,10 @@ export function JoinTeamForm({ interventionRef }: { interventionRef: Interventio
 }
 
 export function InvitationResponseForm({ interventionRef }: { interventionRef: InterventionRef }) {
-  const [state, formAction] = useActionState(respondToInvitationAction, idleFormState);
+  const [state, formAction] = useActionState(
+    useOfflineAction(respondToInvitationAction, heroForms.respondToInvitation),
+    idleFormState,
+  );
 
   return (
     <form action={formAction} className="space-y-3">
@@ -179,7 +193,10 @@ export function InvitationResponseForm({ interventionRef }: { interventionRef: I
 }
 
 export function OutcomeVoteForm({ interventionRef }: { interventionRef: InterventionRef }) {
-  const [state, formAction] = useActionState(voteOnOutcomeAction, idleFormState);
+  const [state, formAction] = useActionState(
+    useOfflineAction(voteOnOutcomeAction, heroForms.voteOnOutcome),
+    idleFormState,
+  );
 
   return (
     <form action={formAction} className="space-y-3">
@@ -208,7 +225,10 @@ export function InviteHeroesForm({
   /** Super-héros qui ne font pas encore partie de l'équipe, par pseudo. */
   candidates: SuperHeroSummary[];
 }) {
-  const [state, formAction] = useActionState(inviteHeroesAction, idleFormState);
+  const [state, formAction] = useActionState(
+    useOfflineAction(inviteHeroesAction, heroForms.invite),
+    idleFormState,
+  );
 
   if (candidates.length === 0) {
     return <p className="text-sm text-muted">Aucun autre super-héros à inviter.</p>;

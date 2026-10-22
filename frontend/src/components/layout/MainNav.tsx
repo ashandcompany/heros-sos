@@ -6,6 +6,7 @@ import { Suspense, useEffect, useId, useRef, useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { buttonClasses } from "@/components/ui/ButtonLink";
 import { cn } from "@/components/ui/cn";
+import { clearOfflinePages } from "@/components/offline/OfflineProvider";
 import { logoutAction } from "@/app/actions/auth";
 import { mainNav, routes } from "@/lib/routes";
 import type { AvatarData } from "@/lib/api";
@@ -120,7 +121,12 @@ function AccountActions({ user, variant, isSpacePage, onNavigate }: AccountActio
           {spaceLink.label}
         </Link>
       )}
-      <form action={logoutAction} className={cn(mobile && !spaceLink && "col-span-2")}>
+      <form
+        action={logoutAction}
+        // Les pages gardées pour la lecture hors ligne sont celles de ce compte : elles partent avec lui.
+        onSubmit={() => void clearOfflinePages()}
+        className={cn(mobile && !spaceLink && "col-span-2")}
+      >
         {mobile ? (
           <button type="submit" className={cn(buttonClasses("secondary"), "w-full")}>
             Déconnexion

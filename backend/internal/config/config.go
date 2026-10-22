@@ -23,6 +23,15 @@ const (
 	EnvironmentTest        Environment = "test"
 )
 
+// LogFormat choisit la forme des lignes de journal.
+type LogFormat string
+
+// Formats de journal.
+const (
+	LogFormatJSON LogFormat = "json" // une ligne JSON par entrée, pour Filebeat et Logstash (défaut en production)
+	LogFormatText LogFormat = "text" // clé=valeur lisible dans un terminal (défaut ailleurs)
+)
+
 // MailDriver choisit comment les mails sont envoyés.
 type MailDriver string
 
@@ -58,6 +67,8 @@ type RateRule struct {
 type Config struct {
 	Environment Environment
 	LogLevel    slog.Level
+	// LogFormat est le format des journaux : JSON (lu par le monitoring) ou texte lisible.
+	LogFormat   LogFormat
 	AutoMigrate bool
 	HTTP        HTTP
 	Database    Database
@@ -69,6 +80,8 @@ type Config struct {
 	Avatar      Avatar
 	App         App
 	Jobs        Jobs
+	Events      Events
+	Dashboard   Dashboard
 	Proximity   Proximity
 }
 
@@ -321,6 +334,33 @@ type Jobs struct {
 	CleanupTimeout   time.Duration
 	SessionRetention time.Duration
 	TokenRetention   time.Duration
+	// CommandRetention est la durée de conservation des commandes rejouables (clés d'idempotence).
+	CommandRetention time.Duration
+}
+
+// Events regroupe les réglages du journal d'événements (voir le paquet events).
+type Events struct {
+	// PollInterval est la fréquence de lecture des nouveaux événements.
+	PollInterval time.Duration
+	// BatchSize borne le nombre d'événements lus par passage.
+	BatchSize int
+	// Heartbeat est le délai entre deux signaux de vie sur un flux ouvert.
+	Heartbeat time.Duration
+	// MaxStreamsPerUser borne les flux temps réel ouverts en même temps par un utilisateur.
+	MaxStreamsPerUser int
+	// StreamMaxAge est la durée maximale d'un flux : à son terme le serveur le ferme, et le navigateur se
+	// reconnecte (la session est alors revérifiée).
+	StreamMaxAge time.Duration
+	// StreamBuffer est le nombre d'événements gardés en attente pour un flux lent avant de le fermer.
+	StreamBuffer int
+}
+
+// Dashboard regroupe les réglages du tableau de bord des héros.
+type Dashboard struct {
+	// StatsTTL est la fraîcheur des statistiques (globales, et celles de chaque héros) : au-delà, la dernière valeur
+	// est encore servie sur-le-champ pendant qu'une nouvelle est calculée en arrière-plan, car ces agrégats parcourent
+	// de très grosses tables. Zéro désactive ce cache : chaque appel recalcule.
+	StatsTTL time.Duration
 }
 
 // Proximity regroupe les réglages de la localisation des héros.
@@ -352,6 +392,7 @@ func Load(getenv func(string) string) (Config, error) {
 	cfg := Config{
 		Environment: environment,
 		LogLevel:    l.logLevel(),
+		LogFormat:   l.logFormat(production),
 		AutoMigrate: l.boolean(envAutoMigrate, false),
 		HTTP: HTTP{
 			Addr:               l.text(envHTTPAddr, defaultHTTPAddr),
@@ -458,7 +499,18 @@ func Load(getenv func(string) string) (Config, error) {
 			CleanupTimeout:   l.duration(envCleanupTimeout, defaultCleanupTimeout),
 			SessionRetention: l.duration(envSessionRetention, defaultSessionRetention),
 			TokenRetention:   l.duration(envTokenRetention, defaultTokenRetention),
+			CommandRetention: l.duration(envCommandRetention, defaultCommandRetention),
 		},
+		Events: Events{
+			PollInterval: l.duration(envEventsPollInterval, defaultEventsPollInterval),
+			BatchSize:    l.positiveInt(envEventsBatchSize, defaultEventsBatchSize),
+			Heartbeat:    l.duration(envEventsHeartbeat, defaultEventsHeartbeat),
+
+			MaxStreamsPerUser: l.positiveInt(envEventsMaxStreamsPerUser, defaultEventsMaxStreamsPerUser),
+			StreamMaxAge:      l.duration(envEventsStreamMaxAge, defaultEventsStreamMaxAge),
+			StreamBuffer:      l.positiveInt(envEventsStreamBuffer, defaultEventsStreamBuffer),
+		},
+		Dashboard: Dashboard{StatsTTL: l.durationOrZero(envDashboardStatsTTL, defaultDashboardStatsTTL)},
 		Proximity: Proximity{
 			LocationTTL:   l.duration(envLocationTTL, defaultLocationTTL),
 			AlertRadiusKm: l.positiveInt(envAlertRadiusKm, defaultAlertRadiusKm),

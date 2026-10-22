@@ -24,6 +24,7 @@ var dataTables = []string{
 	"users", "hero_profiles", "sessions", "user_tokens", "audit_logs",
 	"incident_types", "incidents", "interventions", "intervention_heroes",
 	"villains", "villain_specialties", "incident_villains",
+	"events", "event_publication", "processed_commands",
 	"hero_reviews", "hero_review_replies",
 	"films", "hero_films", "villain_films",
 	"email_change_requests", "newsletter_subscriptions", "articles",
@@ -380,10 +381,11 @@ func (s *seeder) seedIncident(ctx context.Context, in incidentSeed) error {
 	}
 
 	incidentID := ids.New()
+	// Les incidents de démonstration sont approuvés : sans cela (défaut « pending »), les héros ne verraient rien.
 	if err := s.exec(ctx, `INSERT INTO incidents
-		(id, reporter_id, type_id, title, description, status, priority, citizens_rescued,
+		(id, reporter_id, type_id, title, description, status, priority, moderation, citizens_rescued,
 		 street, postal_code, city, country, latitude, longitude, occurred_at, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		incidentID, reporterID, typeID, in.Title, in.Description, status, in.Priority, in.Rescued,
 		in.Address.Street, in.Address.PostalCode, in.Address.City, in.Address.Country, in.Lat, in.Lon,
 		occurredAt, createdAt, createdAt); err != nil {

@@ -5,6 +5,7 @@ package config
 const (
 	envEnvironment = "HEROS_ENV"
 	envLogLevel    = "HEROS_LOG_LEVEL"
+	envLogFormat   = "HEROS_LOG_FORMAT"
 	envAutoMigrate = "HEROS_AUTO_MIGRATE"
 
 	envHTTPAddr              = "HEROS_HTTP_ADDR"
@@ -112,6 +113,17 @@ const (
 	envCleanupTimeout   = "HEROS_CLEANUP_TIMEOUT"
 	envSessionRetention = "HEROS_SESSION_RETENTION"
 	envTokenRetention   = "HEROS_TOKEN_RETENTION"
+	envCommandRetention = "HEROS_COMMAND_RETENTION"
+
+	envEventsPollInterval = "HEROS_EVENTS_POLL_INTERVAL"
+	envEventsBatchSize    = "HEROS_EVENTS_BATCH_SIZE"
+	envEventsHeartbeat    = "HEROS_EVENTS_HEARTBEAT"
+
+	envEventsMaxStreamsPerUser = "HEROS_EVENTS_MAX_STREAMS_PER_USER"
+	envEventsStreamMaxAge      = "HEROS_EVENTS_STREAM_MAX_AGE"
+	envEventsStreamBuffer      = "HEROS_EVENTS_STREAM_BUFFER"
+
+	envDashboardStatsTTL = "HEROS_DASHBOARD_STATS_TTL"
 
 	envLocationTTL   = "HEROS_LOCATION_TTL"
 	envAlertRadiusKm = "HEROS_ALERT_RADIUS_KM"
@@ -121,7 +133,7 @@ const (
 // Elle sert à vérifier que .env.example reste synchronisé avec le code.
 func EnvVarNames() []string {
 	return []string{
-		envEnvironment, envLogLevel, envAutoMigrate,
+		envEnvironment, envLogLevel, envLogFormat, envAutoMigrate,
 		envHTTPAddr, envHTTPReadHeaderTimeout, envHTTPReadTimeout, envHTTPWriteTimeout,
 		envHTTPIdleTimeout, envHTTPShutdownTimeout, envHTTPMaxBodyBytes, envHealthcheckTimeout, envTrustedProxies,
 		envAllowedOrigins,
@@ -148,7 +160,10 @@ func EnvVarNames() []string {
 		envContactRecipient, envAvatarDir, envAvatarMaxBytes, envAvatarMaxDimension,
 		envPublicBaseURL, envActivationPath, envPasswordResetPath, envNewsletterConfirmPath,
 		envNewsletterUnsubscribePath, envEmailChangeConfirmPath,
-		envCleanupInterval, envCleanupTimeout, envSessionRetention, envTokenRetention,
-				envLocationTTL, envAlertRadiusKm,
-			}
+		envCleanupInterval, envCleanupTimeout, envSessionRetention, envTokenRetention, envCommandRetention,
+		envEventsPollInterval, envEventsBatchSize, envEventsHeartbeat,
+		envEventsMaxStreamsPerUser, envEventsStreamMaxAge, envEventsStreamBuffer,
+		envDashboardStatsTTL,
+		envLocationTTL, envAlertRadiusKm,
+	}
 }

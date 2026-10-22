@@ -343,6 +343,7 @@ export async function declareIncident(
         method: "POST",
         sessionToken: token,
         body: {
+          ...(declaration.id ? { id: declaration.id } : {}),
           typeId: declaration.typeId,
           title: declaration.title,
           description: declaration.description,

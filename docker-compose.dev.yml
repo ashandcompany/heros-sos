@@ -6,6 +6,7 @@
 #                                             http://localhost:3001/heros-sos/  (la documentation)
 #
 # Outils facultatifs : `make adminer` ajoute Adminer (http://localhost:8082).
+# `make elk` ajoute le monitoring ELK (Kibana : http://localhost:5601), qui pèse 3 à 4 Go de mémoire.
 #
 # Lancé depuis la racine du dépôt : les chemins sont relatifs à la racine, et l'environnement de l'API
 # est lu dans backend/.env (le Makefile le passe aussi à Compose pour les ${…} de ce fichier).
@@ -34,6 +35,8 @@ services:
       # Le navigateur arrive par le proxy ; le front lancé hors Docker (npm run dev) reste accepté.
       HEROS_ALLOWED_ORIGINS: http://localhost:${PROXY_PORT:-8088},http://localhost:3000
       HEROS_PUBLIC_BASE_URL: http://localhost:${PROXY_PORT:-8088}
+      # `make elk` passe les journaux en JSON, que Filebeat sait lire ; sinon, du texte lisible dans un terminal.
+      HEROS_LOG_FORMAT: ${HEROS_LOG_FORMAT:-text}
     ports:
       # Accès direct à l'API (curl, outils), sans passer par le proxy.
       - "127.0.0.1:${API_PORT:-8081}:8080"
@@ -223,6 +226,111 @@ services:
       timeout: 10s
       retries: 10
 
+  # --- Monitoring ELK (profil `elk`, `make elk`) ------------------------------------------------------------
+  # Filebeat lit les journaux JSON de l'API, Logstash les trie (et retire ce qui est personnel), Elasticsearch les
+  # stocke, Kibana les affiche. Démonstration locale : la sécurité d'Elasticsearch est désactivée, tous les ports
+  # sont liés à 127.0.0.1, et rien de tout cela n'existe en production (voir backend/stack/performance-et-synchronisation.md).
+  # Les quatre images sont à la même version : ELASTIC_VERSION.
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${ELASTIC_VERSION:-9.3.1}
+    profiles: ["elk"]
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      discovery.type: single-node
+      # Démonstration locale uniquement : en production, la sécurité (mot de passe, TLS) est activée.
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms1g -Xmx1g
+      # Sur un disque presque plein (portable), Elasticsearch passerait ses index en lecture seule dès 85 % d'usage.
+      cluster.routing.allocation.disk.threshold_enabled: "false"
+    ports:
+      - "127.0.0.1:${ELASTICSEARCH_PORT:-9200}:9200"
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    networks:
+      - backend
+    healthcheck:
+      # `status.{3}` : les trois caractères (":") entre la clé et la valeur du JSON.
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health | grep -q -E 'status.{3}(green|yellow)'"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:${ELASTIC_VERSION:-9.3.1}
+    profiles: ["elk"]
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      LS_JAVA_OPTS: -Xms512m -Xmx512m
+      XPACK_MONITORING_ENABLED: "false"
+    volumes:
+      - ./backend/docker/elk/logstash/pipeline:/usr/share/logstash/pipeline:ro
+    networks:
+      - backend
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:${ELASTIC_VERSION:-9.3.1}
+    profiles: ["elk"]
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+      TELEMETRY_OPTIN: "false"
+    ports:
+      - "127.0.0.1:${KIBANA_PORT:-5601}:5601"
+    networks:
+      - backend
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5601/api/status | grep -q -E 'level.{3}available'"]
+      interval: 10s
+      timeout: 10s
+      retries: 60
+      start_period: 60s
+
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:${ELASTIC_VERSION:-9.3.1}
+    profiles: ["elk"]
+    restart: unless-stopped
+    logging: *logging
+    # Root pour lire les fichiers de journaux de Docker (non lisibles par un autre utilisateur).
+    user: root
+    command: ["filebeat", "-e", "--strict.perms=false"]
+    volumes:
+      - ./backend/docker/elk/filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    networks:
+      - backend
+    depends_on:
+      - logstash
+
+  # Tâche unique : modèles d'index, cycle de vie, vues de données et dashboard Kibana. Réutilise l'image de Kibana
+  # (curl et bash y sont déjà) plutôt que d'en télécharger une autre.
+  elk-setup:
+    image: docker.elastic.co/kibana/kibana:${ELASTIC_VERSION:-9.3.1}
+    profiles: ["elk"]
+    restart: "no"
+    logging: *logging
+    entrypoint: ["/bin/bash", "/elk/setup.sh"]
+    environment:
+      KIBANA_PORT: ${KIBANA_PORT:-5601}
+    volumes:
+      - ./backend/docker/elk:/elk:ro
+    networks:
+      - backend
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      kibana:
+        condition: service_healthy
+
   adminer:
     image: adminer:5
     profiles: ["tools"]
@@ -243,6 +351,8 @@ networks:
 
 volumes:
   rabbitmq_data:
+  # Index d'Elasticsearch (profil `elk`).
+  esdata:
   # Copie des documents de backend/ lus par la documentation (voir docs-sync).
   docs-source:
   # Copie des documents de frontend/ lus par la documentation (voir docs-sync).

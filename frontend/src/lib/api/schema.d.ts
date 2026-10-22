@@ -1490,6 +1490,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/events/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Flux temps réel des événements (SSE)
+         * @description Flux Server-Sent Events : la réponse reste ouverte et le serveur y écrit chaque événement du journal dès
+         *     qu'il est enregistré (déclaration, modération, correction ou priorité d'un incident, démarrage d'une
+         *     intervention, résultat…). Chaque message porte `id` (numéro de l'événement), `event` (type, par exemple
+         *     `incident.declared`) et `data` (JSON : `seq`, `type`, `aggregateType`, `aggregateId`, `incidentId`, `version`,
+         *     `actorId`, `payload`, `recordedAt`). Le contenu ne comporte que des identifiants et des états.
+         *
+         *     Visibilité : un modérateur reçoit tout ; un héros ne reçoit que les événements des incidents approuvés par la
+         *     modération (comme `GET /incidents`) ; un citoyen ne reçoit que ceux de ses propres incidents, quel que soit
+         *     leur état de modération.
+         *
+         *     L'auteur d'une déclaration n'est révélé qu'à lui et aux modérateurs.
+         *
+         *     À la reconnexion, le navigateur renvoie l'en-tête `Last-Event-ID` : le serveur rejoue d'abord les événements
+         *     manqués depuis le journal, puis continue en direct. Un flux trop lent est fermé (il se reconnecte et rattrape
+         *     son retard), et chaque flux est fermé après une durée maximale pour revérifier la session. Un signal de vie
+         *     (commentaire SSE) est envoyé régulièrement.
+         */
+        get: operations["streamEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/incidents/{incidentId}/interventions": {
         parameters: {
             query?: never;
@@ -2618,6 +2653,12 @@ export interface components {
             offset: number;
         };
         IncidentPayload: {
+            /**
+             * Format: uuid
+             * @description Identifiant choisi par le client (facultatif). Un appareil hors ligne le fixe à la déclaration pour
+             *     reconnaître son incident une fois synchronisé. 409 (`incident_already_exists`) s'il est déjà pris.
+             */
+            id?: string;
             /** Format: int32 */
             typeId: number;
             /** @description Titre court, affiché dans les listes. */
@@ -2739,6 +2780,8 @@ export interface components {
             total: number;
             limit: number;
             offset: number;
+            /** @description Valeur du paramètre `cursor` qui donne la page suivante. Absente de la dernière page. */
+            nextCursor?: string;
         };
         /** @description Incident vu depuis la fiche publique d'un héros ou d'un vilain. */
         IncidentSummary: {
@@ -2957,6 +3000,12 @@ export interface components {
             id: string;
             /** Format: uuid */
             incidentId: string;
+            /**
+             * @description Version de l'intervention dans le journal d'événements (une de plus à chaque action). À renvoyer comme
+             *     `expectedVersion` pour qu'une action faite sur une lecture périmée soit refusée (409,
+             *     `intervention_version_conflict`) plutôt qu'appliquée.
+             */
+            version: number;
             /** @enum {string} */
             status: "in_progress" | "succeeded" | "failed";
             /** @enum {string} */
@@ -2979,9 +3028,13 @@ export interface components {
             /** @enum {string} */
             status: "succeeded" | "failed";
             notes?: string;
+            /** @description Version de l'intervention lue par le client (facultative). Voir `Intervention.version`. */
+            expectedVersion?: number;
         };
         InterventionOutcomeValidationPayload: {
             approved: boolean;
+            /** @description Version de l'intervention lue par le client (facultative). Voir `Intervention.version`. */
+            expectedVersion?: number;
         };
         Account: {
             /**
@@ -3322,6 +3375,20 @@ export interface components {
         Limit: number;
         /** @description Nombre d'éléments à sauter. */
         Offset: number;
+        /**
+         * @description UUID choisi par le client pour cette action. Si la même clé revient (rejeu après une coupure de connexion,
+         *     action faite hors ligne puis synchronisée), la réponse du premier passage est rendue telle quelle, avec
+         *     l'en-tête `Idempotent-Replayed: true`, sans rien refaire. Seules les réussites sont conservées : après une
+         *     erreur, la même clé se rejoue. La même clé avec une autre requête est refusée (422, `idempotency_key_reused`).
+         *     La clé est propre à son auteur.
+         */
+        IdempotencyKey: string;
+        /**
+         * @description Date (RFC 3339) à laquelle l'action a été créée sur l'appareil, pour une action faite hors ligne. Elle sert à
+         *     mesurer le délai de synchronisation, et reste sans effet sans `Idempotency-Key`. Une date plus avancée que
+         *     l'heure du serveur est ramenée à l'heure de réception.
+         */
+        ClientCreatedAt: string;
     };
     requestBodies: never;
     headers: never;
@@ -5773,13 +5840,22 @@ export interface operations {
                 villainId?: string[];
                 /**
                  * @description Ordre : les plus récemment déclarés d'abord (`-createdAt`, par défaut), ou les plus
-                 *     récemment résolus d'abord (`-resolvedAt`, les incidents non résolus en dernier).
+                 *     récemment résolus d'abord (`-resolvedAt`, les incidents non résolus en dernier). Le tri par résolution se
+                 *     pagine par `offset` : il n'a pas de `nextCursor`, et un `cursor` avec lui est refusé (422).
                  */
                 sort?: "-createdAt" | "-resolvedAt";
                 /** @description Nombre d'éléments par page (1 à 100, 20 par défaut). */
                 limit?: components["parameters"]["Limit"];
                 /** @description Nombre d'éléments à sauter. */
                 offset?: components["parameters"]["Offset"];
+                /**
+                 * @description Position de la page à lire, telle que renvoyée par `nextCursor` de la page précédente (valeur opaque,
+                 *     à renvoyer telle quelle). Elle remplace `offset` (les deux ensemble sont refusés) et coûte autant à la
+                 *     millionième page qu'à la première ; elle ne saute ni ne répète d'incident quand de nouveaux incidents
+                 *     arrivent entre deux pages. C'est la position dans l'ordre par date de déclaration : elle ne se combine pas
+                 *     avec `sort=-resolvedAt`.
+                 */
+                cursor?: string;
             };
             header?: never;
             path?: never;
@@ -5804,7 +5880,22 @@ export interface operations {
     createIncident: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description UUID choisi par le client pour cette action. Si la même clé revient (rejeu après une coupure de connexion,
+                 *     action faite hors ligne puis synchronisée), la réponse du premier passage est rendue telle quelle, avec
+                 *     l'en-tête `Idempotent-Replayed: true`, sans rien refaire. Seules les réussites sont conservées : après une
+                 *     erreur, la même clé se rejoue. La même clé avec une autre requête est refusée (422, `idempotency_key_reused`).
+                 *     La clé est propre à son auteur.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description Date (RFC 3339) à laquelle l'action a été créée sur l'appareil, pour une action faite hors ligne. Elle sert à
+                 *     mesurer le délai de synchronisation, et reste sans effet sans `Idempotency-Key`. Une date plus avancée que
+                 *     l'heure du serveur est ramenée à l'heure de réception.
+                 */
+                "X-Client-Created-At"?: components["parameters"]["ClientCreatedAt"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -5826,6 +5917,15 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            /** @description Un incident porte déjà l'identifiant choisi par le client (`incident_already_exists`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
@@ -6054,10 +6154,54 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
+    streamEvents: {
+        parameters: {
+            query?: {
+                /** @description Équivalent du `Last-Event-ID` pour un client qui ne maîtrise pas les en-têtes. */
+                lastEventId?: number;
+            };
+            header?: {
+                /** @description Numéro du dernier événement reçu ; envoyé automatiquement par `EventSource` à la reconnexion. */
+                "Last-Event-ID"?: number;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Flux d'événements (`text/event-stream`). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
     startIntervention: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description UUID choisi par le client pour cette action. Si la même clé revient (rejeu après une coupure de connexion,
+                 *     action faite hors ligne puis synchronisée), la réponse du premier passage est rendue telle quelle, avec
+                 *     l'en-tête `Idempotent-Replayed: true`, sans rien refaire. Seules les réussites sont conservées : après une
+                 *     erreur, la même clé se rejoue. La même clé avec une autre requête est refusée (422, `idempotency_key_reused`).
+                 *     La clé est propre à son auteur.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description Date (RFC 3339) à laquelle l'action a été créée sur l'appareil, pour une action faite hors ligne. Elle sert à
+                 *     mesurer le délai de synchronisation, et reste sans effet sans `Idempotency-Key`. Une date plus avancée que
+                 *     l'heure du serveur est ramenée à l'heure de réception.
+                 */
+                "X-Client-Created-At"?: components["parameters"]["ClientCreatedAt"];
+            };
             path: {
                 incidentId: string;
             };
@@ -6074,6 +6218,7 @@ export interface operations {
                     "application/json": components["schemas"]["Intervention"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -6086,6 +6231,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            422: components["responses"]["ValidationFailed"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -6122,7 +6268,22 @@ export interface operations {
     joinIntervention: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description UUID choisi par le client pour cette action. Si la même clé revient (rejeu après une coupure de connexion,
+                 *     action faite hors ligne puis synchronisée), la réponse du premier passage est rendue telle quelle, avec
+                 *     l'en-tête `Idempotent-Replayed: true`, sans rien refaire. Seules les réussites sont conservées : après une
+                 *     erreur, la même clé se rejoue. La même clé avec une autre requête est refusée (422, `idempotency_key_reused`).
+                 *     La clé est propre à son auteur.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description Date (RFC 3339) à laquelle l'action a été créée sur l'appareil, pour une action faite hors ligne. Elle sert à
+                 *     mesurer le délai de synchronisation, et reste sans effet sans `Idempotency-Key`. Une date plus avancée que
+                 *     l'heure du serveur est ramenée à l'heure de réception.
+                 */
+                "X-Client-Created-At"?: components["parameters"]["ClientCreatedAt"];
+            };
             path: {
                 /**
                  * @description Identifiant de l'utilisateur (champ `id` de la liste des comptes).
@@ -6141,6 +6302,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -6153,13 +6315,29 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            422: components["responses"]["ValidationFailed"];
             500: components["responses"]["InternalError"];
         };
     };
     inviteHeroes: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description UUID choisi par le client pour cette action. Si la même clé revient (rejeu après une coupure de connexion,
+                 *     action faite hors ligne puis synchronisée), la réponse du premier passage est rendue telle quelle, avec
+                 *     l'en-tête `Idempotent-Replayed: true`, sans rien refaire. Seules les réussites sont conservées : après une
+                 *     erreur, la même clé se rejoue. La même clé avec une autre requête est refusée (422, `idempotency_key_reused`).
+                 *     La clé est propre à son auteur.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description Date (RFC 3339) à laquelle l'action a été créée sur l'appareil, pour une action faite hors ligne. Elle sert à
+                 *     mesurer le délai de synchronisation, et reste sans effet sans `Idempotency-Key`. Une date plus avancée que
+                 *     l'heure du serveur est ramenée à l'heure de réception.
+                 */
+                "X-Client-Created-At"?: components["parameters"]["ClientCreatedAt"];
+            };
             path: {
                 /**
                  * @description Identifiant de l'utilisateur (champ `id` de la liste des comptes).
@@ -6204,7 +6382,22 @@ export interface operations {
     confirmInterventionInvitation: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description UUID choisi par le client pour cette action. Si la même clé revient (rejeu après une coupure de connexion,
+                 *     action faite hors ligne puis synchronisée), la réponse du premier passage est rendue telle quelle, avec
+                 *     l'en-tête `Idempotent-Replayed: true`, sans rien refaire. Seules les réussites sont conservées : après une
+                 *     erreur, la même clé se rejoue. La même clé avec une autre requête est refusée (422, `idempotency_key_reused`).
+                 *     La clé est propre à son auteur.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description Date (RFC 3339) à laquelle l'action a été créée sur l'appareil, pour une action faite hors ligne. Elle sert à
+                 *     mesurer le délai de synchronisation, et reste sans effet sans `Idempotency-Key`. Une date plus avancée que
+                 *     l'heure du serveur est ramenée à l'heure de réception.
+                 */
+                "X-Client-Created-At"?: components["parameters"]["ClientCreatedAt"];
+            };
             path: {
                 /**
                  * @description Identifiant de l'utilisateur (champ `id` de la liste des comptes).
@@ -6223,6 +6416,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -6235,13 +6429,29 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            422: components["responses"]["ValidationFailed"];
             500: components["responses"]["InternalError"];
         };
     };
     declineInterventionInvitation: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description UUID choisi par le client pour cette action. Si la même clé revient (rejeu après une coupure de connexion,
+                 *     action faite hors ligne puis synchronisée), la réponse du premier passage est rendue telle quelle, avec
+                 *     l'en-tête `Idempotent-Replayed: true`, sans rien refaire. Seules les réussites sont conservées : après une
+                 *     erreur, la même clé se rejoue. La même clé avec une autre requête est refusée (422, `idempotency_key_reused`).
+                 *     La clé est propre à son auteur.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description Date (RFC 3339) à laquelle l'action a été créée sur l'appareil, pour une action faite hors ligne. Elle sert à
+                 *     mesurer le délai de synchronisation, et reste sans effet sans `Idempotency-Key`. Une date plus avancée que
+                 *     l'heure du serveur est ramenée à l'heure de réception.
+                 */
+                "X-Client-Created-At"?: components["parameters"]["ClientCreatedAt"];
+            };
             path: {
                 /**
                  * @description Identifiant de l'utilisateur (champ `id` de la liste des comptes).
@@ -6260,6 +6470,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -6272,13 +6483,29 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            422: components["responses"]["ValidationFailed"];
             500: components["responses"]["InternalError"];
         };
     };
     proposeInterventionOutcome: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description UUID choisi par le client pour cette action. Si la même clé revient (rejeu après une coupure de connexion,
+                 *     action faite hors ligne puis synchronisée), la réponse du premier passage est rendue telle quelle, avec
+                 *     l'en-tête `Idempotent-Replayed: true`, sans rien refaire. Seules les réussites sont conservées : après une
+                 *     erreur, la même clé se rejoue. La même clé avec une autre requête est refusée (422, `idempotency_key_reused`).
+                 *     La clé est propre à son auteur.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description Date (RFC 3339) à laquelle l'action a été créée sur l'appareil, pour une action faite hors ligne. Elle sert à
+                 *     mesurer le délai de synchronisation, et reste sans effet sans `Idempotency-Key`. Une date plus avancée que
+                 *     l'heure du serveur est ramenée à l'heure de réception.
+                 */
+                "X-Client-Created-At"?: components["parameters"]["ClientCreatedAt"];
+            };
             path: {
                 /**
                  * @description Identifiant de l'utilisateur (champ `id` de la liste des comptes).
@@ -6323,7 +6550,22 @@ export interface operations {
     validateInterventionOutcome: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description UUID choisi par le client pour cette action. Si la même clé revient (rejeu après une coupure de connexion,
+                 *     action faite hors ligne puis synchronisée), la réponse du premier passage est rendue telle quelle, avec
+                 *     l'en-tête `Idempotent-Replayed: true`, sans rien refaire. Seules les réussites sont conservées : après une
+                 *     erreur, la même clé se rejoue. La même clé avec une autre requête est refusée (422, `idempotency_key_reused`).
+                 *     La clé est propre à son auteur.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description Date (RFC 3339) à laquelle l'action a été créée sur l'appareil, pour une action faite hors ligne. Elle sert à
+                 *     mesurer le délai de synchronisation, et reste sans effet sans `Idempotency-Key`. Une date plus avancée que
+                 *     l'heure du serveur est ramenée à l'heure de réception.
+                 */
+                "X-Client-Created-At"?: components["parameters"]["ClientCreatedAt"];
+            };
             path: {
                 /**
                  * @description Identifiant de l'utilisateur (champ `id` de la liste des comptes).
@@ -6368,7 +6610,22 @@ export interface operations {
     arbitrateInterventionOutcome: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description UUID choisi par le client pour cette action. Si la même clé revient (rejeu après une coupure de connexion,
+                 *     action faite hors ligne puis synchronisée), la réponse du premier passage est rendue telle quelle, avec
+                 *     l'en-tête `Idempotent-Replayed: true`, sans rien refaire. Seules les réussites sont conservées : après une
+                 *     erreur, la même clé se rejoue. La même clé avec une autre requête est refusée (422, `idempotency_key_reused`).
+                 *     La clé est propre à son auteur.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description Date (RFC 3339) à laquelle l'action a été créée sur l'appareil, pour une action faite hors ligne. Elle sert à
+                 *     mesurer le délai de synchronisation, et reste sans effet sans `Idempotency-Key`. Une date plus avancée que
+                 *     l'heure du serveur est ramenée à l'heure de réception.
+                 */
+                "X-Client-Created-At"?: components["parameters"]["ClientCreatedAt"];
+            };
             path: {
                 /**
                  * @description Identifiant de l'utilisateur (champ `id` de la liste des comptes).

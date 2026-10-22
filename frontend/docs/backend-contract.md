@@ -494,6 +494,27 @@ Types dans [src/types/review.ts](../src/types/review.ts) (`HeroReview`, `ReviewR
   413, 415, 429 (avec `Retry-After`) et API indisponible passent par `toApiFailure` et
   `apiFailureMessage`.
 
+### Hors ligne, rejeu et temps réel
+
+Ajouts du contrat, tous facultatifs : le branchement existant ne change pas.
+
+- **`Idempotency-Key`** (UUID) et **`X-Client-Created-At`** (RFC 3339) sur `POST /incidents` et les routes
+  d'intervention : la même clé rejouée reçoit la réponse du premier passage (`Idempotent-Replayed: true`) sans rien
+  refaire. Posés par `app/api/sync/route.ts`, jamais par une Server Action.
+- **`id`** dans `IncidentPayload` : identifiant d'incident choisi par l'appareil (409 `incident_already_exists`
+  s'il est pris).
+- **`version`** dans `Intervention` et **`expectedVersion`** dans les corps de `outcome` et `outcome/validate` :
+  une action faite sur une lecture périmée est refusée (409 `intervention_version_conflict`). Pas encore utilisé
+  par l'interface.
+- **`cursor`** / **`nextCursor`** sur `GET /incidents` : pagination qui garde le même coût à toute profondeur
+  (`offset` reste accepté, mais pas avec `cursor`). Le curseur est celui de l'ordre par date de déclaration : avec
+  `sort=-resolvedAt` (les derniers incidents résolus), la liste se pagine par `offset`, et un `cursor` est refusé (422).
+- **`reporterRole`** (`witness` ou `victim`) dans `IncidentPayload` : le formulaire de déclaration le demande, hors ligne
+  comme en ligne ; la commande mise en file le transporte.
+- **`GET /events/stream`** : flux temps réel (SSE) des événements du journal, filtré par rôle **et par modération** : un
+  héros ne reçoit que ceux des incidents approuvés (comme `GET /incidents`), l'auteur d'un incident reçoit les siens
+  quel que soit leur état.
+
 ### Incidents et interventions : choix du branchement
 
 Fonctions dans [incidents.ts](../src/lib/api/incidents.ts) (incidents) et

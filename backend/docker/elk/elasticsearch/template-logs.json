@@ -1,0 +1,31 @@
+{
+  "index_patterns": ["herossos-logs-*"],
+  "priority": 200,
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "index.lifecycle.name": "herossos-7d"
+    },
+    "mappings": {
+      "dynamic_templates": [
+        { "strings_as_keywords": { "match_mapping_type": "string", "mapping": { "type": "keyword", "ignore_above": 1024 } } }
+      ],
+      "properties": {
+        "@timestamp": { "type": "date" },
+        "message": { "type": "text" },
+        "level": { "type": "keyword" },
+        "service": { "type": "keyword" },
+        "event": { "properties": { "dataset": { "type": "keyword" } } },
+        "method": { "type": "keyword" },
+        "path": { "type": "keyword" },
+        "route": { "type": "keyword" },
+        "status": { "type": "integer" },
+        "duration_ms": { "type": "integer" },
+        "bytes": { "type": "long" },
+        "request_id": { "type": "keyword" },
+        "error": { "type": "text" }
+      }
+    }
+  }
+}

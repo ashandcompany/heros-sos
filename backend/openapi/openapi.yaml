@@ -2419,10 +2419,20 @@ paths:
           in: query
           description: |
             Ordre : les plus récemment déclarés d'abord (`-createdAt`, par défaut), ou les plus
-            récemment résolus d'abord (`-resolvedAt`, les incidents non résolus en dernier).
+            récemment résolus d'abord (`-resolvedAt`, les incidents non résolus en dernier). Le tri par résolution se
+            pagine par `offset` : il n'a pas de `nextCursor`, et un `cursor` avec lui est refusé (422).
           schema: { type: string, enum: [-createdAt, -resolvedAt], default: -createdAt }
         - { $ref: "#/components/parameters/Limit" }
         - { $ref: "#/components/parameters/Offset" }
+        - name: cursor
+          in: query
+          description: |
+            Position de la page à lire, telle que renvoyée par `nextCursor` de la page précédente (valeur opaque,
+            à renvoyer telle quelle). Elle remplace `offset` (les deux ensemble sont refusés) et coûte autant à la
+            millionième page qu'à la première ; elle ne saute ni ne répète d'incident quand de nouveaux incidents
+            arrivent entre deux pages. C'est la position dans l'ordre par date de déclaration : elle ne se combine pas
+            avec `sort=-resolvedAt`.
+          schema: { type: string }
       responses:
         "200":
           description: Une page d'incidents.
@@ -2442,6 +2452,9 @@ paths:
         de héros sont en attente de modération; celles des modérateurs sont approuvées d'office.
       operationId: createIncident
       security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { $ref: "#/components/parameters/ClientCreatedAt" }
       requestBody:
         required: true
         content:
@@ -2460,6 +2473,11 @@ paths:
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "409":
+          description: Un incident porte déjà l'identifiant choisi par le client (`incident_already_exists`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   /incidents/{id}:
@@ -2620,6 +2638,50 @@ paths:
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/InternalError" }
 
+  /events/stream:
+    get:
+      tags: [Incidents]
+      summary: Flux temps réel des événements (SSE)
+      description: |
+        Flux Server-Sent Events : la réponse reste ouverte et le serveur y écrit chaque événement du journal dès
+        qu'il est enregistré (déclaration, modération, correction ou priorité d'un incident, démarrage d'une
+        intervention, résultat…). Chaque message porte `id` (numéro de l'événement), `event` (type, par exemple
+        `incident.declared`) et `data` (JSON : `seq`, `type`, `aggregateType`, `aggregateId`, `incidentId`, `version`,
+        `actorId`, `payload`, `recordedAt`). Le contenu ne comporte que des identifiants et des états.
+
+        Visibilité : un modérateur reçoit tout ; un héros ne reçoit que les événements des incidents approuvés par la
+        modération (comme `GET /incidents`) ; un citoyen ne reçoit que ceux de ses propres incidents, quel que soit
+        leur état de modération.
+
+        L'auteur d'une déclaration n'est révélé qu'à lui et aux modérateurs.
+
+        À la reconnexion, le navigateur renvoie l'en-tête `Last-Event-ID` : le serveur rejoue d'abord les événements
+        manqués depuis le journal, puis continue en direct. Un flux trop lent est fermé (il se reconnecte et rattrape
+        son retard), et chaque flux est fermé après une durée maximale pour revérifier la session. Un signal de vie
+        (commentaire SSE) est envoyé régulièrement.
+      operationId: streamEvents
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: Last-Event-ID
+          in: header
+          required: false
+          description: Numéro du dernier événement reçu ; envoyé automatiquement par `EventSource` à la reconnexion.
+          schema: { type: integer, format: int64, minimum: 0 }
+        - name: lastEventId
+          in: query
+          required: false
+          description: Équivalent du `Last-Event-ID` pour un client qui ne maîtrise pas les en-têtes.
+          schema: { type: integer, format: int64, minimum: 0 }
+      responses:
+        "200":
+          description: Flux d'événements (`text/event-stream`).
+          content:
+            text/event-stream:
+              schema: { type: string }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
   /incidents/{incidentId}/interventions:
     post:
       tags: [Incidents]
@@ -2628,6 +2690,8 @@ paths:
       operationId: startIntervention
       security: [{ sessionCookie: [], csrfToken: [] }]
       parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { $ref: "#/components/parameters/ClientCreatedAt" }
         - name: incidentId
           in: path
           required: true
@@ -2646,6 +2710,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   /interventions/{id}:
@@ -2676,6 +2742,8 @@ paths:
       operationId: joinIntervention
       security: [{ sessionCookie: [], csrfToken: [] }]
       parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { $ref: "#/components/parameters/ClientCreatedAt" }
         - { $ref: "#/components/parameters/Id" }
       responses:
         "204": { description: Participation confirmée. }
@@ -2687,6 +2755,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   /interventions/{id}/invitations:
@@ -2697,6 +2767,8 @@ paths:
       operationId: inviteHeroes
       security: [{ sessionCookie: [], csrfToken: [] }]
       parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { $ref: "#/components/parameters/ClientCreatedAt" }
         - { $ref: "#/components/parameters/Id" }
       requestBody:
         required: true
@@ -2726,6 +2798,8 @@ paths:
       operationId: confirmInterventionInvitation
       security: [{ sessionCookie: [], csrfToken: [] }]
       parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { $ref: "#/components/parameters/ClientCreatedAt" }
         - { $ref: "#/components/parameters/Id" }
       responses:
         "204": { description: Invitation confirmée. }
@@ -2737,6 +2811,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   /interventions/{id}/invitations/me/decline:
@@ -2747,6 +2823,8 @@ paths:
       operationId: declineInterventionInvitation
       security: [{ sessionCookie: [], csrfToken: [] }]
       parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { $ref: "#/components/parameters/ClientCreatedAt" }
         - { $ref: "#/components/parameters/Id" }
       responses:
         "204": { description: Invitation refusée. }
@@ -2758,6 +2836,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   /interventions/{id}/outcome:
@@ -2768,6 +2848,8 @@ paths:
       operationId: proposeInterventionOutcome
       security: [{ sessionCookie: [], csrfToken: [] }]
       parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { $ref: "#/components/parameters/ClientCreatedAt" }
         - { $ref: "#/components/parameters/Id" }
       requestBody:
         required: true
@@ -2797,6 +2879,8 @@ paths:
       operationId: validateInterventionOutcome
       security: [{ sessionCookie: [], csrfToken: [] }]
       parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { $ref: "#/components/parameters/ClientCreatedAt" }
         - { $ref: "#/components/parameters/Id" }
       requestBody:
         required: true
@@ -2833,6 +2917,8 @@ paths:
       operationId: arbitrateInterventionOutcome
       security: [{ sessionCookie: [], csrfToken: [] }]
       parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { $ref: "#/components/parameters/ClientCreatedAt" }
         - { $ref: "#/components/parameters/Id" }
       requestBody:
         required: true
@@ -3535,6 +3621,26 @@ components:
       in: query
       description: Nombre d'éléments à sauter.
       schema: { type: integer, minimum: 0, default: 0 }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: |
+        UUID choisi par le client pour cette action. Si la même clé revient (rejeu après une coupure de connexion,
+        action faite hors ligne puis synchronisée), la réponse du premier passage est rendue telle quelle, avec
+        l'en-tête `Idempotent-Replayed: true`, sans rien refaire. Seules les réussites sont conservées : après une
+        erreur, la même clé se rejoue. La même clé avec une autre requête est refusée (422, `idempotency_key_reused`).
+        La clé est propre à son auteur.
+      schema: { type: string, format: uuid }
+    ClientCreatedAt:
+      name: X-Client-Created-At
+      in: header
+      required: false
+      description: |
+        Date (RFC 3339) à laquelle l'action a été créée sur l'appareil, pour une action faite hors ligne. Elle sert à
+        mesurer le délai de synchronisation, et reste sans effet sans `Idempotency-Key`. Une date plus avancée que
+        l'heure du serveur est ramenée à l'heure de réception.
+      schema: { type: string, format: date-time }
 
   responses:
     BadRequest:
@@ -4590,6 +4696,12 @@ components:
       required: [typeId, title, description, location]
       additionalProperties: false
       properties:
+        id:
+          type: string
+          format: uuid
+          description: |
+            Identifiant choisi par le client (facultatif). Un appareil hors ligne le fixe à la déclaration pour
+            reconnaître son incident une fois synchronisé. 409 (`incident_already_exists`) s'il est déjà pris.
         typeId: { type: integer, format: int32 }
         title:
           type: string
@@ -4742,6 +4854,9 @@ components:
         total: { type: integer }
         limit: { type: integer }
         offset: { type: integer }
+        nextCursor:
+          type: string
+          description: Valeur du paramètre `cursor` qui donne la page suivante. Absente de la dernière page.
 
     IncidentSummary:
       type: object
@@ -5059,10 +5174,16 @@ components:
 
     Intervention:
       type: object
-      required: [id, incidentId, status, startedAt, participants]
+      required: [id, incidentId, version, status, startedAt, participants]
       properties:
         id: { type: string, format: uuid }
         incidentId: { type: string, format: uuid }
+        version:
+          type: integer
+          description: |
+            Version de l'intervention dans le journal d'événements (une de plus à chaque action). À renvoyer comme
+            `expectedVersion` pour qu'une action faite sur une lecture périmée soit refusée (409,
+            `intervention_version_conflict`) plutôt qu'appliquée.
         status: { type: string, enum: [in_progress, succeeded, failed] }
         proposedStatus: { type: string, enum: [succeeded, failed] }
         proposedBy: { type: string, format: uuid }
@@ -5091,6 +5212,9 @@ components:
       properties:
         status: { type: string, enum: [succeeded, failed] }
         notes: { type: string }
+        expectedVersion:
+          type: integer
+          description: Version de l'intervention lue par le client (facultative). Voir `Intervention.version`.
 
     InterventionOutcomeValidationPayload:
       type: object
@@ -5098,6 +5222,9 @@ components:
       additionalProperties: false
       properties:
         approved: { type: boolean }
+        expectedVersion:
+          type: integer
+          description: Version de l'intervention lue par le client (facultative). Voir `Intervention.version`.
 
     Account:
       type: object

@@ -55,6 +55,7 @@ func (r *Router) Routes() []Route {
 // erreurs JSON au format de l'API, à la place des pages texte de la bibliothèque standard.
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if _, pattern := r.mux.Handler(req); pattern != "" {
+		httpx.SetRoute(req.Context(), pattern)
 		// ServeHTTP du mux (et non le handler retourné par Handler) : c'est lui qui renseigne
 		// les paramètres de chemin lus par r.PathValue.
 		r.mux.ServeHTTP(w, req)

@@ -70,11 +70,11 @@ Fonctions de chaque fichier :
 
 ### ⏳ Encore sur les mocks (ou à faire)
 
-| Domaine frontend                  | Fonctions `lib/api/`                                                                                 | Contrat OpenAPI                                                                       | État |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ---- |
-| Incidents résolus publics         | `incidents.ts` : `getLatestResolvedIncidents`, `getResolvedIncidentsByHero`, `getIncidentsByVillain` | ❌ aucun (`GET /incidents` public ne renvoie pas les résolus, ni filtre héros/vilain) | mock |
-| Fiches complètes super-héros      | `super-heroes.ts` : `getSuperHeroProfiles` (back-office)                                             | ❌ aucun                                                                              | mock |
-| Tableau de bord héros, modération | `hero-dashboard.ts`, `moderation.ts`                                                                 | ❌ aucun (statistiques)                                                               | mock |
+| Domaine frontend                  | Fonctions `lib/api/`                                     | Contrat OpenAPI                                               | État |
+| --------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------- | ---- |
+| Incidents résolus publics         | `incidents.ts` : `getLatestResolvedIncidents`            | ❌ aucun (`GET /incidents` public ne renvoie pas les résolus) | mock |
+| Fiches complètes super-héros      | `super-heroes.ts` : `getSuperHeroProfiles` (back-office) | ❌ aucun                                                      | mock |
+| Tableau de bord héros, modération | `hero-dashboard.ts`, `moderation.ts`                     | ❌ aucun (statistiques)                                       | mock |
 
 > [!WARNING]
 > Les « Future implémentation » écrites dans les commentaires de `lib/api/` pour les domaines non
@@ -251,9 +251,12 @@ qu'un seul `GET /auth/me`.
   ancien identifiant mock (`hero-1`).
 - **Note et interventions** : `averageRating` et `interventionsCount` viennent de l'API (moyenne des
   avis publiés, interventions confirmées).
-- **Fiche publique, sections encore mockées** : « Dernières interventions réussies » et « Vilains
-  neutralisés » (`getResolvedIncidentsByHero`) restent vides pour un vrai héros tant que les
-  incidents ne sont pas branchés. Avis et films viennent déjà de l'API.
+- **Historique de la fiche publique** : « Dernières interventions réussies » et « Vilains
+  neutralisés » (`getResolvedIncidentsByHero`) lisent `GET /heroes/{heroId}/incidents` : les
+  incidents résolus par une intervention réussie du héros, avec la ville seule (ni description ni
+  adresse). La fiche d'un vilain (`getIncidentsByVillain`) lit `GET /villains/{id}/incidents`, tous
+  états confondus ; « Ils l'ont affronté » y liste les leads de ces incidents. Avis et films
+  viennent aussi de l'API.
 - **Incidents mockés** : la correction d'un incident par la modération (`/admin/incidents/{id}`,
   `updateIncidentAction`) prend ses héros dans `getIncidentHeroes` (mocks), pas dans
   `getSuperHeroes` : les incidents mockés référencent les identifiants mock. À supprimer en
@@ -453,10 +456,8 @@ demandent une session.
 | Historique des interventions terminées          | `incident.interventionId` ne désigne que l'intervention en cours      | Section « Interventions précédentes » vide  |
 
 **Absent du contrat, encore sur les mocks avec l'API** (la liste publique ne renvoie pas les
-incidents résolus et ne filtre ni par héros ni par vilain) : derniers incidents résolus de
-l'accueil (`getLatestResolvedIncidents`), interventions d'un héros et incidents d'un vilain sur les
-fiches de l'encyclopédie (`getResolvedIncidentsByHero`, `getIncidentsByVillain` : vides pour un
-vrai héros ou vilain), tableaux de bord (`hero-dashboard.ts`, `moderation.ts`).
+incidents résolus) : derniers incidents résolus de l'accueil (`getLatestResolvedIncidents`),
+tableaux de bord (`hero-dashboard.ts`, `moderation.ts`).
 
 ### Blog : choix du branchement
 

@@ -1093,6 +1093,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/heroes/{heroId}/incidents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Incidents résolus par un héros
+         * @description Publique (encyclopédie). Incidents résolus par une intervention réussie à laquelle le héros a
+         *     participé, les plus récemment résolus d'abord. Contrairement à `GET /incidents`, la liste
+         *     contient les incidents résolus, sans description ni adresse précise. 404 si le héros n'est pas
+         *     public (demande non approuvée ou compte inactif).
+         */
+        get: operations["listHeroIncidents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/villains/{id}/incidents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Incidents d'un vilain
+         * @description Publique (encyclopédie). Incidents auxquels le vilain est associé, quel que soit leur état, les
+         *     plus récents d'abord, sans description ni adresse précise. `lead` est le héros qui mène la
+         *     dernière intervention.
+         */
+        get: operations["listVillainIncidents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/incidents/{incidentId}/interventions": {
         parameters: {
             query?: never;
@@ -2071,6 +2116,42 @@ export interface components {
         };
         IncidentPage: {
             items: components["schemas"]["Incident"][];
+            total: number;
+            limit: number;
+            offset: number;
+        };
+        /** @description Incident vu depuis la fiche publique d'un héros ou d'un vilain. */
+        IncidentSummary: {
+            /** Format: uuid */
+            id: string;
+            /** @description Titre court de l'incident ; vide pour un incident déclaré avant son introduction. */
+            title: string;
+            typeCode: string;
+            typeLabel: string;
+            /** @enum {string} */
+            status: "reported" | "in_progress" | "succeeded" | "failed";
+            city: string;
+            /** Format: date-time */
+            createdAt: string;
+            /**
+             * Format: date-time
+             * @description Fin de l'intervention réussie ; `null` si l'incident n'est pas résolu.
+             */
+            resolvedAt: string | null;
+            /** @description Héros qui mène la dernière intervention ; `null` sans intervention ou si son profil n'est plus public. */
+            lead: {
+                /** Format: uuid */
+                id: string;
+                alias: string;
+            } | null;
+            villains: {
+                /** Format: uuid */
+                id: string;
+                alias: string;
+            }[];
+        };
+        IncidentSummaryPage: {
+            items: components["schemas"]["IncidentSummary"][];
             total: number;
             limit: number;
             offset: number;
@@ -4618,6 +4699,71 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listHeroIncidents: {
+        parameters: {
+            query?: {
+                /** @description Nombre d'éléments par page (1 à 100, 20 par défaut). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Nombre d'éléments à sauter. */
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path: {
+                /** @description Identifiant du super-héros. */
+                heroId: components["parameters"]["HeroId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page d'incidents résolus. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentSummaryPage"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listVillainIncidents: {
+        parameters: {
+            query?: {
+                /** @description Nombre d'éléments par page (1 à 100, 20 par défaut). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Nombre d'éléments à sauter. */
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path: {
+                /**
+                 * @description Identifiant de l'utilisateur (champ `id` de la liste des comptes).
+                 * @example 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
+                 */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page d'incidents. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentSummaryPage"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
             500: components["responses"]["InternalError"];
         };
     };

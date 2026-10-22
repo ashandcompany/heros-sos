@@ -70,6 +70,9 @@ type Repository interface {
 	Create(ctx context.Context, in *Incident) error
 	Find(ctx context.Context, id uuid.UUID) (*Incident, error)
 	List(ctx context.Context, reporterID *uuid.UUID, limit, offset int) ([]Incident, int64, error)
+	PublicHeroExists(ctx context.Context, heroID uuid.UUID) (bool, error)
+	ListResolvedByHero(ctx context.Context, heroID uuid.UUID, limit, offset int) ([]Summary, int64, error)
+	ListByVillain(ctx context.Context, villainID uuid.UUID, limit, offset int) ([]Summary, int64, error)
 }
 
 type gormRepository struct {

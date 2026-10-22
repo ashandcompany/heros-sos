@@ -133,7 +133,7 @@ Depuis la fusion de la PR #37, `GET /incidents` renvoie **tous les statuts** sau
   - Il ajoute les incidents par `INSERT … SELECT generate_series`, lot par lot, avec leurs interventions, leurs héros et leurs vilains dans des proportions réalistes : 92 % des incidents clos réussissent, les plus récents seulement sont ouverts, et les interventions en cours se répartissent sur les héros qui n'en ont aucune. Les lignes sont reproductibles : aucun tirage aléatoire.
   - Il refuse la production, comme `cmd/seed`, refuse une base qui contient déjà beaucoup d'incidents (`-append` pour passer outre), et s'arrête entre deux lots quand la base dépasse `PERF_MAX_SIZE_GB`.
   - Il termine par `VACUUM ANALYZE` : statistiques à jour et carte de visibilité renseignée, comme une base installée depuis longtemps.
-- **Place disque : environ 7 Go pour 5 M d'incidents** (tables et index : `incidents` 3,4 Go, `intervention_heroes` 1,8 Go, `interventions` 0,9 Go, `incident_villains` 0,6 Go), et le chargement dure environ 5 minutes. Les 8 Go libres d'un portable ne suffisent pas toujours : garder `PERF_MAX_SIZE_GB` renseigné.
+- **Place disque : 8,2 Go pour 5 M d'incidents** (tables et index : `incidents` 4,7 Go, `intervention_heroes` 1,9 Go, `interventions` 0,9 Go, `incident_villains` 0,7 Go ; les index partiels et les colonnes dénormalisées ajoutés avec la modération ont fait grossir `incidents`), et le chargement dure environ 7 minutes. Avec le journal de transactions, compter **11 Go libres** : un portable à 8 Go libres ne suffit pas. Garder `PERF_MAX_SIZE_GB` renseigné, **à 10** (à 8, le chargement s'arrêterait à quelques Mo de la fin).
 - **`cmd/loadtest`** (`make perf`) : se connecte avec un cookie de session (le mot de passe est lu dans `LOADTEST_PASSWORD`, jamais dans un argument), joue neuf scénarios en parallèle, affiche p50, p95, p99, les erreurs, et sort en erreur si le p95 dépasse `-p95 350ms`. Le scénario « mes incidents » utilise un client **connecté** et tous les autres un client **anonyme** : l'API ne montre à un citoyen connecté que ses propres incidents, même sur la liste publique.
 - Limite connue : `loadtest` envoie les requêtes avec un nombre fixe de clients. Sous forte surcharge, il sous-estime un peu les pires latences ; c'est suffisant pour comparer un avant et un après. La mesure côté serveur (P6) complète.
 
@@ -217,7 +217,7 @@ Côté code :
 make db-start                  # ou la pile Docker : make perf-db crée alors herossos_perf dedans
 make env
 make perf-prepare              # migre herossos_perf et y charge les données Marvel
-make seed-perf PERF_MAX_SIZE_GB=8
+make seed-perf PERF_MAX_SIZE_GB=10
 make perf-run                  # API sur :8090, à laisser tourner
 LOADTEST_PASSWORD='Avengers2026!' make perf   # p95 ≤ 350 ms, scénario « mes incidents » compris
 make perf-indexes-off          # retire les index de lecture : la lenteur d'origine revient

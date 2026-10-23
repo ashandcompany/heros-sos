@@ -32,7 +32,7 @@ const sidebars: SidebarsConfig = {
       items: [
         {type: 'doc', id: 'tables/comptes', label: '1. Comptes et accès'},
         {type: 'doc', id: 'tables/incidents', label: '2. Incidents'},
-        {type: 'doc', id: 'tables/vilains', label: '3. Super-héros et super-vilains'},
+        {type: 'doc', id: 'tables/vilains', label: '3. Super-vilains'},
         {type: 'doc', id: 'tables/films', label: '4. Films des héros et des vilains'},
         {type: 'doc', id: 'tables/reputation', label: '5. Réputation'},
         {type: 'doc', id: 'tables/contenu', label: '6. Contenu et newsletter'},

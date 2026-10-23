@@ -231,3 +231,46 @@ func TestInterventionLifecycle(t *testing.T) {
 		}
 	}
 }
+
+func TestIncidentInterventionsHistory(t *testing.T) {
+	e := newE2E(t, nil)
+	reporter := e.signUpAndLogin("reporter@example.org")
+	moderator := e.newModerator("mod@shield.example")
+	lead := e.approvedHero(moderator, "lead@example.org", "Lead")
+	incidentID := e.declareIncident(reporter, moderator, "rescue")
+	path := "/incidents/" + incidentID + "/interventions"
+
+	var history struct{ Items []interventionView }
+	if got := lead.get(path); got.status != http.StatusOK {
+		t.Fatalf("historique vide : %d %s", got.status, got.body)
+	} else if got.decode(t, &history); len(history.Items) != 0 {
+		t.Fatalf("aucune intervention attendue : %s", got.body)
+	}
+
+	var failed, retried interventionView
+	lead.post(path, nil).decode(t, &failed)
+	if got := lead.post("/interventions/"+failed.ID+"/outcome", map[string]string{"status": "failed"}); got.status != http.StatusNoContent {
+		t.Fatalf("échec de la première intervention : %d %s", got.status, got.body)
+	}
+	if got := lead.post(path, nil); got.status != http.StatusCreated {
+		t.Fatalf("nouvelle intervention après un échec : %d %s", got.status, got.body)
+	} else {
+		got.decode(t, &retried)
+	}
+
+	for _, viewer := range []*actor{lead, moderator} {
+		got := viewer.get(path)
+		got.decode(t, &history)
+		if got.status != http.StatusOK || len(history.Items) != 2 ||
+			history.Items[0].ID != retried.ID || history.Items[0].Status != "in_progress" ||
+			history.Items[1].ID != failed.ID || history.Items[1].Status != "failed" {
+			t.Fatalf("historique, de la plus récente à la plus ancienne : %d %s", got.status, got.body)
+		}
+	}
+	if got := reporter.get(path); got.status != http.StatusForbidden {
+		t.Errorf("un citoyen ne lit pas les interventions : %d", got.status)
+	}
+	if got := lead.get("/incidents/00000000-0000-0000-0000-000000000000/interventions"); got.status != http.StatusNotFound {
+		t.Errorf("incident inconnu : %d %s", got.status, got.body)
+	}
+}

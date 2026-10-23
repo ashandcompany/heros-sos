@@ -2686,6 +2686,36 @@ paths:
         "500": { $ref: "#/components/responses/InternalError" }
 
   /incidents/{incidentId}/interventions:
+    get:
+      tags: [Incidents]
+      summary: Interventions d'un incident
+      description: |
+        Toutes les interventions de l'incident, en cours et terminées, de la plus récente à la plus ancienne.
+        Réservé aux héros et aux modérateurs, comme le détail d'une intervention.
+      operationId: listIncidentInterventions
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: incidentId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Interventions de l'incident (liste vide s'il n'y en a aucune).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Intervention" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
     post:
       tags: [Incidents]
       summary: Démarrer une intervention

@@ -1,6 +1,6 @@
 # Contrat backend de Maxime (Dev A) : ce qui est fait, ce qui reste
 
-État au 21/10/2026, branche `feat/account-security` (poussée sur GitHub, **pas encore fusionnée** dans `develop`).
+État au 23/10/2026 : `feat/account-security` est fusionnée dans `develop` (PR #32).
 La source de vérité des routes est [openapi/openapi.yaml](openapi/openapi.yaml) : les tests échouent si une route
 diverge du fichier. Ce document n'en recopie pas le détail ; il dit **qui livre quoi**, **où en est chaque domaine** et
 **ce qui reste avant une vraie mise en ligne**.
@@ -88,8 +88,9 @@ Colonne « Front » : l'écran appelle bien la route quand `API_URL` est renseig
   doublon, la version de cette branche a été gardée (elle gère la confirmation d'email, la 2FA et la
   désinscription). Les tests du backend, le build du front et celui du site de documentation passent sur le
   résultat. L'index sur `intervention_heroes` touche une table de Dev B : à lui signaler.
-- [ ] Ouvrir la PR et la faire relire (Dev B pour le contrat et la migration, Emma pour le front).
-- [ ] Vérifier les pseudos de `.github/CODEOWNERS` (déduits de l'historique).
+- [x] Ouvrir la PR et la faire relire : fusionnée dans `develop` (PR #32).
+- [x] Vérifier les pseudos de `.github/CODEOWNERS` : `@le-veilleur`, `@Jersey276` et `@ashandcompany` sont ceux
+  des commits.
 - [ ] Activer GitHub Pages si le site doit être publié (réglages décrits dans `docs-site/README.md`). Le dépôt est
   public : le site le sera aussi.
 
@@ -111,10 +112,10 @@ Colonne « Front » : l'écran appelle bien la route quand `API_URL` est renseig
 ### 3.3 Avec Emma (phase 3)
 
 - [x] Fiches publiques des héros branchées sur `GET /heroes` (Emma) ; `asMockDataUser` est supprimé.
-- [ ] Supprimer le reste des mocks une fois tous les domaines branchés : `userFromToken` et
-  `MOCK_SESSION_MAX_AGE`. Il reste sur mocks : les incidents résolus publics (accueil, fiches héros et vilains),
-  le tableau de bord héros et le résumé de modération (statistiques, sans contrat). Le blog et les films des
-  super-vilains sont branchés.
+- [x] Brancher tous les domaines : incidents résolus publics, tableau de bord héros, résumé de modération, blog,
+  films des super-vilains et numéros de la newsletter compris.
+- [ ] Décider du sort du mode sans API (mocks) : supprimer `userFromToken` et `MOCK_SESSION_MAX_AGE`, ou le
+  garder comme mode démo.
 - [ ] Jouer le scénario de démonstration de bout en bout (voir `MVP.md`).
 - [ ] Durcissement puis déploiement (rien n'est déployé ; aucune mise en ligne sans feu vert explicite).
 
@@ -131,8 +132,9 @@ Colonne « Front » : l'écran appelle bien la route quand `API_URL` est renseig
 
 ### 3.5 Hors MVP (version 2)
 
-2FA des héros et des citoyens, liste des appareils connectés, envoi des numéros de la newsletter, équipes de héros,
-proximité (`hero_locations`), encyclopédie Marvel.
+Liste des appareils connectés, suivi de remise des numéros de la newsletter, encyclopédie Marvel. La 2FA des héros et
+des citoyens (PR #56) et l'envoi des numéros de la newsletter (PR #50) sont faits ; les équipes de héros et la
+proximité (`hero_locations`) ont leurs routes.
 
 ## 4. Comment vérifier
 

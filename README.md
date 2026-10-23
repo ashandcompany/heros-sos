@@ -122,7 +122,7 @@ Rien n'est copié : les documents de `backend/` sont lus tels quels, donc le sit
 
 ## État du branchement front ↔ API
 
-Quand `API_URL` est renseignée, **inscription, activation, connexion, session, déconnexion et réinitialisation du mot de passe** passent par l'API. Tout le reste fonctionne encore sur les mocks côté frontend. Le backend expose désormais `GET /heroes` et `GET /heroes/{heroId}`, mais les fiches héroïques du frontend ne sont pas encore branchées. Le détail, domaine par domaine, est tenu à jour dans [frontend/docs/backend-contract.md](frontend/docs/backend-contract.md).
+Quand `API_URL` est renseignée, **tous les domaines** passent par l'API : identité, compte, incidents et interventions, modération, vidéothèque, avis, blog, newsletter et contact. Sans `API_URL`, le frontend fonctionne sur ses mocks. Le détail, domaine par domaine, et les derniers écarts sont tenus à jour dans [frontend/docs/backend-contract.md](frontend/docs/backend-contract.md).
 
 ## Variables d'environnement du frontend
 

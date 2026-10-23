@@ -11,10 +11,9 @@ branchement. À mettre à jour à chaque fonction branchée.
 > d'incident, incidents et interventions (y compris incidents en cours, carte publique et historique public
 > des héros et des vilains), vidéothèque (paginée et filtrable), avis, blog, films des super-vilains, compte
 > (profil, photo, changement d'e-mail confirmé par lien), contact, newsletter (confirmation et
-> désinscription), « déconnexion de tous les appareils », double authentification et
-> compteurs du tableau de bord de modération sont branchés** sur l'API dès que `API_URL` est renseignée (tableau ci-dessous). Le reste fonctionne encore sur
-> des mocks, y compris avec l'API. Les numéros de la newsletter (`/admin/newsletters*`) sont dans le contrat
-> mais n'ont pas encore d'écran.
+> désinscription, numéros envoyés par les modérateurs), « déconnexion de tous les appareils », double
+> authentification et compteurs du tableau de bord de modération sont branchés** sur l'API dès que
+> `API_URL` est renseignée (tableau ci-dessous). Sans `API_URL`, tout fonctionne sur les mocks.
 
 ## 1. Couverture : ce qui est dans le contrat, et le reste
 
@@ -47,6 +46,7 @@ de bord de modération.
 | Partage de position (proximité)       | `super-heroes.ts` (§ 3)                            | `PUT/DELETE /hero/location`, `PUT/DELETE /hero/location/consent`, `hero.locationConsentAt` de `GET /me`                                |
 | Profil, photo, changements d'email    | `account.ts`, `avatar.ts`, `super-heroes.ts` (§ 3) | `/me`, `/me/avatar`, `/avatars/{name}`, `/me/email-change-requests`, `/email-change-requests/confirm`, `/admin/email-change-requests*` |
 | Newsletter                            | `newsletter.ts`, `account.ts`                      | `/newsletter/subscriptions`, `…/confirm`, `…/unsubscribe`, `PUT /me/newsletter`                                                        |
+| Numéros de la newsletter              | `newsletter-issues.ts`                             | `/admin/newsletters`, `/admin/newsletters/{id}`, `/admin/newsletters/{id}/send`                                                        |
 | Formulaire de contact                 | `contact.ts`                                       | `POST /contact/messages`                                                                                                               |
 | Vidéothèque (films)                   | `videos.ts`, `imdb.ts` (§ 3)                       | `/films`, `/films/heroes`, `/heroes/{heroId}/films`, `/hero/films*`, `/admin/hero-films*`, `/imdb/titles*`                             |
 | Films des super-vilains               | `videos.ts` (§ 3)                                  | `GET /villains/{villainId}/films` (public), `POST /admin/villain-films`, `DELETE /admin/villains/{villainId}/films/*`                  |
@@ -63,6 +63,8 @@ Fonctions de chaque fichier :
   `avatar.ts` : `getMyAvatar`.
 - `newsletter.ts` : `subscribeToNewsletter`, `confirmNewsletterSubscription`, `unsubscribeFromNewsletter` ;
   `contact.ts` : `sendContactMessage`.
+- `newsletter-issues.ts` : `getNewsletterIssues`, `getNewsletterIssue`, `createNewsletterIssue`,
+  `updateNewsletterIssue`, `deleteNewsletterIssue`, `sendNewsletterIssue`.
 - `hero-requests.ts` : `requestHeroStatus`, `getMyHeroRequest`, `getHeroApplications`,
   `reviewHeroApplication`.
 - `user-moderation.ts` : `getAccounts`, `moderateAccount`.
@@ -84,8 +86,7 @@ Fonctions de chaque fichier :
 - `blog.ts` : `getPublishedArticles`, `getPublishedArticle`, `getAllArticles`, `getArticle`,
   `createArticle`, `updateArticle`, `deleteArticle`.
 - `moderation.ts` : `getModerationSummary` (« Comptes à contrôler » n'a pas d'équivalent :
-  `accounts: null`, tuile masquée ; `draftNewsletters` est lu mais pas encore affiché, faute d'écran de
-  newsletter, et vaut `0` dans le mock).
+  `accounts: null`, tuile masquée ; `draftNewsletters` alimente la tuile « Newsletters en brouillon »).
 
 ### ⏳ Encore sur les mocks (ou à faire)
 
@@ -93,8 +94,8 @@ Tous les domaines sont branchés : tableau de bord des héros, derniers incident
 et tableau de bord de modération compris (§ 3). Restent masqués avec l'API deux points d'incidents
 sans décision côté backend (§ 3, « Incidents et interventions »).
 
-Reste à construire côté frontend : l'écran des **numéros de la newsletter** (voir « Contact et
-newsletter : choix du branchement », § 3), dont le contrat existe déjà.
+L'écran des **numéros de la newsletter** (`/admin/newsletter`) est branché lui aussi (voir « Contact
+et newsletter : choix du branchement », § 3).
 
 > [!WARNING]
 > Les « Future implémentation » écrites dans les commentaires de `lib/api/` pour les domaines non
@@ -704,13 +705,13 @@ héros proche, ou sans coordonnées, tous les héros actifs sont prévenus, sans
   qui doit rester égale à `HEROS_NEWSLETTER_CONFIRM_PATH` du backend. Comme l'activation, la
   confirmation se fait par un **bouton** : une messagerie qui ouvre le lien à l'avance ne donne pas
   le consentement à la place du visiteur. `400 invalid_token` → « lien invalide ou expiré ».
-- **Numéros de la newsletter (modérateurs, pas encore d'écran)** : `GET/POST /admin/newsletters`,
+- **Numéros de la newsletter (modérateurs, écran `/admin/newsletter`)** : `GET/POST /admin/newsletters`,
   `GET/PUT/DELETE /admin/newsletters/{id}`, `POST /admin/newsletters/{id}/send`. Un brouillon a un `subject`
   (1 à 200 caractères), un `body` HTML (balises de l'éditeur seulement, assaini par l'API, 200 000 octets au
   plus) et un `recipientUserId` facultatif (absent : tous les abonnés confirmés). La liste
   (`NewsletterSummaryPage`) n'a pas le corps, comme celle des articles. L'envoi répond `202` avec `recipients`
   (mails mis en file, sans attendre leur remise) et n'a lieu qu'une fois. Le compteur « à envoyer » du tableau
-  de bord est `draftNewsletters` de `GET /admin/moderation/summary`. Codes à mapper au branchement :
+  de bord est `draftNewsletters` de `GET /admin/moderation/summary`. Codes traduits par `newsletter-issues.ts` :
 
   | Code API (statut)                      | Sens                                                               |
   | -------------------------------------- | ------------------------------------------------------------------ |

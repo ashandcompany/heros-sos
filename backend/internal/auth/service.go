@@ -507,3 +507,24 @@ func (s *Service) Cleanup(ctx context.Context, sessionRetention, tokenRetention 
 	tokens, err = s.Tokens.DeleteStale(ctx, s.Clock.Now().Add(-tokenRetention))
 	return sessions, tokens, err
 }
+
+// CheckPassword redemande le mot de passe actuel d'un utilisateur connecté, avant une action irréversible
+// (suppression du compte). Un mot de passe absent ou faux est une erreur de champ (password) ; comme pour
+// ChangePassword, il ne compte pas dans le verrouillage de la connexion et la route est limitée en débit.
+func (s *Service) CheckPassword(ctx context.Context, userID uuid.UUID, password string) error {
+	if password == "" {
+		return &validation.Error{Fields: map[string]string{"password": validation.CodeRequired}}
+	}
+	u, err := s.Users.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	check, err := s.Hasher.Verify(ctx, u.PasswordHash, password)
+	if err != nil {
+		return fmt.Errorf("auth : vérification du mot de passe : %w", err)
+	}
+	if !check.Match {
+		return &validation.Error{Fields: map[string]string{"password": validation.CodeInvalid}}
+	}
+	return nil
+}

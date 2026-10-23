@@ -894,3 +894,16 @@ func TestServiceRendersPasswordChanged(t *testing.T) {
 		t.Fatalf("mail = %+v", sent)
 	}
 }
+
+func TestServiceRendersAccountDeleted(t *testing.T) {
+	recorder := NewRecorder()
+	service, _ := NewService(recorder, "Heros-SOS", config.Tokens{})
+	if err := service.SendAccountDeleted(context.Background(), "steve@example.org", "Steve"); err != nil {
+		t.Fatal(err)
+	}
+	sent := recorder.Messages()
+	if len(sent) != 1 || sent[0].Subject != "Votre compte Heros-SOS a été supprimé" ||
+		!strings.Contains(sent[0].Text, "Steve") || !strings.Contains(sent[0].HTML, "compte supprimé") {
+		t.Fatalf("mail = %+v", sent)
+	}
+}

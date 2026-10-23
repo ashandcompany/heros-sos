@@ -3108,6 +3108,44 @@ paths:
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/InternalError" }
+    delete:
+      tags: [Compte]
+      summary: Supprimer mon compte
+      description: |
+        Droit à l'effacement (RGPD). Le compte est **anonymisé** : identité, coordonnées, photo et adresse
+        email effacées, sessions, 2FA, abonnement et vidéothèque supprimés, compte désactivé pour de bon. Les
+        incidents, interventions et avis restent, rattachés à un « compte supprimé ». Le mot de passe est
+        redemandé, et le code TOTP (`code`) si la 2FA est activée. Un mail confirme la suppression.
+      operationId: deleteMyAccount
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeleteAccountRequest" }
+            examples:
+              supprimer:
+                summary: Supprimer le compte
+                value:
+                  password: Mon-mot-de-passe-1
+      responses:
+        "204":
+          description: Compte supprimé ; la session n'existe plus.
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: Compte déjà supprimé (`account_already_erased`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          description: "`validation_failed` : `password` ou `code` vaut `required` ou `invalid`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
 
   /me/avatar:
     put:
@@ -3188,6 +3226,51 @@ paths:
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /me/export:
+    get:
+      tags: [Compte]
+      summary: Exporter mes données
+      description: |
+        Droit d'accès (RGPD) : le profil (comme `GET /me`) et toute l'activité du compte, en un fichier JSON
+        à télécharger (`Content-Disposition: attachment`). Limité par utilisateur (`429`).
+      operationId: exportMyData
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Les données du compte.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExportedData" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/users/{id}/anonymize:
+    post:
+      tags: [Modération]
+      summary: Anonymiser un compte
+      description: |
+        Droit à l'effacement exercé par un modérateur (demande reçue par le formulaire de contact) : comme
+        `DELETE /me`, sans mail. Ni son propre compte, ni celui d'un modérateur (`409 account_not_erasable`).
+      operationId: anonymizeUser
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "204":
+          description: Compte anonymisé.
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Compte non anonymisable (`account_not_erasable`) ou déjà supprimé (`account_already_erased`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   /me/password:
@@ -4369,6 +4452,30 @@ components:
           type: string
           format: password
           description: Au moins 10 caractères, avec une minuscule, une majuscule et un chiffre.
+
+    DeleteAccountRequest:
+      type: object
+      required: [password]
+      additionalProperties: false
+      properties:
+        password: { type: string, format: password, description: Le mot de passe actuel. }
+        code: { type: string, description: "Code TOTP, si la double authentification est activée." }
+
+    ExportedData:
+      type: object
+      required: [exportedAt, account, incidents, interventions, reviewsGiven, reviewsReceived, films, emailChangeRequests, sessions, mfaEnabled]
+      properties:
+        exportedAt: { type: string, format: date-time }
+        account: { $ref: "#/components/schemas/Account" }
+        incidents: { type: array, nullable: true, items: { type: object } }
+        interventions: { type: array, nullable: true, items: { type: object } }
+        reviewsGiven: { type: array, nullable: true, items: { type: object } }
+        reviewsReceived: { type: array, nullable: true, items: { type: object } }
+        films: { type: array, nullable: true, items: { type: object } }
+        emailChangeRequests: { type: array, nullable: true, items: { type: object } }
+        newsletter: { type: object }
+        sessions: { type: array, nullable: true, items: { type: object } }
+        mfaEnabled: { type: boolean }
 
     PasswordChangeRequest:
       type: object

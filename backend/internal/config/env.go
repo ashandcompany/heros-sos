@@ -63,6 +63,7 @@ const (
 	envRateAvatarPerUser        = "HEROS_RATE_AVATAR_PER_USER"
 	envRateMFAVerifyPerUser     = "HEROS_RATE_MFA_VERIFY_PER_USER"
 	envRatePasswordCheckPerUser = "HEROS_RATE_PASSWORD_CHECK_PER_USER"
+	envRateExportPerUser        = "HEROS_RATE_EXPORT_PER_USER"
 	envRateHeroLocationPerUser  = "HEROS_RATE_HERO_LOCATION_PER_USER"
 
 	envActivationTokenTTL    = "HEROS_ACTIVATION_TOKEN_TTL"
@@ -157,7 +158,7 @@ func EnvVarNames() []string {
 		envRateLoginPerIP, envRateLoginPerIdentifier, envRateRegisterPerIP,
 		envRatePasswordResetPerIP, envRatePasswordResetPerKey, envRateIncidentCreatePerUser, envMaxTrackedRateKeys,
 		envRateContactPerIP, envRateNewsletterPerIP, envRateNewsletterPerEmail, envRateEmailChangePerUser,
-		envRateAvatarPerUser, envRateMFAVerifyPerUser, envRatePasswordCheckPerUser, envRateHeroLocationPerUser,
+		envRateAvatarPerUser, envRateMFAVerifyPerUser, envRatePasswordCheckPerUser, envRateExportPerUser, envRateHeroLocationPerUser,
 		envActivationTokenTTL, envPasswordResetTokenTTL, envNewsletterConfirmTTL, envEmailChangeConfirmTTL,
 		envMFAModeratorRequired, envMFAIssuer,
 		envCSRFSecret, envCryptoKeys, envCryptoActiveK,

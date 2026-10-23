@@ -34,6 +34,8 @@ const (
 	ActionUserVerified       = "user.verify"
 	ActionPasswordReset      = "auth.password_reset"
 	ActionPasswordChanged    = "auth.password_change"
+	ActionAccountExported    = "user.export"
+	ActionAccountErased      = "user.erase"
 	ActionLogoutAllSessions  = "auth.logout_all"
 
 	// Double authentification : jamais de code, de secret ni de code de secours dans le journal.

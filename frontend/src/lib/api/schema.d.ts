@@ -1727,7 +1727,14 @@ export interface paths {
         get: operations["getMyAccount"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Supprimer mon compte
+         * @description Droit à l'effacement (RGPD). Le compte est **anonymisé** : identité, coordonnées, photo et adresse
+         *     email effacées, sessions, 2FA, abonnement et vidéothèque supprimés, compte désactivé pour de bon. Les
+         *     incidents, interventions et avis restent, rattachés à un « compte supprimé ». Le mot de passe est
+         *     redemandé, et le code TOTP (`code`) si la 2FA est activée. Un mail confirme la suppression.
+         */
+        delete: operations["deleteMyAccount"];
         options?: never;
         head?: never;
         /**
@@ -1773,6 +1780,48 @@ export interface paths {
          * @description Retire la photo de profil et supprime son fichier. Sans photo, c'est sans effet.
          */
         delete: operations["deleteMyAvatar"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Exporter mes données
+         * @description Droit d'accès (RGPD) : le profil (comme `GET /me`) et toute l'activité du compte, en un fichier JSON
+         *     à télécharger (`Content-Disposition: attachment`). Limité par utilisateur (`429`).
+         */
+        get: operations["exportMyData"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{id}/anonymize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Anonymiser un compte
+         * @description Droit à l'effacement exercé par un modérateur (demande reçue par le formulaire de contact) : comme
+         *     `DELETE /me`, sans mail. Ni son propre compte, ni celui d'un modérateur (`409 account_not_erasable`).
+         */
+        post: operations["anonymizeUser"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2331,6 +2380,29 @@ export interface components {
              * @description Au moins 10 caractères, avec une minuscule, une majuscule et un chiffre.
              */
             newPassword: string;
+        };
+        DeleteAccountRequest: {
+            /**
+             * Format: password
+             * @description Le mot de passe actuel.
+             */
+            password: string;
+            /** @description Code TOTP, si la double authentification est activée. */
+            code?: string;
+        };
+        ExportedData: {
+            /** Format: date-time */
+            exportedAt: string;
+            account: components["schemas"]["Account"];
+            incidents: Record<string, never>[] | null;
+            interventions: Record<string, never>[] | null;
+            reviewsGiven: Record<string, never>[] | null;
+            reviewsReceived: Record<string, never>[] | null;
+            films: Record<string, never>[] | null;
+            emailChangeRequests: Record<string, never>[] | null;
+            newsletter?: Record<string, never>;
+            sessions: Record<string, never>[] | null;
+            mfaEnabled: boolean;
         };
         PasswordChangeRequest: {
             /**
@@ -6909,6 +6981,51 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
+    deleteMyAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description Compte supprimé ; la session n'existe plus. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description Compte déjà supprimé (`account_already_erased`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `validation_failed` : `password` ou `code` vaut `required` ou `invalid`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
     updateMyContact: {
         parameters: {
             query?: never;
@@ -7034,6 +7151,68 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    exportMyData: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Les données du compte. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportedData"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    anonymizeUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identifiant de l'utilisateur (champ `id` de la liste des comptes).
+                 * @example 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
+                 */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Compte anonymisé. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Compte non anonymisable (`account_not_erasable`) ou déjà supprimé (`account_already_erased`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             500: components["responses"]["InternalError"];
         };
     };

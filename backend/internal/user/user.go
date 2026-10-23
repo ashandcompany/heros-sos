@@ -88,10 +88,12 @@ type User struct {
 	// Alias est le pseudo public d'un super-héros (vide pour les autres comptes).
 	Alias string
 
-	ActivatedAt      *time.Time
-	VerifiedAt       *time.Time
-	VerifiedBy       *uuid.UUID
-	DeactivatedAt    *time.Time
+	ActivatedAt   *time.Time
+	VerifiedAt    *time.Time
+	VerifiedBy    *uuid.UUID
+	DeactivatedAt *time.Time
+	// DeletedAt date l'anonymisation d'un compte supprimé (droit à l'effacement) ; nil pour un compte en service.
+	DeletedAt        *time.Time
 	FailedLoginCount int
 	LockedUntil      *time.Time
 	LastLoginAt      *time.Time

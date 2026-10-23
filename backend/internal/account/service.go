@@ -44,6 +44,7 @@ type Mailer interface {
 	SendEmailChangeApproved(ctx context.Context, to, firstName string) error
 	SendEmailChangeNotice(ctx context.Context, to, firstName, newEmail string) error
 	SendEmailChangeRejected(ctx context.Context, to, firstName string) error
+	SendAccountDeleted(ctx context.Context, to, firstName string) error
 }
 
 // LinkSigner signe et vérifie le lien de confirmation de la nouvelle adresse (implémenté par
@@ -72,8 +73,12 @@ type ServiceDeps struct {
 	// EmailChangeConfirmTTL est la validité du lien de confirmation de la nouvelle adresse.
 	EmailChangeConfirmTTL time.Duration
 	Audit                 audit.Recorder
-	Tx                    database.Transactor
-	Clock                 clock.Clock
+	// Privacy, Identity et Hasher servent à l'export et à la suppression du compte (privacy.go).
+	Privacy  PrivacyRepository
+	Identity IdentityChecker
+	Hasher   PasswordHasher
+	Tx       database.Transactor
+	Clock    clock.Clock
 	// AvatarMaxDimension est le côté maximal, en pixels, d'une photo acceptée.
 	AvatarMaxDimension int
 	Logger             *slog.Logger

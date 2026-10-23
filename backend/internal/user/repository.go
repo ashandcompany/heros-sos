@@ -78,6 +78,13 @@ type Repository interface {
 	// en avait pas), pour que l'appelant puisse la supprimer. Un chemin vide retire la photo.
 	SetAvatarPath(ctx context.Context, id uuid.UUID, path string, now time.Time) (previous string, err error)
 
+	// Anonymize efface les données personnelles d'un compte (droit à l'effacement) : adresse email et mot de
+	// passe inutilisables, identité neutre, coordonnées et photo supprimées, compte désactivé et daté par
+	// deleted_at. La ligne reste, pour que les incidents, interventions et avis qui la citent restent
+	// cohérents. passwordHash est l'empreinte d'un secret aléatoire jeté. Il retourne la photo à supprimer
+	// (vide sans photo), ErrNotFound si le compte n'existe pas ou est déjà anonymisé.
+	Anonymize(ctx context.Context, id uuid.UUID, passwordHash string, now time.Time) (previousAvatar string, err error)
+
 	List(ctx context.Context, filter Filter) (users []User, total int64, err error)
 	// ActiveEmailsByRole retourne les adresses des comptes actifs ayant l'un des rôles.
 	ActiveEmailsByRole(ctx context.Context, roles ...Role) ([]string, error)
@@ -245,7 +252,8 @@ func (r *gormRepository) Deactivate(ctx context.Context, id uuid.UUID, now time.
 // Reactivate rend le compte à son état d'avant la désactivation : actif s'il avait été
 // activé, sinon en attente d'activation.
 func (r *gormRepository) Reactivate(ctx context.Context, id uuid.UUID, now time.Time) (bool, error) {
-	return r.conditionalUpdate(ctx, "id = ? AND status = ?", []any{id, string(StatusDeactivated)}, map[string]any{
+	// Un compte anonymisé (deleted_at) ne se réactive pas : il n'a plus de titulaire.
+	return r.conditionalUpdate(ctx, "id = ? AND status = ? AND deleted_at IS NULL", []any{id, string(StatusDeactivated)}, map[string]any{
 		"status": gorm.Expr("CASE WHEN activated_at IS NULL THEN ? ELSE ? END",
 			string(StatusPendingActivation), string(StatusActive)),
 		"deactivated_at": nil,
@@ -352,6 +360,60 @@ func (r *gormRepository) SetAvatarPath(ctx context.Context, id uuid.UUID, path s
 	query := r.conn(ctx).Raw(setAvatarPathSQL, id, path, now, id).Scan(&result)
 	if query.Error != nil {
 		return "", fmt.Errorf("user : remplacement de la photo : %w", query.Error)
+	}
+	if query.RowsAffected == 0 {
+		return "", ErrNotFound
+	}
+	if result.AvatarPath == nil {
+		return "", nil
+	}
+	return *result.AvatarPath, nil
+}
+
+// Valeurs d'un compte anonymisé. Les colonnes chiffrées obligatoires gardent une valeur chiffrée (neutre) ;
+// la date de naissance doit rester une date valide pour que le compte se relise.
+const (
+	AnonymizedFirstName = "Compte supprimé"
+	anonymizedBirthDate = "1900-01-01"
+	anonymizedCivility  = "non-precise"
+)
+
+// AnonymizedEmail est l'adresse d'un compte anonymisé : unique (elle porte l'identifiant), et dans le
+// domaine réservé .invalid, qui ne reçoit jamais de mail.
+func AnonymizedEmail(id uuid.UUID) string { return "supprime-" + id.String() + "@heros-sos.invalid" }
+
+const anonymizeSQL = `
+WITH previous AS (SELECT avatar_path FROM users WHERE id = ? AND deleted_at IS NULL FOR UPDATE)
+UPDATE users SET
+    email = ?, password_hash = ?, civility = ?,
+    last_name = ?, first_name = ?, birth_date = ?,
+    phone = NULL, street = NULL, address_complement = NULL, postal_code = NULL, city = NULL, country = NULL,
+    avatar_path = NULL, status = ?, deactivated_at = coalesce(deactivated_at, ?), deleted_at = ?,
+    failed_login_count = 0, locked_until = NULL, updated_at = ?
+FROM previous
+WHERE users.id = ?
+RETURNING previous.avatar_path`
+
+func (r *gormRepository) Anonymize(ctx context.Context, id uuid.UUID, passwordHash string, now time.Time) (string, error) {
+	c := codec{sealer: r.sealer, id: id}
+	lastName, err := c.seal(columnLastName, "")
+	if err != nil {
+		return "", err
+	}
+	firstName, err := c.seal(columnFirstName, AnonymizedFirstName)
+	if err != nil {
+		return "", err
+	}
+	birthDate, err := c.seal(columnBirthDate, anonymizedBirthDate)
+	if err != nil {
+		return "", err
+	}
+	var result struct{ AvatarPath *string }
+	query := r.conn(ctx).Raw(anonymizeSQL, id,
+		AnonymizedEmail(id), passwordHash, anonymizedCivility, lastName, firstName, birthDate,
+		string(StatusDeactivated), now, now, now, id).Scan(&result)
+	if query.Error != nil {
+		return "", fmt.Errorf("user : anonymisation : %w", query.Error)
 	}
 	if query.RowsAffected == 0 {
 		return "", ErrNotFound

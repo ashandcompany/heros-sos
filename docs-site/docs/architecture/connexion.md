@@ -25,7 +25,7 @@ sequenceDiagram
     A-->>W: 200 + Set-Cookie + état de la 2FA (mfa)
     W-->>N: recopie le cookie
 
-    opt modérateur : 2FA à faire (session limitée)
+    opt compte avec 2FA : code à saisir (session limitée)
         N->>W: Server Action verifyMfaAction (code ou code de secours)
         W->>A: POST /auth/mfa/verify (cookie)
         A->>D: vérifie le code, remplace le jeton de session
@@ -42,7 +42,9 @@ sequenceDiagram
     W-->>N: page selon le rôle
 ```
 
-**Double authentification des modérateurs.** Quand elle est obligatoire (toujours en production), `POST
+**Double authentification.** Obligatoire pour les modérateurs, elle est facultative pour les citoyens et les
+super-héros, qui l'activent depuis « Mon compte » ou « Mon profil » : à la connexion suivante, leur session est
+limitée jusqu'à la saisie du code, comme celle d'un modérateur. Quand elle est obligatoire (toujours en production), `POST
 /auth/login` ouvre une session *limitée* : l'API ne lui accepte que la 2FA, `GET /auth/me` et la déconnexion, et
 répond `403 mfa_required` partout ailleurs. Le front la traite comme un visiteur et envoie le modérateur saisir
 son code (`/connexion/verification`), ou activer sa 2FA la première fois (`/connexion/double-authentification`).

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
-import { MfaPanel } from "@/components/admin/MfaPanel";
+import { MfaSection } from "@/components/auth/MfaPanel";
 import { SessionsPanel } from "@/components/citizen/AccountDetails";
 
 export const metadata: Metadata = { title: "Sécurité" };
@@ -15,16 +14,7 @@ export default function AdminSecurityPage() {
         description="Protégez votre compte de modérateur : il donne accès à toutes les données de la plateforme."
       />
       <div className="max-w-2xl space-y-6">
-        <Suspense
-          fallback={
-            <div
-              aria-hidden="true"
-              className="h-64 border-2 border-border bg-surface motion-safe:animate-pulse"
-            />
-          }
-        >
-          <MfaPanel />
-        </Suspense>
+        <MfaSection role="admin" />
         <SessionsPanel />
       </div>
     </>

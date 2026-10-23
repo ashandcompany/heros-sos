@@ -28,7 +28,7 @@ Sans configuration, toute l'application tourne sur les mocks (comptes de test da
 ### Avec l'API Go
 
 Identité (inscription, activation, connexion avec « Rester connecté », session, déconnexion de tous les
-appareils, mot de passe, double authentification des modérateurs), demandes de super-héros,
+appareils, mot de passe, double authentification), demandes de super-héros,
 modération des comptes, annuaire admin des super-héros, types d'incident, incidents et interventions
 (dont l'historique public des héros et des vilains), vidéothèque, avis, blog, films des super-vilains, profil et photo, changements d'adresse email (confirmés
 par un lien), contact, newsletter (confirmation et désinscription par lien) et compteurs du tableau de bord de
@@ -111,7 +111,8 @@ Les listes à modérer affichent par défaut les éléments en attente (`?statut
 pour les autres). Le HTML des articles doit être assaini côté API avant tout affichage public.
 
 Avec l'API, un modérateur doit activer sa double authentification (TOTP) : obligatoire en production,
-facultative en développement. Tant qu'il n'a pas saisi son code, sa session est limitée et il est envoyé à
+facultative en développement. Un citoyen ou un super-héros peut aussi l'activer, depuis « Mon compte » ou
+« Mon profil » (panneau `MfaSection`). Tant que la personne n'a pas saisi son code, sa session est limitée et il est envoyé à
 `/connexion/verification` ou `/connexion/double-authentification` (voir
 [docs/backend-contract.md](docs/backend-contract.md#double-authentification-et-session-limitée)).
 

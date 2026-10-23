@@ -21,6 +21,7 @@
     "@tiptap/starter-kit": "^3.32.0",
     "leaflet": "^1.9.4",
     "next": "16.4.2",
+    "qrcode.react": "^4.2.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-easy-crop": "^6.2.4",

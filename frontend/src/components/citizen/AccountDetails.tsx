@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { MfaSection } from "@/components/auth/MfaPanel";
 import { Avatar } from "@/components/ui/Avatar";
 import { getMyAccount } from "@/lib/api";
 import { formatDate } from "@/lib/format";
@@ -12,6 +12,9 @@ import {
   LogoutAllForm,
   NewsletterSettingsForm,
 } from "./AccountForms";
+import { Panel } from "./Panel";
+
+export { Panel };
 
 /** Panneau « Sessions » : même texte pour tous les rôles (citoyen, héros, modérateur). */
 export function SessionsPanel() {
@@ -23,31 +26,6 @@ export function SessionsPanel() {
     >
       <LogoutAllForm />
     </Panel>
-  );
-}
-
-export function Panel({
-  id,
-  title,
-  description,
-  children,
-}: {
-  id: string;
-  title: string;
-  description?: string;
-  children: ReactNode;
-}) {
-  return (
-    <section
-      aria-labelledby={id}
-      className="border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-5 sm:p-8"
-    >
-      <h2 id={id} className="font-display text-xl font-semibold">
-        {title}
-      </h2>
-      {description && <p className="mt-1 text-sm text-muted">{description}</p>}
-      <div className="mt-6">{children}</div>
-    </section>
   );
 }
 
@@ -130,6 +108,8 @@ function AccountPanels({ account }: { account: MyAccount }) {
         <Panel id="newsletter-settings-title" title="Newsletter">
           <NewsletterSettingsForm subscribed={account.newsletterSubscribed} />
         </Panel>
+
+        <MfaSection role="citoyen" />
 
         <SessionsPanel />
       </div>

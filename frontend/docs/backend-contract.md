@@ -11,7 +11,7 @@ branchement. À mettre à jour à chaque fonction branchée.
 > d'incident, incidents et interventions (y compris incidents en cours, carte publique et historique public
 > des héros et des vilains), vidéothèque (paginée et filtrable), avis, blog, films des super-vilains, compte
 > (profil, photo, changement d'e-mail confirmé par lien), contact, newsletter (confirmation et
-> désinscription), « déconnexion de tous les appareils », double authentification des modérateurs et
+> désinscription), « déconnexion de tous les appareils », double authentification et
 > compteurs du tableau de bord de modération sont branchés** sur l'API dès que `API_URL` est renseignée (tableau ci-dessous). Le reste fonctionne encore sur
 > des mocks, y compris avec l'API.
 
@@ -155,7 +155,9 @@ flowchart LR
 ### Double authentification et session limitée
 
 Les modérateurs ont une double authentification (TOTP) : **obligatoire en production** (le backend refuse de
-démarrer sans), facultative en développement (`HEROS_MFA_MODERATOR_REQUIRED`). `POST /auth/login` et
+démarrer sans), facultative en développement (`HEROS_MFA_MODERATOR_REQUIRED`). Elle est facultative pour un
+citoyen ou un super-héros, qui l'active depuis « Mon compte » ou « Mon profil » ; une fois activée, elle suit les
+mêmes règles de connexion. `POST /auth/login` et
 `GET /auth/me` annoncent son état dans `mfa`, traduit par `MfaStatus` :
 
 | `mfa` de l'API          | `MfaStatus`             | Session     | Où va le visiteur                                                                       |
@@ -176,16 +178,27 @@ session avec `getMfaSession`, limitée ou non.
   actions de `actions/mfa.ts` le recopient dans le cookie du navigateur (`setSessionCookie`). À l'activation,
   l'API ferme aussi toutes les autres sessions du compte.
 - **Codes de secours** : dix codes, montrés **une seule fois** (l'API n'en garde que l'empreinte), chacun à
-  usage unique. La page `/admin/securite` en demande de nouveaux contre le code courant. Il n'y a
+  usage unique. Le panneau « Codes de secours » (`/admin/securite`, « Mon compte », « Mon profil ») en demande de nouveaux contre le code courant. Il n'y a
   volontairement **aucun bouton pour désactiver ou réinitialiser** la 2FA : un compte piraté ne doit pas
   pouvoir retirer sa propre protection. Un appareil perdu sans code de secours se règle hors ligne :
   `make resetmfa EMAIL=…` (voir le README du backend).
 - **Un code faux compte comme un échec de connexion** (verrouillage progressif, `429`). Il s'affiche comme
   « trop de tentatives, réessayez dans N minutes » (`apiFailureMessage`) ; l'API répond `422` (`code: invalid`)
   pour un code simplement faux, jamais `401` (qui redirigerait vers la connexion).
-- **Pas de QR code** : la page affiche la clé à saisir et un lien `otpauth://` qui s'ouvre dans l'application
-  sur un téléphone. Un QR code demanderait une dépendance de plus.
-- Sans API (mocks), aucune 2FA n'existe : la session est toujours complète, et `/admin/securite` simule l'activation.
+- **QR code** : la page affiche un QR code de l'adresse `otpauth://`, avec la clé à saisir et deux liens pour
+  l'appareil en cours. Il est dessiné dans le navigateur (`qrcode.react`, sans dépendance, en SVG noir sur fond blanc quel que soit le
+  thème) et jamais par un service tiers : l'adresse contient le secret de la 2FA.
+- **Deux liens, dont un pour Apple** : le lien `otpauth://` standard ouvre l'application d'authentification que
+  l'appareil a choisie (Google Authenticator, Aegis, 1Password…), mais **pas** l'app Mots de passe d'Apple, qui
+  n'attend que le schéma `apple-otpauth:` (même adresse, autre schéma : `appleOtpauthUrl`, d'après la documentation
+  d'Apple « Securing Logins with iCloud Keychain Verification Codes »). Mots de passe ne range un code que **dans un
+  compte** (site et identifiant) : ce lien le rattache à un compte existant. L'action serveur (`startMfaSetupAction`)
+  y met le domaine de `SITE_URL` comme `issuer`, ce qu'Apple utilise pour proposer le compte enregistré à la connexion ;
+  sans compte enregistré pour ce site (navigateur qui n'utilise pas le Trousseau iCloud, développement sur
+  `localhost`), il faut créer le compte dans Mots de passe d'abord, ou passer par une application d'authentification, qui
+  crée l'entrée toute seule. La page décrit aussi le chemin à la main d'Apple (compte, Modifier, Configurer un code,
+  puis scanner ou saisir la clé). Le QR code garde le schéma standard, que lisent toutes les applications.
+- Sans API (mocks), aucune 2FA n'existe : la session est toujours complète, et le panneau de 2FA simule l'activation.
 
 ### Déconnexion de tous les appareils
 

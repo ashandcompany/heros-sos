@@ -21,7 +21,7 @@ Complément au cahier des charges, qui prévoit PHP 8.4 et MySQL (§2.4) : le ba
 - **OpenAPI :** spec d'abord (`oapi-codegen`).
 - **Cookie de session :** option A, Next relaie le `Set-Cookie` de Go.
 - **Devenir héros :** formulaire dédié « Devenir super-héros » dans « Mon compte », validé par un modérateur.
-- **2FA :** TOTP, obligatoire pour les modérateurs avant toute mise en ligne (voir [Sessions](stack/sessions.md)).
+- **2FA :** TOTP, obligatoire pour les modérateurs avant toute mise en ligne, facultative pour les autres comptes (voir [Sessions](stack/sessions.md)).
 - **Newsletter :** double opt-in pour les visiteurs anonymes.
 - **Appareil de la session :** résumé (`device_label`), pas de User-Agent brut.
 - **Chiffrement :** nom, prénom, date de naissance, téléphone et adresse de tous les utilisateurs.

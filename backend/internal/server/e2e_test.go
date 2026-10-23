@@ -69,6 +69,7 @@ func newE2E(t *testing.T, overrides map[string]string) *e2e {
 		"HEROS_RATE_NEWSLETTER_PER_EMAIL":     "10000/1h",
 		"HEROS_RATE_EMAIL_CHANGE_PER_USER":    "10000/1h",
 		"HEROS_RATE_AVATAR_PER_USER":          "10000/1h",
+		"HEROS_RATE_HERO_LOCATION_PER_USER":   "10000/1h",
 		// Pas de cache sur les statistiques du tableau de bord : les tests veulent voir leurs écritures.
 		"HEROS_DASHBOARD_STATS_TTL": "0",
 	}

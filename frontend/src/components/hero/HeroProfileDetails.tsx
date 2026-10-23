@@ -6,6 +6,7 @@ import {
 import { MfaSection } from "@/components/auth/MfaPanel";
 import { Panel, SessionsPanel } from "@/components/citizen/AccountDetails";
 import { AvatarForm, ContactForm, EmailChangeForm } from "@/components/citizen/AccountForms";
+import { LocationSharingPanel } from "@/components/hero/LocationSharingPanel";
 import { Avatar } from "@/components/ui/Avatar";
 import { getMyHeroProfile } from "@/lib/api";
 import { formatDate, formatFullName } from "@/lib/format";
@@ -83,6 +84,10 @@ export async function HeroProfileDetails() {
             </p>
           )}
           <EmailChangeForm action={requestHeroEmailChangeAction} />
+        </Panel>
+
+        <Panel id="location-title" title="Partage de position">
+          <LocationSharingPanel consentAt={profile.locationConsentAt} />
         </Panel>
 
         <MfaSection role="super-heros" />

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <meta name="supported-color-schemes" content="light dark">
+    <title>{{.AppName}}</title>
+    <style>
+      :root { color-scheme: light dark; supported-color-schemes: light dark; }
+      .content p { margin: 0 0 16px; }
+      .content h1, .content h2, .content h3 { margin: 0 0 12px; line-height: 1.25; }
+      .content ul, .content ol { margin: 0 0 16px; padding-left: 22px; }
+      .content blockquote { margin: 0 0 16px; padding-left: 12px; border-left: 3px solid #cf6a3c; }
+      .content hr { border: none; border-top: 1px solid #b4aa90; margin: 20px 0; }
+      .content a { color: #a8330a; }
+      @media (prefers-color-scheme: light) {
+        .page { background: #efe9da !important; }
+        .card { background: #fbf7ec !important; }
+        .brand { color: #111315 !important; }
+        .muted, .muted a { color: #4a4d52 !important; }
+      }
+    </style>
+  </head>
+  <body class="page" bgcolor="#111315" style="margin: 0; padding: 0; background: #111315;">
+    <table role="presentation" class="page" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#111315" style="background: #111315;">
+      <tr>
+        <td align="center" style="padding: 24px 12px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px;">
+            <tr>
+              <td align="center" style="padding: 0 0 20px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td valign="middle" style="padding-right: 12px;">
+                      <img src="{{.LogoURL}}" alt="" width="75" height="40" style="display: block; border: 0; width: 75px; height: 40px;">
+                    </td>
+                    <td valign="middle" align="left" class="brand" style="font-family: Arial, Helvetica, sans-serif; color: #f2ebd9; line-height: 1;">
+                      <span style="font-size: 17px; font-weight: bold; letter-spacing: 4px; text-transform: uppercase;">{{.AppName}}</span><br>
+                      <span class="muted" style="font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: #b4b9bf; line-height: 18px;">Service d'intervention</span>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td class="card" bgcolor="#f2ebd9" style="background: #f2ebd9; border-top: 8px solid #cf6a3c; border-radius: 6px; padding: 28px 28px 12px;">
+                <div class="content" style="font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 1.5; color: #111315;">
+{{.Content}}
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td align="center" class="muted" style="padding: 20px 12px 0; font-family: Arial, Helvetica, sans-serif; font-size: 12px; line-height: 1.5; color: #b4b9bf;">
+                {{if .UnsubscribeLink}}Vous recevez ce message parce que vous êtes abonné·e à la newsletter de {{.AppName}}.<br>
+                <a href="{{.UnsubscribeLink}}" style="color: #b4b9bf; text-decoration: underline;">Se désabonner</a>{{else}}{{.AppName}} · Service d'intervention{{end}}
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

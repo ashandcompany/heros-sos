@@ -567,7 +567,7 @@ func TestModeratorSummaryCountsPendingItems(t *testing.T) {
 	e := newE2E(t, nil)
 	moderator := e.newModerator("fury@shield.example")
 	type summary struct {
-		Incidents, HeroApplications, Videos, Comments, EmailChanges, DraftArticles int64
+		Incidents, HeroApplications, Videos, Comments, EmailChanges, DraftArticles, DraftNewsletters int64
 	}
 	var before summary
 	moderator.get("/admin/moderation/summary").decode(t, &before)
@@ -583,6 +583,18 @@ func TestModeratorSummaryCountsPendingItems(t *testing.T) {
 	moderator.get("/admin/moderation/summary").decode(t, &after)
 	if after != (summary{HeroApplications: 1}) {
 		t.Fatalf("après une demande de héros : %+v", after)
+	}
+
+	var draft struct{ ID string }
+	moderator.post("/admin/newsletters", map[string]any{"subject": "À envoyer", "body": "<p>Brouillon</p>"}).decode(t, &draft)
+	moderator.get("/admin/moderation/summary").decode(t, &after)
+	if after != (summary{HeroApplications: 1, DraftNewsletters: 1}) {
+		t.Fatalf("après un brouillon de newsletter : %+v", after)
+	}
+	moderator.request(http.MethodDelete, "/admin/newsletters/"+draft.ID, nil)
+	moderator.get("/admin/moderation/summary").decode(t, &after)
+	if after.DraftNewsletters != 0 {
+		t.Fatalf("après suppression du brouillon : %+v", after)
 	}
 }
 

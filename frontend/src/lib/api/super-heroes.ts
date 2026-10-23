@@ -1,10 +1,13 @@
 import { cache } from "react";
 import { superHeroesMock, superHeroProfilesMock } from "@/mocks/super-heroes";
 import { accountsMock } from "@/mocks/users";
+import { apiFailureMessage } from "@/lib/validation/form-state";
 import type {
   AvatarUpdateResult,
   ContactUpdateResult,
   EmailChangeResult,
+  HeroPosition,
+  MutationResult,
   MyHeroProfile,
   PostalAddress,
   SuperHero,
@@ -12,7 +15,7 @@ import type {
 } from "@/types";
 import { fetchMyAccount, patchMyContact, postMyEmailChange, putMyAvatar } from "./account";
 import { isApiEnabled, mockResponse } from "./config";
-import { ApiError, type ApiSchema, apiFetch } from "./http";
+import { ApiError, type ApiSchema, apiFetch, toApiFailure } from "./http";
 import { MAX_PAGE_SIZE, pageQuery } from "./pagination";
 import { userFromToken } from "./session-user";
 import { accountStatusFromApi } from "./user-moderation";
@@ -135,7 +138,11 @@ export async function getMyHeroProfile(token: string): Promise<MyHeroProfile> {
   if (!isApiEnabled) {
     // Sans API, aucun mail n'est envoyé : une demande est confirmée d'emblée.
     const profile = await findMyProfile(token);
-    return mockResponse({ ...profile, pendingEmailConfirmed: profile.pendingEmail !== null });
+    return mockResponse({
+      ...profile,
+      pendingEmailConfirmed: profile.pendingEmail !== null,
+      locationConsentAt: locationConsentsMock.get(profile.id) ?? null,
+    });
   }
 
   const { hero, ...account } = await fetchMyAccount(token);
@@ -156,6 +163,7 @@ export async function getMyHeroProfile(token: string): Promise<MyHeroProfile> {
     mobilePhone: account.mobilePhone,
     address: { street, postalCode, city, country },
     registeredAt: account.createdAt,
+    locationConsentAt: hero.locationConsentAt ?? null,
   };
 }
 
@@ -213,6 +221,95 @@ export async function requestHeroEmailChange(
 
   profile.pendingEmail = normalized;
   return mockResponse({ ok: true });
+}
+
+/* ---------- Partage de position (rôle super-heros) ---------- */
+
+/** Sans API : date du consentement au partage de position, par identifiant de héros. */
+const locationConsentsMock = new Map<string, string>();
+
+const locationErrorMessages: Record<string, string> = {
+  hero_location_consent_required: "Activez d'abord le partage de position.",
+  validation_failed: "Position invalide.",
+};
+
+/** Traduit l'échec d'une écriture sur la position en message affichable. */
+function toLocationFailure(error: unknown, context: string): MutationResult {
+  if (error instanceof ApiError && locationErrorMessages[error.code]) {
+    return { ok: false, error: locationErrorMessages[error.code] };
+  }
+  return { ok: false, error: apiFailureMessage(toApiFailure(error, context)) };
+}
+
+async function writeLocation(
+  token: string,
+  path: string,
+  method: "PUT" | "DELETE",
+  context: string,
+  body?: HeroPosition,
+): Promise<MutationResult> {
+  try {
+    await apiFetch(path, { method, sessionToken: token, body });
+    return { ok: true };
+  } catch (error) {
+    return toLocationFailure(error, context);
+  }
+}
+
+/** Consent au partage de position (la date d'origine est conservée). API : `PUT /hero/location/consent`. */
+export async function grantHeroLocationConsent(token: string): Promise<MutationResult> {
+  if (!isApiEnabled) {
+    const { id } = await findMyProfile(token);
+    if (!locationConsentsMock.has(id)) locationConsentsMock.set(id, new Date().toISOString());
+    return mockResponse({ ok: true });
+  }
+  return writeLocation(token, "/hero/location/consent", "PUT", "Consentement à la position");
+}
+
+/**
+ * Retire le consentement ; l'API supprime aussi la position. API : `DELETE /hero/location/consent`.
+ */
+export async function revokeHeroLocationConsent(token: string): Promise<MutationResult> {
+  if (!isApiEnabled) {
+    locationConsentsMock.delete((await findMyProfile(token)).id);
+    return mockResponse({ ok: true });
+  }
+  return writeLocation(
+    token,
+    "/hero/location/consent",
+    "DELETE",
+    "Retrait du consentement à la position",
+  );
+}
+
+/**
+ * Remplace la position actuelle du héros, refusée sans consentement (409). Elle n'est relue par
+ * aucune route : elle sert seulement à l'alerte de proximité. API : `PUT /hero/location`.
+ */
+export async function saveHeroLocation(
+  token: string,
+  position: HeroPosition,
+): Promise<MutationResult> {
+  if (!isApiEnabled) {
+    const { id } = await findMyProfile(token);
+    if (!locationConsentsMock.has(id)) {
+      return mockResponse({
+        ok: false,
+        error: locationErrorMessages.hero_location_consent_required,
+      });
+    }
+    return mockResponse({ ok: true });
+  }
+  return writeLocation(token, "/hero/location", "PUT", "Partage de la position", position);
+}
+
+/** Supprime la position en gardant le consentement. API : `DELETE /hero/location`. */
+export async function deleteHeroLocation(token: string): Promise<MutationResult> {
+  if (!isApiEnabled) {
+    await findMyProfile(token);
+    return mockResponse({ ok: true });
+  }
+  return writeLocation(token, "/hero/location", "DELETE", "Suppression de la position");
 }
 
 /**

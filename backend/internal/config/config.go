@@ -200,6 +200,7 @@ type RateLimits struct {
 	EmailChangePerUser    RateRule
 	AvatarPerUser         RateRule
 	MFAVerifyPerUser      RateRule
+	HeroLocationPerUser   RateRule
 	MaxTrackedKeys        int
 }
 
@@ -284,6 +285,16 @@ type App struct {
 	// EmailChangeConfirmPath est la page du frontend qui confirme la nouvelle adresse d'un compte
 	// (`?token=…`).
 	EmailChangeConfirmPath string
+}
+
+// MailLogoPath est l'emplacement, dans le frontend, du logo affiché en tête des mails.
+const MailLogoPath = "/mail/logo.png"
+
+// MailLogoURL construit l'adresse absolue du logo des mails.
+func (a App) MailLogoURL() string {
+	target := *a.PublicBaseURL
+	target.Path = MailLogoPath
+	return target.String()
 }
 
 // ActivationLink construit le lien d'activation de compte envoyé par mail.
@@ -465,6 +476,7 @@ func Load(getenv func(string) string) (Config, error) {
 				EmailChangePerUser:    l.rateRule(envRateEmailChangePerUser, defaultRateEmailChangePerUser),
 				AvatarPerUser:         l.rateRule(envRateAvatarPerUser, defaultRateAvatarPerUser),
 				MFAVerifyPerUser:      l.rateRule(envRateMFAVerifyPerUser, defaultRateMFAVerifyPerUser),
+				HeroLocationPerUser:   l.rateRule(envRateHeroLocationPerUser, defaultRateHeroLocationPerUser),
 				MaxTrackedKeys:        l.positiveInt(envMaxTrackedRateKeys, defaultMaxTrackedRateKeys),
 			},
 			Tokens: Tokens{

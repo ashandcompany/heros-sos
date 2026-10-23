@@ -111,7 +111,17 @@ export type MyHeroProfile = Omit<
 > & {
   /** Le titulaire de `pendingEmail` a confirmé cette nouvelle adresse par le lien reçu. */
   pendingEmailConfirmed: boolean;
+  /** Date ISO 8601 du consentement au partage de position, `null` sans consentement. */
+  locationConsentAt: string | null;
 };
+
+/** Position actuelle déclarée par un super-héros (`PUT /hero/location`). */
+export interface HeroPosition {
+  latitude: number;
+  longitude: number;
+  /** Précision de la mesure en mètres. */
+  accuracyM?: number;
+}
 
 /** Tableau de bord professionnel d'un super-héros. */
 export interface HeroDashboard {

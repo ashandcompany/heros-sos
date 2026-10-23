@@ -156,6 +156,9 @@ func (s *Service) PurgeStale(ctx context.Context) (int64, error) {
 	return result.RowsAffected, nil
 }
 
+// AlertRadiusKm est le rayon d'alerte autour d'un incident, en kilomètres.
+func (s *Service) AlertRadiusKm() int { return s.radiusKm }
+
 // EmailsNear retourne les adresses des héros actifs dont la position est fraîche et à moins du rayon
 // d'alerte du point donné.
 func (s *Service) EmailsNear(ctx context.Context, latitude, longitude float64) ([]string, error) {

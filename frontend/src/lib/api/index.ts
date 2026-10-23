@@ -97,12 +97,16 @@ export {
   replyToReview,
 } from "./reviews";
 export {
+  deleteHeroLocation,
   getFeaturedSuperHeroes,
   getMyHeroProfile,
   getSuperHero,
   getSuperHeroes,
   getSuperHeroProfiles,
+  grantHeroLocationConsent,
   requestHeroEmailChange,
+  revokeHeroLocationConsent,
+  saveHeroLocation,
   updateMyHeroAvatar,
   updateMyHeroContact,
 } from "./super-heroes";

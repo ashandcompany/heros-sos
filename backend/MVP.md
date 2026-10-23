@@ -33,7 +33,7 @@ Ajouter `villain_specialties` et `incident_villains` si on lie les vilains aux i
 ## Hors MVP (version 2)
 
 - Notes et réponses des héros, films et OMDb, statistiques (§5.8.1 et §5.8.2).
-- Envoi des numéros de la newsletter (l'abonnement par double opt-in et la désinscription existent déjà), articles du blog.
+- Suivi de remise des numéros de la newsletter (l'envoi, l'abonnement par double opt-in et la désinscription existent déjà), articles du blog.
 - Équipes de héros : invitations, confirmations, validation du résultat, arbitrage par un modérateur.
 - 2FA TOTP des héros et des citoyens (celle des modérateurs n'est pas « hors MVP » : voir « À ne pas couper »), liste des appareils connectés.
 - Encyclopédie Marvel.

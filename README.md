@@ -15,7 +15,8 @@ Plateforme web qui rapproche les citoyens et les super-héros pour signaler et t
 ## Prérequis
 
 - **Docker** : pour la pile de développement complète (`make up`). Prévoir de la place pour sa machine virtuelle : **16 Go de disque recommandés** (Docker Desktop, Settings → Resources), car la pile, ses images et le cache de build dépassent 8 Go. Avec un disque plein, les builds échouent et PostgreSQL ne peut plus écrire.
-- **openssl** : pour générer les secrets du backend (`make env`, lancé par `make up`)
+- **make** : facultatif. Sans make sur la machine, `./make up` lance la même commande dans un conteneur (voir [Sans make installé](#sans-make-installé)).
+- **openssl** : pour générer les secrets du backend (`make env`, lancé par `make up`). Fourni par `./make`, qui l'embarque.
 - **Node.js** ≥ 22 (version utilisée par la CI) et **npm** ≥ 10 : seulement pour travailler sur le frontend hors Docker. `make up` n'en a pas besoin, la documentation non plus.
 - **Go** : version fixée par `backend/go.mod` (1.26), seulement pour lancer l'API hors Docker
 
@@ -66,6 +67,25 @@ make moderator EMAIL=modo@example.org FIRST=Nick LAST=Fury BIRTH=1950-12-04
 ```
 
 > **Sauvegardez `HEROS_CRYPTO_KEYS`** (dans `backend/.env`) : sans cette clé, les données personnelles chiffrées en base sont définitivement illisibles.
+
+### Sans make installé
+
+Seul Docker est nécessaire : `./make` lance `make` dans un conteneur, avec les mêmes cibles et les mêmes arguments.
+
+```bash
+./make                                  # liste les cibles (make help)
+./make up                               # comme make up
+./make moderator EMAIL=modo@example.org FIRST=Nick LAST=Fury BIRTH=1950-12-04
+FORCE=1 ./make up                       # les variables d'environnement lues par les Makefile sont transmises
+```
+
+Au premier appel, le script construit une image d'environ 250 Mo (`docker/make/` : make, bash, openssl, client Docker et Compose) : il faut internet cette fois-là, puis plus rien à télécharger. Ce n'est pas un Docker imbriqué : `./make` pilote le Docker de la machine (son socket est monté), donc `./make up` et `make up` donnent la même pile, et l'un peut arrêter ce que l'autre a démarré. Le dépôt est monté au même chemin que sur la machine, pour que Compose y trouve les dossiers à monter dans les conteneurs, et `make` tourne avec votre utilisateur : `backend/.env` et `backend/secrets/` vous appartiennent. Depuis un sous-dossier, `../make` lance le Makefile de ce dossier.
+
+Limites :
+
+- Les cibles qui lancent Go sur la machine (`perf-prepare`, `seed-perf`, `perf-run`, `perf`, et `run`, `test`, `lint`… de `backend/Makefile`) exigent Go installé et ne passent pas par `./make`.
+- `make up` contrôle d'abord (avec `lsof`) qu'aucun port n'est déjà pris ; `./make up` laisse Docker annoncer le conflit.
+- Prévu pour macOS, Linux et WSL2 (Docker Desktop ou Docker Engine). Sous Windows, lancez `./make` depuis WSL2 : Git Bash n'est pas pris en charge.
 
 ### Frontend seul
 

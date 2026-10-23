@@ -43,6 +43,7 @@ des super-héros n'a pas encore de contrat.
 | Super-vilains                         | `villains.ts`                                      | `GET /villains`, `GET /villains/{id}` (publics), `POST /villains`, `PATCH /villains/{id}`                                              |
 | Fiches publiques super-héros          | `super-heroes.ts` (§ 3)                            | `GET /heroes`, `GET /heroes/{heroId}` (publics)                                                                                        |
 | Annuaire admin des super-héros        | `super-heroes.ts`                                  | `GET /admin/heroes`                                                                                                                    |
+| Partage de position (proximité)       | `super-heroes.ts` (§ 3)                            | `PUT/DELETE /hero/location`, `PUT/DELETE /hero/location/consent`, `hero.locationConsentAt` de `GET /me`                                |
 | Profil, photo, changements d'email    | `account.ts`, `avatar.ts`, `super-heroes.ts` (§ 3) | `/me`, `/me/avatar`, `/avatars/{name}`, `/me/email-change-requests`, `/email-change-requests/confirm`, `/admin/email-change-requests*` |
 | Newsletter                            | `newsletter.ts`, `account.ts`                      | `/newsletter/subscriptions`, `…/confirm`, `…/unsubscribe`, `PUT /me/newsletter`                                                        |
 | Formulaire de contact                 | `contact.ts`                                       | `POST /contact/messages`                                                                                                               |
@@ -73,7 +74,8 @@ Fonctions de chaque fichier :
 - `villains.ts` : `getVillains`, `getVillainsPage`, `getVillain`, `createVillain`, `updateVillain`.
 - `super-heroes.ts` (fiches publiques) : `getSuperHeroes`, `getFeaturedSuperHeroes`, `getSuperHero` ; (profil
   connecté) `getMyHeroProfile`, `updateMyHeroContact`, `updateMyHeroAvatar`, `requestHeroEmailChange` ;
-  (annuaire admin) `getSuperHeroProfiles`.
+  (partage de position) `grantHeroLocationConsent`, `revokeHeroLocationConsent`, `saveHeroLocation`,
+  `deleteHeroLocation` ; (annuaire admin) `getSuperHeroProfiles`.
 - `videos.ts` : `getMyVideos`, `getMyVideosPage`, `addMyVideo`, `deleteMyVideo`, `getHeroVideos`,
   `getHeroVideosPage`, `moderateVideo`, `deleteVideo`, `getPublishedFilmsPage`, `getFilmHeroes`,
   `getPublishedVideos`, `getHeroesForVideos`, `addHeroVideo`, `getVillainFilms`, `addVillainFilm`,
@@ -628,6 +630,35 @@ affiche « Vous intervenez » ou « Pris en charge par … ».
   comme dans la liste des incidents du héros). Les listes sont bornées à 5 incidents récents et 3 ennemis.
 - **Mes incidents en cours** : l'incident de l'intervention en cours dont le héros est participant confirmé et
   actif ; au plus un, car un héros n'intervient que sur un incident à la fois.
+
+### Partage de position : choix du branchement
+
+Un super-héros peut partager sa position pour être prévenu en priorité des incidents proches. À la
+déclaration d'un incident avec coordonnées, l'API envoie le mail aux modérateurs et aux héros dont la
+position date de moins de 30 minutes et se trouve à moins de 10 km (`HEROS_LOCATION_TTL`,
+`HEROS_ALERT_RADIUS_KM`). Leur mail précise « à moins de 10 km de votre dernière position partagée ». Sans
+héros proche, ou sans coordonnées, tous les héros actifs sont prévenus, sans cette mention.
+
+- **Consentement** : le panneau « Partage de position » de « Mon profil » (`LocationSharingPanel`) appelle
+  `setLocationSharingAction`, qui envoie `PUT` ou `DELETE /hero/location/consent`. L'état vient de
+  `hero.locationConsentAt` dans `GET /me` (`MyHeroProfile.locationConsentAt`, `null` sans consentement).
+  Retirer le consentement supprime aussi la position côté API.
+- **Envoi** : le layout de `/heros` monte `HeroLocationProvider`, et `HeroLocationTrackerLoader` (sous
+  `<Suspense>`) y rend `HeroLocationTracker` si le héros a consenti. Le suivi appelle
+  `navigator.geolocation.getCurrentPosition` tout de suite, puis toutes les 5 minutes, et au retour sur
+  l'onglet. Chaque position passe par `saveHeroLocationAction` (`PUT /hero/location`). On n'utilise pas
+  `watchPosition` : il ne se déclenche pas quand le héros ne bouge pas, et sa position serait purgée.
+- **Pause** : « Arrêter pour l'instant » envoie `DELETE /hero/location` (le consentement est conservé) et
+  suspend l'envoi jusqu'à « Reprendre », le temps de l'onglet (`sessionStorage`).
+- **Erreurs** : le 409 `hero_location_consent_required` devient « Activez d'abord le partage de position. »,
+  et le 429 (60 envois par heure et par héros, `HEROS_RATE_HERO_LOCATION_PER_USER`) le message commun. Un
+  refus de géolocalisation du navigateur arrête le suivi et le panneau explique comment l'autoriser.
+
+> [!NOTE]
+> Un site ne lit la position qu'au premier plan : elle n'est à jour que tant qu'une page de l'espace héros
+> est ouverte. Onglet fermé, elle n'est plus utilisée après 30 minutes, puis la tâche de nettoyage la
+> supprime. Aucune route ne relit la position : ni le public, ni les autres héros, ni la modération n'y ont
+> accès.
 
 ### Blog : choix du branchement
 

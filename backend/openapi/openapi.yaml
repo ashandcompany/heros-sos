@@ -138,7 +138,7 @@ paths:
     get:
       tags: [Réputation]
       summary: Interventions terminées à noter
-      description: Liste les héros confirmés des interventions clôturées sur les incidents déclarés par l'utilisateur connecté (citoyen ou héros), avec ses avis déjà déposés. Un héros déclarant ne peut pas se noter lui-même.
+      description: Liste les héros confirmés des interventions clôturées sur les incidents déclarés par l'utilisateur connecté (citoyen, héros ou modérateur), avec ses avis déjà déposés. Un héros déclarant ne peut pas se noter lui-même.
       operationId: listMyRateableInterventions
       security: [{ sessionCookie: [] }]
       parameters:
@@ -159,7 +159,7 @@ paths:
     post:
       tags: [Réputation]
       summary: Noter un héros de l'intervention
-      description: Seul le déclarant connecté (citoyen ou héros) peut noter chaque participant confirmé d'une intervention clôturée, une fois par héros; un héros déclarant ne peut pas se noter lui-même. Une note seule est publiée immédiatement; un avis avec commentaire attend la modération.
+      description: Seul le déclarant connecté (citoyen, héros ou modérateur) peut noter chaque participant confirmé d'une intervention clôturée, une fois par héros; un héros déclarant ne peut pas se noter lui-même. Une note seule est publiée immédiatement; un avis avec commentaire attend la modération.
       operationId: createHeroReview
       security: [{ sessionCookie: [], csrfToken: [] }]
       parameters:
@@ -247,7 +247,7 @@ paths:
         110 m, conservée en clair 30 minutes au plus (`HEROS_LOCATION_TTL`) puis supprimée, et n'est relue par aucune
         route : le serveur s'en sert seulement pour prévenir les héros à proximité (`HEROS_ALERT_RADIUS_KM`, 10 km par
         défaut) d'un nouvel incident avec coordonnées. Sans héros proche, ou sans coordonnées, tous les héros actifs
-        sont prévenus.
+        sont prévenus. Limité à 60 envois par heure et par héros (`HEROS_RATE_HERO_LOCATION_PER_USER`).
       operationId: saveHeroLocation
       security: [{ sessionCookie: [], csrfToken: [] }]
       requestBody:
@@ -270,6 +270,7 @@ paths:
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "500": { $ref: "#/components/responses/InternalError" }
     delete:
       tags: [Super-héros]
@@ -415,6 +416,7 @@ paths:
     patch:
       tags: [Réputation]
       summary: Publier ou masquer un avis
+      description: Un modérateur ne peut pas modérer un avis qu'il a lui-même déposé (403 hero_review_own_review).
       operationId: moderateHeroReview
       security: [{ sessionCookie: [], csrfToken: [] }]
       parameters:
@@ -1538,6 +1540,7 @@ paths:
                 comments: 0
                 emailChanges: 1
                 draftArticles: 4
+                draftNewsletters: 2
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "500": { $ref: "#/components/responses/InternalError" }
@@ -3541,6 +3544,142 @@ paths:
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
         "500": { $ref: "#/components/responses/InternalError" }
 
+  /admin/newsletters:
+    get:
+      tags: [Contact et newsletter]
+      summary: Numéros de la newsletter (modérateur)
+      description: Brouillons et numéros envoyés, les plus récents d'abord. Le corps n'est pas inclus.
+      operationId: listNewsletters
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Une page de numéros.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NewsletterSummaryPage" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    post:
+      tags: [Contact et newsletter]
+      summary: Enregistrer un brouillon de newsletter
+      description: |
+        Le destinataire est un compte précis (`recipientUserId`) ou, s'il est absent, tous les abonnés
+        confirmés. Le HTML est assaini à l'enregistrement.
+      operationId: createNewsletter
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewsletterPayload" }
+      responses:
+        "201":
+          description: Brouillon créé.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Newsletter" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/newsletters/{id}:
+    get:
+      tags: [Contact et newsletter]
+      summary: Consulter un numéro de la newsletter (modérateur)
+      operationId: getNewsletter
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/NewsletterId" }
+      responses:
+        "200":
+          description: Le numéro.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Newsletter" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    put:
+      tags: [Contact et newsletter]
+      summary: Modifier un brouillon
+      description: Un numéro déjà envoyé est en lecture seule (`newsletter_already_sent`).
+      operationId: updateNewsletter
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/NewsletterId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewsletterPayload" }
+      responses:
+        "200":
+          description: Brouillon modifié.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Newsletter" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/NewsletterAlreadySent" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    delete:
+      tags: [Contact et newsletter]
+      summary: Supprimer un brouillon
+      description: Un numéro déjà envoyé ne peut pas être supprimé (`newsletter_already_sent`).
+      operationId: deleteNewsletter
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/NewsletterId" }
+      responses:
+        "204": { description: Brouillon supprimé. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/NewsletterAlreadySent" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/newsletters/{id}/send:
+    post:
+      tags: [Contact et newsletter]
+      summary: Envoyer un numéro
+      description: |
+        Envoie le brouillon aux abonnés confirmés (`status = subscribed`), ou au seul compte désigné s'il
+        est abonné. Le numéro est daté « envoyé » avant les mails, de façon atomique : il ne part qu'une
+        fois. Les mails sont déposés en arrière-plan dans la file d'envoi, chacun avec le lien de
+        désinscription de son destinataire ; la réponse `202` n'attend pas leur remise. Sans aucun
+        destinataire abonné, `422` (`no_subscribed_recipient`) et le numéro reste un brouillon.
+      operationId: sendNewsletter
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/NewsletterId" }
+      responses:
+        "202":
+          description: Envoi pris en charge.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NewsletterSendResult" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/NewsletterAlreadySent" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
 components:
   securitySchemes:
     sessionCookie:
@@ -3577,6 +3716,12 @@ components:
       in: path
       required: true
       description: Identifiant de l'article.
+      schema: { type: string, format: uuid }
+    NewsletterId:
+      name: id
+      in: path
+      required: true
+      description: Identifiant du numéro de la newsletter.
       schema: { type: string, format: uuid }
     ArticleSlug:
       name: slug
@@ -3821,6 +3966,11 @@ components:
                 error:
                   code: internal_error
                   message: Une erreur interne est survenue.
+    NewsletterAlreadySent:
+      description: "Le numéro a déjà été envoyé (`newsletter_already_sent`), il est en lecture seule."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
 
   schemas:
     Health:
@@ -4351,7 +4501,16 @@ components:
 
     ModerationSummary:
       type: object
-      required: [incidents, heroApplications, videos, comments, emailChanges, draftArticles]
+      required:
+        [
+          incidents,
+          heroApplications,
+          videos,
+          comments,
+          emailChanges,
+          draftArticles,
+          draftNewsletters,
+        ]
       properties:
         incidents: { type: integer, description: "Incidents signalés (`reported`)." }
         heroApplications: { type: integer, description: Demandes de super-héros en attente. }
@@ -4359,6 +4518,7 @@ components:
         comments: { type: integer, description: Réponses de héros en attente de vérification. }
         emailChanges: { type: integer, description: Changements d'email en attente. }
         draftArticles: { type: integer, description: Articles du blog en brouillon. }
+        draftNewsletters: { type: integer, description: Numéros de la newsletter en brouillon (à envoyer). }
 
     UserSummaryPage:
       type: object
@@ -4547,6 +4707,52 @@ components:
         total: { type: integer }
         limit: { type: integer }
         offset: { type: integer }
+    NewsletterPayload:
+      type: object
+      required: [subject, body]
+      additionalProperties: false
+      properties:
+        subject: { type: string, minLength: 1, maxLength: 200 }
+        body:
+          type: string
+          description: HTML (balises de l'éditeur uniquement, le reste est retiré), 200 000 octets au plus.
+        recipientUserId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Compte destinataire. Absent ou nul pour tous les abonnés confirmés.
+    NewsletterSummary:
+      type: object
+      required: [id, subject, recipientUserId, sent, createdAt, sentAt]
+      properties:
+        id: { type: string, format: uuid }
+        subject: { type: string }
+        recipientUserId: { type: string, format: uuid, nullable: true }
+        sent: { type: boolean, description: Un numéro envoyé est en lecture seule. }
+        createdAt: { type: string, format: date-time }
+        sentAt: { type: string, format: date-time, nullable: true }
+    Newsletter:
+      allOf:
+        - { $ref: "#/components/schemas/NewsletterSummary" }
+        - type: object
+          required: [body]
+          properties:
+            body: { type: string, description: HTML assaini. }
+    NewsletterSummaryPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/NewsletterSummary" }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+    NewsletterSendResult:
+      type: object
+      required: [recipients]
+      properties:
+        recipients: { type: integer, description: Nombre de mails confiés à la file d'envoi. }
     VillainPage:
       type: object
       required: [items, total, limit, offset]
@@ -5319,6 +5525,12 @@ components:
       properties:
         alias: { type: string, description: Pseudo public. }
         bio: { type: string, description: Description publique. }
+        locationConsentAt:
+          {
+            type: string,
+            format: date-time,
+            description: "Date du consentement au partage de position (`PUT /hero/location/consent`), absente sans consentement.",
+          }
 
     ContactUpdateRequest:
       type: object

@@ -99,6 +99,35 @@ Avec `Service.Warm` (mesuré à 5 millions, 22 héros) : le préchauffage prend 
 | Temps réel | SSE (flux du serveur vers le navigateur), repris avec `Last-Event-ID` | Natif en Go, et la reprise après coupure ne demande pas de code en plus |
 | Monitoring | ELK : Filebeat, Logstash, Elasticsearch, Kibana, dans un profil Compose séparé | Imposé par le sujet. Gratuit en auto-hébergement (offre Basic) ; images officielles sur `docker.elastic.co` |
 
+## Ce que PostgreSQL fait maintenant
+
+Avant ce travail, PostgreSQL stockait et filtrait. Il tient maintenant aussi les totaux, impose des règles et ordonne les écritures. Ce qui est utilisé, compté par recherche dans les sept migrations `20261022160000` à `166000` et dans le code Go (23/10/2026, les nombres sont des occurrences) :
+
+| Fonctionnalité PostgreSQL | Où et combien | À quoi elle sert |
+|---|---|---|
+| **Index** (composites, partiels, `DESC`, `NULLS LAST`) | 12 index ([liste](#p1--performance)) | Pages déjà triées, sans parcourir la table |
+| **Fonctions PL/pgSQL** | 21 | Le code qui s'exécute dans la base |
+| **Triggers** | 20, dont 17 de niveau instruction, dont 15 avec tables de transition (`REFERENCING`) | Tenir à jour les compteurs, les colonnes dénormalisées et `resolved_at`. Un `INSERT` de 100 000 lignes fait une seule mise à jour par compteur |
+| **Upsert** (`ON CONFLICT … DO UPDATE`) | 8 dans les migrations | Incrémenter un compteur, ou le créer s'il manque |
+| **Verrous consultatifs** (`pg_advisory_xact_lock`) | `events/store.go`, `events/shipper.go` | Sérialiser l'écriture des événements ; un seul processus journalise vers ELK |
+| **Colonne `GENERATED … AS IDENTITY`** | `events.seq` | Ordre global des événements |
+| **Contrainte `UNIQUE (aggregate_id, version)`** | `events` | Concurrence optimiste |
+| **`jsonb`** | `events.payload` | Données variables de chaque événement |
+| **Trigger de refus** (`RAISE EXCEPTION`) | `events` | Journal en ajout seul : tout `UPDATE` ou `DELETE` est refusé par la base |
+| **`LATERAL`** | `incident/history.go`, `incident/repository.go` | Dernière intervention d'un incident dans les historiques |
+| **Transactions** | `internal/idempotency` | La clé d'idempotence et l'écriture réussissent ou échouent ensemble |
+| **`generate_series`** | `internal/perfseed` | Fabriquer 5 millions d'incidents en SQL |
+| **`EXPLAIN (ANALYZE)`**, **`pg_stat_statements`**, **`VACUUM ANALYZE`** | outils de diagnostic et de préparation | Voir `make slow-queries` et P0 |
+
+**Non utilisés**, volontairement ou non : les vues matérialisées, le partitionnement et la sécurité au niveau des lignes (aucun dans les migrations) ; `LISTEN`/`NOTIFY` (le flux temps réel lit la table `events` à intervalle régulier, `HEROS_EVENTS_POLL_INTERVAL`, 250 ms par défaut, plus simple à tenir qu'un canal de notification) ; `FOR UPDATE SKIP LOCKED` (il servirait à la table `mail_outbox`, non implémentée : voir [RabbitMQ](rabbitmq.md)).
+
+**Le compromis :**
+
+- **Plus de logique dans la base.** Les règles ne se lisent plus seulement dans le code Go : il faut lire aussi les migrations. C'est le choix des compteurs par triggers plutôt que du code dans les services (un trigger n'oublie aucun chemin d'écriture, seed compris). `Controller → Service → Repository` ne change pas : les services lisent toujours les tables d'état, seuls les totaux passent par les compteurs.
+- **Dépendance à PostgreSQL.** Les triggers à tables de transition, les index partiels et les verrous consultatifs ne se portent pas sur une autre base. Le projet est déjà sur PostgreSQL 18.
+- **Écritures plus lourdes.** Chaque insertion met à jour plusieurs index et compteurs ; acceptable, car les incidents sont bien plus lus qu'écrits.
+- **Un piège rencontré :** un trigger de niveau instruction se déclenche même quand l'`UPDATE` ne touche aucune ligne, et celui qui écrit dans sa propre table se rappelait à l'infini (garde en tête de fonction, voir P1).
+
 ## Vue d'ensemble
 
 ```mermaid

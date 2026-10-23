@@ -152,6 +152,25 @@ Cinq migrations de lecture, dans l'ordre (`20261022160000`, `161000`, `162000`, 
 4. `add_incident_resolved_at` (`165000`) : la colonne `incidents.resolved_at`, la fin de la dernière intervention d'un incident réussi, avec son rattrapage et ses triggers (un incident change de statut ; une intervention est créée ou modifiée). Placée après les index : le rattrapage cherche la dernière intervention de chaque incident avec `interventions_incident_idx`. Un trigger de niveau instruction se déclenche **même quand l'`UPDATE` ne touche aucune ligne** : celui qui écrit dans `incidents` a une garde en tête de fonction, sans quoi son propre `UPDATE` le redéclencherait à l'infini (`stack depth limit exceeded`).
 5. `add_incident_resolved_index` (`166000`) : l'index des derniers incidents résolus, lui aussi **que des index**, retiré et recréé par `make perf-indexes-off` et `make perf-indexes-on` avec les précédents.
 
+**Les index ajoutés.** Douze index : neuf de lecture (migrations `…162000` et `…166000`, ceux de `make perf-indexes-off`) et trois pour le journal et les commandes (`…163000` et `…164000`). Définitions lues dans `pg_indexes` d'une base de développement migrée le 23/10/2026.
+
+| Index | Table | Colonnes | Partiel | À quoi il sert |
+|---|---|---|---|---|
+| `incidents_created_idx` | `incidents` | `created_at DESC, id DESC` | non | Liste sans filtre, du plus récent au plus ancien |
+| `incidents_status_created_idx` | `incidents` | `status, created_at DESC, id DESC` | non | Liste filtrée par statut (l'index d'origine `(status, priority, created_at)` ne sert pas ce tri) |
+| `incidents_approved_created_idx` | `incidents` | `created_at DESC, id DESC` | `moderation = 'approved'` | Liste publique et liste des héros (incidents approuvés) |
+| `incidents_approved_status_created_idx` | `incidents` | `status, created_at DESC, id DESC` | `moderation = 'approved'` | Même liste, avec un filtre de statut |
+| `incidents_reporter_created_idx` | `incidents` | `reporter_id, created_at DESC, id DESC` | non | « Mes incidents » et réputation ; aucun index n'existait sur `reporter_id` (une clé étrangère n'en crée pas), la suppression d'un compte parcourait toute la table |
+| `incidents_approved_resolved_idx` | `incidents` | `resolved_at DESC NULLS LAST, created_at DESC, id DESC` | `moderation = 'approved'` | Derniers incidents résolus (page d'accueil) |
+| `incident_villains_villain_idx` | `incident_villains` | `villain_id, incident_created_at DESC, incident_id DESC` | `incident_approved` | Historique d'un vilain, déjà trié |
+| `intervention_heroes_resolved_idx` | `intervention_heroes` | `hero_id, resolved_at DESC, intervention_id DESC` | `resolved_at IS NOT NULL` | Historique d'un héros, déjà trié |
+| `interventions_incident_idx` | `interventions` | `incident_id, started_at DESC NULLS LAST, id DESC` | non | Dernière intervention d'un incident (jointure latérale, rattrapage de `resolved_at`) et recherche par incident |
+| `events_incident_idx` | `events` | `incident_id, seq` | non | Événements d'un incident, dans l'ordre |
+| `events_command_idx` | `events` | `command_id` | `command_id IS NOT NULL` | Retrouver à la main les événements d'une commande (`command_id`, aussi présent dans les journaux ELK) ; aucune requête de l'application ne le lit aujourd'hui |
+| `processed_commands_created_idx` | `processed_commands` | `created_at` | non | Purge des commandes anciennes (`DELETE … WHERE created_at < …`, `HEROS_COMMAND_RETENTION`) |
+
+Les clés primaires et contraintes `UNIQUE` des tables de compteurs (`incident_stats`, `reporter_stats`, `villain_stats`, `hero_stats`), de `events` (`seq`, `event_id`, `(aggregate_id, version)`) et de `processed_commands` (`(user_id, command_id)`) créent aussi leurs index, sans être listés ici. Deux index de `incidents` existaient avant ce travail : `incidents_status_priority_created_idx` et `incidents_location_duplicate_idx`. Les index partiels ne servent que si la requête écrit la condition en toutes lettres (`moderation = 'approved'`).
+
 Côté code :
 
 - `incident/repository.go` : le total d'une liste se lit dans les compteurs quand un compteur a exactement la définition du filtre (sans héros ni vilain ; un vilain seul, approuvés) ; les autres combinaisons se comptent directement. `ListFilter.SkipTotal` dispense du total les appelants sans pagination (le tableau de bord).

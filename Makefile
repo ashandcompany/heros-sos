@@ -81,6 +81,13 @@ perf-indexes-off: ## Démonstration : retire les index de lecture de la base de 
 perf-indexes-on: ## Démonstration : recrée les index de lecture de la base de mesures
 	@$(BACKEND) perf-indexes-on
 
+.PHONY: perf-all perf-drop
+perf-all: docker ## Tout enchaîner pour tester les 5 M : place disque, base, données, API de mesure, mesure (PERF_INCIDENTS=…)
+	@$(BACKEND) perf-all
+
+perf-drop: docker ## Supprime la base de mesures (jamais la base de développement)
+	@$(BACKEND) perf-drop
+
 .PHONY: slow-queries
 slow-queries: docker ## Classe les requêtes de la base de dev par temps total (pg_stat_statements) ; DB_NAME=herossos_perf pour les mesures
 	@$(BACKEND) slow-queries-dev $(if $(DB_NAME),DB_NAME=$(DB_NAME))

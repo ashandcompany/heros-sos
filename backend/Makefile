@@ -118,6 +118,40 @@ perf: ## Mesure les temps de réponse (p95 ≤ PERF_P95) ; LOADTEST_PASSWORD=…
 	@$(WITH_ENV) go run ./cmd/loadtest -base-url '$(PERF_API_URL)' -workers $(PERF_WORKERS) -duration $(PERF_DURATION) \
 		-p95 $(PERF_P95) $(if $(LOADTEST_PASSWORD),-identifier '$(PERF_USER)') $(if $(SCENARIOS),-scenarios '$(SCENARIOS)')
 
+# Tout enchaîner d'une commande : `make perf-all` (5 millions d'incidents) ou `make perf-all PERF_INCIDENTS=1000000`.
+# Repart d'une base de mesures vide : `make perf-drop` d'abord si elle existe déjà.
+PERF_API_BIN        ?= bin/perf-api
+PERF_PASSWORD       ?= Avengers2026!
+# Place disque estimée pour 5 millions d'incidents (8,2 Go mesurés, plus le journal de transactions).
+PERF_FREE_GB_PER_5M ?= 11
+
+.PHONY: perf-disk
+perf-disk: ## Vérifie que Docker a assez de place pour PERF_INCIDENTS (PERF_SKIP_DISK_CHECK=1 pour passer outre)
+	@free=$$($(COMPOSE_DEV) exec -T db df -Pk /var/lib/postgresql | awk 'NR==2 {printf "%d", $$4/1048576}'); \
+	need=$$(( $(PERF_INCIDENTS) * $(PERF_FREE_GB_PER_5M) / 5000000 + 1 )); \
+	if [ "$$free" -lt "$$need" ] && [ -z "$(PERF_SKIP_DISK_CHECK)" ]; then \
+		echo "Pas assez de place dans Docker : $$free Go libres, $$need Go nécessaires pour $(PERF_INCIDENTS) incidents."; \
+		echo "Libérez de la place (docker builder prune, docker image prune -a) ou réduisez PERF_INCIDENTS (1 000 000 : 3 Go)."; \
+		exit 1; \
+	fi; \
+	echo "Place libre dans Docker : $$free Go (besoin estimé : $$need Go)."
+
+.PHONY: perf-drop
+perf-drop: ## Supprime la base de mesures (jamais la base de développement)
+	@case "$(PERF_DB_NAME)" in *perf*) ;; *) echo "Refusé : $(PERF_DB_NAME) n'est pas une base de mesures."; exit 1;; esac
+	@$(COMPOSE_DEV) exec -T db psql -U $(DB_USER) -d postgres -q -c "DROP DATABASE IF EXISTS $(PERF_DB_NAME)"
+	@echo "Base $(PERF_DB_NAME) supprimée."
+
+.PHONY: perf-all
+perf-all: perf-disk perf-db perf-prepare seed-perf ## Tout enchaîner : base, données, API de mesure, mesure, arrêt de l'API (PERF_INCIDENTS=…)
+	@mkdir -p bin && go build -o $(PERF_API_BIN) ./cmd/api
+	@$(WITH_ENV) export HEROS_DATABASE_URL='$(PERF_DATABASE_URL)' HEROS_HTTP_ADDR='$(PERF_API_ADDR)'; \
+	$(PERF_API_BIN) > $(PERF_API_BIN).log 2>&1 & api=$$!; \
+	trap 'kill $$api 2>/dev/null' EXIT; \
+	for i in $$(seq 1 60); do curl -sf '$(PERF_API_URL)/health' >/dev/null && break; sleep 1; done; \
+	curl -sf '$(PERF_API_URL)/health' >/dev/null || { echo "L'API de mesure ne répond pas : voir $(PERF_API_BIN).log"; exit 1; }; \
+	LOADTEST_PASSWORD='$(PERF_PASSWORD)' $(MAKE) --no-print-directory perf
+
 .PHONY: build
 build: ## Compile tous les paquets
 	go build ./...

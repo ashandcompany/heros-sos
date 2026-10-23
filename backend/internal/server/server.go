@@ -305,14 +305,9 @@ func buildMailer(cfg config.Config, logger *slog.Logger, settings options) (mail
 		return settings.mailer, nil, nil
 	}
 
-	var transport mail.Mailer
-	switch cfg.Mail.Driver {
-	case config.MailDriverSMTP:
-		transport = mail.NewSMTPMailer(cfg.Mail.SMTP, mail.Sender{Address: cfg.Mail.FromAddress, Name: cfg.Mail.FromName}, clock.System{})
-	case config.MailDriverLog:
-		transport = mail.NewLogMailer(logger)
-	default:
-		return nil, nil, fmt.Errorf("server : driver de mail inconnu %q", cfg.Mail.Driver)
+	transport, err := mail.NewTransport(cfg.Mail, logger)
+	if err != nil {
+		return nil, nil, fmt.Errorf("server : %w", err)
 	}
 	queue := mail.NewQueue(transport, cfg.Mail, logger)
 	return queue, queue, nil

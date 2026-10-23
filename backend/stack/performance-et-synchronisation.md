@@ -31,7 +31,7 @@ Ces mesures à 5 millions datent d'avant la modération des incidents : celles d
 
 Le « 12 s » du sujet n'est pas reproduit à l'identique : la base de mesure est locale, sur un disque rapide et avec un cache chaud. Les ordres de grandeur sont les mêmes (jusqu'à 9 s au p95), et c'est le rapport avant/après qui compte. Un clone neuf avec `make up` donnera des temps plus élevés des deux côtés (PostgreSQL non réglé, disque de la machine virtuelle de Docker).
 
-Ce que `pg_stat_statements` a désigné avant correction, une requête à froid :
+Ce que `pg_stat_statements` a désigné avant correction, une requête à froid (cette extension de PostgreSQL classe les requêtes par temps total, nombre d'appels, durée moyenne et maximale ; la pile de développement la charge depuis le 23/10/2026, voir `make slow-queries` dans [P0](#p0--données-et-mesures)) :
 
 | Requête | Durée |
 |---|---|
@@ -99,6 +99,35 @@ Avec `Service.Warm` (mesuré à 5 millions, 22 héros) : le préchauffage prend 
 | Temps réel | SSE (flux du serveur vers le navigateur), repris avec `Last-Event-ID` | Natif en Go, et la reprise après coupure ne demande pas de code en plus |
 | Monitoring | ELK : Filebeat, Logstash, Elasticsearch, Kibana, dans un profil Compose séparé | Imposé par le sujet. Gratuit en auto-hébergement (offre Basic) ; images officielles sur `docker.elastic.co` |
 
+## Ce que PostgreSQL fait maintenant
+
+Avant ce travail, PostgreSQL stockait et filtrait. Il tient maintenant aussi les totaux, impose des règles et ordonne les écritures. Ce qui est utilisé, compté par recherche dans les sept migrations `20261022160000` à `166000` et dans le code Go (23/10/2026, les nombres sont des occurrences) :
+
+| Fonctionnalité PostgreSQL | Où et combien | À quoi elle sert |
+|---|---|---|
+| **Index** (composites, partiels, `DESC`, `NULLS LAST`) | 12 index ([liste](#p1--performance)) | Pages déjà triées, sans parcourir la table |
+| **Fonctions PL/pgSQL** | 21 | Le code qui s'exécute dans la base |
+| **Triggers** | 20, dont 17 de niveau instruction, dont 15 avec tables de transition (`REFERENCING`) | Tenir à jour les compteurs, les colonnes dénormalisées et `resolved_at`. Un `INSERT` de 100 000 lignes fait une seule mise à jour par compteur |
+| **Upsert** (`ON CONFLICT … DO UPDATE`) | 8 dans les migrations | Incrémenter un compteur, ou le créer s'il manque |
+| **Verrous consultatifs** (`pg_advisory_xact_lock`) | `events/store.go`, `events/shipper.go` | Sérialiser l'écriture des événements ; un seul processus journalise vers ELK |
+| **Colonne `GENERATED … AS IDENTITY`** | `events.seq` | Ordre global des événements |
+| **Contrainte `UNIQUE (aggregate_id, version)`** | `events` | Concurrence optimiste |
+| **`jsonb`** | `events.payload` | Données variables de chaque événement |
+| **Trigger de refus** (`RAISE EXCEPTION`) | `events` | Journal en ajout seul : tout `UPDATE` ou `DELETE` est refusé par la base |
+| **`LATERAL`** | `incident/history.go`, `incident/repository.go` | Dernière intervention d'un incident dans les historiques |
+| **Transactions** | `internal/idempotency` | La clé d'idempotence et l'écriture réussissent ou échouent ensemble |
+| **`generate_series`** | `internal/perfseed` | Fabriquer 5 millions d'incidents en SQL |
+| **`EXPLAIN (ANALYZE)`**, **`pg_stat_statements`**, **`VACUUM ANALYZE`** | outils de diagnostic et de préparation | Voir `make slow-queries` et P0 |
+
+**Non utilisés**, volontairement ou non : les vues matérialisées, le partitionnement et la sécurité au niveau des lignes (aucun dans les migrations) ; `LISTEN`/`NOTIFY` (le flux temps réel lit la table `events` à intervalle régulier, `HEROS_EVENTS_POLL_INTERVAL`, 250 ms par défaut, plus simple à tenir qu'un canal de notification) ; `FOR UPDATE SKIP LOCKED` (il servirait à la table `mail_outbox`, non implémentée : voir [RabbitMQ](rabbitmq.md)).
+
+**Le compromis :**
+
+- **Plus de logique dans la base.** Les règles ne se lisent plus seulement dans le code Go : il faut lire aussi les migrations. C'est le choix des compteurs par triggers plutôt que du code dans les services (un trigger n'oublie aucun chemin d'écriture, seed compris). `Controller → Service → Repository` ne change pas : les services lisent toujours les tables d'état, seuls les totaux passent par les compteurs.
+- **Dépendance à PostgreSQL.** Les triggers à tables de transition, les index partiels et les verrous consultatifs ne se portent pas sur une autre base. Le projet est déjà sur PostgreSQL 18.
+- **Écritures plus lourdes.** Chaque insertion met à jour plusieurs index et compteurs ; acceptable, car les incidents sont bien plus lus qu'écrits.
+- **Un piège rencontré :** un trigger de niveau instruction se déclenche même quand l'`UPDATE` ne touche aucune ligne, et celui qui écrit dans sa propre table se rappelait à l'infini (garde en tête de fonction, voir P1).
+
 ## Vue d'ensemble
 
 ```mermaid
@@ -139,6 +168,7 @@ Depuis la fusion de la PR #37, `GET /incidents` renvoie **tous les statuts** sau
   - Il termine par `VACUUM ANALYZE` : statistiques à jour et carte de visibilité renseignée, comme une base installée depuis longtemps.
 - **Place disque : 8,2 Go pour 5 M d'incidents** (tables et index : `incidents` 4,7 Go, `intervention_heroes` 1,9 Go, `interventions` 0,9 Go, `incident_villains` 0,7 Go ; les index partiels et les colonnes dénormalisées ajoutés avec la modération ont fait grossir `incidents`), et le chargement dure environ 7 minutes. Avec le journal de transactions, compter **11 Go libres** : un portable à 8 Go libres ne suffit pas. Garder `PERF_MAX_SIZE_GB` renseigné, **à 10** (à 8, le chargement s'arrêterait à quelques Mo de la fin).
 - **`cmd/loadtest`** (`make perf`) : se connecte avec un cookie de session (le mot de passe est lu dans `LOADTEST_PASSWORD`, jamais dans un argument), joue neuf scénarios en parallèle, affiche p50, p95, p99, les erreurs, et sort en erreur si le p95 dépasse `-p95 350ms`. Le scénario « mes incidents » utilise un client **connecté** et tous les autres un client **anonyme** : l'API ne montre à un citoyen connecté que ses propres incidents, même sur la liste publique.
+- **`make slow-queries`** (`DB_NAME=herossos_perf` pour la base des mesures) : les 15 requêtes les plus coûteuses de la base de développement (temps total, appels, durée moyenne et maximale), lues dans `pg_stat_statements`. C'est l'outil du diagnostic : on lance la charge, puis on regarde ce qui a coûté le plus. `docker-compose.dev.yml` charge l'extension au démarrage de PostgreSQL (`shared_preload_libraries=pg_stat_statements`), la cible la crée dans la base (`CREATE EXTENSION IF NOT EXISTS`, idempotent) : il faut donc la relancer après `make reset`, qui efface la base. Limites : développement seulement (rien n'est activé en production : l'extension garde le texte des requêtes et ajoute une légère surcharge, à décider), et seulement avec la base du Compose, pas celle de `make db-start`, qui ne charge pas la bibliothèque. Les compteurs sont cumulatifs : pour repartir de zéro avant une mesure, `SELECT pg_stat_statements_reset();`.
 - Limite connue : `loadtest` envoie les requêtes avec un nombre fixe de clients. Sous forte surcharge, il sous-estime un peu les pires latences ; c'est suffisant pour comparer un avant et un après. La mesure côté serveur (P6) complète.
 
 ### P1 : performance
@@ -148,8 +178,27 @@ Cinq migrations de lecture, dans l'ordre (`20261022160000`, `161000`, `162000`, 
 1. `denormalize_history_columns` : `incident_villains.incident_created_at` et `incident_approved`, et `intervention_heroes.resolved_at` (date de la résolution réussie d'un incident approuvé, pour un héros confirmé). Des triggers les remplissent à l'insertion, suivent le changement de statut d'une intervention et répercutent une décision de modération : aucun chemin d'écriture ne peut les oublier.
 2. `create_read_counters` : `incident_stats` (par modération, statut et type), `reporter_stats` (par déclarant et statut), `villain_stats` (incidents approuvés) et `hero_stats` (interventions et résolutions de chaque héros). Tenus à jour par des **triggers de niveau instruction** (`REFERENCING … TABLE`), et recalculables par `rebuild_read_counters()`, qui sert aussi au rattrapage initial. `TRUNCATE` les vide avec les tables.
 3. `add_incident_perf_indexes` : **que des index**, sans toucher aux données. `make perf-indexes-off` les retire et `make perf-indexes-on` les recrée : c'est ce qui rend la lenteur d'origine rejouable en direct. Sur une base de production volumineuse, `CREATE INDEX` bloque les écritures pendant sa construction : à lancer en période creuse.
-4. `add_incident_resolved_at` (`145000`) : la colonne `incidents.resolved_at`, la fin de la dernière intervention d'un incident réussi, avec son rattrapage et ses triggers (un incident change de statut ; une intervention est créée ou modifiée). Placée après les index : le rattrapage cherche la dernière intervention de chaque incident avec `interventions_incident_idx`. Un trigger de niveau instruction se déclenche **même quand l'`UPDATE` ne touche aucune ligne** : celui qui écrit dans `incidents` a une garde en tête de fonction, sans quoi son propre `UPDATE` le redéclencherait à l'infini (`stack depth limit exceeded`).
-5. `add_incident_resolved_index` (`146000`) : l'index des derniers incidents résolus, lui aussi **que des index**, retiré et recréé par `make perf-indexes-off` et `make perf-indexes-on` avec les précédents.
+4. `add_incident_resolved_at` (`165000`) : la colonne `incidents.resolved_at`, la fin de la dernière intervention d'un incident réussi, avec son rattrapage et ses triggers (un incident change de statut ; une intervention est créée ou modifiée). Placée après les index : le rattrapage cherche la dernière intervention de chaque incident avec `interventions_incident_idx`. Un trigger de niveau instruction se déclenche **même quand l'`UPDATE` ne touche aucune ligne** : celui qui écrit dans `incidents` a une garde en tête de fonction, sans quoi son propre `UPDATE` le redéclencherait à l'infini (`stack depth limit exceeded`).
+5. `add_incident_resolved_index` (`166000`) : l'index des derniers incidents résolus, lui aussi **que des index**, retiré et recréé par `make perf-indexes-off` et `make perf-indexes-on` avec les précédents.
+
+**Les index ajoutés.** Douze index : neuf de lecture (migrations `…162000` et `…166000`, ceux de `make perf-indexes-off`) et trois pour le journal et les commandes (`…163000` et `…164000`). Définitions lues dans `pg_indexes` d'une base de développement migrée le 23/10/2026.
+
+| Index | Table | Colonnes | Partiel | À quoi il sert |
+|---|---|---|---|---|
+| `incidents_created_idx` | `incidents` | `created_at DESC, id DESC` | non | Liste sans filtre, du plus récent au plus ancien |
+| `incidents_status_created_idx` | `incidents` | `status, created_at DESC, id DESC` | non | Liste filtrée par statut (l'index d'origine `(status, priority, created_at)` ne sert pas ce tri) |
+| `incidents_approved_created_idx` | `incidents` | `created_at DESC, id DESC` | `moderation = 'approved'` | Liste publique et liste des héros (incidents approuvés) |
+| `incidents_approved_status_created_idx` | `incidents` | `status, created_at DESC, id DESC` | `moderation = 'approved'` | Même liste, avec un filtre de statut |
+| `incidents_reporter_created_idx` | `incidents` | `reporter_id, created_at DESC, id DESC` | non | « Mes incidents » et réputation ; aucun index n'existait sur `reporter_id` (une clé étrangère n'en crée pas), la suppression d'un compte parcourait toute la table |
+| `incidents_approved_resolved_idx` | `incidents` | `resolved_at DESC NULLS LAST, created_at DESC, id DESC` | `moderation = 'approved'` | Derniers incidents résolus (page d'accueil) |
+| `incident_villains_villain_idx` | `incident_villains` | `villain_id, incident_created_at DESC, incident_id DESC` | `incident_approved` | Historique d'un vilain, déjà trié |
+| `intervention_heroes_resolved_idx` | `intervention_heroes` | `hero_id, resolved_at DESC, intervention_id DESC` | `resolved_at IS NOT NULL` | Historique d'un héros, déjà trié |
+| `interventions_incident_idx` | `interventions` | `incident_id, started_at DESC NULLS LAST, id DESC` | non | Dernière intervention d'un incident (jointure latérale, rattrapage de `resolved_at`) et recherche par incident |
+| `events_incident_idx` | `events` | `incident_id, seq` | non | Événements d'un incident, dans l'ordre |
+| `events_command_idx` | `events` | `command_id` | `command_id IS NOT NULL` | Retrouver à la main les événements d'une commande (`command_id`, aussi présent dans les journaux ELK) ; aucune requête de l'application ne le lit aujourd'hui |
+| `processed_commands_created_idx` | `processed_commands` | `created_at` | non | Purge des commandes anciennes (`DELETE … WHERE created_at < …`, `HEROS_COMMAND_RETENTION`) |
+
+Les clés primaires et contraintes `UNIQUE` des tables de compteurs (`incident_stats`, `reporter_stats`, `villain_stats`, `hero_stats`), de `events` (`seq`, `event_id`, `(aggregate_id, version)`) et de `processed_commands` (`(user_id, command_id)`) créent aussi leurs index, sans être listés ici. Deux index de `incidents` existaient avant ce travail : `incidents_status_priority_created_idx` et `incidents_location_duplicate_idx`. Les index partiels ne servent que si la requête écrit la condition en toutes lettres (`moderation = 'approved'`).
 
 Côté code :
 
@@ -227,6 +276,7 @@ LOADTEST_PASSWORD='Avengers2026!' make perf   # p95 ≤ 350 ms, scénario « mes
 make perf-indexes-off          # retire les index de lecture : la lenteur d'origine revient
 make perf                      # …et la mesure le montre
 make perf-indexes-on
+make slow-queries DB_NAME=herossos_perf   # les requêtes les plus coûteuses (pg_stat_statements), base de la pile Docker
 # Tableau de bord des héros : il demande un compte héros (le scénario « mine » utilise PERF_USER, un citoyen)
 cd backend && LOADTEST_PASSWORD='Avengers2026!' go run ./cmd/loadtest -base-url http://127.0.0.1:8090/api/v1 \
     -identifier tony.stark@heros-sos.local -dashboard -scenarios dashboard

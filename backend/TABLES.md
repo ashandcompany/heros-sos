@@ -48,7 +48,7 @@ flowchart TB
   Tables : [`users`](tables/comptes.md#users), [`hero_profiles`](tables/comptes.md#hero_profiles), [`hero_locations`](tables/comptes.md#hero_locations), [`sessions`](tables/comptes.md#sessions), [`user_tokens`](tables/comptes.md#user_tokens), [`email_change_requests`](tables/comptes.md#email_change_requests), [`user_mfa`](tables/comptes.md#user_mfa-et-mfa_recovery_codes), [`mfa_recovery_codes`](tables/comptes.md#user_mfa-et-mfa_recovery_codes)
 - **[2. Incidents](tables/incidents.md)** : Les incidents signalés, leurs types et les interventions des héros.  
   Tables : [`incident_types`](tables/incidents.md#incident_types), [`incidents`](tables/incidents.md#incidents), [`interventions`](tables/incidents.md#interventions), [`intervention_heroes`](tables/incidents.md#intervention_heroes)
-- **[3. Super-héros et super-vilains](tables/vilains.md)** : L'encyclopédie des super-vilains, leurs spécialités et leur lien avec les incidents.  
+- **[3. Super-vilains](tables/vilains.md)** : L'encyclopédie des super-vilains, leurs spécialités et leur lien avec les incidents.  
   Tables : [`villains`](tables/vilains.md#villains), [`villain_specialties`](tables/vilains.md#villain_specialties), [`incident_villains`](tables/vilains.md#incident_villains)
 - **[4. Films des héros et des vilains](tables/films.md)** : Le cache des films OMDb, la vidéothèque des héros et les films des vilains.  
   Tables : [`films`](tables/films.md#films), [`hero_films`](tables/films.md#hero_films), [`villain_films`](tables/films.md#villain_films)

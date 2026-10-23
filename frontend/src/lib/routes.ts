@@ -46,6 +46,7 @@ export const routes = {
   adminHeroes: "/admin/super-heros",
   adminVideos: "/admin/videotheque",
   adminComments: "/admin/commentaires",
+  adminProfile: "/admin/profil",
   adminSecurity: "/admin/securite",
   adminBlog: "/admin/blog",
   adminNewArticle: "/admin/blog/nouveau",
@@ -118,5 +119,6 @@ export const adminNav: NavItem[] = [
   { label: "Commentaires", href: routes.adminComments },
   { label: "Noter un héros", href: routes.adminRate },
   { label: "Blog", href: routes.adminBlog },
+  { label: "Mon profil", href: routes.adminProfile },
   { label: "Sécurité", href: routes.adminSecurity },
 ];

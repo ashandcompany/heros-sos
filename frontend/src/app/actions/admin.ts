@@ -25,6 +25,9 @@ import {
   reviewHeroApplication,
   updateArticle,
   updateIncident,
+  updateMyAvatar,
+  updateMyContact,
+  updateNewsletterPreference,
   updateVillain,
 } from "@/lib/api";
 import { isModerationStatus } from "@/lib/format";
@@ -36,6 +39,14 @@ import {
   villainSheetRoute,
 } from "@/lib/routes";
 import { requireAdminSession } from "@/lib/server-session";
+import {
+  avatarErrorMessage,
+  contactFailureState,
+  readContactValues,
+  validateAvatar,
+  validateContact,
+  type ContactField,
+} from "@/lib/validation/account";
 import {
   readArticleValues,
   readIncidentEditValues,
@@ -619,4 +630,80 @@ export async function deleteArticleAction(
 
   for (const path of [routes.admin, routes.adminBlog, routes.blog]) revalidatePath(path);
   redirect(routes.adminBlog);
+}
+
+/* ---------- Mon profil ---------- */
+
+/*
+ * Profil du modérateur connecté : mêmes routes `/me` que les autres rôles. Son adresse email ne se
+ * change pas ici : personne ne pourrait valider sa demande (voir backend routes_account.go).
+ */
+
+export async function updateModeratorContactAction(
+  _previousState: FormState<ContactField>,
+  formData: FormData,
+): Promise<FormState<ContactField>> {
+  const token = await requireAdminSession();
+  const values = readContactValues(formData);
+  const fieldErrors = validateContact(values);
+
+  if (hasFieldErrors(fieldErrors)) return { status: "error", fieldErrors, values };
+
+  const result = await updateMyContact(token, {
+    mobilePhone: values.mobilePhone.replace(/[\s.-]/g, ""),
+    address: {
+      street: values.street,
+      complement: values.complement || null,
+      postalCode: values.postalCode,
+      city: values.city,
+      country: values.country,
+    },
+  });
+
+  if (!result.ok) return contactFailureState(result, values);
+
+  revalidatePath(routes.adminProfile);
+  return { status: "success", message: "Vos coordonnées ont été mises à jour.", fieldErrors: {} };
+}
+
+export async function updateModeratorAvatarAction(
+  _previousState: FormState<"avatar">,
+  formData: FormData,
+): Promise<FormState<"avatar">> {
+  const token = await requireAdminSession();
+  const file = formData.get("avatar");
+  const avatar = file instanceof File ? file : null;
+  const error = validateAvatar(avatar);
+
+  if (error || !avatar) return { status: "error", fieldErrors: { avatar: error } };
+
+  const result = await updateMyAvatar(token, avatar);
+  if (!result.ok) return { status: "error", message: avatarErrorMessage(result), fieldErrors: {} };
+
+  revalidatePath(routes.adminProfile);
+  return {
+    status: "success",
+    message: "Votre photo de profil a été mise à jour.",
+    fieldErrors: {},
+  };
+}
+
+export async function updateModeratorNewsletterAction(
+  _previousState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const token = await requireAdminSession();
+  const subscribed = formData.get("newsletter") === "on";
+
+  const result = await updateNewsletterPreference(token, subscribed);
+  if (!result.ok) return { status: "error", message: apiFailureMessage(result), fieldErrors: {} };
+
+  revalidatePath(routes.adminProfile);
+  return {
+    status: "success",
+    message: subscribed
+      ? "Vous êtes abonné·e à la newsletter."
+      : "Vous ne recevrez plus la newsletter.",
+    fieldErrors: {},
+  };
 }

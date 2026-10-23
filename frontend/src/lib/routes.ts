@@ -95,30 +95,70 @@ export const citizenNav: NavItem[] = [
   { label: "Noter un super-héros", href: routes.profileInterventions },
 ];
 
-/** Sous-navigation de l'espace professionnel des super-héros. */
-export const heroNav: NavItem[] = [
+/** Sous-navigation de l'espace professionnel des super-héros, regroupée en menus déroulants. */
+export const heroNav: NavEntry[] = [
   { label: "Tableau de bord", href: routes.heroDashboard },
-  { label: "Incidents", href: routes.heroIncidents },
-  { label: "Carte", href: routes.heroMap },
-  { label: "Signaler un incident", href: routes.heroDeclare },
-  { label: "Noter un héros", href: routes.heroRate },
-  { label: "Ma vidéothèque", href: routes.heroVideos },
-  { label: "Ma réputation", href: routes.heroReputation },
+  {
+    label: "Incidents",
+    items: [
+      { label: "Incidents", href: routes.heroIncidents },
+      { label: "Carte", href: routes.heroMap },
+      { label: "Signaler un incident", href: routes.heroDeclare },
+    ],
+  },
+  {
+    label: "Mon activité",
+    items: [
+      { label: "Ma réputation", href: routes.heroReputation },
+      { label: "Noter un héros", href: routes.heroRate },
+      { label: "Ma vidéothèque", href: routes.heroVideos },
+    ],
+  },
   { label: "Mon profil", href: routes.heroProfile },
 ];
 
-/** Sous-navigation du back-office (modération). */
-export const adminNav: NavItem[] = [
+/** Groupe de liens d'une sous-navigation, affiché en menu déroulant (voir SpaceNav). */
+export interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
+
+export type NavEntry = NavItem | NavGroup;
+
+export const isNavGroup = (entry: NavEntry): entry is NavGroup => "items" in entry;
+
+/** Sous-navigation du back-office (modération), regroupée en menus déroulants. */
+export const adminNav: NavEntry[] = [
   { label: "Tableau de bord", href: routes.admin },
-  { label: "Incidents", href: routes.adminIncidents },
-  { label: "Types d'incident", href: routes.adminIncidentTypes },
-  { label: "Comptes", href: routes.adminAccounts },
-  { label: "Super-héros", href: routes.adminHeroes },
-  { label: "Super-vilains", href: routes.adminVillains },
-  { label: "Vidéothèque", href: routes.adminVideos },
-  { label: "Commentaires", href: routes.adminComments },
-  { label: "Noter un héros", href: routes.adminRate },
-  { label: "Blog", href: routes.adminBlog },
-  { label: "Mon profil", href: routes.adminProfile },
-  { label: "Sécurité", href: routes.adminSecurity },
+  {
+    label: "Incidents",
+    items: [
+      { label: "Incidents", href: routes.adminIncidents },
+      { label: "Types d'incident", href: routes.adminIncidentTypes },
+    ],
+  },
+  {
+    label: "Utilisateurs",
+    items: [
+      { label: "Comptes", href: routes.adminAccounts },
+      { label: "Super-héros", href: routes.adminHeroes },
+      { label: "Noter un héros", href: routes.adminRate },
+    ],
+  },
+  {
+    label: "Contenus",
+    items: [
+      { label: "Super-vilains", href: routes.adminVillains },
+      { label: "Vidéothèque", href: routes.adminVideos },
+      { label: "Commentaires", href: routes.adminComments },
+      { label: "Blog", href: routes.adminBlog },
+    ],
+  },
+  {
+    label: "Mon compte",
+    items: [
+      { label: "Mon profil", href: routes.adminProfile },
+      { label: "Sécurité", href: routes.adminSecurity },
+    ],
+  },
 ];

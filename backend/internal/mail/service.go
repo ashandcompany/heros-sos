@@ -32,6 +32,8 @@ const (
 	templateContactMessage     = "contact_message"
 	templateNewsletterConfirm  = "newsletter_confirmation"
 	templateNewsletter         = "newsletter"
+	// templateLayout enveloppe le fragment HTML de chaque mail : fond, logo, carte et pied.
+	templateLayout             = "layout"
 	templateEmailChangeConfirm = "email_change_confirmation"
 	templateEmailChangeApprove = "email_change_approved"
 	templateEmailChangeNotice  = "email_change_notice"
@@ -76,20 +78,35 @@ type templateData struct {
 	UnsubscribeLink string
 	// NearbyRadiusKm est le rayon d'alerte d'un héros prévenu pour sa proximité (0 sinon).
 	NearbyRadiusKm int
+	// BodyHTML est le corps d'une newsletter, déjà nettoyé par l'appelant (liste blanche de balises).
+	BodyHTML htmltemplate.HTML
+
+	// Renseignés par deliver pour le gabarit commun.
+	LogoURL string
+	Content htmltemplate.HTML
 }
 
 // Service compose les mails de l'application à partir des modèles et les confie à un Mailer.
 type Service struct {
 	mailer  Mailer
 	appName string
+	logoURL string
 	tokens  config.Tokens
 	text    *texttemplate.Template
 	html    *htmltemplate.Template
 }
 
+// Option ajuste un Service à sa création.
+type Option func(*Service)
+
+// WithLogoURL donne l'adresse absolue du logo affiché en tête de chaque mail.
+func WithLogoURL(logoURL string) Option {
+	return func(s *Service) { s.logoURL = logoURL }
+}
+
 // NewService charge les modèles (une erreur de modèle est détectée au démarrage, pas au premier
 // envoi). appName est le nom du service dans les mails.
-func NewService(mailer Mailer, appName string, tokens config.Tokens) (*Service, error) {
+func NewService(mailer Mailer, appName string, tokens config.Tokens, options ...Option) (*Service, error) {
 	text, err := texttemplate.ParseFS(templateFS, "templates/*.txt.tmpl")
 	if err != nil {
 		return nil, fmt.Errorf("mail : modèles texte : %w", err)
@@ -98,7 +115,11 @@ func NewService(mailer Mailer, appName string, tokens config.Tokens) (*Service, 
 	if err != nil {
 		return nil, fmt.Errorf("mail : modèles HTML : %w", err)
 	}
-	return &Service{mailer: mailer, appName: appName, tokens: tokens, text: text, html: html}, nil
+	service := &Service{mailer: mailer, appName: appName, tokens: tokens, text: text, html: html}
+	for _, option := range options {
+		option(service)
+	}
+	return service, nil
 }
 
 // SendActivation envoie le lien d'activation d'un compte.
@@ -210,14 +231,15 @@ func (s *Service) SendEmailChangeRejected(ctx context.Context, to, firstName str
 var ErrMissingUnsubscribeLink = errors.New("mail : une newsletter doit porter son lien de désinscription")
 
 // SendNewsletter envoie un numéro de la newsletter à un abonné. C'est la seule façon d'en envoyer une :
-// le gabarit ajoute le lien de désinscription au corps et en-tête List-Unsubscribe, et un envoi sans ce
-// lien est refusé. body est du texte brut (échappé dans la version HTML).
-func (s *Service) SendNewsletter(ctx context.Context, to, subject, body, unsubscribeLink string) error {
+// le gabarit ajoute le lien de désinscription au pied du message et en en-tête List-Unsubscribe, et un
+// envoi sans ce lien est refusé. bodyHTML doit déjà être nettoyé (liste blanche de balises) : il est
+// inséré tel quel dans la carte du message, et la version texte en est dérivée.
+func (s *Service) SendNewsletter(ctx context.Context, to, subject, bodyHTML, unsubscribeLink string) error {
 	if strings.TrimSpace(unsubscribeLink) == "" {
 		return ErrMissingUnsubscribeLink
 	}
 	return s.deliver(ctx, Message{To: to, Subject: subject, ListUnsubscribe: unsubscribeLink}, templateNewsletter, templateData{
-		Body: body, UnsubscribeLink: unsubscribeLink,
+		Body: plainText(bodyHTML), BodyHTML: htmltemplate.HTML(bodyHTML), UnsubscribeLink: unsubscribeLink, //nolint:gosec // nettoyé par l'appelant
 	})
 }
 
@@ -225,18 +247,24 @@ func (s *Service) send(ctx context.Context, to, subject, name string, data templ
 	return s.deliver(ctx, Message{To: to, Subject: subject}, name, data)
 }
 
-// deliver compose le corps du message à partir du modèle, puis le confie au Mailer.
+// deliver compose le corps du message à partir du modèle, puis le confie au Mailer. La version HTML
+// passe par le gabarit commun : le modèle du mail n'en est que le contenu.
 func (s *Service) deliver(ctx context.Context, message Message, name string, data templateData) error {
 	data.AppName = s.appName
+	data.LogoURL = s.logoURL
 
-	var text, html bytes.Buffer
+	var text, fragment, page bytes.Buffer
 	if err := s.text.ExecuteTemplate(&text, name+".txt.tmpl", data); err != nil {
 		return fmt.Errorf("mail : modèle texte %s : %w", name, err)
 	}
-	if err := s.html.ExecuteTemplate(&html, name+".html.tmpl", data); err != nil {
+	if err := s.html.ExecuteTemplate(&fragment, name+".html.tmpl", data); err != nil {
 		return fmt.Errorf("mail : modèle HTML %s : %w", name, err)
 	}
-	message.Text, message.HTML = text.String(), html.String()
+	data.Content = htmltemplate.HTML(fragment.String()) //nolint:gosec // produit par nos modèles, déjà échappé
+	if err := s.html.ExecuteTemplate(&page, templateLayout+".html.tmpl", data); err != nil {
+		return fmt.Errorf("mail : gabarit HTML : %w", err)
+	}
+	message.Text, message.HTML = text.String(), page.String()
 	return s.mailer.Send(ctx, message)
 }
 

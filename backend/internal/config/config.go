@@ -287,6 +287,16 @@ type App struct {
 	EmailChangeConfirmPath string
 }
 
+// MailLogoPath est l'emplacement, dans le frontend, du logo affiché en tête des mails.
+const MailLogoPath = "/mail/logo.png"
+
+// MailLogoURL construit l'adresse absolue du logo des mails.
+func (a App) MailLogoURL() string {
+	target := *a.PublicBaseURL
+	target.Path = MailLogoPath
+	return target.String()
+}
+
 // ActivationLink construit le lien d'activation de compte envoyé par mail.
 func (a App) ActivationLink(token string) string {
 	return a.link(a.ActivationPath, token)

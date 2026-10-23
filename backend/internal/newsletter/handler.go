@@ -11,6 +11,7 @@ import (
 	"github.com/ashandcompany/heros-sos/backend/internal/config"
 	"github.com/ashandcompany/heros-sos/backend/internal/httpx"
 	"github.com/ashandcompany/heros-sos/backend/internal/ratelimit"
+	"github.com/ashandcompany/heros-sos/backend/internal/validation"
 )
 
 // HandlerDeps regroupe les dépendances du handler.
@@ -108,8 +109,15 @@ func (h *Handler) Unsubscribe(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error) {
-	if errors.Is(err, ErrLinkInvalid) {
+	switch {
+	case errors.Is(err, ErrLinkInvalid):
 		err = httpx.NewError(http.StatusBadRequest, auth.CodeInvalidToken, "Ce lien est invalide, expiré ou déjà utilisé.")
+	case errors.Is(err, ErrIssueNotFound):
+		err = httpx.NotFound("Numéro introuvable.")
+	case errors.Is(err, ErrIssueSent):
+		err = httpx.Conflict(CodeIssueSent, "Ce numéro a déjà été envoyé : il n'est plus modifiable.")
+	case errors.Is(err, ErrNoRecipient):
+		err = &validation.Error{Fields: map[string]string{"recipient_user_id": CodeNoRecipient}}
 	}
 	httpx.Fail(w, r, h.Logger, err)
 }

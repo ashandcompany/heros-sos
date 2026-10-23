@@ -16,4 +16,6 @@ export interface ModerationSummary {
   /** Réponses de super-héros en attente de vérification (les avis sont publiés d'office). */
   comments: number;
   draftArticles: number;
+  /** Numéros de la newsletter en brouillon, à envoyer. */
+  draftNewsletters: number;
 }

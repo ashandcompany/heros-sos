@@ -8,8 +8,10 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/ashandcompany/heros-sos/backend/internal/audit"
 	"github.com/ashandcompany/heros-sos/backend/internal/clock"
 	"github.com/ashandcompany/heros-sos/backend/internal/config"
+	"github.com/ashandcompany/heros-sos/backend/internal/database"
 	"github.com/ashandcompany/heros-sos/backend/internal/ids"
 	"github.com/ashandcompany/heros-sos/backend/internal/signedlink"
 	"github.com/ashandcompany/heros-sos/backend/internal/validation"
@@ -18,6 +20,7 @@ import (
 // Mailer envoie le mail de confirmation (implémenté par mail.Service).
 type Mailer interface {
 	SendNewsletterConfirmation(ctx context.Context, to, link string) error
+	SendNewsletter(ctx context.Context, to, subject, bodyHTML, unsubscribeLink string) error
 }
 
 // LinkSigner signe et vérifie les liens de confirmation (implémenté par signedlink.Signer).
@@ -29,6 +32,9 @@ type LinkSigner interface {
 // ServiceDeps regroupe les dépendances du service.
 type ServiceDeps struct {
 	Repo   Repository
+	Issues IssueRepository
+	Audit  audit.Recorder
+	Tx     database.Transactor
 	Links  LinkSigner
 	Mailer Mailer
 	App    config.App

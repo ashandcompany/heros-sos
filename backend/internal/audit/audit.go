@@ -65,6 +65,12 @@ const (
 	ActionArticleCreated = "article.create"
 	ActionArticleUpdated = "article.update"
 	ActionArticleDeleted = "article.delete"
+
+	// Newsletter : un numéro rédigé, modifié, supprimé ou envoyé par un modérateur.
+	ActionNewsletterCreated = "newsletter.create"
+	ActionNewsletterUpdated = "newsletter.update"
+	ActionNewsletterDeleted = "newsletter.delete"
+	ActionNewsletterSent    = "newsletter.send"
 )
 
 // Entry décrit une action à journaliser.

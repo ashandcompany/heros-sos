@@ -47,6 +47,6 @@ Abonnés, avec ou sans compte (§4.2). Le désabonnement passe par un lien sign�
 | `id` | uuid | PK |
 | `subject` | text | NOT NULL |
 | `body_html` | text | NOT NULL |
-| `recipient_user_id` | uuid | FK `users`. NULL = tous les abonnés ; renseigné = un seul utilisateur (§4.3.2). |
+| `recipient_user_id` | uuid | FK `users` ON DELETE CASCADE. NULL = tous les abonnés confirmés ; renseigné = un seul utilisateur, s'il est abonné (§4.3.2). |
 | `created_by` | uuid | FK `users` ON DELETE SET NULL |
-| `created_at`, `sent_at` | timestamptz | |
+| `created_at`, `sent_at` | timestamptz | Brouillon tant que `sent_at` est NULL ; un numéro envoyé est en lecture seule. |

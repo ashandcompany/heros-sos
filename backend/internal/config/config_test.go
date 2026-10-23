@@ -288,6 +288,9 @@ func TestAppLinks(t *testing.T) {
 	if got, want := cfg.App.PasswordResetLink("xyz"), "http://localhost:3000/reinitialisation-mot-de-passe?token=xyz"; got != want {
 		t.Errorf("PasswordResetLink = %q, attendu %q", got, want)
 	}
+	if got, want := cfg.App.MailLogoURL(), "http://localhost:3000/mail/logo.png"; got != want {
+		t.Errorf("MailLogoURL = %q, attendu %q", got, want)
+	}
 	if got, want := cfg.App.NewsletterConfirmLink("a b/c"), "http://localhost:3000/newsletter/confirmation?token=a+b%2Fc"; got != want {
 		t.Errorf("NewsletterConfirmLink = %q, attendu %q", got, want)
 	}

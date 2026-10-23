@@ -302,9 +302,14 @@ la même interface `mail.Mailer`.
   fichier orphelin, sans effet visible.
 - **Formulaire de contact** : le mail est la seule trace du message, et la file d'envoi est interne
   au processus (voir plus haut). Régler `HEROS_CONTACT_RECIPIENT` sur la boîte de l'équipe.
-- **Newsletter** : l'abonnement (double opt-in) et la désinscription existent, pas encore l'envoi des
-  numéros. `mail.SendNewsletter` est la seule façon d'en envoyer un et refuse un message sans lien de
-  désinscription. Le consentement est daté dans `newsletter_subscriptions.confirmed_at`.
+- **Newsletter** : l'abonnement (double opt-in), la désinscription et l'envoi des numéros existent. Les
+  modérateurs rédigent des brouillons sous `/admin/newsletters` (HTML assaini) et les envoient à tous les
+  abonnés confirmés ou à un seul ; un numéro envoyé est en lecture seule. Les mails partent en
+  arrière-plan par la file d'envoi (perdus si le processus s'arrête brutalement, sans suivi par
+  destinataire). `mail.SendNewsletter` est la seule façon d'en envoyer un et refuse un message sans lien de
+  désinscription. Tous les mails HTML partagent la mise en page `internal/mail/templates/layout.html.tmpl`
+  (logo `frontend/public/mail/logo.png` servi depuis l'adresse publique du frontend, thèmes clair et sombre).
+  Le consentement est daté dans `newsletter_subscriptions.confirmed_at`.
 - **Double authentification des modérateurs** : `HEROS_MFA_MODERATOR_REQUIRED=true` est imposé (le serveur
   refuse de démarrer avec `false`).
   - *Activation, pour chaque modérateur* : l'exploitation crée le compte (`make moderator-prod`, depuis

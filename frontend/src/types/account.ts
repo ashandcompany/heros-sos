@@ -48,6 +48,16 @@ type InvalidFields = { ok: false; error: "invalid-fields"; fields: Record<string
 
 export type ContactUpdateResult = { ok: true } | InvalidFields | ApiFailure;
 
+/** Pseudo et description publics d'un super-héros, modifiés par lui-même (`PATCH /me`). */
+export interface HeroPublicProfileUpdate {
+  alias: string;
+  /** Description publique (`bio` de l'API) ; vide pour l'effacer. */
+  power: string;
+}
+
+export type HeroPublicProfileResult =
+  { ok: true } | { ok: false; error: "alias-taken" } | InvalidFields | ApiFailure;
+
 export type AvatarUpdateResult =
   | { ok: true }
   | {

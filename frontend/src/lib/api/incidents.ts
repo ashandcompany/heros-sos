@@ -32,6 +32,7 @@ import { ApiError, type ApiSchema, apiFetch, toApiFailure } from "./http";
 import { getIncidentTypes } from "./incident-types";
 import {
   getInterventionTeam,
+  getPastInterventions,
   proposeOutcome,
   sessionUserId,
   toInterventionFailure,
@@ -48,15 +49,9 @@ import { getVillain } from "./villains";
  * (`GET /heroes/{heroId}/incidents`, `GET /villains/{id}/incidents`).
  *
  * Aussi branchés : derniers incidents résolus de l'accueil, priorité (`PUT /hero/incidents/{id}/priority`),
- * modération des déclarations (`PUT /admin/incidents/{id}/moderation`, `PATCH /admin/incidents/{id}`).
- * Reste mocké, faute de route : l'historique des interventions terminées.
+ * modération des déclarations (`PUT /admin/incidents/{id}/moderation`, `PATCH /admin/incidents/{id}`),
+ * historique des interventions terminées (`GET /incidents/{incidentId}/interventions`).
  */
-
-/** Fonctions que l'API ne couvre pas encore : les écrans les masquent quand elle est active. */
-export const incidentFeatures = {
-  /** Les listes ne demandent pas les incidents résolus, en attendant une décision sur leur exposition. */
-  resolvedInLists: !isApiEnabled,
-} as const;
 
 /* ---------- Conversion depuis l'API ---------- */
 
@@ -615,7 +610,8 @@ const byHeroQueue = (a: HeroIncident, b: HeroIncident) =>
 /**
  * Signalements diffusés aux super-héros, avec leur équipe en cours, triés par statut (à prendre
  * en charge d'abord), puis par priorité et du plus récent au plus ancien.
- * API : `GET /incidents` (sans les incidents résolus), puis l'équipe de chaque intervention en cours.
+ * `statuses` absent : tous les statuts, résolus compris.
+ * API : `GET /incidents?status=…`, puis l'équipe de chaque intervention en cours.
  */
 export async function getHeroIncidents(
   token: string,
@@ -624,9 +620,15 @@ export async function getHeroIncidents(
   const wanted = (status: IncidentStatus) => !statuses || statuses.includes(status);
 
   if (isApiEnabled) {
-    const [incidents, meId] = await Promise.all([fetchAllIncidents(token), sessionUserId(token)]);
-    const kept = incidents.filter(({ status }) => wanted(fromApiStatus[status]));
-    return (await withTeams(token, kept, meId)).sort(byHeroQueue);
+    // Un incident en échec redevient « signalé » : on le demande avec les signalements.
+    const apiStatuses = statuses
+      ? UNRESOLVED_STATUSES.concat("succeeded").filter((status) => wanted(fromApiStatus[status]))
+      : [];
+    const [incidents, meId] = await Promise.all([
+      fetchAllIncidents(token, {}, apiStatuses),
+      sessionUserId(token),
+    ]);
+    return (await withTeams(token, incidents, meId)).sort(byHeroQueue);
   }
 
   const user = await userFromToken(token, "super-heros");
@@ -639,11 +641,19 @@ export async function getHeroIncidents(
   return mockResponse(incidents);
 }
 
-/** Fiche d'un incident pour un héros. API : `GET /incidents/{id}` et son équipe (404 → `null`). */
+/**
+ * Fiche d'un incident pour un héros. API : `GET /incidents/{id}`, son équipe et ses interventions
+ * terminées (`GET /incidents/{incidentId}/interventions`) ; 404 → `null`.
+ */
 export async function getHeroIncident(token: string, id: string): Promise<HeroIncident | null> {
   if (isApiEnabled) {
     const [incident, meId] = await Promise.all([fetchIncident(token, id), sessionUserId(token)]);
-    return incident ? (await withTeams(token, [incident], meId))[0] : null;
+    if (!incident) return null;
+    const [[withTeam], interventions] = await Promise.all([
+      withTeams(token, [incident], meId),
+      getPastInterventions(token, incident.id),
+    ]);
+    return { ...withTeam, interventions };
   }
 
   const user = await userFromToken(token, "super-heros");
@@ -760,7 +770,7 @@ function buildIncidentMap(
  * API : construite à partir de `getHeroIncidents` (position enregistrée à la déclaration).
  */
 export async function getIncidentMap(token: string): Promise<IncidentMapData> {
-  return buildIncidentMap(await getHeroIncidents(token), "hero");
+  return buildIncidentMap(await getHeroIncidents(token, ["signale", "en-cours"]), "hero");
 }
 
 /**

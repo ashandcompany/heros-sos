@@ -1,6 +1,6 @@
 # Contrat backend de Maxime (Dev A) : ce qui est fait, ce qui reste
 
-État au 21/10/2026, branche `feat/account-security` (poussée sur GitHub, **pas encore fusionnée** dans `develop`).
+État au 23/10/2026 : `feat/account-security` est fusionnée dans `develop` (PR #32).
 La source de vérité des routes est [openapi/openapi.yaml](openapi/openapi.yaml) : les tests échouent si une route
 diverge du fichier. Ce document n'en recopie pas le détail ; il dit **qui livre quoi**, **où en est chaque domaine** et
 **ce qui reste avant une vraie mise en ligne**.
@@ -88,8 +88,9 @@ Colonne « Front » : l'écran appelle bien la route quand `API_URL` est renseig
   doublon, la version de cette branche a été gardée (elle gère la confirmation d'email, la 2FA et la
   désinscription). Les tests du backend, le build du front et celui du site de documentation passent sur le
   résultat. L'index sur `intervention_heroes` touche une table de Dev B : à lui signaler.
-- [ ] Ouvrir la PR et la faire relire (Dev B pour le contrat et la migration, Emma pour le front).
-- [ ] Vérifier les pseudos de `.github/CODEOWNERS` (déduits de l'historique).
+- [x] Ouvrir la PR et la faire relire : fusionnée dans `develop` (PR #32).
+- [x] Vérifier les pseudos de `.github/CODEOWNERS` : `@le-veilleur`, `@Jersey276` et `@ashandcompany` sont ceux
+  des commits.
 - [ ] Activer GitHub Pages si le site doit être publié (réglages décrits dans `docs-site/README.md`). Le dépôt est
   public : le site le sera aussi.
 
@@ -98,11 +99,11 @@ Colonne « Front » : l'écran appelle bien la route quand `API_URL` est renseig
 | # | Point | État | Décision ou travail |
 | --- | --- | --- | --- |
 | 1 | **Droit à l'effacement et export des données (RGPD)** | ⬜ Le principe est écrit (suppression réelle ou anonymisation, pas de `deleted_at`), mais aucune route ni commande ne le fait. | Concevoir : suppression ou anonymisation d'un compte, avec les cascades (sessions, abonnements, demandes), puis l'exposer. |
-| 2 | **Changer son mot de passe quand on est connecté** | ⬜ Seule la réinitialisation par mail existe. | À décider avec Emma : route `POST /me/password` (mot de passe actuel exigé, autres sessions fermées). |
-| 3 | **Modifier son pseudo ou sa description de héros** | ⬜ `PATCH /me` ne prend que le téléphone et l'adresse. | Confirmer avec le cahier ; sinon ajouter les champs (le pseudo est unique, sans casse). |
+| 2 | **Changer son mot de passe quand on est connecté** | ✅ `POST /me/password` : mot de passe actuel exigé, autres sessions fermées, nouveau cookie, mail au titulaire, limité par `HEROS_RATE_PASSWORD_CHECK_PER_USER`. | Fait (panneau « Mot de passe » des trois rôles). |
+| 3 | **Modifier son pseudo ou sa description de héros** | ✅ `PATCH /me` accepte `alias` et `bio` pour un héros (`409 alias_already_used`, `403 hero_profile_required` pour un autre rôle). | Fait (formulaire « Profil public »). |
 | 4 | **2FA récente pour les actions sensibles** | ⬜ La 2FA protège la session entière, pas chaque action (valider un héros, désactiver un compte). | Durcissement : exiger un code de moins de N minutes sur ces routes. |
 | 5 | **Lire le journal d'audit** | 🟡 Il s'écrit, mais aucune route ne le lit. | Décider : route réservée aux modérateurs, ou requête SQL côté exploitation. |
-| 6 | **Supprimer sa photo de profil** | ⬜ On peut la remplacer, pas la retirer. | Petite route `DELETE /me/avatar`, si l'écran le demande. |
+| 6 | **Supprimer sa photo de profil** | ✅ `DELETE /me/avatar` retire la photo et son fichier. | Fait (« Retirer la photo »). |
 | 7 | **Limiteur de débit en mémoire** | 🟡 Exact pour **une** instance de l'API. | À revoir (Redis ou table) avant d'en lancer plusieurs. |
 | 8 | **Mails non durables** | 🟡 Avec `HEROS_MAIL_QUEUE=rabbitmq` (pile de développement), un mail accepté est durable : confirmation du courtier, worker `mail-worker`, reprises, file morte `mail.dead`. Le défaut reste la file en mémoire, qui perd les mails en attente à un arrêt brutal. | Activer RabbitMQ en production (`COMPOSE_PROFILES=rabbitmq` et `HEROS_MAIL_QUEUE=rabbitmq`), puis surveiller la file morte. |
 | 9 | **Exploitation** | ⬜ Sauvegarde séparée de `HEROS_CRYPTO_KEYS`, du volume `avatars` et de la base ; SMTP réel ; premiers modérateurs et leur 2FA ; supervision. | Checklist « Production » du README du backend, à dérouler. |
@@ -111,10 +112,10 @@ Colonne « Front » : l'écran appelle bien la route quand `API_URL` est renseig
 ### 3.3 Avec Emma (phase 3)
 
 - [x] Fiches publiques des héros branchées sur `GET /heroes` (Emma) ; `asMockDataUser` est supprimé.
-- [ ] Supprimer le reste des mocks une fois tous les domaines branchés : `userFromToken` et
-  `MOCK_SESSION_MAX_AGE`. Il reste sur mocks : les incidents résolus publics (accueil, fiches héros et vilains),
-  le tableau de bord héros et le résumé de modération (statistiques, sans contrat). Le blog et les films des
-  super-vilains sont branchés.
+- [x] Brancher tous les domaines : incidents résolus publics, tableau de bord héros, résumé de modération, blog,
+  films des super-vilains et numéros de la newsletter compris.
+- [ ] Décider du sort du mode sans API (mocks) : supprimer `userFromToken` et `MOCK_SESSION_MAX_AGE`, ou le
+  garder comme mode démo.
 - [ ] Jouer le scénario de démonstration de bout en bout (voir `MVP.md`).
 - [ ] Durcissement puis déploiement (rien n'est déployé ; aucune mise en ligne sans feu vert explicite).
 
@@ -131,8 +132,9 @@ Colonne « Front » : l'écran appelle bien la route quand `API_URL` est renseig
 
 ### 3.5 Hors MVP (version 2)
 
-2FA des héros et des citoyens, liste des appareils connectés, envoi des numéros de la newsletter, équipes de héros,
-proximité (`hero_locations`), encyclopédie Marvel.
+Liste des appareils connectés, suivi de remise des numéros de la newsletter, encyclopédie Marvel. La 2FA des héros et
+des citoyens (PR #56) et l'envoi des numéros de la newsletter (PR #50) sont faits ; les équipes de héros et la
+proximité (`hero_locations`) ont leurs routes.
 
 ## 4. Comment vérifier
 

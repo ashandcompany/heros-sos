@@ -340,6 +340,20 @@ func (s *Service) Get(ctx context.Context, id uuid.UUID) (*Intervention, error) 
 	return found, nil
 }
 
+// ListByIncident retourne les interventions d'un incident, en cours et terminées, avec leur version.
+func (s *Service) ListByIncident(ctx context.Context, incidentID uuid.UUID) ([]*Intervention, error) {
+	found, err := s.Repo.ListByIncident(ctx, incidentID)
+	if err != nil {
+		return nil, err
+	}
+	for _, in := range found {
+		if in.Version, err = s.Events.Version(ctx, in.ID); err != nil {
+			return nil, err
+		}
+	}
+	return found, nil
+}
+
 func (s *Service) requireApprovedHero(ctx context.Context, userID uuid.UUID) error {
 	account, err := s.Users.FindByID(ctx, userID)
 	if err != nil {

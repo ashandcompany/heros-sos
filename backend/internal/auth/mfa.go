@@ -19,6 +19,7 @@ import (
 	"github.com/ashandcompany/heros-sos/backend/internal/database"
 	"github.com/ashandcompany/heros-sos/backend/internal/totp"
 	"github.com/ashandcompany/heros-sos/backend/internal/user"
+	"github.com/ashandcompany/heros-sos/backend/internal/validation"
 )
 
 // MFAStatus dit où en est la double authentification d'une session. C'est ce que le frontend lit pour
@@ -349,4 +350,27 @@ func hashRecoveryCode(code string) []byte {
 	normalized := strings.ToUpper(strings.NewReplacer("-", "", " ", "").Replace(code))
 	sum := sha256.Sum256([]byte(normalized))
 	return sum[:]
+}
+
+// CheckCodeIfEnrolled redemande le code TOTP d'un compte qui a activé la 2FA, avant une action
+// irréversible (suppression du compte) ; sans 2FA, il ne demande rien. Un code absent ou faux est une erreur
+// de champ (code) ; un code faux compte comme un échec de connexion, et peut verrouiller le compte
+// (*LockedError).
+func (s *MFAService) CheckCodeIfEnrolled(ctx context.Context, userID uuid.UUID, code string, ip netip.Addr) error {
+	state, err := s.confirmed(ctx, userID)
+	if errors.Is(err, ErrMFANotSetUp) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	code = strings.ReplaceAll(code, " ", "")
+	if code == "" {
+		return &validation.Error{Fields: map[string]string{"code": validation.CodeRequired}}
+	}
+	err = s.checkCode(ctx, userID, state, code, s.Clock.Now(), ip)
+	if errors.Is(err, ErrMFAInvalidCode) {
+		return &validation.Error{Fields: map[string]string{"code": validation.CodeInvalid}}
+	}
+	return err
 }

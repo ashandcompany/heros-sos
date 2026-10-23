@@ -8,6 +8,7 @@ import (
 
 func registerInterventionRoutes(router *Router, c *components) {
 	h := c.interventionHandler
+	router.Handle(http.MethodGet, "/incidents/{incidentId}/interventions", c.protected(h.ListByIncident, user.RoleHero, user.RoleModerator))
 	router.Handle(http.MethodPost, "/incidents/{incidentId}/interventions", c.protected(c.idempotent.Wrap(h.Start), user.RoleHero))
 	router.Handle(http.MethodGet, "/interventions/{id}", c.protected(h.Get, user.RoleHero, user.RoleModerator))
 	router.Handle(http.MethodPost, "/interventions/{id}/join", c.protected(c.idempotent.Wrap(h.Join), user.RoleHero))

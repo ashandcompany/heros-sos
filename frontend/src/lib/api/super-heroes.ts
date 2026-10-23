@@ -7,13 +7,21 @@ import type {
   ContactUpdateResult,
   EmailChangeResult,
   HeroPosition,
+  HeroPublicProfileResult,
+  HeroPublicProfileUpdate,
   MutationResult,
   MyHeroProfile,
   PostalAddress,
   SuperHero,
   SuperHeroProfile,
 } from "@/types";
-import { fetchMyAccount, patchMyContact, postMyEmailChange, putMyAvatar } from "./account";
+import {
+  deleteMyAvatar,
+  fetchMyAccount,
+  patchMyContact,
+  postMyEmailChange,
+  putMyAvatar,
+} from "./account";
 import { isApiEnabled, mockResponse } from "./config";
 import { ApiError, type ApiSchema, apiFetch, toApiFailure } from "./http";
 import { MAX_PAGE_SIZE, pageQuery } from "./pagination";
@@ -184,6 +192,47 @@ export async function updateMyHeroContact(
 }
 
 /**
+ * Change le pseudo et la description publics, aussitôt visibles sur la fiche. API : `PATCH /me` avec
+ * `{ alias, bio }` ; un pseudo déjà pris (sans tenir compte de la casse) répond `409 alias_already_used`.
+ */
+export async function updateMyHeroPublicProfile(
+  token: string,
+  update: HeroPublicProfileUpdate,
+): Promise<HeroPublicProfileResult> {
+  if (!isApiEnabled) {
+    const profile = await findMyProfile(token);
+    const taken = superHeroesMock.some(
+      ({ id, alias }) => id !== profile.id && alias.toLowerCase() === update.alias.toLowerCase(),
+    );
+    if (taken) return mockResponse({ ok: false, error: "alias-taken" });
+    profile.alias = update.alias;
+    profile.power = update.power;
+    const hero = superHeroesMock.find(({ id }) => id === profile.id);
+    if (hero) Object.assign(hero, { alias: update.alias, power: update.power });
+    const account = accountsMock.find(({ user }) => user.id === profile.id);
+    if (account) account.user.displayName = update.alias;
+    return mockResponse({ ok: true });
+  }
+
+  try {
+    await apiFetch("/me", {
+      method: "PATCH",
+      sessionToken: token,
+      body: { alias: update.alias, bio: update.power } satisfies ApiSchema<"ContactUpdateRequest">,
+    });
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof ApiError) {
+      if (error.code === "alias_already_used") return { ok: false, error: "alias-taken" };
+      if (error.code === "validation_failed") {
+        return { ok: false, error: "invalid-fields", fields: error.fields };
+      }
+    }
+    return toApiFailure(error, "Modification du profil public");
+  }
+}
+
+/**
  * Remplace la photo (profil complet et profil public). API : `PUT /me/avatar`, le corps est l'image
  * elle-même. Elle est publique : `GET /avatars/{name}`.
  */
@@ -196,6 +245,17 @@ export async function updateMyHeroAvatar(token: string, file: File): Promise<Ava
   profile.avatarUrl = avatarUrl;
   const hero = superHeroesMock.find(({ id }) => id === profile.id);
   if (hero) hero.avatarUrl = avatarUrl;
+  return mockResponse({ ok: true });
+}
+
+/** Retire la photo (profil complet et profil public). API : `DELETE /me/avatar`. */
+export async function removeMyHeroAvatar(token: string): Promise<MutationResult> {
+  if (isApiEnabled) return deleteMyAvatar(token);
+
+  const profile = await findMyProfile(token);
+  profile.avatarUrl = null;
+  const hero = superHeroesMock.find(({ id }) => id === profile.id);
+  if (hero) hero.avatarUrl = null;
   return mockResponse({ ok: true });
 }
 

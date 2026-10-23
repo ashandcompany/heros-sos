@@ -3,15 +3,21 @@
 import { useActionState, useEffect, useState, type ChangeEvent } from "react";
 import Cropper from "react-easy-crop";
 import {
+  removeAvatarAction,
   requestEmailChangeAction,
   updateAvatarAction,
   updateContactAction,
   updateNewsletterAction,
 } from "@/app/actions/account";
-import { logoutAllAction } from "@/app/actions/auth";
+import {
+  changePasswordAction,
+  logoutAllAction,
+  type PasswordChangeField,
+} from "@/app/actions/auth";
 import { AddressField } from "@/components/ui/AddressField";
 import { buttonClasses } from "@/components/ui/ButtonLink";
 import { FormMessage } from "@/components/ui/FormMessage";
+import { PasswordField } from "@/components/ui/PasswordField";
 import { SelectField } from "@/components/ui/SelectField";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { TextField } from "@/components/ui/TextField";
@@ -19,6 +25,7 @@ import { cropAvatar, type CropArea } from "@/lib/avatar-image";
 import { countries, DEFAULT_COUNTRY } from "@/lib/countries";
 import { AVATAR_TYPES, type ContactField } from "@/lib/validation/account";
 import { idleFormState, type FormState } from "@/lib/validation/form-state";
+import { PASSWORD_RULES } from "@/lib/validation/signup";
 import type { PostalAddress } from "@/types";
 
 /*
@@ -306,6 +313,63 @@ export function LogoutAllForm() {
       <FormMessage state={state} />
       <SubmitButton variant="secondary" pendingLabel="Déconnexion…">
         Me déconnecter partout
+      </SubmitButton>
+    </form>
+  );
+}
+
+/** Nouveau mot de passe, contre l'actuel. La session continue ; les autres appareils sont déconnectés. */
+export function PasswordChangeForm() {
+  const [state, formAction] = useActionState(
+    changePasswordAction,
+    idleFormState as FormState<PasswordChangeField>,
+  );
+  const errors = state.fieldErrors;
+
+  return (
+    // React vide les champs après chaque envoi : un mot de passe n'est jamais renvoyé pour les remplir.
+    <form action={formAction} noValidate className="space-y-4">
+      <PasswordField
+        label="Mot de passe actuel"
+        name="currentPassword"
+        autoComplete="current-password"
+        required
+        error={errors.currentPassword}
+      />
+      <PasswordField
+        label="Nouveau mot de passe"
+        hint={PASSWORD_RULES}
+        name="newPassword"
+        autoComplete="new-password"
+        required
+        error={errors.newPassword}
+      />
+      <PasswordField
+        label="Confirmer le nouveau mot de passe"
+        name="confirmPassword"
+        autoComplete="new-password"
+        required
+        error={errors.confirmPassword}
+      />
+      <FormMessage state={state} />
+      <SubmitButton variant="secondary" pendingLabel="Modification…">
+        Changer le mot de passe
+      </SubmitButton>
+    </form>
+  );
+}
+
+/** « Retirer la photo » : à n'afficher que si le compte en a une. */
+export function RemoveAvatarForm({
+  action = removeAvatarAction,
+}: { action?: () => Promise<FormState> } = {}) {
+  const [state, formAction] = useActionState(action, idleFormState);
+
+  return (
+    <form action={formAction} className="mt-3 space-y-3">
+      <FormMessage state={state} />
+      <SubmitButton variant="ghost" pendingLabel="Retrait…">
+        Retirer la photo
       </SubmitButton>
     </form>
   );

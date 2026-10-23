@@ -53,6 +53,7 @@ type record struct {
 	VerifiedAt        *time.Time
 	VerifiedBy        *uuid.UUID
 	DeactivatedAt     *time.Time
+	DeletedAt         *time.Time
 	FailedLoginCount  int
 	LockedUntil       *time.Time
 	LastLoginAt       *time.Time
@@ -184,6 +185,7 @@ func (r row) toUser(sealer Sealer) (*User, error) {
 		VerifiedAt:       rec.VerifiedAt,
 		VerifiedBy:       rec.VerifiedBy,
 		DeactivatedAt:    rec.DeactivatedAt,
+		DeletedAt:        rec.DeletedAt,
 		FailedLoginCount: rec.FailedLoginCount,
 		LockedUntil:      rec.LockedUntil,
 		LastLoginAt:      rec.LastLoginAt,

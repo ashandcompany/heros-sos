@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { routes } from "@/lib/routes";
 import {
   requestEmailChange,
+  removeMyAvatar,
   requestHeroStatus,
   updateMyAvatar,
   updateMyContact,
@@ -168,4 +169,13 @@ export async function requestHeroStatusAction(
     message: "Demande envoyée : le Bureau l'examinera dans les meilleurs délais.",
     fieldErrors: {},
   };
+}
+
+export async function removeAvatarAction(): Promise<FormState> {
+  const token = await requireCitizenSession();
+  const result = await removeMyAvatar(token);
+  if (!result.ok) return { status: "error", message: result.error, fieldErrors: {} };
+
+  revalidatePath(routes.profile);
+  return { status: "success", message: "Votre photo a été retirée.", fieldErrors: {} };
 }

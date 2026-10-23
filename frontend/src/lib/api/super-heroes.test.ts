@@ -90,3 +90,51 @@ describe("partage de position (API)", () => {
     });
   });
 });
+
+describe("profil public (API)", () => {
+  it("envoie le pseudo et la description (`bio`) par PATCH /me", async () => {
+    const fetchMock = mockFetch((path) =>
+      path === "/auth/me" ? session() : jsonResponse(account),
+    );
+    const { updateMyHeroPublicProfile } = await withApi(() => import("./super-heroes"));
+
+    expect(
+      await updateMyHeroPublicProfile("token", { alias: "Iron Man", power: "Armure." }),
+    ).toEqual({ ok: true });
+    expect(writes(fetchMock)).toEqual([
+      ["/me", "PATCH", { alias: "Iron Man", bio: "Armure." }, "csrf-1"],
+    ]);
+  });
+
+  it("signale un pseudo déjà pris et les champs refusés", async () => {
+    let answer = errorResponse(409, "alias_already_used");
+    mockFetch((path) => (path === "/auth/me" ? session() : answer));
+    const { updateMyHeroPublicProfile } = await withApi(() => import("./super-heroes"));
+
+    expect(await updateMyHeroPublicProfile("token", { alias: "Thor", power: "" })).toEqual({
+      ok: false,
+      error: "alias-taken",
+    });
+    answer = jsonResponse(
+      { error: { code: "validation_failed", message: "", fields: { alias: "invalid" } } },
+      { status: 422 },
+    );
+    expect(await updateMyHeroPublicProfile("token", { alias: "T!", power: "" })).toEqual({
+      ok: false,
+      error: "invalid-fields",
+      fields: { alias: "invalid" },
+    });
+  });
+});
+
+describe("retrait de la photo (API)", () => {
+  it("appelle DELETE /me/avatar avec le jeton CSRF", async () => {
+    const fetchMock = mockFetch((path) =>
+      path === "/auth/me" ? session() : new Response(null, { status: 204 }),
+    );
+    const { removeMyHeroAvatar } = await withApi(() => import("./super-heroes"));
+
+    expect(await removeMyHeroAvatar("token")).toEqual({ ok: true });
+    expect(writes(fetchMock)).toEqual([["/me/avatar", "DELETE", undefined, "csrf-1"]]);
+  });
+});

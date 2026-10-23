@@ -32,16 +32,18 @@ Ajouter `villain_specialties` et `incident_villains` si on lie les vilains aux i
 
 ## Hors MVP (version 2)
 
-- Notes et réponses des héros, films et OMDb, statistiques (§5.8.1 et §5.8.2).
-- Suivi de remise des numéros de la newsletter (l'envoi, l'abonnement par double opt-in et la désinscription existent déjà), articles du blog.
-- Équipes de héros : invitations, confirmations, validation du résultat, arbitrage par un modérateur.
-- 2FA TOTP des héros et des citoyens (celle des modérateurs n'est pas « hors MVP » : voir « À ne pas couper »), liste des appareils connectés.
+Prévu hors MVP au départ ; ✅ marque ce qui a été livré depuis.
+
+- ✅ Notes et réponses des héros, films et OMDb, statistiques (§5.8.1 et §5.8.2).
+- Suivi de remise des numéros de la newsletter (l'envoi, l'abonnement par double opt-in et la désinscription existent déjà). ✅ Articles du blog.
+- ✅ Équipes de héros : invitations, confirmations, validation du résultat, arbitrage par un modérateur.
+- ✅ 2FA TOTP des héros et des citoyens, facultative. Reste la liste des appareils connectés.
 - Encyclopédie Marvel.
 
 ## À ne pas couper
 
 - **`internal/crypto` (cascade AES-256-GCM puis XChaCha20-Poly1305) dès le départ.** Il touche tous les accès à `users`. L'ajouter après obligerait à migrer des données déjà enregistrées en clair. Exception : un MVP qui reste une démo avec des données fictives.
-- **La 2FA des modérateurs avant tout vrai utilisateur.** Un compte modérateur piraté donne accès à tout. Elle est **facultative pour une démo** (en développement, `HEROS_MFA_MODERATOR_REQUIRED` vaut faux par défaut) et **obligatoire pour une mise en ligne** : en production le backend l'impose et refuse de démarrer si on la désactive. Elle est déjà implémentée (TOTP, codes de secours, commande `resetmfa`) ; seule celle des autres rôles reste en version 2.
+- **La 2FA des modérateurs avant tout vrai utilisateur.** Un compte modérateur piraté donne accès à tout. Elle est **facultative pour une démo** (en développement, `HEROS_MFA_MODERATOR_REQUIRED` vaut faux par défaut) et **obligatoire pour une mise en ligne** : en production le backend l'impose et refuse de démarrer si on la désactive. Elle est déjà implémentée (TOTP, codes de secours, commande `resetmfa`), et les autres rôles peuvent l'activer s'ils le souhaitent.
 
 ## Mails et RabbitMQ
 
@@ -56,8 +58,8 @@ Pour le MVP, les mails partent depuis le worker ou une goroutine, derrière une 
 5. **Modération et pages publiques.**
 6. **Mails**, puis finitions et déploiement.
 
-## À vérifier avec Emma
+## Branchement du front
 
-Le front est branché sur l'API pour l'identité (inscription, connexion, 2FA des modérateurs, sessions), le compte (profil, photo, changement d'email), la modération des comptes, le contact et la newsletter. Les incidents, les interventions, les vilains, la vidéothèque, les avis, le blog et le tableau de bord héros tournent encore sur des données mockées : les brancher domaine par domaine avec Emma (voir `frontend/docs/backend-contract.md`).
+Tous les domaines du front sont branchés sur l'API : identité, compte, incidents et interventions, modération, vilains, vidéothèque, avis, blog, tableaux de bord, newsletter et contact. Les derniers écarts sont suivis dans `frontend/docs/backend-contract.md`.
 
 Voir aussi [STACK.md](STACK.md) pour les choix techniques et [TABLES.md](TABLES.md) pour le schéma.

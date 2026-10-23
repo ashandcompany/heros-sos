@@ -2686,6 +2686,36 @@ paths:
         "500": { $ref: "#/components/responses/InternalError" }
 
   /incidents/{incidentId}/interventions:
+    get:
+      tags: [Incidents]
+      summary: Interventions d'un incident
+      description: |
+        Toutes les interventions de l'incident, en cours et terminées, de la plus récente à la plus ancienne.
+        Réservé aux héros et aux modérateurs, comme le détail d'une intervention.
+      operationId: listIncidentInterventions
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: incidentId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Interventions de l'incident (liste vide s'il n'y en a aucune).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Intervention" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
     post:
       tags: [Incidents]
       summary: Démarrer une intervention
@@ -3020,6 +3050,10 @@ paths:
         `null`, le complément actuel est conservé ; chaîne vide, il est effacé. Le formulaire du profil
         d'un super-héros, qui n'a pas de complément, ne l'efface donc pas.
 
+        Un super-héros peut aussi changer son pseudo (`alias`, unique sans tenir compte de la casse) et
+        sa description publique (`bio`), aussitôt visibles sur sa fiche. Un autre compte qui les envoie
+        reçoit `403 hero_profile_required` ; un pseudo déjà pris, `409 alias_already_used`.
+
         Retourne le profil à jour. Le nom, la date de naissance et l'adresse email ne se modifient pas
         ici (l'adresse email passe par `POST /me/email-change-requests`).
       operationId: updateMyContact
@@ -3044,6 +3078,11 @@ paths:
                 summary: Le téléphone seulement
                 value:
                   mobilePhone: "+33698765432"
+              profil-de-heros:
+                summary: Le pseudo et la description d'un super-héros
+                value:
+                  alias: Captain America
+                  bio: Un super-soldat au bouclier indestructible.
       responses:
         "200":
           description: Coordonnées modifiées ; le profil à jour.
@@ -3052,11 +3091,60 @@ paths:
               schema: { $ref: "#/components/schemas/Account" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
-        "403": { $ref: "#/components/responses/Forbidden" }
+        "403":
+          description: |
+            Session sans le jeton CSRF (`forbidden`), ou pseudo et description envoyés par un compte qui
+            n'est pas super-héros (`hero_profile_required`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Pseudo déjà utilisé par un autre super-héros (`alias_already_used`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    delete:
+      tags: [Compte]
+      summary: Supprimer mon compte
+      description: |
+        Droit à l'effacement (RGPD). Le compte est **anonymisé** : identité, coordonnées, photo et adresse
+        email effacées, sessions, 2FA, abonnement et vidéothèque supprimés, compte désactivé pour de bon. Les
+        incidents, interventions et avis restent, rattachés à un « compte supprimé ». Le mot de passe est
+        redemandé, et le code TOTP (`code`) si la 2FA est activée. Un mail confirme la suppression.
+      operationId: deleteMyAccount
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeleteAccountRequest" }
+            examples:
+              supprimer:
+                summary: Supprimer le compte
+                value:
+                  password: Mon-mot-de-passe-1
+      responses:
+        "204":
+          description: Compte supprimé ; la session n'existe plus.
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: Compte déjà supprimé (`account_already_erased`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          description: "`validation_failed` : `password` ou `code` vaut `required` ou `invalid`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   /me/avatar:
@@ -3124,6 +3212,121 @@ paths:
                       message: Certaines informations sont invalides.
                       fields:
                         avatar: too_large
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    delete:
+      tags: [Compte]
+      summary: Retirer ma photo de profil
+      description: Retire la photo de profil et supprime son fichier. Sans photo, c'est sans effet.
+      operationId: deleteMyAvatar
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      responses:
+        "204":
+          description: Photo retirée.
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /me/export:
+    get:
+      tags: [Compte]
+      summary: Exporter mes données
+      description: |
+        Droit d'accès (RGPD) : le profil (comme `GET /me`) et toute l'activité du compte, en un fichier JSON
+        à télécharger (`Content-Disposition: attachment`). Limité par utilisateur (`429`).
+      operationId: exportMyData
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Les données du compte.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExportedData" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/users/{id}/anonymize:
+    post:
+      tags: [Modération]
+      summary: Anonymiser un compte
+      description: |
+        Droit à l'effacement exercé par un modérateur (demande reçue par le formulaire de contact) : comme
+        `DELETE /me`, sans mail. Ni son propre compte, ni celui d'un modérateur (`409 account_not_erasable`).
+      operationId: anonymizeUser
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "204":
+          description: Compte anonymisé.
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Compte non anonymisable (`account_not_erasable`) ou déjà supprimé (`account_already_erased`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /me/password:
+    post:
+      tags: [Compte]
+      summary: Changer mon mot de passe
+      description: |
+        Le mot de passe actuel est redemandé. Le nouveau suit les règles de l'inscription. Toutes les
+        autres sessions du compte sont fermées, et la session courante reçoit un **nouveau cookie** et un
+        nouveau jeton CSRF (réponse comme celle de la connexion). Le titulaire est prévenu par mail.
+
+        Un mot de passe actuel faux répond `422` (champ `currentPassword` : `invalid`) : il ne compte pas
+        dans le verrouillage de la connexion, mais la route est limitée à quelques essais par utilisateur
+        (`429`).
+      operationId: changeMyPassword
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PasswordChangeRequest" }
+            examples:
+              nouveau-mot-de-passe:
+                summary: Remplacer le mot de passe
+                value:
+                  currentPassword: Ancien-mot-de-passe-1
+                  newPassword: Nouveau-mot-de-passe-2
+      responses:
+        "200":
+          description: Mot de passe changé ; la session courante continue avec un nouveau cookie.
+          headers:
+            Set-Cookie:
+              description: Le nouveau cookie de session (le précédent est révoqué).
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422":
+          description: |
+            `validation_failed` : `currentPassword` vaut `required` ou `invalid` (mot de passe actuel faux),
+            `newPassword` vaut `too_short`, `too_long` ou `weak`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                mot-de-passe-actuel-faux:
+                  summary: Le mot de passe actuel est faux
+                  value:
+                    error:
+                      code: validation_failed
+                      message: Certaines informations sont invalides.
+                      fields:
+                        currentPassword: invalid
         "429": { $ref: "#/components/responses/RateLimited" }
         "500": { $ref: "#/components/responses/InternalError" }
 
@@ -4245,6 +4448,44 @@ components:
             type: string,
             description: Jeton du lien de réinitialisation reçu par mail.,
           }
+        newPassword:
+          type: string
+          format: password
+          description: Au moins 10 caractères, avec une minuscule, une majuscule et un chiffre.
+
+    DeleteAccountRequest:
+      type: object
+      required: [password]
+      additionalProperties: false
+      properties:
+        password: { type: string, format: password, description: Le mot de passe actuel. }
+        code: { type: string, description: "Code TOTP, si la double authentification est activée." }
+
+    ExportedData:
+      type: object
+      required: [exportedAt, account, incidents, interventions, reviewsGiven, reviewsReceived, films, emailChangeRequests, sessions, mfaEnabled]
+      properties:
+        exportedAt: { type: string, format: date-time }
+        account: { $ref: "#/components/schemas/Account" }
+        incidents: { type: array, nullable: true, items: { type: object } }
+        interventions: { type: array, nullable: true, items: { type: object } }
+        reviewsGiven: { type: array, nullable: true, items: { type: object } }
+        reviewsReceived: { type: array, nullable: true, items: { type: object } }
+        films: { type: array, nullable: true, items: { type: object } }
+        emailChangeRequests: { type: array, nullable: true, items: { type: object } }
+        newsletter: { type: object }
+        sessions: { type: array, nullable: true, items: { type: object } }
+        mfaEnabled: { type: boolean }
+
+    PasswordChangeRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      additionalProperties: false
+      properties:
+        currentPassword:
+          type: string
+          format: password
+          description: Le mot de passe actuel.
         newPassword:
           type: string
           format: password
@@ -5541,6 +5782,13 @@ components:
           type: string
           description: Portable français (06 ou 07) ou international (+33…) ; espaces, points et tirets sont ignorés.
         address: { $ref: "#/components/schemas/AddressUpdate" }
+        alias:
+          type: string
+          description: "Super-héros seulement : nouveau pseudo public (2 à 30 caractères : lettres, chiffres, espaces, tirets)."
+        bio:
+          type: string
+          maxLength: 1000
+          description: Super-héros seulement. Nouvelle description publique ; chaîne vide pour l'effacer.
 
     AddressUpdate:
       type: object

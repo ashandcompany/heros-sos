@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/netip"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/ashandcompany/heros-sos/backend/internal/avatar"
 	"github.com/ashandcompany/heros-sos/backend/internal/clock"
 	"github.com/ashandcompany/heros-sos/backend/internal/config"
+	"github.com/ashandcompany/heros-sos/backend/internal/hero"
 	"github.com/ashandcompany/heros-sos/backend/internal/httpx"
 	"github.com/ashandcompany/heros-sos/backend/internal/ratelimit"
 	"github.com/ashandcompany/heros-sos/backend/internal/user"
@@ -27,6 +29,7 @@ const (
 	CodeChangeNotFound     = "email_change_not_found"
 	CodeChangeNotPending   = "email_change_not_pending"
 	CodeChangeNotConfirmed = "email_change_not_confirmed"
+	CodeNotHero            = "hero_profile_required"
 	messageValidationError = "Certains paramètres sont invalides."
 )
 
@@ -48,8 +51,10 @@ type HandlerDeps struct {
 type Handler struct {
 	HandlerDeps
 
-	avatarPerUser      *ratelimit.Limiter
-	emailChangePerUser *ratelimit.Limiter
+	avatarPerUser        *ratelimit.Limiter
+	emailChangePerUser   *ratelimit.Limiter
+	exportPerUser        *ratelimit.Limiter
+	passwordCheckPerUser *ratelimit.Limiter
 }
 
 // NewHandler crée le handler et ses limiteurs de débit.
@@ -61,6 +66,9 @@ func NewHandler(deps HandlerDeps) *Handler {
 		HandlerDeps:        deps,
 		avatarPerUser:      limiter(deps.Limits.AvatarPerUser),
 		emailChangePerUser: limiter(deps.Limits.EmailChangePerUser),
+		exportPerUser:      limiter(deps.Limits.ExportPerUser),
+		// Distinct de celui de POST /me/password (paquet auth) : chacun compte ses propres essais.
+		passwordCheckPerUser: limiter(deps.Limits.PasswordCheckPerUser),
 	}
 }
 
@@ -68,6 +76,8 @@ func NewHandler(deps HandlerDeps) *Handler {
 func (h *Handler) SweepLimiters() {
 	h.avatarPerUser.Sweep()
 	h.emailChangePerUser.Sweep()
+	h.exportPerUser.Sweep()
+	h.passwordCheckPerUser.Sweep()
 }
 
 // Get traite GET /me.
@@ -89,7 +99,7 @@ func (h *Handler) UpdateContact(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	in := ContactInput{Phone: body.MobilePhone}
+	in := ContactInput{Phone: body.MobilePhone, Alias: body.Alias, Bio: body.Bio}
 	if address := body.Address; address != nil {
 		in.Address = &AddressInput{
 			Street: address.Street, Complement: address.Complement, PostalCode: address.PostalCode,
@@ -97,7 +107,7 @@ func (h *Handler) UpdateContact(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	account, err := h.Service.UpdateContact(r.Context(), principal.UserID, in)
+	account, err := h.Service.UpdateContact(r.Context(), principal.UserID, in, httpx.ClientIPFrom(r.Context()))
 	if err != nil {
 		h.fail(w, r, err)
 		return
@@ -138,6 +148,16 @@ func (h *Handler) UpdateAvatar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, avatarResponse{AvatarURL: h.AvatarURLPrefix + name})
+}
+
+// RemoveAvatar traite DELETE /me/avatar.
+func (h *Handler) RemoveAvatar(w http.ResponseWriter, r *http.Request) {
+	principal, _ := auth.PrincipalFrom(r.Context())
+	if err := h.Service.RemoveAvatar(r.Context(), principal.UserID); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.WriteNoContent(w)
 }
 
 // RequestEmailChange traite POST /me/email-change-requests.
@@ -273,6 +293,20 @@ func toHTTPError(err error) error {
 		return httpx.Conflict(CodeChangeNotConfirmed, "Le titulaire de la nouvelle adresse ne l'a pas encore confirmée.")
 	case errors.Is(err, ErrLinkInvalid):
 		return httpx.NewError(http.StatusBadRequest, auth.CodeInvalidToken, "Ce lien est invalide, expiré ou déjà utilisé.")
+	case errors.Is(err, ErrNotHero):
+		return httpx.NewError(http.StatusForbidden, CodeNotHero, "Le pseudo et la description sont réservés aux super-héros.")
+	case errors.Is(err, hero.ErrAliasTaken):
+		return httpx.Conflict(hero.CodeAliasTaken, "Ce pseudo est déjà utilisé.")
+	case errors.Is(err, ErrNotErasable):
+		return httpx.Conflict(CodeNotErasable, "Un modérateur ne peut anonymiser ni son propre compte, ni celui d'un autre modérateur.")
+	case errors.Is(err, ErrAlreadyErased):
+		return httpx.Conflict(CodeAlreadyErased, "Ce compte a déjà été supprimé.")
+	}
+	var locked *auth.LockedError
+	if errors.As(err, &locked) {
+		apiErr := httpx.RateLimited(max(time.Until(locked.Until), time.Second))
+		apiErr.Code, apiErr.Message = auth.CodeAccountLocked, "Compte temporairement verrouillé après trop d'échecs."
+		return apiErr
 	}
 	return err
 }

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { MfaSection } from "@/components/auth/MfaPanel";
-import { SessionsPanel } from "@/components/citizen/AccountDetails";
+import { PasswordPanel, SessionsPanel } from "@/components/citizen/AccountDetails";
 
 export const metadata: Metadata = { title: "Sécurité" };
 
@@ -14,6 +14,7 @@ export default function AdminSecurityPage() {
         description="Protégez votre compte de modérateur : il donne accès à toutes les données de la plateforme."
       />
       <div className="max-w-2xl space-y-6">
+        <PasswordPanel />
         <MfaSection role="admin" />
         <SessionsPanel />
       </div>

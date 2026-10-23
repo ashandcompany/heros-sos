@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"time"
 
+	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 
@@ -190,18 +192,19 @@ func NewWithDB(cfg config.Config, logger *slog.Logger, db *gorm.DB, opts ...Opti
 	csrf := auth.NewCSRF(cfg.Security.CSRFSecret)
 
 	mfaStore := auth.NewMFAStore(db, sealer)
+	hasher := auth.NewPasswordHasher(cfg.Security.Argon2)
 	c.authService = auth.NewService(auth.ServiceDeps{
 		Users: c.users, Tokens: auth.NewTokenStore(db), MFA: mfaStore, Sessions: sessions,
-		Hasher: auth.NewPasswordHasher(cfg.Security.Argon2), Mailer: mailService,
+		Hasher: hasher, Mailer: mailService,
 		Audit: c.audit, Tx: c.tx, Clock: c.clock, Security: cfg.Security, App: cfg.App, Logger: logger,
+	})
+	mfaService := auth.NewMFAService(auth.MFADeps{
+		Store: mfaStore, Sessions: sessions, Users: c.users, Audit: c.audit, Tx: c.tx, Clock: c.clock,
+		Security: cfg.Security,
 	})
 	c.authMiddleware = auth.NewMiddleware(sessions, cookies, csrf, cfg.HTTP.AllowedOrigins, logger)
 	c.authHandler = auth.NewHandler(auth.HandlerDeps{
-		Service: c.authService, Cookies: cookies,
-		MFA: auth.NewMFAService(auth.MFADeps{
-			Store: mfaStore, Sessions: sessions, Users: c.users, Audit: c.audit, Tx: c.tx, Clock: c.clock,
-			Security: cfg.Security,
-		}), CSRF: csrf, Clock: c.clock, Logger: logger,
+		Service: c.authService, Cookies: cookies, MFA: mfaService, CSRF: csrf, Clock: c.clock, Logger: logger,
 		HTTP: cfg.HTTP, Limits: cfg.Security.RateLimits,
 	})
 	heroProfiles := hero.NewRepository(db)
@@ -257,7 +260,9 @@ func NewWithDB(cfg config.Config, logger *slog.Logger, db *gorm.DB, opts ...Opti
 		Users: c.users, Heroes: heroProfiles, Changes: account.NewEmailChangeRepository(db),
 		Newsletter: c.newsletterService, Avatars: avatars, Mailer: mailService, Links: links, App: cfg.App,
 		EmailChangeConfirmTTL: cfg.Security.Tokens.EmailChangeConfirmTTL,
-		Audit:                 c.audit, Tx: c.tx, Clock: c.clock,
+		Privacy:               account.NewPrivacyRepository(db),
+		Identity:              identityChecker{c.authService, mfaService}, Hasher: hasher,
+		Audit: c.audit, Tx: c.tx, Clock: c.clock,
 		AvatarMaxDimension: cfg.Avatar.MaxDimension, Logger: logger,
 	})
 	c.accountHandler = account.NewHandler(account.HandlerDeps{
@@ -498,4 +503,19 @@ func (s *Server) purge(ctx context.Context, task purgeTask) {
 	if purged > 0 {
 		s.logger.InfoContext(ctx, task.successMessage, task.countAttribute, purged)
 	}
+}
+
+// identityChecker redemande le mot de passe (auth.Service) puis, si la 2FA est activée, un code
+// (auth.MFAService) : c'est account.IdentityChecker, avant la suppression d'un compte.
+type identityChecker struct {
+	passwords *auth.Service
+	codes     *auth.MFAService
+}
+
+func (c identityChecker) CheckPassword(ctx context.Context, userID uuid.UUID, password string) error {
+	return c.passwords.CheckPassword(ctx, userID, password)
+}
+
+func (c identityChecker) CheckCodeIfEnrolled(ctx context.Context, userID uuid.UUID, code string, ip netip.Addr) error {
+	return c.codes.CheckCodeIfEnrolled(ctx, userID, code, ip)
 }

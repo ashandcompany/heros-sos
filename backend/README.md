@@ -190,9 +190,12 @@ Envoyer un mail : dépendre de l'interface `mail.Mailer` (la file asynchrone l'i
 - **Profil** : `GET` et `PATCH /me` valent pour tous les rôles (un super-héros est un compte avec un
   bloc `hero` en plus : pas de routes `/hero/me` à part). `PUT /me/avatar` reçoit **l'image brute**
   (`Content-Type: image/jpeg|png|webp`, ni JSON ni multipart) et répond l'`avatarUrl`, un chemin
-  absolu sur la même origine (`/api/v1/avatars/<uuid>.jpg`, public, qui change à chaque envoi).
-  L'adresse email change par `POST /me/email-change-requests`, validée par un modérateur
-  (`/admin/email-change-requests`) : tant qu'elle ne l'est pas, `pendingEmail` la montre.
+  absolu sur la même origine (`/api/v1/avatars/<uuid>.jpg`, public, qui change à chaque envoi) ;
+  `DELETE /me/avatar` retire la photo. Un super-héros change aussi son pseudo et sa description par
+  `PATCH /me` (`alias`, `bio`). L'adresse email change par `POST /me/email-change-requests`, validée
+  par un modérateur (`/admin/email-change-requests`) : tant qu'elle ne l'est pas, `pendingEmail` la
+  montre. `POST /me/password` change le mot de passe contre l'actuel : les autres sessions sont
+  fermées et la session courante reçoit un nouveau cookie.
 - **Newsletter et contact** (publics, sans session, limités par IP) : `POST /newsletter/subscriptions`
   envoie un lien de confirmation vers la page `HEROS_NEWSLETTER_CONFIRM_PATH` du frontend (jeton dans
   `?token=`, à poster sur `/newsletter/subscriptions/confirm`) ; `POST /contact/messages` écrit à

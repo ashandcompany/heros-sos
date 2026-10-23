@@ -107,3 +107,12 @@ export type SignupResult =
 
 /** Fermeture de toutes les sessions du compte : un échec est rapporté (voir `logoutAll`). */
 export type LogoutAllResult = { ok: true } | ApiFailure;
+
+/**
+ * Changement du mot de passe d'un compte connecté : la session courante continue avec un nouveau jeton
+ * (`token`, à écrire dans le cookie), les autres sont fermées.
+ */
+export type PasswordChangeResult =
+  | { ok: true; token: string; expiresAt: string }
+  | { ok: false; error: "invalid-current-password" | "weak-password" }
+  | ApiFailure;

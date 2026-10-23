@@ -24,6 +24,8 @@ var templateFS embed.FS
 const (
 	templateActivation         = "activation"
 	templatePasswordReset      = "password_reset"
+	templatePasswordChanged    = "password_changed"
+	templateAccountDeleted     = "account_deleted"
 	templateIncident           = "incident_reported"
 	templateInterventionInvite = "intervention_invitation"
 	templateOutcomeValidation  = "outcome_validation"
@@ -43,6 +45,8 @@ const (
 const (
 	subjectActivation         = "Activez votre compte %s"
 	subjectPasswordReset      = "Réinitialisation de votre mot de passe %s"
+	subjectPasswordChanged    = "Le mot de passe de votre compte %s a été modifié"
+	subjectAccountDeleted     = "Votre compte %s a été supprimé"
 	subjectIncident           = "Nouvel incident déclaré sur %s"
 	subjectInterventionInvite = "Vous êtes invité à une intervention sur %s"
 	subjectOutcomeValidation  = "Validation du résultat d'une intervention sur %s"
@@ -133,6 +137,22 @@ func (s *Service) SendActivation(ctx context.Context, to, firstName, link string
 func (s *Service) SendPasswordReset(ctx context.Context, to, firstName, link string) error {
 	return s.send(ctx, to, fmt.Sprintf(subjectPasswordReset, s.appName), templatePasswordReset, templateData{
 		FirstName: firstName, Link: link, ExpiresIn: formatDuration(s.tokens.PasswordResetTTL),
+	})
+}
+
+// SendPasswordChanged prévient le titulaire d'un compte que son mot de passe vient d'être changé : si ce n'est pas
+// lui, il est le premier à pouvoir réagir.
+func (s *Service) SendPasswordChanged(ctx context.Context, to, firstName string) error {
+	return s.send(ctx, to, fmt.Sprintf(subjectPasswordChanged, s.appName), templatePasswordChanged, templateData{
+		FirstName: firstName,
+	})
+}
+
+// SendAccountDeleted confirme à l'ancienne adresse d'un compte qu'il a été supprimé (anonymisé). C'est le
+// dernier mail envoyé à cette adresse.
+func (s *Service) SendAccountDeleted(ctx context.Context, to, firstName string) error {
+	return s.send(ctx, to, fmt.Sprintf(subjectAccountDeleted, s.appName), templateAccountDeleted, templateData{
+		FirstName: firstName,
 	})
 }
 

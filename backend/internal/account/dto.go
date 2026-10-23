@@ -69,6 +69,8 @@ func (h *Handler) newResponse(a *Account) Response {
 type contactRequest struct {
 	MobilePhone *string         `json:"mobilePhone"`
 	Address     *addressRequest `json:"address"`
+	Alias       *string         `json:"alias"`
+	Bio         *string         `json:"bio"`
 }
 
 type addressRequest struct {

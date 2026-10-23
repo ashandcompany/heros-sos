@@ -23,6 +23,7 @@ import {
   moderateIncident,
   moderateVideo,
   parseHeroVideoKey,
+  removeMyAvatar,
   reviewEmailChange,
   reviewHeroApplication,
   sendNewsletterIssue,
@@ -76,10 +77,16 @@ import {
 } from "@/lib/validation/admin";
 import { apiFailureMessage, hasFieldErrors, type FormState } from "@/lib/validation/form-state";
 import { OUTCOME_NOTES_MAX_LENGTH, validateRejectionReason } from "@/lib/validation/hero";
+import {
+  readFreeVideoValues,
+  validateFreeVideo,
+  type FreeVideoValues,
+} from "@/lib/validation/video";
 import type {
   AccountModerationAction,
   AccountModerationResult,
   EmailChangeReviewResult,
+  FilmSource,
   HeroReviewResult,
   ModerationStatus,
   MutationResult,
@@ -489,10 +496,23 @@ export async function addHeroVideoAction(
 ): Promise<FormState> {
   const token = await requireAdminSession();
   const heroId = String(formData.get("heroId") ?? "");
-  const imdbId = String(formData.get("imdbId") ?? "");
-  if (!heroId || !/^tt\d{7,}$/.test(imdbId)) return invalidRequest;
+  if (!heroId) return invalidRequest;
+  let source: FilmSource;
+  let values: FreeVideoValues | undefined;
+  if (formData.has("imdbId")) {
+    source = String(formData.get("imdbId"));
+    if (!/^tt\d{7,}$/.test(source)) return invalidRequest;
+  } else {
+    // Vidéo libre, hors IMDb.
+    source = values = readFreeVideoValues(formData);
+    const fieldErrors = validateFreeVideo(values);
+    if (hasFieldErrors(fieldErrors)) return { status: "error", fieldErrors, values };
+  }
 
-  const result = await addHeroVideo(token, heroId, imdbId);
+  const result = await addHeroVideo(token, heroId, source);
+  if (!result.ok && values) {
+    return { status: "error", message: result.error, fieldErrors: {}, values };
+  }
   return settle(
     result,
     [routes.adminVideos, routes.videos],
@@ -785,4 +805,13 @@ export async function updateModeratorNewsletterAction(
       : "Vous ne recevrez plus la newsletter.",
     fieldErrors: {},
   };
+}
+
+export async function removeModeratorAvatarAction(): Promise<FormState> {
+  const token = await requireAdminSession();
+  const result = await removeMyAvatar(token);
+  if (!result.ok) return { status: "error", message: result.error, fieldErrors: {} };
+
+  revalidatePath(routes.adminProfile);
+  return { status: "success", message: "Votre photo a été retirée.", fieldErrors: {} };
 }

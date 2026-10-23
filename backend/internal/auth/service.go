@@ -23,6 +23,7 @@ import (
 type AccountMailer interface {
 	SendActivation(ctx context.Context, to, firstName, link string) error
 	SendPasswordReset(ctx context.Context, to, firstName, link string) error
+	SendPasswordChanged(ctx context.Context, to, firstName string) error
 }
 
 // ServiceDeps regroupe les dépendances du service d'authentification.
@@ -433,6 +434,71 @@ func (s *Service) ConfirmPasswordReset(ctx context.Context, rawToken, newPasswor
 	})
 }
 
+// PasswordChange est le résultat d'un changement de mot de passe : la session qui remplace la session courante
+// (les autres sont fermées) et l'état de sa double authentification.
+type PasswordChange struct {
+	Session IssuedSession
+	MFA     MFAStatus
+}
+
+// ChangePassword remplace le mot de passe d'un utilisateur connecté, qui redonne le mot de passe actuel. Toutes
+// ses sessions sont fermées, et la session courante (sessionToken) est remplacée par une nouvelle : un jeton
+// volé cesse de valoir. Un mot de passe actuel faux est une erreur de champ (currentPassword) ; il ne compte
+// pas dans le verrouillage de la connexion, qu'une session volée pourrait sinon déclencher, mais la route est
+// limitée en débit. Le titulaire est prévenu par mail ; un échec d'envoi est journalisé sans annuler le
+// changement.
+func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, sessionToken, currentPassword, newPassword string, ip netip.Addr) (PasswordChange, error) {
+	if currentPassword == "" {
+		return PasswordChange{}, &validation.Error{Fields: map[string]string{"currentPassword": validation.CodeRequired}}
+	}
+	if code := validation.Password(newPassword, s.passwordPolicy()); code != "" {
+		return PasswordChange{}, &validation.Error{Fields: map[string]string{"newPassword": code}}
+	}
+	u, err := s.Users.FindByID(ctx, userID)
+	if err != nil {
+		return PasswordChange{}, err
+	}
+	check, err := s.Hasher.Verify(ctx, u.PasswordHash, currentPassword)
+	if err != nil {
+		return PasswordChange{}, fmt.Errorf("auth : vérification du mot de passe : %w", err)
+	}
+	if !check.Match {
+		return PasswordChange{}, &validation.Error{Fields: map[string]string{"currentPassword": validation.CodeInvalid}}
+	}
+	hash, err := s.Hasher.Hash(ctx, newPassword)
+	if err != nil {
+		return PasswordChange{}, fmt.Errorf("auth : hachage du mot de passe : %w", err)
+	}
+	enrolled, err := s.MFA.IsEnrolled(ctx, userID)
+	if err != nil {
+		return PasswordChange{}, err
+	}
+
+	now := s.Clock.Now()
+	var issued IssuedSession
+	err = s.Tx.WithinTx(ctx, func(ctx context.Context) error {
+		if err := s.Users.UpdatePasswordHash(ctx, userID, hash, now); err != nil {
+			return err
+		}
+		if issued, err = s.Sessions.Rotate(ctx, sessionToken, true); err != nil {
+			return err
+		}
+		if err := s.Tokens.DeleteUnused(ctx, userID, TokenPasswordReset); err != nil {
+			return err
+		}
+		return s.Audit.Record(ctx, audit.Entry{
+			ActorID: &userID, Action: audit.ActionPasswordChanged, EntityType: "user", EntityID: &userID, IP: ip,
+		})
+	})
+	if err != nil {
+		return PasswordChange{}, err
+	}
+	if err := s.Mailer.SendPasswordChanged(ctx, u.Email, u.FirstName); err != nil {
+		s.Logger.ErrorContext(ctx, "envoi du mail de changement de mot de passe impossible", "user_id", userID, "error", err)
+	}
+	return PasswordChange{Session: issued, MFA: NewMFAStatus(enrolled, true)}, nil
+}
+
 // Cleanup supprime les sessions et les jetons périmés depuis plus de retention.
 func (s *Service) Cleanup(ctx context.Context, sessionRetention, tokenRetention time.Duration) (sessions, tokens int64, err error) {
 	if sessions, err = s.Sessions.Cleanup(ctx, sessionRetention); err != nil {
@@ -440,4 +506,25 @@ func (s *Service) Cleanup(ctx context.Context, sessionRetention, tokenRetention 
 	}
 	tokens, err = s.Tokens.DeleteStale(ctx, s.Clock.Now().Add(-tokenRetention))
 	return sessions, tokens, err
+}
+
+// CheckPassword redemande le mot de passe actuel d'un utilisateur connecté, avant une action irréversible
+// (suppression du compte). Un mot de passe absent ou faux est une erreur de champ (password) ; comme pour
+// ChangePassword, il ne compte pas dans le verrouillage de la connexion et la route est limitée en débit.
+func (s *Service) CheckPassword(ctx context.Context, userID uuid.UUID, password string) error {
+	if password == "" {
+		return &validation.Error{Fields: map[string]string{"password": validation.CodeRequired}}
+	}
+	u, err := s.Users.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	check, err := s.Hasher.Verify(ctx, u.PasswordHash, password)
+	if err != nil {
+		return fmt.Errorf("auth : vérification du mot de passe : %w", err)
+	}
+	if !check.Match {
+		return &validation.Error{Fields: map[string]string{"password": validation.CodeInvalid}}
+	}
+	return nil
 }

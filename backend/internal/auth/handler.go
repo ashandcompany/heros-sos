@@ -57,6 +57,7 @@ type Handler struct {
 	passwordResetPerIP    *ratelimit.Limiter
 	passwordResetPerEmail *ratelimit.Limiter
 	mfaPerUser            *ratelimit.Limiter
+	passwordCheckPerUser  *ratelimit.Limiter
 }
 
 // NewHandler crée les handlers et leurs limiteurs de débit.
@@ -72,6 +73,7 @@ func NewHandler(deps HandlerDeps) *Handler {
 		passwordResetPerIP:    limiter(deps.Limits.PasswordResetPerIP),
 		passwordResetPerEmail: limiter(deps.Limits.PasswordResetPerEmail),
 		mfaPerUser:            limiter(deps.Limits.MFAVerifyPerUser),
+		passwordCheckPerUser:  limiter(deps.Limits.PasswordCheckPerUser),
 	}
 }
 
@@ -80,6 +82,7 @@ func NewHandler(deps HandlerDeps) *Handler {
 func (h *Handler) SweepLimiters() {
 	for _, limiter := range []*ratelimit.Limiter{
 		h.registerPerIP, h.loginPerIP, h.loginPerIdentifier, h.passwordResetPerIP, h.passwordResetPerEmail, h.mfaPerUser,
+		h.passwordCheckPerUser,
 	} {
 		limiter.Sweep()
 	}
@@ -171,6 +174,38 @@ func (h *Handler) ConfirmPasswordReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteNoContent(w)
+}
+
+// ChangePassword traite POST /me/password : le nouveau mot de passe ferme les autres sessions, et la session
+// courante reçoit un nouveau cookie (et un nouveau jeton CSRF).
+func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	principal, _ := PrincipalFrom(r.Context())
+	var req passwordChangeRequest
+	if err := httpx.DecodeJSON(w, r, h.HTTP.MaxBodyBytes, &req); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if err := h.allow(h.passwordCheckPerUser, principal.UserID.String()); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	sessionToken, _ := h.Cookies.Read(r)
+	changed, err := h.Service.ChangePassword(r.Context(), principal.UserID, sessionToken, req.CurrentPassword, req.NewPassword,
+		httpx.ClientIPFrom(r.Context()))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	current, err := h.Service.Me(r.Context(), principal.UserID)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	h.Cookies.Set(w, changed.Session.Token, changed.Session.ExpiresAt, h.Clock.Now())
+	httpx.WriteJSON(w, http.StatusOK, loginResponse{
+		User: NewUserResponse(current), CSRFToken: h.CSRF.Token(changed.Session.Token), ExpiresAt: changed.Session.ExpiresAt,
+		MFA: changed.MFA,
+	})
 }
 
 // Login traite POST /auth/login et pose le cookie de session.

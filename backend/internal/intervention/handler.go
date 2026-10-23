@@ -135,6 +135,26 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, responseFrom(found))
 }
 
+// ListByIncident traite GET /incidents/{incidentId}/interventions.
+func (h *Handler) ListByIncident(w http.ResponseWriter, r *http.Request) {
+	incidentID, ok := parseID(w, r, "incidentId", h)
+	if !ok {
+		return
+	}
+	found, err := h.service.ListByIncident(r.Context(), incidentID)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	items := make([]Response, len(found))
+	for i, in := range found {
+		items[i] = responseFrom(in)
+	}
+	httpx.WriteJSON(w, http.StatusOK, struct {
+		Items []Response `json:"items"`
+	}{items})
+}
+
 // Join traite POST /interventions/{id}/join.
 func (h *Handler) Join(w http.ResponseWriter, r *http.Request) {
 	principal, _ := auth.PrincipalFrom(r.Context())

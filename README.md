@@ -210,7 +210,7 @@ Variables (à copier de `frontend/.env.example`, puis redémarrer `npm run dev` 
 | `MAP_TILE_ATTRIBUTION` | Mention de la source des tuiles, affichée sur la carte |
 | `MAP_TILE_MAX_ZOOM` | Zoom maximal des tuiles |
 
-Quand `API_URL` est renseignée, la majorité des domaines passent par l'API (identité, incidents et interventions, héros, vilains, blog, vidéothèque, compte, newsletter, double authentification…) ; le reste fonctionne encore sur des mocks. L'état exact, domaine par domaine, est tenu à jour dans [frontend/docs/backend-contract.md](frontend/docs/backend-contract.md).
+Quand `API_URL` est renseignée, **tous les domaines** passent par l'API : identité, compte, incidents et interventions, modération, héros, vilains, vidéothèque, avis, blog, newsletter, contact et double authentification. Sans `API_URL`, le frontend fonctionne sur ses mocks. Le détail, domaine par domaine, et les derniers écarts sont tenus à jour dans [frontend/docs/backend-contract.md](frontend/docs/backend-contract.md).
 
 ### Backend seul
 

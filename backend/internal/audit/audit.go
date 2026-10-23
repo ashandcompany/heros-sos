@@ -25,14 +25,18 @@ const (
 
 // Actions enregistrées. Le préfixe indique le domaine.
 const (
-	ActionHeroRequested     = "hero.request"
-	ActionHeroApproved      = "hero.approve"
-	ActionHeroRejected      = "hero.reject"
-	ActionUserDeactivated   = "user.deactivate"
-	ActionUserReactivated   = "user.reactivate"
-	ActionUserVerified      = "user.verify"
-	ActionPasswordReset     = "auth.password_reset"
-	ActionLogoutAllSessions = "auth.logout_all"
+	ActionHeroRequested      = "hero.request"
+	ActionHeroApproved       = "hero.approve"
+	ActionHeroRejected       = "hero.reject"
+	ActionHeroProfileUpdated = "hero.profile_update"
+	ActionUserDeactivated    = "user.deactivate"
+	ActionUserReactivated    = "user.reactivate"
+	ActionUserVerified       = "user.verify"
+	ActionPasswordReset      = "auth.password_reset"
+	ActionPasswordChanged    = "auth.password_change"
+	ActionAccountExported    = "user.export"
+	ActionAccountErased      = "user.erase"
+	ActionLogoutAllSessions  = "auth.logout_all"
 
 	// Double authentification : jamais de code, de secret ni de code de secours dans le journal.
 	ActionMFAEnabled             = "auth.mfa_enabled"

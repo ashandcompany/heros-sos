@@ -111,3 +111,8 @@ type passwordResetConfirmRequest struct {
 	Token       string `json:"token"`
 	NewPassword string `json:"newPassword"`
 }
+
+type passwordChangeRequest struct {
+	CurrentPassword string `json:"currentPassword"`
+	NewPassword     string `json:"newPassword"`
+}

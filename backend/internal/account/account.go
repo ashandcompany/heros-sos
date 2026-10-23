@@ -27,6 +27,8 @@ var (
 	// ErrLinkInvalid indique un lien de confirmation falsifié, expiré, ou qui ne correspond plus à une
 	// demande en cours (remplacée par son titulaire, ou refusée).
 	ErrLinkInvalid = errors.New("account : lien de confirmation invalide ou expiré")
+	// ErrNotHero indique qu'un compte sans profil de super-héros tente d'en modifier le pseudo ou la description.
+	ErrNotHero = errors.New("account : réservé aux super-héros")
 )
 
 // ChangeStatus est l'état d'une demande de changement d'adresse.
@@ -82,10 +84,13 @@ type Account struct {
 	Hero *hero.Profile
 }
 
-// ContactInput est le changement de coordonnées demandé : un champ nil est conservé.
+// ContactInput est le changement de coordonnées demandé : un champ nil est conservé. Alias et Bio, le pseudo
+// et la description publics, sont réservés aux super-héros.
 type ContactInput struct {
 	Phone   *string
 	Address *AddressInput
+	Alias   *string
+	Bio     *string
 }
 
 // AddressInput est la nouvelle adresse postale. Complement nil conserve le complément actuel, ce qui

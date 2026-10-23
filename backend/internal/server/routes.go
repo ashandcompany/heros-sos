@@ -66,6 +66,7 @@ func registerAuthRoutes(router *Router, c *components) {
 	// Une session limitée (2FA pas encore validée) peut se déconnecter et lire son état.
 	router.Handle(http.MethodPost, "/auth/logout", c.protectedPendingMFA(h.Logout))
 	router.Handle(http.MethodPost, "/auth/logout-all", c.protectedPendingMFA(h.LogoutAll))
+	router.Handle(http.MethodPost, "/me/password", c.protected(h.ChangePassword))
 	router.Handle(http.MethodGet, "/auth/me", c.protectedPendingMFA(h.Me))
 
 	// Double authentification : obligatoire pour les modérateurs, facultative pour les autres comptes, qui peuvent

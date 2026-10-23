@@ -4,7 +4,10 @@ import {
   ALIAS_MIN_LENGTH,
   BIO_MAX_LENGTH,
   REJECTION_REASON_MAX_LENGTH,
+  heroPublicProfileFieldErrors,
   heroRequestFieldErrors,
+  readHeroPublicProfileValues,
+  validateHeroPublicProfile,
   validateHeroRequest,
   validateRejectionReason,
 } from "./hero";
@@ -48,5 +51,32 @@ describe("validateRejectionReason", () => {
     expect(validateRejectionReason("")).toBeDefined();
     expect(validateRejectionReason("Dossier incomplet")).toBeUndefined();
     expect(validateRejectionReason("a".repeat(REJECTION_REASON_MAX_LENGTH + 1))).toBeDefined();
+  });
+});
+
+describe("validateHeroPublicProfile", () => {
+  it("applique les règles du pseudo et de la description", () => {
+    expect(validateHeroPublicProfile({ alias: "Lumen", power: "" })).toEqual({
+      alias: undefined,
+      power: undefined,
+    });
+    const errors = validateHeroPublicProfile({
+      alias: "L!",
+      power: "a".repeat(BIO_MAX_LENGTH + 1),
+    });
+    expect(errors.alias).toBeDefined();
+    expect(errors.power).toBeDefined();
+  });
+
+  it("traduit les champs refusés par l'API vers ceux du formulaire", () => {
+    const errors = heroPublicProfileFieldErrors({ alias: "invalid", bio: "too_long" });
+    expect(errors.alias).toBeDefined();
+    expect(errors.power).toBeDefined();
+  });
+
+  it("lit et nettoie le formulaire", () => {
+    const formData = new FormData();
+    formData.set("alias", " Lumen ");
+    expect(readHeroPublicProfileValues(formData)).toEqual({ alias: "Lumen", power: "" });
   });
 });

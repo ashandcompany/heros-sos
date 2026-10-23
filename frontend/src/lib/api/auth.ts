@@ -10,6 +10,7 @@ import type {
   LoginResult,
   LogoutAllResult,
   MfaStatus,
+  PasswordChangeResult,
   PasswordResetConfirmResult,
   PasswordResetRequestResult,
   ResendActivationResult,
@@ -219,6 +220,46 @@ export async function logoutAll(token: string): Promise<LogoutAllResult> {
     // Une session déjà fermée (401) est le résultat voulu : l'action efface le cookie ensuite.
     if (error instanceof ApiError && error.status === 401) return { ok: true };
     return toApiFailure(error, "Déconnexion de tous les appareils");
+  }
+}
+
+/**
+ * Change le mot de passe du compte connecté, qui redonne le mot de passe actuel. L'API ferme les autres
+ * sessions et remplace celle-ci par une nouvelle : son jeton (`Set-Cookie`) est à recopier vers le navigateur.
+ * API : `POST /me/password` avec `{ currentPassword, newPassword }`. Mock : le mot de passe des comptes de
+ * démonstration est vérifié puis remplacé, le jeton reste le même.
+ */
+export async function changePassword(
+  token: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<PasswordChangeResult> {
+  if (!isApiEnabled) {
+    const user = await getSessionUser(token);
+    const account = accountsMock.find((candidate) => candidate.user.id === user?.id);
+    if (!account || account.password !== currentPassword) {
+      return mockResponse({ ok: false, error: "invalid-current-password" });
+    }
+    account.password = newPassword;
+    const expiresAt = new Date(Date.now() + MOCK_SESSION_MAX_AGE * 1000).toISOString();
+    return mockResponse({ ok: true, token, expiresAt });
+  }
+
+  try {
+    const response = await apiFetch("/me/password", {
+      method: "POST",
+      sessionToken: token,
+      body: { currentPassword, newPassword } satisfies ApiSchema<"PasswordChangeRequest">,
+    });
+    const body = (await response.json()) as ApiSchema<"LoginResponse">;
+    return { ok: true, token: readSessionCookie(response), expiresAt: body.expiresAt };
+  } catch (error) {
+    if (error instanceof ApiError && error.code === "validation_failed") {
+      return error.fields.currentPassword
+        ? { ok: false, error: "invalid-current-password" }
+        : { ok: false, error: "weak-password" };
+    }
+    return toApiFailure(error, "Changement du mot de passe");
   }
 }
 

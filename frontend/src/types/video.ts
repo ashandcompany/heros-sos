@@ -35,6 +35,17 @@ export interface PublicFilm {
   addedAt: string;
 }
 
+/** Vidéo libre, hors catalogue IMDb : hébergée ailleurs et décrite à la main. */
+export interface FreeVideoInput {
+  title: string;
+  description: string;
+  /** Adresse `http` ou `https` de la vidéo. */
+  videoUrl: string;
+}
+
+/** Film à ajouter à une vidéothèque : identifiant IMDb (`tt…`) ou vidéo libre. */
+export type FilmSource = string | FreeVideoInput;
+
 /** Super-héros ayant au moins un film publié (filtre de la vidéothèque). */
 export interface FilmHero extends SuperHeroSummary {
   filmCount: number;

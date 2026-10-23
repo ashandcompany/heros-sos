@@ -11,14 +11,13 @@ branchement. À mettre à jour à chaque fonction branchée.
 > d'incident, incidents et interventions (y compris incidents en cours, carte publique et historique public
 > des héros et des vilains), vidéothèque (paginée et filtrable), avis, blog, films des super-vilains, compte
 > (profil, photo, changement d'e-mail confirmé par lien), contact, newsletter (confirmation et
-> désinscription), « déconnexion de tous les appareils », double authentification et
-> compteurs du tableau de bord de modération sont branchés** sur l'API dès que `API_URL` est renseignée (tableau ci-dessous). Le reste fonctionne encore sur
-> des mocks, y compris avec l'API. Les numéros de la newsletter (`/admin/newsletters*`) sont dans le contrat
-> mais n'ont pas encore d'écran.
+> désinscription, numéros envoyés par les modérateurs), « déconnexion de tous les appareils », double
+> authentification et compteurs du tableau de bord de modération sont branchés** sur l'API dès que
+> `API_URL` est renseignée (tableau ci-dessous). Sans `API_URL`, tout fonctionne sur les mocks.
 
 ## 1. Couverture : ce qui est dans le contrat, et le reste
 
-Le contrat décrit aujourd'hui **110 opérations** (plus `/health` et `/ready`) : identité (dont la double
+Le contrat décrit aujourd'hui **113 opérations** (plus `/health` et `/ready`) : identité (dont la double
 authentification des modérateurs) et modération des comptes, annuaire des héros, profil du compte (`/me`,
 photo, changements d'e-mail confirmés par lien), incidents (dont l'historique public d'un héros et d'un
 vilain), interventions, types d'incident, super-vilains, avis sur les interventions, vidéothèque (films), blog
@@ -29,7 +28,7 @@ de bord de modération.
 
 | Domaine frontend                      | Fichier de `lib/api/`                              | Contrat OpenAPI                                                                                                                        |
 | ------------------------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Connexion, session, déconnexion       | `auth.ts`                                          | `/auth/login`, `/auth/me`, `/auth/logout`, `/auth/logout-all`                                                                          |
+| Connexion, session, déconnexion       | `auth.ts`                                          | `/auth/login`, `/auth/me`, `/auth/logout`, `/auth/logout-all`, `/me/password`                                                          |
 | Double authentification (TOTP)        | `mfa.ts`                                           | `/auth/mfa`, `/auth/mfa/setup`, `/auth/mfa/enable`, `/auth/mfa/verify`, `/auth/mfa/recovery-codes`                                     |
 | Inscription                           | `auth.ts`                                          | `/auth/register`                                                                                                                       |
 | Activation du compte                  | `auth.ts`                                          | `/auth/activate`, `/auth/resend-activation`                                                                                            |
@@ -47,6 +46,7 @@ de bord de modération.
 | Partage de position (proximité)       | `super-heroes.ts` (§ 3)                            | `PUT/DELETE /hero/location`, `PUT/DELETE /hero/location/consent`, `hero.locationConsentAt` de `GET /me`                                |
 | Profil, photo, changements d'email    | `account.ts`, `avatar.ts`, `super-heroes.ts` (§ 3) | `/me`, `/me/avatar`, `/avatars/{name}`, `/me/email-change-requests`, `/email-change-requests/confirm`, `/admin/email-change-requests*` |
 | Newsletter                            | `newsletter.ts`, `account.ts`                      | `/newsletter/subscriptions`, `…/confirm`, `…/unsubscribe`, `PUT /me/newsletter`                                                        |
+| Numéros de la newsletter              | `newsletter-issues.ts`                             | `/admin/newsletters`, `/admin/newsletters/{id}`, `/admin/newsletters/{id}/send`                                                        |
 | Formulaire de contact                 | `contact.ts`                                       | `POST /contact/messages`                                                                                                               |
 | Vidéothèque (films)                   | `videos.ts`, `imdb.ts` (§ 3)                       | `/films`, `/films/heroes`, `/heroes/{heroId}/films`, `/hero/films*`, `/admin/hero-films*`, `/imdb/titles*`                             |
 | Films des super-vilains               | `videos.ts` (§ 3)                                  | `GET /villains/{villainId}/films` (public), `POST /admin/villain-films`, `DELETE /admin/villains/{villainId}/films/*`                  |
@@ -56,13 +56,15 @@ de bord de modération.
 Fonctions de chaque fichier :
 
 - `auth.ts` : `login`, `getSessionUser`, `getMfaSession`, `logout`, `logoutAll`, `register`, `activateAccount`,
-  `resendActivation`, `requestPasswordReset`, `confirmPasswordReset`.
+  `resendActivation`, `requestPasswordReset`, `confirmPasswordReset`, `changePassword`.
 - `mfa.ts` : `getMfaOverview`, `startMfaSetup`, `enableMfa`, `verifyMfa`, `regenerateMfaRecoveryCodes`.
-- `account.ts` : `getMyAccount`, `updateMyContact`, `updateMyAvatar`, `requestEmailChange`,
+- `account.ts` : `getMyAccount`, `updateMyContact`, `updateMyAvatar`, `removeMyAvatar`, `requestEmailChange`,
   `confirmEmailChange`, `updateNewsletterPreference`, `getEmailChangeRequests`, `reviewEmailChange` ;
   `avatar.ts` : `getMyAvatar`.
 - `newsletter.ts` : `subscribeToNewsletter`, `confirmNewsletterSubscription`, `unsubscribeFromNewsletter` ;
   `contact.ts` : `sendContactMessage`.
+- `newsletter-issues.ts` : `getNewsletterIssues`, `getNewsletterIssue`, `createNewsletterIssue`,
+  `updateNewsletterIssue`, `deleteNewsletterIssue`, `sendNewsletterIssue`.
 - `hero-requests.ts` : `requestHeroStatus`, `getMyHeroRequest`, `getHeroApplications`,
   `reviewHeroApplication`.
 - `user-moderation.ts` : `getAccounts`, `moderateAccount`.
@@ -74,7 +76,8 @@ Fonctions de chaque fichier :
   `moderateReply`.
 - `villains.ts` : `getVillains`, `getVillainsPage`, `getVillain`, `createVillain`, `updateVillain`.
 - `super-heroes.ts` (fiches publiques) : `getSuperHeroes`, `getFeaturedSuperHeroes`, `getSuperHero` ; (profil
-  connecté) `getMyHeroProfile`, `updateMyHeroContact`, `updateMyHeroAvatar`, `requestHeroEmailChange` ;
+  connecté) `getMyHeroProfile`, `updateMyHeroContact`, `updateMyHeroPublicProfile`, `updateMyHeroAvatar`,
+  `removeMyHeroAvatar`, `requestHeroEmailChange` ;
   (partage de position) `grantHeroLocationConsent`, `revokeHeroLocationConsent`, `saveHeroLocation`,
   `deleteHeroLocation` ; (annuaire admin) `getSuperHeroProfiles`.
 - `videos.ts` : `getMyVideos`, `getMyVideosPage`, `addMyVideo`, `deleteMyVideo`, `getHeroVideos`,
@@ -83,18 +86,17 @@ Fonctions de chaque fichier :
   `deleteVillainFilm` ; `imdb.ts` : `searchImdbTitles`, `getImdbTitle`.
 - `blog.ts` : `getPublishedArticles`, `getPublishedArticle`, `getAllArticles`, `getArticle`,
   `createArticle`, `updateArticle`, `deleteArticle`.
-- `moderation.ts` : `getModerationSummary` (« Comptes à contrôler » n'a pas d'équivalent :
-  `accounts: null`, tuile masquée ; `draftNewsletters` est lu mais pas encore affiché, faute d'écran de
-  newsletter, et vaut `0` dans le mock).
+- `moderation.ts` : `getModerationSummary` (`draftNewsletters` alimente la tuile « Newsletters en
+  brouillon »).
 
 ### ⏳ Encore sur les mocks (ou à faire)
 
-Tous les domaines sont branchés : tableau de bord des héros, derniers incidents résolus de l'accueil
-et tableau de bord de modération compris (§ 3). Restent masqués avec l'API deux points d'incidents
-sans décision côté backend (§ 3, « Incidents et interventions »).
+Tous les domaines sont branchés : tableau de bord des héros, derniers incidents résolus de l'accueil,
+tableau de bord de modération, incidents résolus dans l'espace héros et historique des interventions
+compris (§ 3). Aucune fonction n'est plus masquée avec l'API.
 
-Reste à construire côté frontend : l'écran des **numéros de la newsletter** (voir « Contact et
-newsletter : choix du branchement », § 3), dont le contrat existe déjà.
+L'écran des **numéros de la newsletter** (`/admin/newsletter`) est branché lui aussi (voir « Contact
+et newsletter : choix du branchement », § 3).
 
 > [!WARNING]
 > Les « Future implémentation » écrites dans les commentaires de `lib/api/` pour les domaines non
@@ -310,8 +312,8 @@ qu'un seul `GET /auth/me`.
   acceptée, son rôle change aussitôt (le proxy l'envoie vers l'espace super-héros).
 - **Comptes** : le contrat ne connaît pas « à contrôler / validé / rejeté », mais un état
   (`pending_activation | active | deactivated` → `AccountStatus`) et une vérification à part
-  (`verifiedAt`, sans route pour l'annuler). Le tableau de bord ne compte donc plus les « comptes à
-  contrôler » avec l'API (tuile masquée). Les **changements d'email** ont leurs routes (§ Profil,
+  (`verifiedAt`, sans route pour l'annuler). Le tableau de bord n'a donc pas de tuile « comptes à
+  contrôler ». Les **changements d'email** ont leurs routes (§ Profil,
   ci-dessous) : la section et sa tuile sont affichées avec l'API.
 - **Types d'incident** : plus aucune liste en dur. Un incident embarque son type (`{ code, label }`,
   `typeCode` et `typeLabel` de l'API) ; les formulaires reçoivent la liste du référentiel et envoient
@@ -389,8 +391,12 @@ qu'un seul `GET /auth/me`.
   statut (« déjà sur la fiche »). Retrait : la clé `villainId/filmId` du formulaire, puis
   `DELETE /admin/villains/{villainId}/films/{filmId}`. Un vilain inconnu de l'API (404, ou ancien
   identifiant mock en 422) n'a aucun film.
-- **Pas encore branché** : vidéos libres sans IMDb (`title`, `description`, `videoUrl` dans
-  `FilmInput`).
+- **Vidéos libres sans IMDb** : `title`, `description` et `videoUrl` de `FilmInput` (et
+  d'`AdminHeroFilmInput`), envoyés par `addMyVideo` et `addHeroVideo` (`FilmSource` : un identifiant
+  IMDb ou une `FreeVideoInput`). Le formulaire « Ajouter une vidéo hors IMDb » (`FreeVideoForm`)
+  applique les règles de l'API avant l'envoi (`validateFreeVideo` : titre de 200 caractères au plus,
+  description de 4 000, lien `http` ou `https` de 2 048) ; un `422 validation_failed` restant est
+  affiché comme message global.
 
 ### Avis : choix du branchement
 
@@ -458,7 +464,18 @@ Types dans [src/types/review.ts](../src/types/review.ts) (`HeroReview`, `ReviewR
   `/api/v1/avatars/<uuid>.jpg`) change à chaque envoi et n'est publique qu'**à travers le reverse
   proxy**, qui l'envoie à l'API : avec `npm run dev` seul sur le port 3000, la photo ne s'affiche pas
   (ouvrir le site par le proxy, `http://localhost:8088`). `Avatar` ne la fait donc pas passer par
-  l'optimiseur de Next (`unoptimized`), qui irait la chercher sur son propre serveur.
+  l'optimiseur de Next (`unoptimized`), qui irait la chercher sur son propre serveur. « Retirer la
+  photo » (`RemoveAvatarForm`, affiché seulement s'il y en a une) appelle `DELETE /me/avatar`
+  (`deleteMyAvatar`), qui supprime aussi le fichier.
+- **Profil public d'un héros** : `PATCH /me` avec `{ alias, bio }` (`updateMyHeroPublicProfile`,
+  formulaire « Profil public » de « Mon profil »). Mêmes règles que la demande de statut
+  (`validateHeroPublicProfile`) ; `409 alias_already_used` → « pseudo déjà utilisé » sur le champ.
+  Le pseudo sert aussi d'identifiant de connexion : il change aussitôt.
+- **Mot de passe** : `POST /me/password` avec `{ currentPassword, newPassword }` (`changePassword`,
+  panneau « Mot de passe » des trois rôles). L'API ferme les autres sessions et répond comme une
+  connexion, avec un **nouveau cookie** que `changePasswordAction` recopie (`setSessionCookie`) : la
+  personne reste connectée. `422` avec `currentPassword` → « mot de passe actuel incorrect », avec
+  `newPassword` → « trop faible » ; `429` → délai `Retry-After` (route limitée par utilisateur).
 - **Changement d'email** : `POST /me/email-change-requests` (citoyen **et** héros). Les demandes des
   deux rôles arrivent dans la même liste du back-office, `GET /admin/email-change-requests?status=pending`,
   décidées par `POST …/{id}/approve` ou `…/reject`. L'identifiant d'une demande **change quand son
@@ -585,10 +602,11 @@ demandent une session.
 - **Liste publique sans session** : pour un citoyen connecté, l'API restreint `GET /incidents` à
   ses propres déclarations (session lue sur toutes les routes). Les écrans publics (incidents en
   cours, carte) appellent donc l'API **sans jeton**.
-- **Statuts demandés** : `GET /incidents` renvoie tous les statuts, résolus compris. Les listes
-  (écrans publics, espace héros, back-office) ne demandent que les incidents non résolus
-  (`?status=reported&status=in_progress&status=failed`, `fetchAllIncidents`) ; seul « Mes
-  incidents » (`reporterId`) les lit tous. L'`Incident` de l'API n'a pas de `reporterId` : la
+- **Statuts demandés** : `GET /incidents` renvoie tous les statuts, résolus compris. Les écrans
+  publics et le back-office ne demandent que les incidents non résolus
+  (`?status=reported&status=in_progress&status=failed`, `fetchAllIncidents`). L'espace héros
+  demande les statuts de son filtre (`getHeroIncidents`) : `failed` avec « À prendre en charge »,
+  `succeeded` avec « Résolus », aucun avec « Tous ». « Mes incidents » (`reporterId`) les lit tous. L'`Incident` de l'API n'a pas de `reporterId` : la
   fiche du citoyen déduit `isMine` de sa propre liste.
 - **Le citoyen ne voit pas l'équipe** : les interventions lui sont fermées. Sa fiche affiche
   « une équipe intervient » et, une fois l'incident résolu, renvoie vers « Mes interventions »
@@ -597,13 +615,10 @@ demandent une session.
   `InterventionRef`) : l'API utilise l'intervention, le mock l'incident. Sans API, les actions
   d'équipe répondent qu'elles demandent l'API (le mock n'a qu'un héros par intervention).
 
-**Masqué avec l'API** (`incidentFeatures` dans `incidents.ts`), en attente d'une décision côté
-backend ; seul le mock applique ces fonctions.
-
-| Fonction                               | Frontend                                                               | Avec l'API                                  |
-| -------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------- |
-| Incidents résolus dans les listes      | Non demandés (`status`), en attendant une décision sur leur exposition | Filtre « Résolus » retiré de l'espace héros |
-| Historique des interventions terminées | `incident.interventionId` ne désigne que l'intervention en cours       | Section « Interventions précédentes » vide  |
+- **Interventions précédentes** : la fiche d'un incident dans l'espace héros lit
+  `GET /incidents/{incidentId}/interventions` (héros et modérateurs, de la plus récente à la plus
+  ancienne) et n'en garde que les interventions terminées (`getPastInterventions`), avec leur lead
+  et leur résultat. L'intervention en cours reste celle de `incident.interventionId`.
 
 **Date de résolution et lead** : chaque `Incident` porte `resolvedAt` (fin de l'intervention
 réussie, sinon `null`) et `lead` (héros qui mène la dernière intervention, `null` sans intervention
@@ -704,13 +719,13 @@ héros proche, ou sans coordonnées, tous les héros actifs sont prévenus, sans
   qui doit rester égale à `HEROS_NEWSLETTER_CONFIRM_PATH` du backend. Comme l'activation, la
   confirmation se fait par un **bouton** : une messagerie qui ouvre le lien à l'avance ne donne pas
   le consentement à la place du visiteur. `400 invalid_token` → « lien invalide ou expiré ».
-- **Numéros de la newsletter (modérateurs, pas encore d'écran)** : `GET/POST /admin/newsletters`,
+- **Numéros de la newsletter (modérateurs, écran `/admin/newsletter`)** : `GET/POST /admin/newsletters`,
   `GET/PUT/DELETE /admin/newsletters/{id}`, `POST /admin/newsletters/{id}/send`. Un brouillon a un `subject`
   (1 à 200 caractères), un `body` HTML (balises de l'éditeur seulement, assaini par l'API, 200 000 octets au
   plus) et un `recipientUserId` facultatif (absent : tous les abonnés confirmés). La liste
   (`NewsletterSummaryPage`) n'a pas le corps, comme celle des articles. L'envoi répond `202` avec `recipients`
   (mails mis en file, sans attendre leur remise) et n'a lieu qu'une fois. Le compteur « à envoyer » du tableau
-  de bord est `draftNewsletters` de `GET /admin/moderation/summary`. Codes à mapper au branchement :
+  de bord est `draftNewsletters` de `GET /admin/moderation/summary`. Codes traduits par `newsletter-issues.ts` :
 
   | Code API (statut)                      | Sens                                                               |
   | -------------------------------------- | ------------------------------------------------------------------ |

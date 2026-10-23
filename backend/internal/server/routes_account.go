@@ -16,6 +16,10 @@ func registerAccountRoutes(router *Router, c *components) {
 	router.Handle(http.MethodGet, "/me", c.protected(h.Get))
 	router.Handle(http.MethodPatch, "/me", c.protected(h.UpdateContact))
 	router.Handle(http.MethodPut, "/me/avatar", c.protected(h.UpdateAvatar))
+	router.Handle(http.MethodDelete, "/me/avatar", c.protected(h.RemoveAvatar))
+	router.Handle(http.MethodGet, "/me/export", c.protected(h.Export))
+	router.Handle(http.MethodDelete, "/me", c.protected(h.DeleteAccount))
+	router.Handle(http.MethodPost, "/admin/users/{id}/anonymize", c.protected(h.Anonymize, user.RoleModerator))
 	router.Handle(http.MethodPost, "/me/email-change-requests", c.protected(h.RequestEmailChange, user.RoleCitizen, user.RoleHero))
 	router.Handle(http.MethodPut, "/me/newsletter", c.protected(h.SetNewsletter))
 	// Publique : le lien de confirmation s'ouvre souvent sur un autre appareil, et se prouve par sa signature.

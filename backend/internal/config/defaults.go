@@ -141,6 +141,10 @@ var (
 	// Un code TOTP a un million de valeurs : cinq essais par fenêtre de cinq minutes rendent leur
 	// énumération hors de portée, sans gêner une faute de frappe.
 	defaultRateMFAVerifyPerUser = RateRule{Max: 5, Window: 5 * time.Minute}
+	// Comme la connexion : le mot de passe actuel ne doit pas pouvoir être deviné depuis une session volée.
+	defaultRatePasswordCheckPerUser = RateRule{Max: 5, Window: 15 * time.Minute}
+	// Un export relit toute l'activité du compte : quelques-uns par heure suffisent.
+	defaultRateExportPerUser = RateRule{Max: 5, Window: time.Hour}
 	// L'espace héros envoie la position toutes les 5 minutes et à chaque retour sur l'onglet : 60 envois
 	// par heure laissent une large marge, sans permettre une rafale.
 	defaultRateHeroLocationPerUser = RateRule{Max: 60, Window: time.Hour}

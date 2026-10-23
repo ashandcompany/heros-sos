@@ -12,14 +12,12 @@ import { userFromToken } from "./session-user";
 
 /**
  * Compteurs du tableau de bord : éléments en attente dans chaque section du back-office.
- * API : `GET /admin/moderation/summary`. Les comptes à contrôler n'y ont pas d'équivalent
- * (`null` : tuile masquée).
+ * API : `GET /admin/moderation/summary`.
  */
 export async function getModerationSummary(token: string): Promise<ModerationSummary> {
   if (isApiEnabled) {
     const response = await apiFetch("/admin/moderation/summary", { sessionToken: token });
-    const summary = (await response.json()) as ApiSchema<"ModerationSummary">;
-    return { ...summary, accounts: null };
+    return (await response.json()) as ApiSchema<"ModerationSummary">;
   }
 
   await userFromToken(token, "admin");
@@ -33,7 +31,6 @@ export async function getModerationSummary(token: string): Promise<ModerationSum
     videos: pending(videosMock),
     // Les avis sont publiés dès leur envoi : seules les réponses modifiées attendent un modérateur.
     comments: reviewsMock.filter(({ reply }) => reply?.status === "en-attente").length,
-    accounts: pending(citizensMock),
     emailChanges: citizensMock.filter(({ pendingEmail }) => pendingEmail).length,
     heroApplications: heroApplicationsMock.filter(({ status }) => status === "en-attente").length,
   });

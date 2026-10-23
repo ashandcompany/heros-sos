@@ -17,7 +17,7 @@ branchement. À mettre à jour à chaque fonction branchée.
 
 ## 1. Couverture : ce qui est dans le contrat, et le reste
 
-Le contrat décrit aujourd'hui **110 opérations** (plus `/health` et `/ready`) : identité (dont la double
+Le contrat décrit aujourd'hui **111 opérations** (plus `/health` et `/ready`) : identité (dont la double
 authentification des modérateurs) et modération des comptes, annuaire des héros, profil du compte (`/me`,
 photo, changements d'e-mail confirmés par lien), incidents (dont l'historique public d'un héros et d'un
 vilain), interventions, types d'incident, super-vilains, avis sur les interventions, vidéothèque (films), blog
@@ -85,14 +85,14 @@ Fonctions de chaque fichier :
   `deleteVillainFilm` ; `imdb.ts` : `searchImdbTitles`, `getImdbTitle`.
 - `blog.ts` : `getPublishedArticles`, `getPublishedArticle`, `getAllArticles`, `getArticle`,
   `createArticle`, `updateArticle`, `deleteArticle`.
-- `moderation.ts` : `getModerationSummary` (« Comptes à contrôler » n'a pas d'équivalent :
-  `accounts: null`, tuile masquée ; `draftNewsletters` alimente la tuile « Newsletters en brouillon »).
+- `moderation.ts` : `getModerationSummary` (`draftNewsletters` alimente la tuile « Newsletters en
+  brouillon »).
 
 ### ⏳ Encore sur les mocks (ou à faire)
 
-Tous les domaines sont branchés : tableau de bord des héros, derniers incidents résolus de l'accueil
-et tableau de bord de modération compris (§ 3). Restent masqués avec l'API deux points d'incidents
-sans décision côté backend (§ 3, « Incidents et interventions »).
+Tous les domaines sont branchés : tableau de bord des héros, derniers incidents résolus de l'accueil,
+tableau de bord de modération, incidents résolus dans l'espace héros et historique des interventions
+compris (§ 3). Aucune fonction n'est plus masquée avec l'API.
 
 L'écran des **numéros de la newsletter** (`/admin/newsletter`) est branché lui aussi (voir « Contact
 et newsletter : choix du branchement », § 3).
@@ -311,8 +311,8 @@ qu'un seul `GET /auth/me`.
   acceptée, son rôle change aussitôt (le proxy l'envoie vers l'espace super-héros).
 - **Comptes** : le contrat ne connaît pas « à contrôler / validé / rejeté », mais un état
   (`pending_activation | active | deactivated` → `AccountStatus`) et une vérification à part
-  (`verifiedAt`, sans route pour l'annuler). Le tableau de bord ne compte donc plus les « comptes à
-  contrôler » avec l'API (tuile masquée). Les **changements d'email** ont leurs routes (§ Profil,
+  (`verifiedAt`, sans route pour l'annuler). Le tableau de bord n'a donc pas de tuile « comptes à
+  contrôler ». Les **changements d'email** ont leurs routes (§ Profil,
   ci-dessous) : la section et sa tuile sont affichées avec l'API.
 - **Types d'incident** : plus aucune liste en dur. Un incident embarque son type (`{ code, label }`,
   `typeCode` et `typeLabel` de l'API) ; les formulaires reçoivent la liste du référentiel et envoient
@@ -390,8 +390,12 @@ qu'un seul `GET /auth/me`.
   statut (« déjà sur la fiche »). Retrait : la clé `villainId/filmId` du formulaire, puis
   `DELETE /admin/villains/{villainId}/films/{filmId}`. Un vilain inconnu de l'API (404, ou ancien
   identifiant mock en 422) n'a aucun film.
-- **Pas encore branché** : vidéos libres sans IMDb (`title`, `description`, `videoUrl` dans
-  `FilmInput`).
+- **Vidéos libres sans IMDb** : `title`, `description` et `videoUrl` de `FilmInput` (et
+  d'`AdminHeroFilmInput`), envoyés par `addMyVideo` et `addHeroVideo` (`FilmSource` : un identifiant
+  IMDb ou une `FreeVideoInput`). Le formulaire « Ajouter une vidéo hors IMDb » (`FreeVideoForm`)
+  applique les règles de l'API avant l'envoi (`validateFreeVideo` : titre de 200 caractères au plus,
+  description de 4 000, lien `http` ou `https` de 2 048) ; un `422 validation_failed` restant est
+  affiché comme message global.
 
 ### Avis : choix du branchement
 
@@ -586,10 +590,11 @@ demandent une session.
 - **Liste publique sans session** : pour un citoyen connecté, l'API restreint `GET /incidents` à
   ses propres déclarations (session lue sur toutes les routes). Les écrans publics (incidents en
   cours, carte) appellent donc l'API **sans jeton**.
-- **Statuts demandés** : `GET /incidents` renvoie tous les statuts, résolus compris. Les listes
-  (écrans publics, espace héros, back-office) ne demandent que les incidents non résolus
-  (`?status=reported&status=in_progress&status=failed`, `fetchAllIncidents`) ; seul « Mes
-  incidents » (`reporterId`) les lit tous. L'`Incident` de l'API n'a pas de `reporterId` : la
+- **Statuts demandés** : `GET /incidents` renvoie tous les statuts, résolus compris. Les écrans
+  publics et le back-office ne demandent que les incidents non résolus
+  (`?status=reported&status=in_progress&status=failed`, `fetchAllIncidents`). L'espace héros
+  demande les statuts de son filtre (`getHeroIncidents`) : `failed` avec « À prendre en charge »,
+  `succeeded` avec « Résolus », aucun avec « Tous ». « Mes incidents » (`reporterId`) les lit tous. L'`Incident` de l'API n'a pas de `reporterId` : la
   fiche du citoyen déduit `isMine` de sa propre liste.
 - **Le citoyen ne voit pas l'équipe** : les interventions lui sont fermées. Sa fiche affiche
   « une équipe intervient » et, une fois l'incident résolu, renvoie vers « Mes interventions »
@@ -598,13 +603,10 @@ demandent une session.
   `InterventionRef`) : l'API utilise l'intervention, le mock l'incident. Sans API, les actions
   d'équipe répondent qu'elles demandent l'API (le mock n'a qu'un héros par intervention).
 
-**Masqué avec l'API** (`incidentFeatures` dans `incidents.ts`), en attente d'une décision côté
-backend ; seul le mock applique ces fonctions.
-
-| Fonction                               | Frontend                                                               | Avec l'API                                  |
-| -------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------- |
-| Incidents résolus dans les listes      | Non demandés (`status`), en attendant une décision sur leur exposition | Filtre « Résolus » retiré de l'espace héros |
-| Historique des interventions terminées | `incident.interventionId` ne désigne que l'intervention en cours       | Section « Interventions précédentes » vide  |
+- **Interventions précédentes** : la fiche d'un incident dans l'espace héros lit
+  `GET /incidents/{incidentId}/interventions` (héros et modérateurs, de la plus récente à la plus
+  ancienne) et n'en garde que les interventions terminées (`getPastInterventions`), avec leur lead
+  et leur résultat. L'intervention en cours reste celle de `incident.interventionId`.
 
 **Date de résolution et lead** : chaque `Incident` porte `resolvedAt` (fin de l'intervention
 réussie, sinon `null`) et `lead` (héros qui mène la dernière intervention, `null` sans intervention

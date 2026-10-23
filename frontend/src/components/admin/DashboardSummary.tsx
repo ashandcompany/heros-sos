@@ -6,8 +6,7 @@ import { requireAdminSession } from "@/lib/server-session";
 
 interface Tile {
   label: string;
-  /** `null` : compteur non disponible (tuile masquée). */
-  count: number | null;
+  count: number;
   href: string;
   /** Texte du lien, complété par le libellé pour les lecteurs d'écran. */
   cta: string;
@@ -30,12 +29,6 @@ export async function DashboardSummary() {
       count: summary.heroApplications,
       href: routes.adminHeroes,
       cta: "Examiner",
-    },
-    {
-      label: "Nouveaux comptes à contrôler",
-      count: summary.accounts,
-      href: routes.adminAccounts,
-      cta: "Contrôler",
     },
     {
       label: "Changements d'email",
@@ -68,10 +61,9 @@ export async function DashboardSummary() {
       cta: "Ouvrir la newsletter",
     },
   ];
-  const shown = tiles.filter((tile): tile is Tile & { count: number } => tile.count !== null);
   // Les brouillons (articles, newsletters) ne sont pas des éléments à modérer.
   const drafts: string[] = [routes.adminBlog, routes.adminNewsletters];
-  const total = shown
+  const total = tiles
     .filter((tile) => !drafts.includes(tile.href))
     .reduce((sum, tile) => sum + tile.count, 0);
 
@@ -83,7 +75,7 @@ export async function DashboardSummary() {
           : `${formatInteger(total)} élément${total > 1 ? "s" : ""} en attente de modération.`}
       </p>
       <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {shown.map((tile) => (
+        {tiles.map((tile) => (
           <li
             key={tile.label}
             className="flex flex-col border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-5"

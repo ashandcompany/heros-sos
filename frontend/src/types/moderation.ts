@@ -8,8 +8,6 @@ export type ModerationStatus = "en-attente" | "valide" | "rejete";
 /** Nombre d'éléments en attente de modération, par section du back-office. */
 export interface ModerationSummary {
   incidents: number;
-  /** `null` : compteur non disponible avec l'API (tuile masquée). */
-  accounts: number | null;
   emailChanges: number;
   heroApplications: number;
   videos: number;

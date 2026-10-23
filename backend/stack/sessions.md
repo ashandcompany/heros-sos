@@ -36,10 +36,10 @@ Préfixe `/api/v1`, noms définitifs dans `openapi.yaml` :
 | `POST /auth/activate` | Active le compte avec le token du lien |
 | `POST /auth/login` | Connexion par email, ou par alias pour un héros. La réponse porte `mfa` : `verified`, `not_enrolled` (session complète), `verification_required` ou `enrollment_required` (session **limitée**, voir « Règles »). |
 | `GET /auth/mfa` | État de la 2FA de la session et nombre de codes de secours restants (accessible à une session limitée) |
-| `POST /auth/mfa/setup` | Modérateur : tire un secret TOTP à configurer dans une application d'authentification (clé et adresse `otpauth://`) ; refusé si la 2FA est déjà activée |
-| `POST /auth/mfa/enable` | Modérateur : le premier code active la 2FA, rend les codes de secours (montrés une seule fois), ouvre une session complète (nouveau jeton) et ferme les autres sessions |
+| `POST /auth/mfa/setup` | Tout compte : tire un secret TOTP à configurer dans une application d'authentification (clé et adresse `otpauth://`) ; refusé si la 2FA est déjà activée |
+| `POST /auth/mfa/enable` | Tout compte : le premier code active la 2FA, rend les codes de secours (montrés une seule fois), ouvre une session complète (nouveau jeton) et ferme les autres sessions |
 | `POST /auth/mfa/verify` | Valide la session avec un code TOTP ou un code de secours à usage unique ; ouvre une session complète (nouveau jeton) |
-| `POST /auth/mfa/recovery-codes` | Modérateur, session complète : remplace les codes de secours, contre le code TOTP courant |
+| `POST /auth/mfa/recovery-codes` | Tout compte qui a activé la 2FA, session complète : remplace les codes de secours, contre le code TOTP courant |
 | `POST /auth/logout`, `POST /auth/logout-all` | Déconnexion de l'appareil, ou de tous les appareils |
 | `GET /auth/me` | Utilisateur et rôle de la session (redirections du §5.3) |
 | `POST /auth/password-reset`, `POST /auth/password-reset/confirm` | Demande, puis changement avec le token reçu |
@@ -64,7 +64,7 @@ Nom du cookie `__Host-session` en production, expiration reçue de l'API au lieu
 - Compte désactivé par un modérateur : ses sessions sont supprimées immédiatement.
 - Compte non activé (§4.3.1) : pas de session. Héros non vérifié : rôle citoyen limité jusqu'à validation.
 - CSRF : vérification de l'en-tête `Origin` et jeton CSRF sur toutes les requêtes qui modifient des données.
-- 2FA (TOTP) : obligatoire pour les modérateurs (toujours en production, `HEROS_MFA_MODERATOR_REQUIRED`). Après le mot de passe, la session est **limitée** : `mfa_verified_at` reste NULL et seules la 2FA (`/auth/mfa*`), `/auth/me` et la déconnexion répondent, toute autre route répond `403 mfa_required` (refus par défaut : une route doit se déclarer `ProtectedPendingMFA` pour être accessible à une session limitée). Un code valide la session et en change le jeton. Même règle pour un modérateur qui n'a pas encore activé la 2FA : sa session ne sert qu'à l'activer. Une 2FA réinitialisée limite aussitôt toutes les sessions du compte.
+- 2FA (TOTP) : obligatoire pour les modérateurs (toujours en production, `HEROS_MFA_MODERATOR_REQUIRED`), facultative pour les citoyens et les super-héros, qui l'activent depuis leur page de compte. Dès qu'un compte l'a activée, elle s'applique à sa connexion, quel que soit son rôle. Après le mot de passe, la session est **limitée** : `mfa_verified_at` reste NULL et seules la 2FA (`/auth/mfa*`), `/auth/me` et la déconnexion répondent, toute autre route répond `403 mfa_required` (refus par défaut : une route doit se déclarer `ProtectedPendingMFA` pour être accessible à une session limitée). Un code valide la session et en change le jeton. Même règle pour un modérateur qui n'a pas encore activé la 2FA : sa session ne sert qu'à l'activer. Une 2FA réinitialisée limite aussitôt toutes les sessions du compte.
 - Un code TOTP ne sert qu'une fois (`last_used_step`) et un code faux compte comme un échec de connexion : verrouillage progressif du compte, sessions fermées au seuil, et le mot de passe seul ne remet pas le compteur à zéro. Les codes de secours sont à usage unique.
 - Aucune route ne désactive ni ne réinitialise la 2FA : l'exploitation le fait avec `make resetmfa EMAIL=…` (commande `resetmfa`, journalisée), après avoir vérifié l'identité de la personne.
 - Pas encore fait : l'exigence d'une 2FA **récente** pour les actions sensibles (valider un héros, supprimer un incident) : la 2FA protège aujourd'hui la session entière, pas chaque action.

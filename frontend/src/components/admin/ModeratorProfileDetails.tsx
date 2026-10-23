@@ -1,11 +1,17 @@
 import Link from "next/link";
 import {
+  removeModeratorAvatarAction,
   updateModeratorAvatarAction,
   updateModeratorContactAction,
   updateModeratorNewsletterAction,
 } from "@/app/actions/admin";
 import { Panel } from "@/components/citizen/AccountDetails";
-import { AvatarForm, ContactForm, NewsletterSettingsForm } from "@/components/citizen/AccountForms";
+import {
+  AvatarForm,
+  ContactForm,
+  NewsletterSettingsForm,
+  RemoveAvatarForm,
+} from "@/components/citizen/AccountForms";
 import { Avatar } from "@/components/ui/Avatar";
 import { getMyAccount } from "@/lib/api";
 import { formatDate } from "@/lib/format";
@@ -38,6 +44,7 @@ export async function ModeratorProfileDetails() {
             </div>
           </div>
           <AvatarForm action={updateModeratorAvatarAction} />
+          {account.avatarUrl && <RemoveAvatarForm action={removeModeratorAvatarAction} />}
         </Panel>
 
         <Panel

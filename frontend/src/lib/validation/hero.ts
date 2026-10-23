@@ -76,3 +76,35 @@ export function validateRejectionReason(reason: string): string | undefined {
   }
   return undefined;
 }
+
+/* ---------- Profil public du super-héros ---------- */
+
+export const heroPublicProfileFields = ["alias", "power"] as const;
+export type HeroPublicProfileField = (typeof heroPublicProfileFields)[number];
+export type HeroPublicProfileValues = Record<HeroPublicProfileField, string>;
+
+export function readHeroPublicProfileValues(formData: FormData): HeroPublicProfileValues {
+  return Object.fromEntries(
+    heroPublicProfileFields.map((field) => [field, String(formData.get(field) ?? "").trim()]),
+  ) as HeroPublicProfileValues;
+}
+
+/** Mêmes règles que la demande de statut : pseudo obligatoire, description bornée. */
+export function validateHeroPublicProfile(
+  values: HeroPublicProfileValues,
+): Partial<Record<HeroPublicProfileField, string>> {
+  const { alias, bio } = validateHeroRequest({
+    alias: values.alias,
+    bio: values.power,
+    requestMessage: "",
+  });
+  return { alias, power: bio };
+}
+
+/** Message d'un champ refusé par l'API (422 de `PATCH /me` : `alias`, `bio`). */
+export function heroPublicProfileFieldErrors(
+  fields: Record<string, string>,
+): Partial<Record<HeroPublicProfileField, string>> {
+  const { alias, bio } = heroRequestFieldErrors(fields);
+  return { alias, power: bio };
+}

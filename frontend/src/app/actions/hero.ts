@@ -9,6 +9,7 @@ import {
   grantHeroLocationConsent,
   inviteHeroes,
   joinIntervention,
+  removeMyHeroAvatar,
   replyToReview,
   requestHeroEmailChange,
   respondToInvitation,
@@ -18,10 +19,11 @@ import {
   takeChargeOfIncident,
   updateMyHeroAvatar,
   updateMyHeroContact,
+  updateMyHeroPublicProfile,
   voteOnOutcome,
 } from "@/lib/api";
 import { isIncidentPriority } from "@/lib/format";
-import { heroIncidentRoute, routes } from "@/lib/routes";
+import { heroIncidentRoute, heroSheetRoute, routes } from "@/lib/routes";
 import { requireHeroSession } from "@/lib/server-session";
 import {
   avatarErrorMessage,
@@ -33,8 +35,15 @@ import {
   validateEmail,
   type ContactField,
 } from "@/lib/validation/account";
-import { hasFieldErrors, type FormState } from "@/lib/validation/form-state";
-import { OUTCOME_NOTES_MAX_LENGTH, REPLY_MAX_LENGTH } from "@/lib/validation/hero";
+import { apiFailureMessage, hasFieldErrors, type FormState } from "@/lib/validation/form-state";
+import {
+  heroPublicProfileFieldErrors,
+  OUTCOME_NOTES_MAX_LENGTH,
+  readHeroPublicProfileValues,
+  REPLY_MAX_LENGTH,
+  validateHeroPublicProfile,
+  type HeroPublicProfileField,
+} from "@/lib/validation/hero";
 import {
   readFreeVideoValues,
   validateFreeVideo,
@@ -424,4 +433,63 @@ export async function replyToReviewAction(
       : "Votre réponse a été publiée.",
     fieldErrors: {},
   };
+}
+
+/** Pseudo et description publics : aussitôt visibles sur la fiche de l'encyclopédie. */
+export async function updateHeroPublicProfileAction(
+  _previousState: FormState<HeroPublicProfileField>,
+  formData: FormData,
+): Promise<FormState<HeroPublicProfileField>> {
+  const { token, user } = await requireHeroSession();
+  const values = readHeroPublicProfileValues(formData);
+  const fieldErrors = validateHeroPublicProfile(values);
+  if (hasFieldErrors(fieldErrors)) return { status: "error", fieldErrors, values };
+
+  const result = await updateMyHeroPublicProfile(token, values);
+  if (!result.ok) {
+    switch (result.error) {
+      case "alias-taken":
+        return {
+          status: "error",
+          fieldErrors: { alias: "Ce pseudo est déjà utilisé par un autre super-héros." },
+          values,
+        };
+      case "invalid-fields":
+        return {
+          status: "error",
+          fieldErrors: heroPublicProfileFieldErrors(result.fields),
+          values,
+        };
+      default:
+        return { status: "error", message: apiFailureMessage(result), fieldErrors: {}, values };
+    }
+  }
+
+  for (const path of [
+    routes.heroProfile,
+    routes.heroDashboard,
+    routes.home,
+    routes.encyclopedia,
+    heroSheetRoute(user.id),
+    routes.adminHeroes,
+  ]) {
+    revalidatePath(path);
+  }
+  return { status: "success", message: "Votre profil public a été mis à jour.", fieldErrors: {} };
+}
+
+export async function removeHeroAvatarAction(): Promise<FormState> {
+  const { token, user } = await requireHeroSession();
+  const result = await removeMyHeroAvatar(token);
+  if (!result.ok) return { status: "error", message: result.error, fieldErrors: {} };
+
+  for (const path of [
+    routes.heroProfile,
+    routes.home,
+    routes.encyclopedia,
+    heroSheetRoute(user.id),
+  ]) {
+    revalidatePath(path);
+  }
+  return { status: "success", message: "Votre photo a été retirée.", fieldErrors: {} };
 }

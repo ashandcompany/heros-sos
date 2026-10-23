@@ -11,6 +11,8 @@ import {
   EmailChangeForm,
   LogoutAllForm,
   NewsletterSettingsForm,
+  PasswordChangeForm,
+  RemoveAvatarForm,
 } from "./AccountForms";
 import { Panel } from "./Panel";
 
@@ -25,6 +27,19 @@ export function SessionsPanel() {
       description="Ferme toutes vos sessions ouvertes, sur tous vos appareils, celle-ci comprise. Utile si vous avez oublié de vous déconnecter d'un ordinateur partagé ou si vous pensez que quelqu'un d'autre a accès à votre compte."
     >
       <LogoutAllForm />
+    </Panel>
+  );
+}
+
+/** Panneau « Mot de passe » : même formulaire pour tous les rôles. */
+export function PasswordPanel() {
+  return (
+    <Panel
+      id="password-title"
+      title="Mot de passe"
+      description="Après le changement, vous restez connecté ici ; vos autres appareils sont déconnectés."
+    >
+      <PasswordChangeForm />
     </Panel>
   );
 }
@@ -55,6 +70,7 @@ function AccountPanels({ account }: { account: MyAccount }) {
             </div>
           </div>
           <AvatarForm />
+          {account.avatarUrl && <RemoveAvatarForm />}
         </Panel>
 
         <Panel
@@ -108,6 +124,8 @@ function AccountPanels({ account }: { account: MyAccount }) {
         <Panel id="newsletter-settings-title" title="Newsletter">
           <NewsletterSettingsForm subscribed={account.newsletterSubscribed} />
         </Panel>
+
+        <PasswordPanel />
 
         <MfaSection role="citoyen" />
 

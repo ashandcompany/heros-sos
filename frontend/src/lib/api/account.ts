@@ -11,9 +11,11 @@ import type {
   EmailChangeRequest,
   EmailChangeResult,
   EmailChangeReviewResult,
+  MutationResult,
   MyAccount,
   NewsletterPreferenceResult,
 } from "@/types";
+import { apiFailureMessage } from "@/lib/validation/form-state";
 import { isApiEnabled, mockResponse } from "./config";
 import { ApiError, type ApiSchema, apiFetch, toApiFailure } from "./http";
 import { MAX_PAGE_SIZE, pageQuery } from "./pagination";
@@ -144,6 +146,25 @@ export async function putMyAvatar(token: string, file: File): Promise<AvatarUpda
       };
     }
     return toApiFailure(error, "Photo de profil");
+  }
+}
+
+/** Retire la photo de profil du citoyen ou du modérateur connecté (voir `deleteMyAvatar`). */
+export async function removeMyAvatar(token: string): Promise<MutationResult> {
+  if (isApiEnabled) return deleteMyAvatar(token);
+
+  const account = await findMyAccount(token);
+  account.avatarUrl = null;
+  return mockResponse({ ok: true });
+}
+
+/** `DELETE /me/avatar`, pour tous les rôles : l'API supprime aussi le fichier. */
+export async function deleteMyAvatar(token: string): Promise<MutationResult> {
+  try {
+    await apiFetch("/me/avatar", { method: "DELETE", sessionToken: token });
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: apiFailureMessage(toApiFailure(error, "Retrait de la photo")) };
   }
 }
 

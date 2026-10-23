@@ -2,6 +2,7 @@ export {
   confirmEmailChange,
   getEmailChangeRequests,
   getMyAccount,
+  removeMyAvatar,
   requestEmailChange,
   reviewEmailChange,
   updateMyAvatar,
@@ -10,6 +11,7 @@ export {
 } from "./account";
 export {
   activateAccount,
+  changePassword,
   confirmPasswordReset,
   getMfaSession,
   getSessionUser,
@@ -111,11 +113,13 @@ export {
   getSuperHeroes,
   getSuperHeroProfiles,
   grantHeroLocationConsent,
+  removeMyHeroAvatar,
   requestHeroEmailChange,
   revokeHeroLocationConsent,
   saveHeroLocation,
   updateMyHeroAvatar,
   updateMyHeroContact,
+  updateMyHeroPublicProfile,
 } from "./super-heroes";
 export {
   addHeroVideo,

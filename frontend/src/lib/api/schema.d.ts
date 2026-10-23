@@ -1737,6 +1737,10 @@ export interface paths {
          *     `null`, le complément actuel est conservé ; chaîne vide, il est effacé. Le formulaire du profil
          *     d'un super-héros, qui n'a pas de complément, ne l'efface donc pas.
          *
+         *     Un super-héros peut aussi changer son pseudo (`alias`, unique sans tenir compte de la casse) et
+         *     sa description publique (`bio`), aussitôt visibles sur sa fiche. Un autre compte qui les envoie
+         *     reçoit `403 hero_profile_required` ; un pseudo déjà pris, `409 alias_already_used`.
+         *
          *     Retourne le profil à jour. Le nom, la date de naissance et l'adresse email ne se modifient pas
          *     ici (l'adresse email passe par `POST /me/email-change-requests`).
          */
@@ -1764,6 +1768,36 @@ export interface paths {
          */
         put: operations["updateMyAvatar"];
         post?: never;
+        /**
+         * Retirer ma photo de profil
+         * @description Retire la photo de profil et supprime son fichier. Sans photo, c'est sans effet.
+         */
+        delete: operations["deleteMyAvatar"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Changer mon mot de passe
+         * @description Le mot de passe actuel est redemandé. Le nouveau suit les règles de l'inscription. Toutes les
+         *     autres sessions du compte sont fermées, et la session courante reçoit un **nouveau cookie** et un
+         *     nouveau jeton CSRF (réponse comme celle de la connexion). Le titulaire est prévenu par mail.
+         *
+         *     Un mot de passe actuel faux répond `422` (champ `currentPassword` : `invalid`) : il ne compte pas
+         *     dans le verrouillage de la connexion, mais la route est limitée à quelques essais par utilisateur
+         *     (`429`).
+         */
+        post: operations["changeMyPassword"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2292,6 +2326,18 @@ export interface components {
         PasswordResetConfirmRequest: {
             /** @description Jeton du lien de réinitialisation reçu par mail. */
             token: string;
+            /**
+             * Format: password
+             * @description Au moins 10 caractères, avec une minuscule, une majuscule et un chiffre.
+             */
+            newPassword: string;
+        };
+        PasswordChangeRequest: {
+            /**
+             * Format: password
+             * @description Le mot de passe actuel.
+             */
+            currentPassword: string;
             /**
              * Format: password
              * @description Au moins 10 caractères, avec une minuscule, une majuscule et un chiffre.
@@ -3242,6 +3288,10 @@ export interface components {
             /** @description Portable français (06 ou 07) ou international (+33…) ; espaces, points et tirets sont ignorés. */
             mobilePhone?: string;
             address?: components["schemas"]["AddressUpdate"];
+            /** @description Super-héros seulement : nouveau pseudo public (2 à 30 caractères : lettres, chiffres, espaces, tirets). */
+            alias?: string;
+            /** @description Super-héros seulement. Nouvelle description publique ; chaîne vide pour l'effacer. */
+            bio?: string;
         };
         AddressUpdate: {
             /** @description Numéro et nom de la voie. */
@@ -6883,8 +6933,28 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthenticated"];
-            403: components["responses"]["Forbidden"];
+            /**
+             * @description Session sans le jeton CSRF (`forbidden`), ou pseudo et description envoyés par un compte qui
+             *     n'est pas super-héros (`hero_profile_required`).
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             404: components["responses"]["NotFound"];
+            /** @description Pseudo déjà utilisé par un autre super-héros (`alias_already_used`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
@@ -6932,6 +7002,71 @@ export interface operations {
             /**
              * @description Image refusée (`validation_failed`) : `avatar` vaut `required` (corps vide), `invalid` (ce
              *     n'est pas une image JPEG, PNG ou WebP lisible) ou `too_large` (plus de 1024 pixels de côté).
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteMyAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Photo retirée. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    changeMyPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Mot de passe changé ; la session courante continue avec un nouveau cookie. */
+            200: {
+                headers: {
+                    /** @description Le nouveau cookie de session (le précédent est révoqué). */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /**
+             * @description `validation_failed` : `currentPassword` vaut `required` ou `invalid` (mot de passe actuel faux),
+             *     `newPassword` vaut `too_short`, `too_long` ou `weak`.
              */
             422: {
                 headers: {

@@ -2,12 +2,13 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { login, logout, logoutAll } from "@/lib/api";
+import { changePassword, login, logout, logoutAll } from "@/lib/api";
 import { SESSION_COOKIE, sessionCookieAttributes } from "@/lib/cookies";
 import { formatRetryDelay } from "@/lib/format";
 import { setSessionCookie } from "@/lib/server-session";
 import { accountHomeByRole, routes } from "@/lib/routes";
-import { apiFailureMessage, type FormState } from "@/lib/validation/form-state";
+import { apiFailureMessage, hasFieldErrors, type FormState } from "@/lib/validation/form-state";
+import { PASSWORD_RULES, validateNewPassword } from "@/lib/validation/signup";
 import type { LoginResult } from "@/types";
 
 export interface LoginFormState {
@@ -106,4 +107,54 @@ export async function logoutAllAction(): Promise<FormState> {
 
   cookieStore.delete({ name: SESSION_COOKIE, ...sessionCookieAttributes });
   redirect(routes.home);
+}
+
+export type PasswordChangeField = "currentPassword" | "newPassword" | "confirmPassword";
+
+/**
+ * Change le mot de passe du compte connecté, quel que soit son rôle. L'API ferme les autres sessions et
+ * remplace celle-ci : le nouveau jeton est recopié dans le cookie, la personne reste connectée.
+ */
+export async function changePasswordAction(
+  _previousState: FormState<PasswordChangeField>,
+  formData: FormData,
+): Promise<FormState<PasswordChangeField>> {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  if (!token) redirect(routes.login);
+
+  const currentPassword = String(formData.get("currentPassword") ?? "");
+  const newPassword = String(formData.get("newPassword") ?? "");
+  const confirmPassword = String(formData.get("confirmPassword") ?? "");
+  const fieldErrors: Partial<Record<PasswordChangeField, string>> = {
+    currentPassword: currentPassword ? undefined : "Saisissez votre mot de passe actuel.",
+    newPassword: validateNewPassword(newPassword),
+    confirmPassword:
+      confirmPassword === newPassword ? undefined : "Les deux mots de passe ne correspondent pas.",
+  };
+  if (hasFieldErrors(fieldErrors)) return { status: "error", fieldErrors };
+
+  const result = await changePassword(token, currentPassword, newPassword);
+  if (!result.ok) {
+    switch (result.error) {
+      case "invalid-current-password":
+        return {
+          status: "error",
+          fieldErrors: { currentPassword: "Le mot de passe actuel est incorrect." },
+        };
+      case "weak-password":
+        return {
+          status: "error",
+          fieldErrors: { newPassword: `Le mot de passe est trop faible. ${PASSWORD_RULES}` },
+        };
+      default:
+        return { status: "error", message: apiFailureMessage(result), fieldErrors: {} };
+    }
+  }
+
+  await setSessionCookie(result.token, result.expiresAt);
+  return {
+    status: "success",
+    message: "Mot de passe modifié. Vos autres appareils ont été déconnectés.",
+    fieldErrors: {},
+  };
 }

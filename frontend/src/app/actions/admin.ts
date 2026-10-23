@@ -23,6 +23,7 @@ import {
   moderateIncident,
   moderateVideo,
   parseHeroVideoKey,
+  removeMyAvatar,
   reviewEmailChange,
   reviewHeroApplication,
   sendNewsletterIssue,
@@ -804,4 +805,13 @@ export async function updateModeratorNewsletterAction(
       : "Vous ne recevrez plus la newsletter.",
     fieldErrors: {},
   };
+}
+
+export async function removeModeratorAvatarAction(): Promise<FormState> {
+  const token = await requireAdminSession();
+  const result = await removeMyAvatar(token);
+  if (!result.ok) return { status: "error", message: result.error, fieldErrors: {} };
+
+  revalidatePath(routes.adminProfile);
+  return { status: "success", message: "Votre photo a été retirée.", fieldErrors: {} };
 }

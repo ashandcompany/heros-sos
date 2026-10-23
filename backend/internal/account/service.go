@@ -25,9 +25,10 @@ import (
 // CodeTooLarge est le code de champ d'une photo dont les dimensions dépassent la limite.
 const CodeTooLarge = "too_large"
 
-// HeroProfiles donne le profil de super-héros d'un compte (implémenté par hero.Repository).
+// HeroProfiles donne et modifie le profil de super-héros d'un compte (implémenté par hero.Repository).
 type HeroProfiles interface {
 	Find(ctx context.Context, userID uuid.UUID) (*hero.Profile, error)
+	UpdatePublic(ctx context.Context, userID uuid.UUID, alias, bio *string) error
 }
 
 // Newsletter gère l'abonnement d'un titulaire de compte (implémenté par newsletter.Service).
@@ -118,11 +119,12 @@ func (s *Service) Get(ctx context.Context, userID uuid.UUID) (*Account, error) {
 	return account, nil
 }
 
-// UpdateContact remplace le téléphone et/ou l'adresse postale, puis retourne le profil à jour. Les
-// règles sont celles de l'inscription ; toutes les erreurs de saisie sont retournées ensemble
-// (*validation.Error).
-func (s *Service) UpdateContact(ctx context.Context, userID uuid.UUID, in ContactInput) (*Account, error) {
-	if in.Phone == nil && in.Address == nil {
+// UpdateContact remplace le téléphone, l'adresse postale et, pour un super-héros, le pseudo et la
+// description publics, puis retourne le profil à jour. Les règles sont celles de l'inscription et de la
+// demande de statut ; toutes les erreurs de saisie sont retournées ensemble (*validation.Error). Un pseudo
+// déjà pris retourne hero.ErrAliasTaken, un pseudo ou une description sans profil de héros ErrNotHero.
+func (s *Service) UpdateContact(ctx context.Context, userID uuid.UUID, in ContactInput, ip netip.Addr) (*Account, error) {
+	if in.Phone == nil && in.Address == nil && in.Alias == nil && in.Bio == nil {
 		return nil, &validation.Error{Fields: map[string]string{
 			"mobilePhone": validation.CodeRequired, "address": validation.CodeRequired,
 		}}
@@ -132,6 +134,17 @@ func (s *Service) UpdateContact(ctx context.Context, userID uuid.UUID, in Contac
 		fields validation.Collector
 		update user.ContactUpdate
 	)
+	var alias, bio *string
+	if in.Alias != nil {
+		value, code := validation.Alias(*in.Alias)
+		fields.Add("alias", code)
+		alias = &value
+	}
+	if in.Bio != nil {
+		value, code := validation.OptionalText(*in.Bio, validation.MaxBioLength)
+		fields.Add("bio", code)
+		bio = &value
+	}
 	if in.Phone != nil {
 		phone, code := validation.Phone(*in.Phone)
 		fields.Add("mobilePhone", code)
@@ -156,10 +169,49 @@ func (s *Service) UpdateContact(ctx context.Context, userID uuid.UUID, in Contac
 		return nil, err
 	}
 
-	if err := s.Users.UpdateContact(ctx, userID, update, s.Clock.Now()); err != nil {
+	err := s.Tx.WithinTx(ctx, func(ctx context.Context) error {
+		if update.Phone != nil || update.Address != nil {
+			if err := s.Users.UpdateContact(ctx, userID, update, s.Clock.Now()); err != nil {
+				return err
+			}
+		}
+		if alias == nil && bio == nil {
+			return nil
+		}
+		return s.updateHeroProfile(ctx, userID, alias, bio, ip)
+	})
+	if err != nil {
 		return nil, err
 	}
 	return s.Get(ctx, userID)
+}
+
+// updateHeroProfile change le pseudo et/ou la description publics d'un super-héros, et le journalise.
+func (s *Service) updateHeroProfile(ctx context.Context, userID uuid.UUID, alias, bio *string, ip netip.Addr) error {
+	owner, err := s.Users.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if owner.Role != user.RoleHero {
+		return ErrNotHero
+	}
+	if err := s.Heroes.UpdatePublic(ctx, userID, alias, bio); err != nil {
+		if errors.Is(err, hero.ErrNotFound) {
+			return ErrNotHero
+		}
+		return err
+	}
+	changed := []string{}
+	if alias != nil {
+		changed = append(changed, "alias")
+	}
+	if bio != nil {
+		changed = append(changed, "bio")
+	}
+	return s.Audit.Record(ctx, audit.Entry{
+		ActorID: &userID, Action: audit.ActionHeroProfileUpdated, EntityType: "user", EntityID: &userID,
+		Details: map[string]any{"fields": changed}, IP: ip,
+	})
 }
 
 // SetAvatar remplace la photo de profil et retourne le nom du nouveau fichier. L'image est contrôlée et
@@ -191,6 +243,18 @@ func (s *Service) SetAvatar(ctx context.Context, userID uuid.UUID, data []byte) 
 		s.discard(ctx, previous)
 	}
 	return name, nil
+}
+
+// RemoveAvatar retire la photo de profil : la base d'abord, puis le fichier. Sans photo, c'est sans effet.
+func (s *Service) RemoveAvatar(ctx context.Context, userID uuid.UUID) error {
+	previous, err := s.Users.SetAvatarPath(ctx, userID, "", s.Clock.Now())
+	if err != nil {
+		return err
+	}
+	if previous != "" {
+		s.discard(ctx, previous)
+	}
+	return nil
 }
 
 // discard supprime un fichier devenu inutile. Un échec est journalisé sans faire échouer l'opération :

@@ -128,6 +128,9 @@ type Repository interface {
 	// false si la demande n'était plus en attente : deux modérateurs ne peuvent pas la traiter
 	// tous les deux.
 	Review(ctx context.Context, userID, reviewer uuid.UUID, to VerificationStatus, reason string, now time.Time) (bool, error)
+	// UpdatePublic change le pseudo et/ou la description d'un profil (nil : inchangé). Il retourne ErrNotFound
+	// sans profil, ErrAliasTaken si le pseudo est déjà pris.
+	UpdatePublic(ctx context.Context, userID uuid.UUID, alias, bio *string) error
 }
 
 type gormRepository struct {
@@ -397,4 +400,28 @@ func (r *gormRepository) Review(ctx context.Context, userID, reviewer uuid.UUID,
 		return false, fmt.Errorf("hero : examen de la demande : %w", result.Error)
 	}
 	return result.RowsAffected > 0, nil
+}
+
+func (r *gormRepository) UpdatePublic(ctx context.Context, userID uuid.UUID, alias, bio *string) error {
+	updates := map[string]any{}
+	if alias != nil {
+		updates["alias"] = *alias
+	}
+	if bio != nil {
+		updates["bio"] = *bio
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+	query := r.conn(ctx).Model(&profileRecord{}).Where("user_id = ?", userID).Updates(updates)
+	if database.IsUniqueViolation(query.Error, aliasUniqueConstrain) {
+		return ErrAliasTaken
+	}
+	if query.Error != nil {
+		return fmt.Errorf("hero : modification du profil : %w", query.Error)
+	}
+	if query.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
 }

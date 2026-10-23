@@ -56,13 +56,14 @@ const (
 	envRateIncidentCreatePerUser = "HEROS_RATE_INCIDENT_CREATE_PER_USER"
 	envMaxTrackedRateKeys        = "HEROS_RATE_MAX_TRACKED_KEYS"
 
-	envRateContactPerIP        = "HEROS_RATE_CONTACT_PER_IP"
-	envRateNewsletterPerIP     = "HEROS_RATE_NEWSLETTER_PER_IP"
-	envRateNewsletterPerEmail  = "HEROS_RATE_NEWSLETTER_PER_EMAIL"
-	envRateEmailChangePerUser  = "HEROS_RATE_EMAIL_CHANGE_PER_USER"
-	envRateAvatarPerUser       = "HEROS_RATE_AVATAR_PER_USER"
-	envRateMFAVerifyPerUser    = "HEROS_RATE_MFA_VERIFY_PER_USER"
-	envRateHeroLocationPerUser = "HEROS_RATE_HERO_LOCATION_PER_USER"
+	envRateContactPerIP         = "HEROS_RATE_CONTACT_PER_IP"
+	envRateNewsletterPerIP      = "HEROS_RATE_NEWSLETTER_PER_IP"
+	envRateNewsletterPerEmail   = "HEROS_RATE_NEWSLETTER_PER_EMAIL"
+	envRateEmailChangePerUser   = "HEROS_RATE_EMAIL_CHANGE_PER_USER"
+	envRateAvatarPerUser        = "HEROS_RATE_AVATAR_PER_USER"
+	envRateMFAVerifyPerUser     = "HEROS_RATE_MFA_VERIFY_PER_USER"
+	envRatePasswordCheckPerUser = "HEROS_RATE_PASSWORD_CHECK_PER_USER"
+	envRateHeroLocationPerUser  = "HEROS_RATE_HERO_LOCATION_PER_USER"
 
 	envActivationTokenTTL    = "HEROS_ACTIVATION_TOKEN_TTL"
 	envPasswordResetTokenTTL = "HEROS_PASSWORD_RESET_TOKEN_TTL"
@@ -156,7 +157,7 @@ func EnvVarNames() []string {
 		envRateLoginPerIP, envRateLoginPerIdentifier, envRateRegisterPerIP,
 		envRatePasswordResetPerIP, envRatePasswordResetPerKey, envRateIncidentCreatePerUser, envMaxTrackedRateKeys,
 		envRateContactPerIP, envRateNewsletterPerIP, envRateNewsletterPerEmail, envRateEmailChangePerUser,
-		envRateAvatarPerUser, envRateMFAVerifyPerUser, envRateHeroLocationPerUser,
+		envRateAvatarPerUser, envRateMFAVerifyPerUser, envRatePasswordCheckPerUser, envRateHeroLocationPerUser,
 		envActivationTokenTTL, envPasswordResetTokenTTL, envNewsletterConfirmTTL, envEmailChangeConfirmTTL,
 		envMFAModeratorRequired, envMFAIssuer,
 		envCSRFSecret, envCryptoKeys, envCryptoActiveK,

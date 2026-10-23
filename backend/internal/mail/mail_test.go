@@ -879,3 +879,18 @@ func TestSendNewsletterAlwaysCarriesTheUnsubscribeLink(t *testing.T) {
 		}
 	}
 }
+
+func TestServiceRendersPasswordChanged(t *testing.T) {
+	recorder := NewRecorder()
+	service, _ := NewService(recorder, "Heros-SOS", config.Tokens{})
+	if err := service.SendPasswordChanged(context.Background(), "steve@example.org", "Steve"); err != nil {
+		t.Fatal(err)
+	}
+	sent := recorder.Messages()
+	if len(sent) != 1 || sent[0].To != "steve@example.org" ||
+		sent[0].Subject != "Le mot de passe de votre compte Heros-SOS a été modifié" ||
+		!strings.Contains(sent[0].Text, "Steve") || !strings.Contains(sent[0].Text, "Mot de passe oublié") ||
+		!strings.Contains(sent[0].HTML, "Mot de passe oublié") {
+		t.Fatalf("mail = %+v", sent)
+	}
+}

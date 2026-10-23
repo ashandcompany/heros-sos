@@ -75,7 +75,7 @@ type Repository interface {
 	// identique existe : l'unicité est garantie par la base, pas par une vérification préalable.
 	ChangeEmail(ctx context.Context, id uuid.UUID, email string, now time.Time) error
 	// SetAvatarPath remplace la photo de profil et retourne le chemin de la précédente (vide s'il n'y
-	// en avait pas), pour que l'appelant puisse la supprimer.
+	// en avait pas), pour que l'appelant puisse la supprimer. Un chemin vide retire la photo.
 	SetAvatarPath(ctx context.Context, id uuid.UUID, path string, now time.Time) (previous string, err error)
 
 	List(ctx context.Context, filter Filter) (users []User, total int64, err error)
@@ -342,7 +342,7 @@ func (r *gormRepository) ChangeEmail(ctx context.Context, id uuid.UUID, email st
 // retourner le même « ancien » chemin (et laisser un fichier orphelin).
 const setAvatarPathSQL = `
 WITH previous AS (SELECT avatar_path FROM users WHERE id = ? FOR UPDATE)
-UPDATE users SET avatar_path = ?, updated_at = ?
+UPDATE users SET avatar_path = NULLIF(?, ''), updated_at = ?
 FROM previous
 WHERE users.id = ?
 RETURNING previous.avatar_path`

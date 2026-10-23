@@ -212,8 +212,11 @@ type RateLimits struct {
 	EmailChangePerUser    RateRule
 	AvatarPerUser         RateRule
 	MFAVerifyPerUser      RateRule
-	HeroLocationPerUser   RateRule
-	MaxTrackedKeys        int
+	// PasswordCheckPerUser borne les actions qui redemandent le mot de passe actuel (changement du mot de
+	// passe, suppression du compte).
+	PasswordCheckPerUser RateRule
+	HeroLocationPerUser  RateRule
+	MaxTrackedKeys       int
 }
 
 // Tokens regroupe la durée de vie des jetons à usage unique envoyés par mail.
@@ -503,6 +506,7 @@ func Load(getenv func(string) string) (Config, error) {
 				EmailChangePerUser:    l.rateRule(envRateEmailChangePerUser, defaultRateEmailChangePerUser),
 				AvatarPerUser:         l.rateRule(envRateAvatarPerUser, defaultRateAvatarPerUser),
 				MFAVerifyPerUser:      l.rateRule(envRateMFAVerifyPerUser, defaultRateMFAVerifyPerUser),
+				PasswordCheckPerUser:  l.rateRule(envRatePasswordCheckPerUser, defaultRatePasswordCheckPerUser),
 				HeroLocationPerUser:   l.rateRule(envRateHeroLocationPerUser, defaultRateHeroLocationPerUser),
 				MaxTrackedKeys:        l.positiveInt(envMaxTrackedRateKeys, defaultMaxTrackedRateKeys),
 			},

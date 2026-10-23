@@ -135,7 +135,12 @@ services:
     logging: *logging
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-heros}
-      RABBITMQ_DEFAULT_PASS_FILE: /run/secrets/rabbitmq_password
+    # L'image refuse de démarrer avec RABBITMQ_DEFAULT_PASS_FILE (variable abandonnée) : le mot de passe est lu dans le
+    # secret au lancement, pour le seul processus RabbitMQ. Il n'apparaît donc pas dans `docker inspect`.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - RABBITMQ_DEFAULT_PASS="$$(cat /run/secrets/rabbitmq_password)" exec docker-entrypoint.sh rabbitmq-server
     secrets:
       - rabbitmq_password
     volumes:

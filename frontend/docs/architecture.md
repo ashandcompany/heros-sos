@@ -316,12 +316,24 @@ Les articles de blog (éditeur Tiptap) passent par cette fonction avant tout aff
 Le jeton est dans `?token=` et n'est consommé qu'au clic sur un bouton : les scanners de mails ouvrent
 les liens sans cliquer. Un lien invalide ou expiré affiche un message d'erreur, jamais le détail.
 
+Le logo en tête des mails de l'API est [public/mail/logo.png](../public/mail/logo.png) : le backend
+l'appelle à l'adresse publique du frontend + `/mail/logo.png`. Ne pas le déplacer.
+
 ### Newsletter
 
 **Où :** cookie `newsletter_subscribed`, `app/newsletter/confirmation`.
 
 Double opt-in : le cookie mémorise la confirmation de l'abonnement côté navigateur. Il est posé par la page
 de confirmation (pas à la demande) et effacé à la désinscription.
+
+### Sonde de santé du conteneur
+
+**Où :** [app/api/health/route.ts](../src/app/api/health/route.ts), `logging` de
+[next.config.ts](../next.config.ts), `healthcheck` de `docker-compose.dev.yml` (à la racine).
+
+Le healthcheck Docker interroge `/api/health` toutes les 10 secondes : la route répond `ok` sans rendre de
+page ni appeler l'API Go (interroger `/` rendait l'accueil, donc deux appels à l'API à chaque passage).
+`next.config.ts` retire ces requêtes du journal de `next dev`.
 
 ### Pages légales
 

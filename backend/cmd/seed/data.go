@@ -74,6 +74,15 @@ type articleSeed struct {
 	DaysAgo   int
 }
 
+type newsletterSeed struct {
+	Subject   string
+	Body      string
+	Author    string // clé du modérateur
+	Recipient string // clé du destinataire ; vide = tous les abonnés
+	DaysAgo   int
+	Sent      bool
+}
+
 var moderators = []moderatorSeed{
 	{person{Key: "admin", FirstName: "Nick", LastName: "Fury", Civility: "monsieur", BirthDate: "1950-12-04",
 		Phone: "+12125550100", Address: address{"1 Triskelion Way", "20001", "Washington", "US"}}},
@@ -467,6 +476,41 @@ var articles = []articleSeed{
 		Title: "Brouillon : retour sur l'invasion kree", Slug: "brouillon-retour-invasion-kree", Published: false, DaysAgo: 1,
 		Excerpt: "Article en cours de rédaction.",
 		Content: `<p>À compléter avec le rapport de Captain Marvel.</p>`,
+	},
+}
+
+var newsletters = []newsletterSeed{
+	{
+		Subject: "Héros SOS est en ligne !", Author: "admin", DaysAgo: 58, Sent: true,
+		Body: `<p>Bonjour,</p>
+<p>Merci de vous être abonné(e) à la newsletter de Héros SOS. Chaque mois, retrouvez ici les interventions marquantes, les nouveaux héros agréés et nos conseils de sécurité.</p>
+<p>Un incident ? Signalez-le en quelques secondes depuis le site : les héros disponibles sont prévenus immédiatement.</p>
+<p>– Nick Fury, pour le Bureau</p>`,
+	},
+	{
+		Subject: "Septembre : la Défense sauvée", Author: "admin", DaysAgo: 30, Sent: true,
+		Body: `<h2>À la une</h2>
+<p><strong>Iron Man</strong>, <strong>Captain Marvel</strong> et <strong>Spider-Man</strong> ont déjoué la tentative d'Ultron de prendre le contrôle des tours de la Défense. Plus de 300 personnes ont été évacuées sans blessé.</p>
+<p>Retrouvez le récit complet sur notre <a href="https://heros-sos.local/blog/bilan-bataille-de-la-defense">blog</a>.</p>`,
+	},
+	{
+		Subject: "Cinq réflexes face à une attaque surhumaine", Author: "maria.hill", DaysAgo: 20, Sent: true,
+		Body: `<ul><li><strong>Éloignez-vous</strong> : les débris volent plus loin qu'on ne le croit.</li><li><strong>Signalez l'incident</strong> avec l'adresse la plus précise possible.</li><li>Ne filmez pas : un héros distrait est un héros en danger.</li><li>Suivez les consignes des héros et des secours.</li><li>Ne tentez jamais de raisonner un vilain, même s'il a l'air sympathique.</li></ul>`,
+	},
+	{
+		Subject: "Votre signalement a fait la différence", Author: "maria.hill", Recipient: "mary.jane.watson", DaysAgo: 12, Sent: true,
+		Body: `<p>Bonjour Mary Jane,</p>
+<p>Grâce à votre alerte rapide, l'équipe d'intervention est arrivée à temps. Tout le Bureau tient à vous remercier personnellement.</p>
+<p>– Maria Hill</p>`,
+	},
+	{
+		Subject: "Octobre : la vidéothèque des héros arrive", Author: "admin", DaysAgo: 8, Sent: true,
+		Body: `<p>Les profils des héros affichent désormais les films qui racontent leurs exploits, et les fiches des vilains listent leurs apparitions.</p>
+<p>Bonne séance !</p>`,
+	},
+	{
+		Subject: "Novembre : bilan de l'invasion kree", Author: "admin", DaysAgo: 1,
+		Body: `<p>À compléter avec le rapport de Captain Marvel et les chiffres d'évacuation.</p>`,
 	},
 }
 

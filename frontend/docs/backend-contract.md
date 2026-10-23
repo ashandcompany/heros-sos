@@ -6,23 +6,24 @@ dit **où le frontend actuel s'écarte de ce contrat** et ce qu'il faut changer 
 branchement. À mettre à jour à chaque fonction branchée.
 
 > [!NOTE]
-> État au 22/10/2026 : **identité (inscription, activation, connexion, session, mot de passe),
+> État au 23/10/2026 : **identité (inscription, activation, connexion, session, mot de passe),
 > demandes de super-héros, fiches publiques et annuaire admin des super-héros, modération des comptes, types
 > d'incident, incidents et interventions (y compris incidents en cours, carte publique et historique public
 > des héros et des vilains), vidéothèque (paginée et filtrable), avis, blog, films des super-vilains, compte
 > (profil, photo, changement d'e-mail confirmé par lien), contact, newsletter (confirmation et
 > désinscription), « déconnexion de tous les appareils », double authentification et
 > compteurs du tableau de bord de modération sont branchés** sur l'API dès que `API_URL` est renseignée (tableau ci-dessous). Le reste fonctionne encore sur
-> des mocks, y compris avec l'API.
+> des mocks, y compris avec l'API. Les numéros de la newsletter (`/admin/newsletters*`) sont dans le contrat
+> mais n'ont pas encore d'écran.
 
 ## 1. Couverture : ce qui est dans le contrat, et le reste
 
-Le contrat décrit aujourd'hui **95 opérations** (plus `/health` et `/ready`) : identité (dont la double
+Le contrat décrit aujourd'hui **110 opérations** (plus `/health` et `/ready`) : identité (dont la double
 authentification des modérateurs) et modération des comptes, annuaire des héros, profil du compte (`/me`,
 photo, changements d'e-mail confirmés par lien), incidents (dont l'historique public d'un héros et d'un
 vilain), interventions, types d'incident, super-vilains, avis sur les interventions, vidéothèque (films), blog
-(articles), contact, newsletter et compteurs du tableau de bord de modération. Seul le tableau de bord
-des super-héros n'a pas encore de contrat.
+(articles), contact, newsletter (abonnements et numéros envoyés par les modérateurs) et compteurs du tableau
+de bord de modération.
 
 ### ✅ Branché sur l'API
 
@@ -83,13 +84,17 @@ Fonctions de chaque fichier :
 - `blog.ts` : `getPublishedArticles`, `getPublishedArticle`, `getAllArticles`, `getArticle`,
   `createArticle`, `updateArticle`, `deleteArticle`.
 - `moderation.ts` : `getModerationSummary` (« Comptes à contrôler » n'a pas d'équivalent :
-  `accounts: null`, tuile masquée).
+  `accounts: null`, tuile masquée ; `draftNewsletters` est lu mais pas encore affiché, faute d'écran de
+  newsletter, et vaut `0` dans le mock).
 
 ### ⏳ Encore sur les mocks (ou à faire)
 
 Tous les domaines sont branchés : tableau de bord des héros, derniers incidents résolus de l'accueil
 et tableau de bord de modération compris (§ 3). Restent masqués avec l'API deux points d'incidents
 sans décision côté backend (§ 3, « Incidents et interventions »).
+
+Reste à construire côté frontend : l'écran des **numéros de la newsletter** (voir « Contact et
+newsletter : choix du branchement », § 3), dont le contrat existe déjà.
 
 > [!WARNING]
 > Les « Future implémentation » écrites dans les commentaires de `lib/api/` pour les domaines non
@@ -493,8 +498,8 @@ Types dans [src/types/review.ts](../src/types/review.ts) (`HeroReview`, `ReviewR
   | `email_change_not_confirmed` (409) | Le titulaire de la nouvelle adresse ne l'a pas encore confirmée |
 
 - **Désinscription de la newsletter** : `/newsletter/desinscription?token=…` (égal à
-  `HEROS_NEWSLETTER_UNSUBSCRIBE_PATH`) est le lien que portera chaque newsletter ; il ne demande aucune
-  connexion et n'expire pas. Confirmé par un bouton, comme les autres liens de mail (`TokenConfirmationForm`).
+  `HEROS_NEWSLETTER_UNSUBSCRIBE_PATH`) est le lien que porte chaque numéro envoyé, propre à son
+  destinataire ; il ne demande aucune connexion et n'expire pas. Confirmé par un bouton, comme les autres liens de mail (`TokenConfirmationForm`).
   Se désabonner retire aussi le cookie `newsletter_subscribed` du navigateur ; se réabonner redemande un
   consentement.
 - **Annuaire des super-héros** (`getSuperHeroProfiles`) : `GET /admin/heroes`, toutes les pages lues
@@ -699,6 +704,22 @@ héros proche, ou sans coordonnées, tous les héros actifs sont prévenus, sans
   qui doit rester égale à `HEROS_NEWSLETTER_CONFIRM_PATH` du backend. Comme l'activation, la
   confirmation se fait par un **bouton** : une messagerie qui ouvre le lien à l'avance ne donne pas
   le consentement à la place du visiteur. `400 invalid_token` → « lien invalide ou expiré ».
+- **Numéros de la newsletter (modérateurs, pas encore d'écran)** : `GET/POST /admin/newsletters`,
+  `GET/PUT/DELETE /admin/newsletters/{id}`, `POST /admin/newsletters/{id}/send`. Un brouillon a un `subject`
+  (1 à 200 caractères), un `body` HTML (balises de l'éditeur seulement, assaini par l'API, 200 000 octets au
+  plus) et un `recipientUserId` facultatif (absent : tous les abonnés confirmés). La liste
+  (`NewsletterSummaryPage`) n'a pas le corps, comme celle des articles. L'envoi répond `202` avec `recipients`
+  (mails mis en file, sans attendre leur remise) et n'a lieu qu'une fois. Le compteur « à envoyer » du tableau
+  de bord est `draftNewsletters` de `GET /admin/moderation/summary`. Codes à mapper au branchement :
+
+  | Code API (statut)                      | Sens                                                               |
+  | -------------------------------------- | ------------------------------------------------------------------ |
+  | `newsletter_already_sent` (409)        | Numéro déjà envoyé : lecture seule (modifier, supprimer, renvoyer) |
+  | `no_subscribed_recipient` (422, envoi) | Aucun destinataire abonné : le numéro reste un brouillon           |
+
+- **Logo des mails** : tous les mails de l'API (gabarit commun) affichent
+  [public/mail/logo.png](../public/mail/logo.png), chargé à `HEROS_PUBLIC_BASE_URL` + `/mail/logo.png`
+  (`MailLogoPath` du backend). Ne pas déplacer ni renommer ce fichier.
 
 ### Pagination
 

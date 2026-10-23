@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { accountsMock } from "@/mocks/users";
-import { citizensMock } from "@/mocks/citizens";
+import { citizensMock, moderatorAccountsMock } from "@/mocks/citizens";
 import type {
   AvatarUpdateResult,
   CitizenAccount,
@@ -25,9 +25,11 @@ import { userFromToken } from "./session-user";
  * bloc `hero` en plus. Ses fonctions (`super-heroes.ts`) réutilisent donc les appels ci-dessous.
  */
 
+/** Mock : compte du citoyen ou du modérateur connecté (celui du super-héros : `super-heroes.ts`). */
 async function findMyAccount(token: string): Promise<CitizenAccount> {
-  const user = await userFromToken(token, "citoyen");
-  const account = citizensMock.find(({ id }) => id === user.id);
+  const user = await userFromToken(token, ["citoyen", "admin"]);
+  const accounts = user.role === "admin" ? moderatorAccountsMock : citizensMock;
+  const account = accounts.find(({ id }) => id === user.id);
   if (!account) throw new Error("404 : compte introuvable");
   return account;
 }
@@ -46,7 +48,7 @@ function fromApiAddress({ complement, ...address }: ApiSchema<"AccountAddress">)
 }
 
 /**
- * Compte du citoyen connecté.
+ * Compte du citoyen ou du modérateur connecté.
  * API : `GET /me`. Mock : le profil complet.
  */
 export async function getMyAccount(token: string): Promise<MyAccount> {

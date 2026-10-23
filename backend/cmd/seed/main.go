@@ -1,6 +1,6 @@
 // Commande seed : remplit une base de développement avec des données de démonstration tirées de
 // l'univers Marvel (modérateurs, super-héros, citoyens, vilains, incidents, interventions, avis,
-// films, articles et abonnés à la newsletter).
+// films, articles, abonnés et newsletters).
 //
 // Tous les comptes partagent le mot de passe lu dans HEROS_SEED_PASSWORD (Avengers2026! par
 // défaut). La commande refuse de tourner en production, et sur une base déjà remplie sans -reset.

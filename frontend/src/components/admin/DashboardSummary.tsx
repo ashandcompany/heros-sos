@@ -61,11 +61,18 @@ export async function DashboardSummary() {
       href: routes.adminBlog,
       cta: "Ouvrir le blog",
     },
+    {
+      label: "Newsletters en brouillon",
+      count: summary.draftNewsletters,
+      href: routes.adminNewsletters,
+      cta: "Ouvrir la newsletter",
+    },
   ];
   const shown = tiles.filter((tile): tile is Tile & { count: number } => tile.count !== null);
-  // Les articles en brouillon (dernière tuile) ne sont pas des éléments à modérer.
+  // Les brouillons (articles, newsletters) ne sont pas des éléments à modérer.
+  const drafts: string[] = [routes.adminBlog, routes.adminNewsletters];
   const total = shown
-    .filter((tile) => tile.href !== routes.adminBlog)
+    .filter((tile) => !drafts.includes(tile.href))
     .reduce((sum, tile) => sum + tile.count, 0);
 
   return (
@@ -109,7 +116,7 @@ export async function DashboardSummary() {
 export function DashboardSummarySkeleton() {
   return (
     <div aria-hidden="true" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      {Array.from({ length: 7 }, (_, index) => (
+      {Array.from({ length: 8 }, (_, index) => (
         <div
           key={index}
           className="h-40 border-2 border-border bg-surface motion-safe:animate-pulse"

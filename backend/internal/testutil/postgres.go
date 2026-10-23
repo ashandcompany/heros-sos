@@ -6,12 +6,14 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"log/slog"
 	"net/url"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 
 	"github.com/ashandcompany/heros-sos/backend/internal/config"
@@ -29,6 +31,10 @@ const (
 	poolSize         = 4
 	pingTimeout      = 5 * time.Second
 	slowQuery        = 5 * time.Second
+
+	deadlockCode      = "40P01"
+	dropSchemaRetries = 5
+	dropSchemaBackoff = 200 * time.Millisecond
 )
 
 // NewDB retourne une base PostgreSQL vierge, migrée, et isolée dans son propre schéma : les
@@ -54,7 +60,7 @@ func NewDB(t testing.TB) *gorm.DB {
 		t.Fatalf("création du schéma de test : %v", err)
 	}
 	t.Cleanup(func() {
-		if err := admin.Exec(`DROP SCHEMA ` + schema + ` CASCADE`).Error; err != nil {
+		if err := dropSchema(admin, schema); err != nil {
 			t.Errorf("suppression du schéma de test : %v", err)
 		}
 		_ = database.Close(admin)
@@ -90,10 +96,27 @@ func DatabaseURL(t testing.TB) string {
 		t.Fatalf("création du schéma de test : %v", err)
 	}
 	t.Cleanup(func() {
-		_ = admin.Exec(`DROP SCHEMA ` + schema + ` CASCADE`).Error
+		_ = dropSchema(admin, schema)
 		_ = database.Close(admin)
 	})
 	return withSearchPath(t, baseURL, schema)
+}
+
+// dropSchema supprime un schéma de test. Une requête interrompue par l'arrêt du serveur testé
+// (janitor, relais d'événements…) peut encore tourner côté PostgreSQL après que le client a rendu
+// la main : elle prend ses verrous dans un autre ordre que DROP SCHEMA … CASCADE, et PostgreSQL
+// sacrifie l'une des deux. Le DROP est alors rejoué une fois l'autre requête terminée.
+func dropSchema(db *gorm.DB, schema string) error {
+	var err error
+	for attempt := range dropSchemaRetries {
+		err = db.Exec(`DROP SCHEMA ` + schema + ` CASCADE`).Error
+		var pgErr *pgconn.PgError
+		if err == nil || !errors.As(err, &pgErr) || pgErr.Code != deadlockCode {
+			return err
+		}
+		time.Sleep(time.Duration(attempt+1) * dropSchemaBackoff)
+	}
+	return err
 }
 
 func open(t testing.TB, databaseURL string) *gorm.DB {

@@ -51,6 +51,7 @@ type seeder struct {
 type stats struct {
 	Moderators, Heroes, HeroRequests, Citizens, Types, Villains, Films int
 	Incidents, Interventions, Reviews, Replies, Articles, Subscribers  int
+	Newsletters, NewslettersSent                                       int
 	PostersFetched                                                     int
 }
 
@@ -77,6 +78,7 @@ func (s *seeder) run(ctx context.Context, reset bool) (stats, error) {
 		steps := []func(context.Context) error{
 			s.seedModerators, s.seedIncidentTypes, s.seedHeroes, s.seedCitizens,
 			s.seedFilms, s.seedVillains, s.seedIncidents, s.seedArticles, s.seedNewsletter,
+			s.seedNewsletterIssues,
 		}
 		for _, step := range steps {
 			if err := step(ctx); err != nil {
@@ -593,6 +595,38 @@ func (s *seeder) seedNewsletter(ctx context.Context) error {
 	return nil
 }
 
+// seedNewsletterIssues ajoute les newsletters rédigées par les modérateurs : envoyées à tous les
+// abonnés, ciblées sur un utilisateur, ou encore en brouillon.
+func (s *seeder) seedNewsletterIssues(ctx context.Context) error {
+	for _, n := range newsletters {
+		authorID, ok := s.userIDs[n.Author]
+		if !ok {
+			return fmt.Errorf("newsletter %q : modérateur %s inconnu", n.Subject, n.Author)
+		}
+		var recipientID *uuid.UUID
+		if n.Recipient != "" {
+			id, ok := s.userIDs[n.Recipient]
+			if !ok {
+				return fmt.Errorf("newsletter %q : destinataire %s inconnu", n.Subject, n.Recipient)
+			}
+			recipientID = &id
+		}
+		createdAt := s.daysAgo(n.DaysAgo)
+		var sentAt *time.Time
+		if n.Sent {
+			at := createdAt.Add(s.minutes(30, 6*60))
+			sentAt = &at
+			s.stats.NewslettersSent++
+		}
+		if err := s.exec(ctx, `INSERT INTO newsletters (id, subject, body_html, recipient_user_id, created_by, created_at, sent_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?)`, ids.New(), n.Subject, n.Body, recipientID, authorID, createdAt, sentAt); err != nil {
+			return fmt.Errorf("newsletter %q : %w", n.Subject, err)
+		}
+		s.stats.Newsletters++
+	}
+	return nil
+}
+
 // --- Résumé ------------------------------------------------------------------------------------
 
 func (st stats) print(w io.Writer, password string) {
@@ -600,7 +634,7 @@ func (st stats) print(w io.Writer, password string) {
   %d modérateurs, %d super-héros validés, %d demandes de héros (en attente ou refusées), %d citoyens
   %d types d'incident, %d vilains, %d films (%d affiches OMDb)
   %d incidents, %d interventions, %d avis, %d réponses de héros
-  %d articles, %d abonnés à la newsletter
+  %d articles, %d abonnés à la newsletter, %d newsletters (%d envoyées)
 
 Comptes (mot de passe commun : %s) :
   modérateur  %s
@@ -610,7 +644,7 @@ Comptes (mot de passe commun : %s) :
 		st.Moderators, st.Heroes, st.HeroRequests, st.Citizens,
 		st.Types, st.Villains, st.Films, st.PostersFetched,
 		st.Incidents, st.Interventions, st.Reviews, st.Replies,
-		st.Articles, st.Subscribers,
+		st.Articles, st.Subscribers, st.Newsletters, st.NewslettersSent,
 		password,
 		email(moderators[0].Key),
 		email(heroes[0].Key), email(heroes[6].Key),

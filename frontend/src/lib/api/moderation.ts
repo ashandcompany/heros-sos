@@ -2,6 +2,7 @@ import { articlesMock } from "@/mocks/articles";
 import { citizensMock } from "@/mocks/citizens";
 import { heroApplicationsMock } from "@/mocks/hero-applications";
 import { incidentsMock } from "@/mocks/incidents";
+import { newslettersMock } from "@/mocks/newsletters";
 import { reviewsMock } from "@/mocks/reviews";
 import { videosMock } from "@/mocks/videos";
 import type { ModerationSummary } from "@/types";
@@ -28,7 +29,7 @@ export async function getModerationSummary(token: string): Promise<ModerationSum
   return mockResponse({
     incidents: pending(incidentsMock),
     draftArticles: articlesMock.filter(({ status }) => status === "brouillon").length,
-    draftNewsletters: 0,
+    draftNewsletters: newslettersMock.filter(({ sentAt }) => !sentAt).length,
     videos: pending(videosMock),
     // Les avis sont publiés dès leur envoi : seules les réponses modifiées attendent un modérateur.
     comments: reviewsMock.filter(({ reply }) => reply?.status === "en-attente").length,

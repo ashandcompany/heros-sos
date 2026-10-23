@@ -22,8 +22,8 @@ import { idleFormState, type FormState } from "@/lib/validation/form-state";
 import type { PostalAddress } from "@/types";
 
 /*
- * Formulaires du compte. Ils servent aussi au profil des super-héros : l'action par défaut
- * (espace citoyen) peut être remplacée par celle d'un autre espace.
+ * Formulaires du compte. Ils servent aussi aux profils des super-héros et des modérateurs : l'action
+ * par défaut (espace citoyen) peut être remplacée par celle d'un autre espace.
  */
 
 type FormAction<Field extends string> = (
@@ -259,8 +259,14 @@ export function EmailChangeForm({
   );
 }
 
-export function NewsletterSettingsForm({ subscribed }: { subscribed: boolean }) {
-  const [state, formAction] = useActionState(updateNewsletterAction, idleFormState);
+export function NewsletterSettingsForm({
+  subscribed,
+  action = updateNewsletterAction,
+}: {
+  subscribed: boolean;
+  action?: FormAction<string>;
+}) {
+  const [state, formAction] = useActionState(action, idleFormState);
 
   return (
     <form action={formAction} className="space-y-4">

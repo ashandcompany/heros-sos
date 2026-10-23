@@ -5,6 +5,7 @@ import type {
   IncidentStatus,
   IncidentTypeInput,
   IncidentUpdate,
+  NewsletterIssueInput,
   ThreatLevel,
   VillainInput,
   VillainStatus,
@@ -137,6 +138,48 @@ export function toArticleInput(values: Record<ArticleField, string>): ArticleInp
     content: values.content,
     status: values.status as ArticleStatus,
   };
+}
+
+/* ---------- Newsletter ---------- */
+
+export const newsletterFields = ["subject", "body"] as const;
+export type NewsletterField = (typeof newsletterFields)[number];
+
+/** Bornes de l'API (backend internal/newsletter/issue.go). */
+export const NEWSLETTER_SUBJECT_MAX_LENGTH = 200;
+const NEWSLETTER_BODY_MAX_BYTES = 200_000;
+
+export function readNewsletterValues(formData: FormData): Record<NewsletterField, string> {
+  return {
+    subject: String(formData.get("subject") ?? "").trim(),
+    body: String(formData.get("body") ?? ""),
+  };
+}
+
+export function validateNewsletter(
+  values: Record<NewsletterField, string>,
+): Partial<Record<NewsletterField, string>> {
+  return {
+    subject: !values.subject
+      ? "Indiquez l'objet du mail."
+      : [...values.subject].length > NEWSLETTER_SUBJECT_MAX_LENGTH
+        ? `L'objet ne doit pas dépasser ${NEWSLETTER_SUBJECT_MAX_LENGTH} caractères.`
+        : undefined,
+    body:
+      visibleTextLength(values.body) === 0
+        ? "Rédigez le contenu de la newsletter."
+        : new TextEncoder().encode(values.body).length > NEWSLETTER_BODY_MAX_BYTES
+          ? "Le contenu est trop long."
+          : undefined,
+  };
+}
+
+/** `recipientUserId` : destinataire unique d'un brouillon, conservé tel quel (`null` : tous les abonnés). */
+export function toNewsletterInput(
+  values: Record<NewsletterField, string>,
+  recipientUserId: string | null,
+): NewsletterIssueInput {
+  return { subject: values.subject, body: values.body, recipientUserId };
 }
 
 /* ---------- Référentiel des types d'incident ---------- */

@@ -7,7 +7,9 @@ import {
   addVillainFilm,
   arbitrateIntervention,
   createArticle,
+  createNewsletterIssue,
   deleteArticle,
+  deleteNewsletterIssue,
   createIncidentType,
   createVillain,
   deleteVideo,
@@ -23,35 +25,53 @@ import {
   parseHeroVideoKey,
   reviewEmailChange,
   reviewHeroApplication,
+  sendNewsletterIssue,
   updateArticle,
   updateIncident,
+  updateMyAvatar,
+  updateMyContact,
+  updateNewsletterIssue,
+  updateNewsletterPreference,
   updateVillain,
 } from "@/lib/api";
 import { isModerationStatus } from "@/lib/format";
 import {
   adminArticleRoute,
   adminIncidentRoute,
+  adminNewsletterRoute,
   adminVillainRoute,
   routes,
   villainSheetRoute,
 } from "@/lib/routes";
 import { requireAdminSession } from "@/lib/server-session";
 import {
+  avatarErrorMessage,
+  contactFailureState,
+  readContactValues,
+  validateAvatar,
+  validateContact,
+  type ContactField,
+} from "@/lib/validation/account";
+import {
   readArticleValues,
   readIncidentEditValues,
   readIncidentTypeValues,
+  readNewsletterValues,
   readVillainValues,
   toIncidentTypeInput,
   toArticleInput,
   toIncidentUpdate,
+  toNewsletterInput,
   toVillainInput,
   validateArticle,
   validateIncidentEdit,
   validateIncidentType,
+  validateNewsletter,
   validateVillain,
   type ArticleField,
   type IncidentEditField,
   type IncidentTypeField,
+  type NewsletterField,
   type VillainField,
 } from "@/lib/validation/admin";
 import { apiFailureMessage, hasFieldErrors, type FormState } from "@/lib/validation/form-state";
@@ -619,4 +639,150 @@ export async function deleteArticleAction(
 
   for (const path of [routes.admin, routes.adminBlog, routes.blog]) revalidatePath(path);
   redirect(routes.adminBlog);
+}
+
+/* ---------- Newsletter ---------- */
+
+export async function saveNewsletterAction(
+  _previousState: FormState<NewsletterField>,
+  formData: FormData,
+): Promise<FormState<NewsletterField>> {
+  const token = await requireAdminSession();
+  const id = String(formData.get("id") ?? "");
+  const values = readNewsletterValues(formData);
+  const fieldErrors = validateNewsletter(values);
+
+  if (hasFieldErrors(fieldErrors)) return { status: "error", fieldErrors, values };
+
+  // Un brouillon ciblé (créé par l'API) garde son destinataire : le formulaire ne le change pas.
+  const input = toNewsletterInput(values, String(formData.get("recipientUserId") ?? "") || null);
+  if (id) {
+    const result = await updateNewsletterIssue(token, id, input);
+    if (!result.ok) return { status: "error", message: result.error, fieldErrors: {}, values };
+    for (const path of [routes.admin, routes.adminNewsletters, adminNewsletterRoute(id)]) {
+      revalidatePath(path);
+    }
+    return { status: "success", message: "Brouillon enregistré.", fieldErrors: {} };
+  }
+
+  const result = await createNewsletterIssue(token, input);
+  if (!result.ok || !result.id) {
+    return {
+      status: "error",
+      message: result.ok ? "La newsletter n'a pas pu être créée." : result.error,
+      fieldErrors: {},
+      values,
+    };
+  }
+  for (const path of [routes.admin, routes.adminNewsletters]) revalidatePath(path);
+  redirect(adminNewsletterRoute(result.id));
+}
+
+export async function deleteNewsletterAction(
+  _previousState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const token = await requireAdminSession();
+  const id = String(formData.get("id") ?? "");
+  if (!id) return invalidRequest;
+
+  const result = await deleteNewsletterIssue(token, id);
+  if (!result.ok) return { status: "error", message: result.error, fieldErrors: {} };
+
+  for (const path of [routes.admin, routes.adminNewsletters]) revalidatePath(path);
+  redirect(routes.adminNewsletters);
+}
+
+/** Envoie un brouillon, puis revient sur sa page (lecture seule) avec le nombre de destinataires. */
+export async function sendNewsletterAction(
+  _previousState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const token = await requireAdminSession();
+  const id = String(formData.get("id") ?? "");
+  if (!id) return invalidRequest;
+
+  const result = await sendNewsletterIssue(token, id);
+  if (!result.ok) return { status: "error", message: result.error, fieldErrors: {} };
+
+  for (const path of [routes.admin, routes.adminNewsletters, adminNewsletterRoute(id)]) {
+    revalidatePath(path);
+  }
+  redirect(`${adminNewsletterRoute(id)}?envoyee=${result.recipients}`);
+}
+
+/* ---------- Mon profil ---------- */
+
+/*
+ * Profil du modérateur connecté : mêmes routes `/me` que les autres rôles. Son adresse email ne se
+ * change pas ici : personne ne pourrait valider sa demande (voir backend routes_account.go).
+ */
+
+export async function updateModeratorContactAction(
+  _previousState: FormState<ContactField>,
+  formData: FormData,
+): Promise<FormState<ContactField>> {
+  const token = await requireAdminSession();
+  const values = readContactValues(formData);
+  const fieldErrors = validateContact(values);
+
+  if (hasFieldErrors(fieldErrors)) return { status: "error", fieldErrors, values };
+
+  const result = await updateMyContact(token, {
+    mobilePhone: values.mobilePhone.replace(/[\s.-]/g, ""),
+    address: {
+      street: values.street,
+      complement: values.complement || null,
+      postalCode: values.postalCode,
+      city: values.city,
+      country: values.country,
+    },
+  });
+
+  if (!result.ok) return contactFailureState(result, values);
+
+  revalidatePath(routes.adminProfile);
+  return { status: "success", message: "Vos coordonnées ont été mises à jour.", fieldErrors: {} };
+}
+
+export async function updateModeratorAvatarAction(
+  _previousState: FormState<"avatar">,
+  formData: FormData,
+): Promise<FormState<"avatar">> {
+  const token = await requireAdminSession();
+  const file = formData.get("avatar");
+  const avatar = file instanceof File ? file : null;
+  const error = validateAvatar(avatar);
+
+  if (error || !avatar) return { status: "error", fieldErrors: { avatar: error } };
+
+  const result = await updateMyAvatar(token, avatar);
+  if (!result.ok) return { status: "error", message: avatarErrorMessage(result), fieldErrors: {} };
+
+  revalidatePath(routes.adminProfile);
+  return {
+    status: "success",
+    message: "Votre photo de profil a été mise à jour.",
+    fieldErrors: {},
+  };
+}
+
+export async function updateModeratorNewsletterAction(
+  _previousState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const token = await requireAdminSession();
+  const subscribed = formData.get("newsletter") === "on";
+
+  const result = await updateNewsletterPreference(token, subscribed);
+  if (!result.ok) return { status: "error", message: apiFailureMessage(result), fieldErrors: {} };
+
+  revalidatePath(routes.adminProfile);
+  return {
+    status: "success",
+    message: subscribed
+      ? "Vous êtes abonné·e à la newsletter."
+      : "Vous ne recevrez plus la newsletter.",
+    fieldErrors: {},
+  };
 }

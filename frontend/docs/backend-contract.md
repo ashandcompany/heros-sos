@@ -17,7 +17,7 @@ branchement. À mettre à jour à chaque fonction branchée.
 
 ## 1. Couverture : ce qui est dans le contrat, et le reste
 
-Le contrat décrit aujourd'hui **111 opérations** (plus `/health` et `/ready`) : identité (dont la double
+Le contrat décrit aujourd'hui **113 opérations** (plus `/health` et `/ready`) : identité (dont la double
 authentification des modérateurs) et modération des comptes, annuaire des héros, profil du compte (`/me`,
 photo, changements d'e-mail confirmés par lien), incidents (dont l'historique public d'un héros et d'un
 vilain), interventions, types d'incident, super-vilains, avis sur les interventions, vidéothèque (films), blog
@@ -28,7 +28,7 @@ de bord de modération.
 
 | Domaine frontend                      | Fichier de `lib/api/`                              | Contrat OpenAPI                                                                                                                        |
 | ------------------------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Connexion, session, déconnexion       | `auth.ts`                                          | `/auth/login`, `/auth/me`, `/auth/logout`, `/auth/logout-all`                                                                          |
+| Connexion, session, déconnexion       | `auth.ts`                                          | `/auth/login`, `/auth/me`, `/auth/logout`, `/auth/logout-all`, `/me/password`                                                          |
 | Double authentification (TOTP)        | `mfa.ts`                                           | `/auth/mfa`, `/auth/mfa/setup`, `/auth/mfa/enable`, `/auth/mfa/verify`, `/auth/mfa/recovery-codes`                                     |
 | Inscription                           | `auth.ts`                                          | `/auth/register`                                                                                                                       |
 | Activation du compte                  | `auth.ts`                                          | `/auth/activate`, `/auth/resend-activation`                                                                                            |
@@ -56,9 +56,9 @@ de bord de modération.
 Fonctions de chaque fichier :
 
 - `auth.ts` : `login`, `getSessionUser`, `getMfaSession`, `logout`, `logoutAll`, `register`, `activateAccount`,
-  `resendActivation`, `requestPasswordReset`, `confirmPasswordReset`.
+  `resendActivation`, `requestPasswordReset`, `confirmPasswordReset`, `changePassword`.
 - `mfa.ts` : `getMfaOverview`, `startMfaSetup`, `enableMfa`, `verifyMfa`, `regenerateMfaRecoveryCodes`.
-- `account.ts` : `getMyAccount`, `updateMyContact`, `updateMyAvatar`, `requestEmailChange`,
+- `account.ts` : `getMyAccount`, `updateMyContact`, `updateMyAvatar`, `removeMyAvatar`, `requestEmailChange`,
   `confirmEmailChange`, `updateNewsletterPreference`, `getEmailChangeRequests`, `reviewEmailChange` ;
   `avatar.ts` : `getMyAvatar`.
 - `newsletter.ts` : `subscribeToNewsletter`, `confirmNewsletterSubscription`, `unsubscribeFromNewsletter` ;
@@ -76,7 +76,8 @@ Fonctions de chaque fichier :
   `moderateReply`.
 - `villains.ts` : `getVillains`, `getVillainsPage`, `getVillain`, `createVillain`, `updateVillain`.
 - `super-heroes.ts` (fiches publiques) : `getSuperHeroes`, `getFeaturedSuperHeroes`, `getSuperHero` ; (profil
-  connecté) `getMyHeroProfile`, `updateMyHeroContact`, `updateMyHeroAvatar`, `requestHeroEmailChange` ;
+  connecté) `getMyHeroProfile`, `updateMyHeroContact`, `updateMyHeroPublicProfile`, `updateMyHeroAvatar`,
+  `removeMyHeroAvatar`, `requestHeroEmailChange` ;
   (partage de position) `grantHeroLocationConsent`, `revokeHeroLocationConsent`, `saveHeroLocation`,
   `deleteHeroLocation` ; (annuaire admin) `getSuperHeroProfiles`.
 - `videos.ts` : `getMyVideos`, `getMyVideosPage`, `addMyVideo`, `deleteMyVideo`, `getHeroVideos`,
@@ -463,7 +464,18 @@ Types dans [src/types/review.ts](../src/types/review.ts) (`HeroReview`, `ReviewR
   `/api/v1/avatars/<uuid>.jpg`) change à chaque envoi et n'est publique qu'**à travers le reverse
   proxy**, qui l'envoie à l'API : avec `npm run dev` seul sur le port 3000, la photo ne s'affiche pas
   (ouvrir le site par le proxy, `http://localhost:8088`). `Avatar` ne la fait donc pas passer par
-  l'optimiseur de Next (`unoptimized`), qui irait la chercher sur son propre serveur.
+  l'optimiseur de Next (`unoptimized`), qui irait la chercher sur son propre serveur. « Retirer la
+  photo » (`RemoveAvatarForm`, affiché seulement s'il y en a une) appelle `DELETE /me/avatar`
+  (`deleteMyAvatar`), qui supprime aussi le fichier.
+- **Profil public d'un héros** : `PATCH /me` avec `{ alias, bio }` (`updateMyHeroPublicProfile`,
+  formulaire « Profil public » de « Mon profil »). Mêmes règles que la demande de statut
+  (`validateHeroPublicProfile`) ; `409 alias_already_used` → « pseudo déjà utilisé » sur le champ.
+  Le pseudo sert aussi d'identifiant de connexion : il change aussitôt.
+- **Mot de passe** : `POST /me/password` avec `{ currentPassword, newPassword }` (`changePassword`,
+  panneau « Mot de passe » des trois rôles). L'API ferme les autres sessions et répond comme une
+  connexion, avec un **nouveau cookie** que `changePasswordAction` recopie (`setSessionCookie`) : la
+  personne reste connectée. `422` avec `currentPassword` → « mot de passe actuel incorrect », avec
+  `newPassword` → « trop faible » ; `429` → délai `Retry-After` (route limitée par utilisateur).
 - **Changement d'email** : `POST /me/email-change-requests` (citoyen **et** héros). Les demandes des
   deux rôles arrivent dans la même liste du back-office, `GET /admin/email-change-requests?status=pending`,
   décidées par `POST …/{id}/approve` ou `…/reject`. L'identifiant d'une demande **change quand son

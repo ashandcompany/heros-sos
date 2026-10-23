@@ -86,6 +86,14 @@ export {
   unsubscribeFromNewsletter,
 } from "./newsletter";
 export {
+  createNewsletterIssue,
+  deleteNewsletterIssue,
+  getNewsletterIssue,
+  getNewsletterIssues,
+  sendNewsletterIssue,
+  updateNewsletterIssue,
+} from "./newsletter-issues";
+export {
   getHeroPublicReviews,
   getMyInterventions,
   getMyReputation,

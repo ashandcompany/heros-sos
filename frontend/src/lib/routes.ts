@@ -50,6 +50,8 @@ export const routes = {
   adminSecurity: "/admin/securite",
   adminBlog: "/admin/blog",
   adminNewArticle: "/admin/blog/nouveau",
+  adminNewsletters: "/admin/newsletter",
+  adminNewNewsletter: "/admin/newsletter/nouvelle",
   about: "/a-propos",
   contact: "/contact",
   faq: "/faq",
@@ -60,6 +62,7 @@ export const routes = {
 export const adminIncidentRoute = (id: string) => `${routes.adminIncidents}/${id}`;
 export const adminVillainRoute = (id: string) => `${routes.adminVillains}/${id}`;
 export const adminArticleRoute = (id: string) => `${routes.adminBlog}/${id}`;
+export const adminNewsletterRoute = (id: string) => `${routes.adminNewsletters}/${id}`;
 export const citizenIncidentRoute = (id: string) => `${routes.profileIncidents}/${id}`;
 export const heroIncidentRoute = (id: string) => `${routes.heroIncidents}/${id}`;
 export const blogArticleRoute = (slug: string) => `${routes.blog}/${slug}`;
@@ -152,6 +155,7 @@ export const adminNav: NavEntry[] = [
       { label: "Vidéothèque", href: routes.adminVideos },
       { label: "Commentaires", href: routes.adminComments },
       { label: "Blog", href: routes.adminBlog },
+      { label: "Newsletter", href: routes.adminNewsletters },
     ],
   },
   {

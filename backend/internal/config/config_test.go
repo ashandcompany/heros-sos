@@ -667,3 +667,40 @@ func TestRabbitMQURLCanComeFromASecretFile(t *testing.T) {
 		t.Fatalf("URL lue dans le fichier = %q, %v", cfg.Mail.RabbitMQ.URL, err)
 	}
 }
+
+func TestMailWorkerNeedsNeitherTheDatabaseNorTheEncryptionKeys(t *testing.T) {
+	env := map[string]string{
+		envMailQueue:   "rabbitmq",
+		envRabbitMQURL: "amqp://heros:heros@rabbitmq:5672/",
+		envSMTPHost:    "mailpit",
+		envSMTPPort:    "1025",
+		envMailDriver:  "smtp",
+	}
+	worker, err := LoadMailWorker(fakeEnv(env))
+	if err != nil {
+		t.Fatalf("le worker ne doit exiger ni %s ni %s : %v", envDatabaseURL, envCryptoKeys, err)
+	}
+	if worker.Mail.Queue != MailQueueRabbitMQ || worker.Mail.SMTP.Host != "mailpit" || worker.Mail.Driver != MailDriverSMTP {
+		t.Errorf("configuration du worker = %+v", worker.Mail)
+	}
+}
+
+func TestMailWorkerRefusesTheInMemoryQueueAndInheritsProductionRules(t *testing.T) {
+	env := map[string]string{envRabbitMQURL: "amqp://heros:heros@rabbitmq:5672/"}
+	if _, err := LoadMailWorker(fakeEnv(env)); err == nil || !strings.Contains(err.Error(), envMailQueue) {
+		t.Errorf("file en mémoire : erreur = %v, attendu un message sur %s", err, envMailQueue)
+	}
+
+	production := map[string]string{
+		envEnvironment: string(EnvironmentProduction), envMailQueue: "rabbitmq",
+		envRabbitMQURL: "amqp://heros:heros@rabbitmq:5672/", envSMTPHost: "smtp.example",
+	}
+	worker, err := LoadMailWorker(fakeEnv(production))
+	if err != nil || worker.LogFormat != LogFormatJSON || worker.Mail.SMTP.TLSMode != TLSModeStartTLS {
+		t.Fatalf("production : %v (%+v)", err, worker)
+	}
+	production[envMailDriver] = "log"
+	if _, err := LoadMailWorker(fakeEnv(production)); err == nil || !strings.Contains(err.Error(), envMailDriver) {
+		t.Errorf("le driver log doit rester interdit en production, y compris pour le worker : %v", err)
+	}
+}

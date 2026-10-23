@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -63,6 +64,16 @@ func newE2E(t *testing.T, overrides map[string]string) *e2e {
 		"HEROS_RATE_LOGIN_PER_IDENTIFIER":     "10000/1h",
 		"HEROS_RATE_PASSWORD_RESET_PER_IP":    "10000/1h",
 		"HEROS_RATE_PASSWORD_RESET_PER_EMAIL": "10000/1h",
+		"HEROS_RATE_CONTACT_PER_IP":           "10000/1h",
+		"HEROS_RATE_NEWSLETTER_PER_IP":        "10000/1h",
+		"HEROS_RATE_NEWSLETTER_PER_EMAIL":     "10000/1h",
+		"HEROS_RATE_EMAIL_CHANGE_PER_USER":    "10000/1h",
+		"HEROS_RATE_AVATAR_PER_USER":          "10000/1h",
+		"HEROS_RATE_PASSWORD_CHECK_PER_USER":  "10000/1h",
+		"HEROS_RATE_EXPORT_PER_USER":          "10000/1h",
+		"HEROS_RATE_HERO_LOCATION_PER_USER":   "10000/1h",
+		// Pas de cache sur les statistiques du tableau de bord : les tests veulent voir leurs écritures.
+		"HEROS_DASHBOARD_STATS_TTL": "0",
 	}
 	for name, value := range overrides {
 		env[name] = value
@@ -72,7 +83,12 @@ func newE2E(t *testing.T, overrides map[string]string) *e2e {
 	clk := clock.NewFake(startTime)
 	recorder := mail.NewRecorder()
 
-	app, err := server.NewWithDB(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), db,
+	// HEROS_TEST_LOG=1 affiche les journaux de l'application : utile pour comprendre une erreur 500.
+	logger := slog.New(slog.DiscardHandler)
+	if os.Getenv("HEROS_TEST_LOG") != "" {
+		logger = slog.New(slog.NewTextHandler(os.Stderr, nil))
+	}
+	app, err := server.NewWithDB(cfg, logger, db,
 		server.WithClock(clk), server.WithMailer(recorder))
 	if err != nil {
 		t.Fatal(err)

@@ -61,3 +61,15 @@ func NewPageResponse[T any](items []T, total int64, page Page) PageResponse[T] {
 	}
 	return PageResponse[T]{Items: items, Total: int(total), Limit: page.Limit, Offset: page.Offset}
 }
+
+// CursorPageResponse est PageResponse pour une liste qui se parcourt aussi par curseur : NextCursor, absent de
+// la dernière page, se renvoie tel quel dans le paramètre cursor pour obtenir la page suivante.
+type CursorPageResponse[T any] struct {
+	PageResponse[T]
+	NextCursor string `json:"nextCursor,omitempty"`
+}
+
+// NewCursorPageResponse construit l'enveloppe d'une liste paginée par curseur (nextCursor vide : dernière page).
+func NewCursorPageResponse[T any](items []T, total int64, page Page, nextCursor string) CursorPageResponse[T] {
+	return CursorPageResponse[T]{PageResponse: NewPageResponse(items, total, page), NextCursor: nextCursor}
+}

@@ -5,6 +5,7 @@ package config
 const (
 	envEnvironment = "HEROS_ENV"
 	envLogLevel    = "HEROS_LOG_LEVEL"
+	envLogFormat   = "HEROS_LOG_FORMAT"
 	envAutoMigrate = "HEROS_AUTO_MIGRATE"
 
 	envHTTPAddr              = "HEROS_HTTP_ADDR"
@@ -55,8 +56,24 @@ const (
 	envRateIncidentCreatePerUser = "HEROS_RATE_INCIDENT_CREATE_PER_USER"
 	envMaxTrackedRateKeys        = "HEROS_RATE_MAX_TRACKED_KEYS"
 
+	envRateContactPerIP         = "HEROS_RATE_CONTACT_PER_IP"
+	envRateNewsletterPerIP      = "HEROS_RATE_NEWSLETTER_PER_IP"
+	envRateNewsletterPerEmail   = "HEROS_RATE_NEWSLETTER_PER_EMAIL"
+	envRateEmailChangePerUser   = "HEROS_RATE_EMAIL_CHANGE_PER_USER"
+	envRateAvatarPerUser        = "HEROS_RATE_AVATAR_PER_USER"
+	envRateMFAVerifyPerUser     = "HEROS_RATE_MFA_VERIFY_PER_USER"
+	envRatePasswordCheckPerUser = "HEROS_RATE_PASSWORD_CHECK_PER_USER"
+	envRateExportPerUser        = "HEROS_RATE_EXPORT_PER_USER"
+	envRateHeroLocationPerUser  = "HEROS_RATE_HERO_LOCATION_PER_USER"
+
 	envActivationTokenTTL    = "HEROS_ACTIVATION_TOKEN_TTL"
 	envPasswordResetTokenTTL = "HEROS_PASSWORD_RESET_TOKEN_TTL"
+
+	envNewsletterConfirmTTL  = "HEROS_NEWSLETTER_CONFIRM_TTL"
+	envEmailChangeConfirmTTL = "HEROS_EMAIL_CHANGE_CONFIRM_TTL"
+
+	envMFAModeratorRequired = "HEROS_MFA_MODERATOR_REQUIRED"
+	envMFAIssuer            = "HEROS_MFA_ISSUER"
 
 	envCSRFSecret    = "HEROS_CSRF_SECRET"
 	envCryptoKeys    = "HEROS_CRYPTO_KEYS"
@@ -76,25 +93,56 @@ const (
 	envMailMaxAttempts = "HEROS_MAIL_MAX_ATTEMPTS"
 	envMailRetryDelay  = "HEROS_MAIL_RETRY_DELAY"
 	envMailSendTimeout = "HEROS_MAIL_SEND_TIMEOUT"
+	envMailQueue       = "HEROS_MAIL_QUEUE"
+
+	envRabbitMQURL            = "HEROS_RABBITMQ_URL"
+	envRabbitMQConfirmTimeout = "HEROS_RABBITMQ_CONFIRM_TIMEOUT"
+	envRabbitMQReconnectDelay = "HEROS_RABBITMQ_RECONNECT_DELAY"
 
 	envOMDbAPIKey  = "HEROS_OMDB_API_KEY"
 	envOMDbBaseURL = "HEROS_OMDB_BASE_URL"
 	envOMDbTimeout = "HEROS_OMDB_TIMEOUT"
 
+	envContactRecipient = "HEROS_CONTACT_RECIPIENT"
+
+	envAvatarDir          = "HEROS_AVATAR_DIR"
+	envAvatarMaxBytes     = "HEROS_AVATAR_MAX_BYTES"
+	envAvatarMaxDimension = "HEROS_AVATAR_MAX_DIMENSION"
+
 	envPublicBaseURL     = "HEROS_PUBLIC_BASE_URL"
 	envActivationPath    = "HEROS_ACTIVATION_PATH"
 	envPasswordResetPath = "HEROS_PASSWORD_RESET_PATH"
 
+	envNewsletterConfirmPath     = "HEROS_NEWSLETTER_CONFIRM_PATH"
+	envNewsletterUnsubscribePath = "HEROS_NEWSLETTER_UNSUBSCRIBE_PATH"
+	envEmailChangeConfirmPath    = "HEROS_EMAIL_CHANGE_CONFIRM_PATH"
+
 	envCleanupInterval  = "HEROS_CLEANUP_INTERVAL"
+	envCleanupTimeout   = "HEROS_CLEANUP_TIMEOUT"
 	envSessionRetention = "HEROS_SESSION_RETENTION"
 	envTokenRetention   = "HEROS_TOKEN_RETENTION"
+	envCommandRetention = "HEROS_COMMAND_RETENTION"
+
+	envEventsPollInterval = "HEROS_EVENTS_POLL_INTERVAL"
+	envEventsBatchSize    = "HEROS_EVENTS_BATCH_SIZE"
+	envEventsHeartbeat    = "HEROS_EVENTS_HEARTBEAT"
+
+	envEventsMaxStreamsPerUser = "HEROS_EVENTS_MAX_STREAMS_PER_USER"
+	envEventsStreamMaxAge      = "HEROS_EVENTS_STREAM_MAX_AGE"
+	envEventsStreamBuffer      = "HEROS_EVENTS_STREAM_BUFFER"
+
+	envDashboardStatsTTL = "HEROS_DASHBOARD_STATS_TTL"
+	envDashboardWarmup   = "HEROS_DASHBOARD_WARMUP"
+
+	envLocationTTL   = "HEROS_LOCATION_TTL"
+	envAlertRadiusKm = "HEROS_ALERT_RADIUS_KM"
 )
 
 // EnvVarNames retourne la liste de toutes les variables d'environnement reconnues.
 // Elle sert à vérifier que .env.example reste synchronisé avec le code.
 func EnvVarNames() []string {
 	return []string{
-		envEnvironment, envLogLevel, envAutoMigrate,
+		envEnvironment, envLogLevel, envLogFormat, envAutoMigrate,
 		envHTTPAddr, envHTTPReadHeaderTimeout, envHTTPReadTimeout, envHTTPWriteTimeout,
 		envHTTPIdleTimeout, envHTTPShutdownTimeout, envHTTPMaxBodyBytes, envHealthcheckTimeout, envTrustedProxies,
 		envAllowedOrigins,
@@ -109,13 +157,23 @@ func EnvVarNames() []string {
 		envLockoutMaxFailures, envLockoutBaseDelay, envLockoutMaxDelay,
 		envRateLoginPerIP, envRateLoginPerIdentifier, envRateRegisterPerIP,
 		envRatePasswordResetPerIP, envRatePasswordResetPerKey, envRateIncidentCreatePerUser, envMaxTrackedRateKeys,
-		envActivationTokenTTL, envPasswordResetTokenTTL,
+		envRateContactPerIP, envRateNewsletterPerIP, envRateNewsletterPerEmail, envRateEmailChangePerUser,
+		envRateAvatarPerUser, envRateMFAVerifyPerUser, envRatePasswordCheckPerUser, envRateExportPerUser, envRateHeroLocationPerUser,
+		envActivationTokenTTL, envPasswordResetTokenTTL, envNewsletterConfirmTTL, envEmailChangeConfirmTTL,
+		envMFAModeratorRequired, envMFAIssuer,
 		envCSRFSecret, envCryptoKeys, envCryptoActiveK,
 		envMailDriver, envMailFromAddress, envMailFromName, envSMTPHost, envSMTPPort,
 		envSMTPUsername, envSMTPPassword, envSMTPTLSMode, envSMTPTimeout, envMailWorkers,
-		envMailQueueSize, envMailMaxAttempts, envMailRetryDelay, envMailSendTimeout,
+		envMailQueueSize, envMailMaxAttempts, envMailRetryDelay, envMailSendTimeout, envMailQueue,
+		envRabbitMQURL, envRabbitMQConfirmTimeout, envRabbitMQReconnectDelay,
 		envOMDbAPIKey, envOMDbBaseURL, envOMDbTimeout,
-		envPublicBaseURL, envActivationPath, envPasswordResetPath,
-		envCleanupInterval, envSessionRetention, envTokenRetention,
+		envContactRecipient, envAvatarDir, envAvatarMaxBytes, envAvatarMaxDimension,
+		envPublicBaseURL, envActivationPath, envPasswordResetPath, envNewsletterConfirmPath,
+		envNewsletterUnsubscribePath, envEmailChangeConfirmPath,
+		envCleanupInterval, envCleanupTimeout, envSessionRetention, envTokenRetention, envCommandRetention,
+		envEventsPollInterval, envEventsBatchSize, envEventsHeartbeat,
+		envEventsMaxStreamsPerUser, envEventsStreamMaxAge, envEventsStreamBuffer,
+		envDashboardStatsTTL, envDashboardWarmup,
+		envLocationTTL, envAlertRadiusKm,
 	}
 }

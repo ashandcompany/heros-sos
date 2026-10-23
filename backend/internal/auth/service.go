@@ -23,12 +23,14 @@ import (
 type AccountMailer interface {
 	SendActivation(ctx context.Context, to, firstName, link string) error
 	SendPasswordReset(ctx context.Context, to, firstName, link string) error
+	SendPasswordChanged(ctx context.Context, to, firstName string) error
 }
 
 // ServiceDeps regroupe les dépendances du service d'authentification.
 type ServiceDeps struct {
 	Users    user.Repository
 	Tokens   *TokenStore
+	MFA      *MFAStore
 	Sessions *SessionService
 	Hasher   *PasswordHasher
 	Mailer   AccountMailer
@@ -106,16 +108,7 @@ func (s *Service) validateRegistration(in RegisterInput, now time.Time) (*user.U
 	u.Phone, code = validation.Phone(in.Phone)
 	fields.Add("mobilePhone", code)
 
-	u.Address.Street, code = validation.RequiredText(in.Address.Street, validation.MaxStreetLength)
-	fields.Add("address.street", code)
-	u.Address.Complement, code = validation.OptionalText(in.Address.Complement, validation.MaxAddressComplementLength)
-	fields.Add("address.complement", code)
-	u.Address.City, code = validation.RequiredText(in.Address.City, validation.MaxCityLength)
-	fields.Add("address.city", code)
-	u.Address.Country, code = validation.Country(in.Address.Country)
-	fields.Add("address.country", code)
-	u.Address.PostalCode, code = validation.PostalCode(in.Address.PostalCode, u.Address.Country)
-	fields.Add("address.postalCode", code)
+	u.Address = user.Address(fields.Address("address", validation.Address(in.Address)))
 
 	fields.Add("password", validation.Password(in.Password, s.passwordPolicy()))
 	return u, fields.Err()
@@ -219,10 +212,12 @@ type LoginInput struct {
 	UserAgent  string
 }
 
-// LoginResult est une connexion réussie.
+// LoginResult est une connexion réussie. Quand MFA n'est pas « verified » ni « not_enrolled », la session
+// est limitée : elle n'ouvre que la saisie du code (ou l'activation de la 2FA) et la déconnexion.
 type LoginResult struct {
 	User    *user.User
 	Session IssuedSession
+	MFA     MFAStatus
 }
 
 // Login authentifie un utilisateur et ouvre une session.
@@ -232,55 +227,89 @@ type LoginResult struct {
 // révéler des comptes existants. Les états « non activé » et « désactivé » ne sont annoncés
 // qu'avec le bon mot de passe.
 func (s *Service) Login(ctx context.Context, in LoginInput) (LoginResult, error) {
+	now := s.Clock.Now()
+	u, check, err := s.verifyCredentials(ctx, in, now)
+	if err != nil {
+		return LoginResult{}, err
+	}
+	if err := statusError(u.Status); err != nil {
+		return LoginResult{}, err
+	}
+	if check.NeedsRehash {
+		s.upgradePasswordHash(ctx, u, in.Password, now)
+	}
+	return s.openSession(ctx, u, in, now)
+}
+
+// verifyCredentials retrouve le compte et contrôle le mot de passe : identifiant inconnu, compte verrouillé,
+// mot de passe faux (l'échec est compté, et verrouille le compte après trop d'essais). Il ne regarde pas l'état
+// du compte, qui ne s'annonce qu'avec le bon mot de passe.
+func (s *Service) verifyCredentials(ctx context.Context, in LoginInput, now time.Time) (*user.User, PasswordCheck, error) {
 	identifier, code := validation.Identifier(in.Identifier)
 	if code != "" || in.Password == "" {
-		return LoginResult{}, s.rejectUnknown(ctx, in.Password)
+		return nil, PasswordCheck{}, s.rejectUnknown(ctx, in.Password)
 	}
 
 	u, err := s.findByIdentifier(ctx, identifier)
 	if errors.Is(err, user.ErrNotFound) {
-		return LoginResult{}, s.rejectUnknown(ctx, in.Password)
+		return nil, PasswordCheck{}, s.rejectUnknown(ctx, in.Password)
 	}
 	if err != nil {
-		return LoginResult{}, err
+		return nil, PasswordCheck{}, err
 	}
-
-	now := s.Clock.Now()
 	if u.IsLocked(now) {
-		return LoginResult{}, &LockedError{Until: *u.LockedUntil}
+		return nil, PasswordCheck{}, &LockedError{Until: *u.LockedUntil}
 	}
 
 	check, err := s.Hasher.Verify(ctx, u.PasswordHash, in.Password)
 	if err != nil {
-		return LoginResult{}, fmt.Errorf("auth : vérification du mot de passe : %w", err)
+		return nil, PasswordCheck{}, fmt.Errorf("auth : vérification du mot de passe : %w", err)
 	}
 	if !check.Match {
 		if _, err := s.Users.RecordLoginFailure(ctx, u.ID, now, s.Security.Lockout); err != nil {
-			return LoginResult{}, err
+			return nil, PasswordCheck{}, err
 		}
-		return LoginResult{}, ErrInvalidCredentials
+		return nil, PasswordCheck{}, ErrInvalidCredentials
 	}
+	return u, check, nil
+}
 
-	switch u.Status {
+// statusError est l'erreur d'un compte qui ne peut pas se connecter, ou nil s'il est actif.
+func statusError(status user.Status) error {
+	switch status {
 	case user.StatusPendingActivation:
-		return LoginResult{}, ErrAccountNotActivated
+		return ErrAccountNotActivated
 	case user.StatusDeactivated:
-		return LoginResult{}, ErrAccountDeactivated
+		return ErrAccountDeactivated
+	case user.StatusActive:
 	}
+	return nil
+}
 
-	if check.NeedsRehash {
-		s.upgradePasswordHash(ctx, u, in.Password, now)
-	}
-	if err := s.Users.RecordLoginSuccess(ctx, u.ID, now); err != nil {
+// openSession ouvre la session d'un compte dont le mot de passe est bon. Elle n'est complète que sans second
+// facteur à fournir : ni activé, ni obligatoire pour ce rôle.
+func (s *Service) openSession(ctx context.Context, u *user.User, in LoginInput, now time.Time) (LoginResult, error) {
+	enrolled, err := s.MFA.IsEnrolled(ctx, u.ID)
+	if err != nil {
 		return LoginResult{}, err
 	}
+	// Le mot de passe seul ne remet pas à zéro le compteur d'échecs d'un compte qui a la 2FA : c'est le code
+	// qui le fera (MFAService.Verify). Sans cela, celui qui connaît le mot de passe se reconnecterait entre
+	// deux séries de devinettes du code.
+	if !enrolled {
+		if err := s.Users.RecordLoginSuccess(ctx, u.ID, now); err != nil {
+			return LoginResult{}, err
+		}
+	}
+	complete := !enrolled && !s.Sessions.mfaRequired(u.Role)
 	issued, err := s.Sessions.Issue(ctx, IssueRequest{
 		UserID: u.ID, Role: u.Role, RememberMe: in.RememberMe, IP: in.IP, UserAgent: in.UserAgent,
+		MFAVerified: complete,
 	})
 	if err != nil {
 		return LoginResult{}, err
 	}
-	return LoginResult{User: u, Session: issued}, nil
+	return LoginResult{User: u, Session: issued, MFA: NewMFAStatus(enrolled, complete)}, nil
 }
 
 // rejectUnknown dépense le temps d'une vérification de mot de passe puis refuse la connexion.
@@ -405,6 +434,71 @@ func (s *Service) ConfirmPasswordReset(ctx context.Context, rawToken, newPasswor
 	})
 }
 
+// PasswordChange est le résultat d'un changement de mot de passe : la session qui remplace la session courante
+// (les autres sont fermées) et l'état de sa double authentification.
+type PasswordChange struct {
+	Session IssuedSession
+	MFA     MFAStatus
+}
+
+// ChangePassword remplace le mot de passe d'un utilisateur connecté, qui redonne le mot de passe actuel. Toutes
+// ses sessions sont fermées, et la session courante (sessionToken) est remplacée par une nouvelle : un jeton
+// volé cesse de valoir. Un mot de passe actuel faux est une erreur de champ (currentPassword) ; il ne compte
+// pas dans le verrouillage de la connexion, qu'une session volée pourrait sinon déclencher, mais la route est
+// limitée en débit. Le titulaire est prévenu par mail ; un échec d'envoi est journalisé sans annuler le
+// changement.
+func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, sessionToken, currentPassword, newPassword string, ip netip.Addr) (PasswordChange, error) {
+	if currentPassword == "" {
+		return PasswordChange{}, &validation.Error{Fields: map[string]string{"currentPassword": validation.CodeRequired}}
+	}
+	if code := validation.Password(newPassword, s.passwordPolicy()); code != "" {
+		return PasswordChange{}, &validation.Error{Fields: map[string]string{"newPassword": code}}
+	}
+	u, err := s.Users.FindByID(ctx, userID)
+	if err != nil {
+		return PasswordChange{}, err
+	}
+	check, err := s.Hasher.Verify(ctx, u.PasswordHash, currentPassword)
+	if err != nil {
+		return PasswordChange{}, fmt.Errorf("auth : vérification du mot de passe : %w", err)
+	}
+	if !check.Match {
+		return PasswordChange{}, &validation.Error{Fields: map[string]string{"currentPassword": validation.CodeInvalid}}
+	}
+	hash, err := s.Hasher.Hash(ctx, newPassword)
+	if err != nil {
+		return PasswordChange{}, fmt.Errorf("auth : hachage du mot de passe : %w", err)
+	}
+	enrolled, err := s.MFA.IsEnrolled(ctx, userID)
+	if err != nil {
+		return PasswordChange{}, err
+	}
+
+	now := s.Clock.Now()
+	var issued IssuedSession
+	err = s.Tx.WithinTx(ctx, func(ctx context.Context) error {
+		if err := s.Users.UpdatePasswordHash(ctx, userID, hash, now); err != nil {
+			return err
+		}
+		if issued, err = s.Sessions.Rotate(ctx, sessionToken, true); err != nil {
+			return err
+		}
+		if err := s.Tokens.DeleteUnused(ctx, userID, TokenPasswordReset); err != nil {
+			return err
+		}
+		return s.Audit.Record(ctx, audit.Entry{
+			ActorID: &userID, Action: audit.ActionPasswordChanged, EntityType: "user", EntityID: &userID, IP: ip,
+		})
+	})
+	if err != nil {
+		return PasswordChange{}, err
+	}
+	if err := s.Mailer.SendPasswordChanged(ctx, u.Email, u.FirstName); err != nil {
+		s.Logger.ErrorContext(ctx, "envoi du mail de changement de mot de passe impossible", "user_id", userID, "error", err)
+	}
+	return PasswordChange{Session: issued, MFA: NewMFAStatus(enrolled, true)}, nil
+}
+
 // Cleanup supprime les sessions et les jetons périmés depuis plus de retention.
 func (s *Service) Cleanup(ctx context.Context, sessionRetention, tokenRetention time.Duration) (sessions, tokens int64, err error) {
 	if sessions, err = s.Sessions.Cleanup(ctx, sessionRetention); err != nil {
@@ -412,4 +506,25 @@ func (s *Service) Cleanup(ctx context.Context, sessionRetention, tokenRetention 
 	}
 	tokens, err = s.Tokens.DeleteStale(ctx, s.Clock.Now().Add(-tokenRetention))
 	return sessions, tokens, err
+}
+
+// CheckPassword redemande le mot de passe actuel d'un utilisateur connecté, avant une action irréversible
+// (suppression du compte). Un mot de passe absent ou faux est une erreur de champ (password) ; comme pour
+// ChangePassword, il ne compte pas dans le verrouillage de la connexion et la route est limitée en débit.
+func (s *Service) CheckPassword(ctx context.Context, userID uuid.UUID, password string) error {
+	if password == "" {
+		return &validation.Error{Fields: map[string]string{"password": validation.CodeRequired}}
+	}
+	u, err := s.Users.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	check, err := s.Hasher.Verify(ctx, u.PasswordHash, password)
+	if err != nil {
+		return fmt.Errorf("auth : vérification du mot de passe : %w", err)
+	}
+	if !check.Match {
+		return &validation.Error{Fields: map[string]string{"password": validation.CodeInvalid}}
+	}
+	return nil
 }

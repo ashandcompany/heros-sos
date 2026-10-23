@@ -15,8 +15,11 @@ const (
 	defaultMaxBodyBytes       = 1 << 20 // 1 Mio
 	defaultHealthcheckTimeout = 3 * time.Second
 
-	defaultDBMaxOpenConns    = 25
-	defaultDBMaxIdleConns    = 5
+	defaultDBMaxOpenConns = 25
+	// Autant de connexions gardées que permises : avec moins, chaque pic de requêtes ferme puis rouvre des
+	// connexions PostgreSQL (3 à 5 ms chacune), jusqu'à épuiser les ports locaux à plusieurs milliers de requêtes
+	// par seconde (« can't assign requested address », mesuré sur 5 millions d'incidents).
+	defaultDBMaxIdleConns    = 25
 	defaultDBConnMaxLifetime = 30 * time.Minute
 	defaultDBConnMaxIdleTime = 10 * time.Minute
 	defaultDBPingTimeout     = 5 * time.Second
@@ -49,6 +52,10 @@ const (
 	defaultActivationTokenTTL    = 24 * time.Hour
 	defaultPasswordResetTokenTTL = time.Hour
 
+	defaultNewsletterConfirmTTL = 48 * time.Hour
+	// Le lien de confirmation de la nouvelle adresse d'un compte : même durée que celui de la newsletter.
+	defaultEmailChangeConfirmTTL = 48 * time.Hour
+
 	defaultMailFromAddress = "no-reply@heros-sos.local"
 	defaultMailFromName    = "Heros-SOS"
 	defaultSMTPHost        = "localhost"
@@ -62,13 +69,59 @@ const (
 	defaultOMDbBaseURL     = "https://www.omdbapi.com/"
 	defaultOMDbTimeout     = 5 * time.Second
 
+	// Un courtier qui ne confirme pas en 5 s est bloqué (alarme disque ou mémoire) : mieux vaut refuser le mail
+	// que de faire attendre la requête, l'appelant réessaiera.
+	defaultRabbitMQConfirmTimeout = 5 * time.Second
+	defaultRabbitMQReconnectDelay = 2 * time.Second
+
+	// Le « Bureau » : destinataire des messages du formulaire de contact.
+	defaultContactRecipient = "contact@heros-sos.local"
+
+	// Photos de profil : le frontend les recadre en 256 px et refuse au-delà de 2 Mio.
+	defaultAvatarDir          = "data/avatars"
+	defaultAvatarMaxBytes     = 2 << 20 // 2 Mio
+	defaultAvatarMaxDimension = 1024
+
 	defaultPublicBaseURL     = "http://localhost:3000"
 	defaultActivationPath    = "/activation"
 	defaultPasswordResetPath = "/reinitialisation-mot-de-passe"
 
+	defaultNewsletterConfirmPath     = "/newsletter/confirmation"
+	defaultNewsletterUnsubscribePath = "/newsletter/desinscription"
+	defaultEmailChangeConfirmPath    = "/changement-email/confirmation"
+
+	// Double authentification (TOTP) : nom affiché dans l'application d'authentification, et nombre de
+	// codes de secours remis à l'activation.
+	defaultMFAIssuer        = "Heros-SOS"
+	defaultMFARecoveryCodes = 10
+
 	defaultCleanupInterval  = 15 * time.Minute
+	defaultCleanupTimeout   = 2 * time.Minute
 	defaultSessionRetention = 7 * 24 * time.Hour
 	defaultTokenRetention   = 7 * 24 * time.Hour
+
+	// Une commande rejouable (clé d'idempotence) est conservée assez longtemps pour qu'un appareil resté hors
+	// ligne plusieurs semaines puisse encore synchroniser sans doublon.
+	defaultCommandRetention = 30 * 24 * time.Hour
+
+	// Journal d'événements : fréquence de lecture des nouveaux événements (diffusion en temps réel et journalisation),
+	// taille d'un passage, et délai entre deux signaux de vie sur un flux ouvert (sans quoi un proxy ou un
+	// navigateur coupe une connexion silencieuse).
+	defaultEventsPollInterval = 250 * time.Millisecond
+	defaultEventsBatchSize    = 500
+	defaultEventsHeartbeat    = 15 * time.Second
+	// Flux temps réel : connexions simultanées d'un même utilisateur (un onglet, un téléphone, un second
+	// onglet), durée maximale d'une connexion (le navigateur se reconnecte seul : la session est revérifiée), et
+	// événements gardés en attente pour un lecteur lent avant de le déconnecter (il reprendra où il en était).
+	defaultEventsMaxStreamsPerUser = 5
+	defaultEventsStreamMaxAge      = 10 * time.Minute
+	defaultEventsStreamBuffer      = 64
+
+	// defaultDashboardStatsTTL est la fraîcheur des statistiques du tableau de bord des héros.
+	defaultDashboardStatsTTL = 30 * time.Second
+
+	defaultLocationTTL   = 30 * time.Minute
+	defaultAlertRadiusKm = 10
 )
 
 // Règles de limitation de débit par défaut (maximum de requêtes par fenêtre).
@@ -79,6 +132,22 @@ var (
 	defaultRatePasswordResetPerIP    = RateRule{Max: 10, Window: time.Hour}
 	defaultRatePasswordResetPerKey   = RateRule{Max: 3, Window: time.Hour}
 	defaultRateIncidentCreatePerUser = RateRule{Max: 10, Window: time.Hour}
+
+	defaultRateContactPerIP       = RateRule{Max: 5, Window: time.Hour}
+	defaultRateNewsletterPerIP    = RateRule{Max: 10, Window: time.Hour}
+	defaultRateNewsletterPerEmail = RateRule{Max: 3, Window: time.Hour}
+	defaultRateEmailChangePerUser = RateRule{Max: 5, Window: time.Hour}
+	defaultRateAvatarPerUser      = RateRule{Max: 20, Window: time.Hour}
+	// Un code TOTP a un million de valeurs : cinq essais par fenêtre de cinq minutes rendent leur
+	// énumération hors de portée, sans gêner une faute de frappe.
+	defaultRateMFAVerifyPerUser = RateRule{Max: 5, Window: 5 * time.Minute}
+	// Comme la connexion : le mot de passe actuel ne doit pas pouvoir être deviné depuis une session volée.
+	defaultRatePasswordCheckPerUser = RateRule{Max: 5, Window: 15 * time.Minute}
+	// Un export relit toute l'activité du compte : quelques-uns par heure suffisent.
+	defaultRateExportPerUser = RateRule{Max: 5, Window: time.Hour}
+	// L'espace héros envoie la position toutes les 5 minutes et à chaque retour sur l'onglet : 60 envois
+	// par heure laissent une large marge, sans permettre une rafale.
+	defaultRateHeroLocationPerUser = RateRule{Max: 60, Window: time.Hour}
 )
 
 // Plancher de sécurité imposé en production pour le hachage des mots de passe

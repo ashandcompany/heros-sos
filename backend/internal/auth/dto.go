@@ -68,14 +68,51 @@ type loginResponse struct {
 	User      UserResponse `json:"user"`
 	CSRFToken string       `json:"csrfToken"`
 	ExpiresAt time.Time    `json:"expiresAt"`
+	MFA       MFAStatus    `json:"mfa"`
 }
 
 type meResponse struct {
 	User      UserResponse `json:"user"`
 	CSRFToken string       `json:"csrfToken"`
+	MFA       MFAStatus    `json:"mfa"`
+}
+
+type mfaStatusResponse struct {
+	Status                 MFAStatus `json:"status"`
+	RecoveryCodesRemaining int       `json:"recoveryCodesRemaining"`
+}
+
+type mfaSetupResponse struct {
+	Secret     string `json:"secret"`
+	OtpauthURL string `json:"otpauthUrl"`
+}
+
+type mfaCodeRequest struct {
+	Code string `json:"code"`
+}
+
+type mfaVerifyRequest struct {
+	Code         string `json:"code"`
+	RecoveryCode string `json:"recoveryCode"`
+}
+
+// mfaEnableResponse est la session complète d'une activation réussie, avec les codes de secours (montrés
+// cette seule fois).
+type mfaEnableResponse struct {
+	loginResponse
+	RecoveryCodes []string `json:"recoveryCodes"`
+}
+
+type recoveryCodesResponse struct {
+	RecoveryCodes []string `json:"recoveryCodes"`
 }
 
 type passwordResetConfirmRequest struct {
 	Token       string `json:"token"`
 	NewPassword string `json:"newPassword"`
+}
+
+type passwordChangeRequest struct {
+	CurrentPassword string `json:"currentPassword"`
+	NewPassword     string `json:"newPassword"`
 }

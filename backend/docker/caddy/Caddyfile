@@ -12,6 +12,13 @@
 {
 	# Sans effet en HTTP seul. En production, Let's Encrypt prévient à cette adresse en cas de problème.
 	email {$ACME_EMAIL:contact@heros-sos.invalid}
+
+	# Le contrôle de santé du conteneur interroge l'API d'administration toutes les 15 secondes ; Caddy
+	# journalise chacune de ces requêtes (« received request »), ce qui noie le reste. Les autres journaux
+	# du serveur (accès, erreurs, contrôle de santé de l'API) sont conservés.
+	log {
+		exclude admin.api
+	}
 }
 
 {$SITE_ADDRESS::80} {

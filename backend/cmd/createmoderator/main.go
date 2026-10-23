@@ -12,7 +12,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 
@@ -48,7 +47,7 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("configuration invalide :\n%w", err)
 	}
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	db, err := database.Open(ctx, cfg.Database, logger)
 	if err != nil {
 		return err

@@ -8,21 +8,24 @@ import { SelectField } from "@/components/ui/SelectField";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { TextAreaField } from "@/components/ui/TextAreaField";
 import { TextField } from "@/components/ui/TextField";
-import { incidentStatusLabels, incidentTypeLabels } from "@/lib/format";
+import { incidentStatusLabels } from "@/lib/format";
 import type { IncidentEditField } from "@/lib/validation/admin";
 import { idleFormState, type FormState } from "@/lib/validation/form-state";
 import { DESCRIPTION_MAX_LENGTH, TITLE_MAX_LENGTH } from "@/lib/validation/incident";
-import type { Incident, SuperHeroSummary, VillainSummary } from "@/types";
+import type { Incident, IncidentTypeDefinition, SuperHeroSummary, VillainSummary } from "@/types";
 
 /** Correction des informations d'un incident par un modérateur. */
 export function IncidentEditForm({
   incident,
   villains,
   heroes,
+  types,
 }: {
   incident: Incident;
   villains: VillainSummary[];
   heroes: SuperHeroSummary[];
+  /** Types du référentiel, par libellé. */
+  types: Array<Pick<IncidentTypeDefinition, "id" | "code" | "label">>;
 }) {
   const [state, formAction] = useActionState(
     updateIncidentAction,
@@ -32,6 +35,7 @@ export function IncidentEditForm({
   // Après une erreur, on réaffiche la saisie ; sinon les valeurs enregistrées.
   const value = (field: IncidentEditField, saved: string | undefined) =>
     state.values?.[field] ?? saved ?? "";
+  const currentTypeId = types.find(({ code }) => code === incident.type.code)?.id.toString();
 
   return (
     <form action={formAction} noValidate className="space-y-5">
@@ -51,12 +55,12 @@ export function IncidentEditForm({
           label="Type d'incident"
           name="type"
           required
-          defaultValue={value("type", incident.type)}
+          defaultValue={value("type", currentTypeId)}
           error={errors.type}
         >
-          {Object.entries(incidentTypeLabels).map(([type, label]) => (
-            <option key={type} value={type}>
-              {label}
+          {types.map((type) => (
+            <option key={type.id} value={type.id}>
+              {type.label}
             </option>
           ))}
         </SelectField>
@@ -107,6 +111,7 @@ export function IncidentEditForm({
           label="Super-vilain impliqué"
           name="villainId"
           defaultValue={value("villainId", incident.villain?.id)}
+          hint={villains.length === 0 ? "Aucun super-vilain n'est encore répertorié." : undefined}
           error={errors.villainId}
         >
           <option value="">Non identifié</option>

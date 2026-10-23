@@ -63,6 +63,17 @@ func TestLoadAppliesDefaults(t *testing.T) {
 		{"driver mail", cfg.Mail.Driver, MailDriverLog},
 		{"TLS SMTP", cfg.Mail.SMTP.TLSMode, TLSModeNone},
 		{"migration auto", cfg.AutoMigrate, false},
+		{"limite contact par IP", cfg.Security.RateLimits.ContactPerIP, defaultRateContactPerIP},
+		{"limite newsletter par IP", cfg.Security.RateLimits.NewsletterPerIP, defaultRateNewsletterPerIP},
+		{"limite newsletter par adresse", cfg.Security.RateLimits.NewsletterPerEmail, defaultRateNewsletterPerEmail},
+		{"limite changement d'adresse", cfg.Security.RateLimits.EmailChangePerUser, defaultRateEmailChangePerUser},
+		{"limite photo de profil", cfg.Security.RateLimits.AvatarPerUser, defaultRateAvatarPerUser},
+		{"validité du lien newsletter", cfg.Security.Tokens.NewsletterConfirmTTL, defaultNewsletterConfirmTTL},
+		{"destinataire du contact", cfg.Mail.ContactRecipient, defaultContactRecipient},
+		{"dossier des photos", cfg.Avatar.Dir, defaultAvatarDir},
+		{"taille max d'une photo", cfg.Avatar.MaxBytes, int64(defaultAvatarMaxBytes)},
+		{"dimension max d'une photo", cfg.Avatar.MaxDimension, defaultAvatarMaxDimension},
+		{"page de confirmation newsletter", cfg.App.NewsletterConfirmPath, defaultNewsletterConfirmPath},
 	}
 	for _, check := range checks {
 		if check.got != check.want {
@@ -80,6 +91,13 @@ func TestLoadOverridesFromEnvironment(t *testing.T) {
 	env[envTrustedProxies] = "10.0.0.0/8, 192.168.1.5"
 	env[envAllowedOrigins] = "https://A.example/, http://localhost:3000"
 	env[envAutoMigrate] = "true"
+	env[envContactRecipient] = "bureau@heros-sos.example"
+	env[envAvatarDir] = "/var/lib/photos"
+	env[envAvatarMaxBytes] = "1048576"
+	env[envAvatarMaxDimension] = "512"
+	env[envRateContactPerIP] = "2/30m"
+	env[envNewsletterConfirmTTL] = "72h"
+	env[envNewsletterConfirmPath] = "/newsletter/ok"
 
 	cfg, err := Load(fakeEnv(env))
 	if err != nil {
@@ -103,6 +121,18 @@ func TestLoadOverridesFromEnvironment(t *testing.T) {
 	}
 	if !cfg.AutoMigrate {
 		t.Error("la migration automatique devrait être active")
+	}
+	if cfg.Mail.ContactRecipient != "bureau@heros-sos.example" {
+		t.Errorf("destinataire du contact = %q", cfg.Mail.ContactRecipient)
+	}
+	if got := cfg.Avatar; got.Dir != "/var/lib/photos" || got.MaxBytes != 1<<20 || got.MaxDimension != 512 {
+		t.Errorf("photos = %+v", got)
+	}
+	if got := cfg.Security.RateLimits.ContactPerIP; got.Max != 2 || got.Window != 30*time.Minute {
+		t.Errorf("limite du contact = %+v", got)
+	}
+	if cfg.Security.Tokens.NewsletterConfirmTTL != 72*time.Hour || cfg.App.NewsletterConfirmPath != "/newsletter/ok" {
+		t.Errorf("confirmation newsletter = %v, %q", cfg.Security.Tokens.NewsletterConfirmTTL, cfg.App.NewsletterConfirmPath)
 	}
 }
 
@@ -159,6 +189,12 @@ func TestLoadRejectsInconsistentValues(t *testing.T) {
 		}, envPasswordMinLength},
 		{"origine invalide", func(env map[string]string) { env[envAllowedOrigins] = "https://a.example/chemin" }, "origine invalide"},
 		{"URL de base de données", func(env map[string]string) { env[envDatabaseURL] = "mysql://x" }, "postgres://"},
+		{"destinataire du contact invalide", func(env map[string]string) { env[envContactRecipient] = "pas-une-adresse" }, envContactRecipient},
+		{"destinataire du contact avec un nom", func(env map[string]string) { env[envContactRecipient] = "Bureau <b@heros-sos.example>" }, envContactRecipient},
+		{"taille de photo nulle", func(env map[string]string) { env[envAvatarMaxBytes] = "0" }, envAvatarMaxBytes},
+		{"dimension de photo invalide", func(env map[string]string) { env[envAvatarMaxDimension] = "grande" }, envAvatarMaxDimension},
+		{"limite du contact invalide", func(env map[string]string) { env[envRateContactPerIP] = "beaucoup" }, envRateContactPerIP},
+		{"validité du lien newsletter invalide", func(env map[string]string) { env[envNewsletterConfirmTTL] = "-1h" }, envNewsletterConfirmTTL},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -251,6 +287,12 @@ func TestAppLinks(t *testing.T) {
 	}
 	if got, want := cfg.App.PasswordResetLink("xyz"), "http://localhost:3000/reinitialisation-mot-de-passe?token=xyz"; got != want {
 		t.Errorf("PasswordResetLink = %q, attendu %q", got, want)
+	}
+	if got, want := cfg.App.MailLogoURL(), "http://localhost:3000/mail/logo.png"; got != want {
+		t.Errorf("MailLogoURL = %q, attendu %q", got, want)
+	}
+	if got, want := cfg.App.NewsletterConfirmLink("a b/c"), "http://localhost:3000/newsletter/confirmation?token=a+b%2Fc"; got != want {
+		t.Errorf("NewsletterConfirmLink = %q, attendu %q", got, want)
 	}
 	if got, want := cfg.App.HeroReviewLink("intervention id", "hero/id"), "http://localhost:3000/profil/interventions?heroId=hero%2Fid&interventionId=intervention+id"; got != want {
 		t.Errorf("HeroReviewLink = %q, attendu %q", got, want)
@@ -366,5 +408,299 @@ func TestProductionRulesStillApplyToSecretsFromFiles(t *testing.T) {
 
 	if _, err := Load(fakeEnv(env)); err == nil || !strings.Contains(err.Error(), "sslmode=disable") {
 		t.Fatalf("la validation de production doit s'appliquer à une valeur lue depuis un fichier : %v", err)
+	}
+}
+
+// La 2FA des modérateurs est obligatoire avant toute mise en ligne : en production elle est exigée par défaut
+// et ne peut pas être désactivée ; en développement elle est facultative, pour une démonstration.
+func TestModeratorTwoFactorIsRequiredInProductionAndCannotBeDisabled(t *testing.T) {
+	development, err := Load(fakeEnv(validEnv()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if development.Security.MFA.ModeratorRequired || development.Security.MFA.Issuer != defaultMFAIssuer ||
+		development.Security.MFA.RecoveryCodes != defaultMFARecoveryCodes {
+		t.Errorf("développement : %+v", development.Security.MFA)
+	}
+	optional := validEnv()
+	optional[envMFAModeratorRequired] = "true"
+	if cfg, err := Load(fakeEnv(optional)); err != nil || !cfg.Security.MFA.ModeratorRequired {
+		t.Errorf("exigée en développement : %+v %v", cfg.Security.MFA, err)
+	}
+
+	production, err := Load(fakeEnv(productionEnv()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !production.Security.MFA.ModeratorRequired {
+		t.Error("la 2FA des modérateurs doit être exigée par défaut en production")
+	}
+
+	env := productionEnv()
+	env[envMFAModeratorRequired] = "false"
+	_, err = Load(fakeEnv(env))
+	if err == nil || !strings.Contains(err.Error(), envMFAModeratorRequired) {
+		t.Fatalf("désactiver la 2FA en production doit être refusé : %v", err)
+	}
+
+	env[envMFAModeratorRequired] = "peut-être"
+	if _, err = Load(fakeEnv(env)); err == nil || !strings.Contains(err.Error(), "booléen attendu") {
+		t.Errorf("valeur invalide : %v", err)
+	}
+}
+
+func TestLinkPathsAndTTLsOfTheAccountFlows(t *testing.T) {
+	cfg, err := Load(fakeEnv(validEnv()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Security.Tokens.EmailChangeConfirmTTL != defaultEmailChangeConfirmTTL {
+		t.Errorf("durée du lien de confirmation d'adresse = %v", cfg.Security.Tokens.EmailChangeConfirmTTL)
+	}
+	if got, want := cfg.App.EmailChangeConfirmLink("a b"), "http://localhost:3000/changement-email/confirmation?token=a+b"; got != want {
+		t.Errorf("EmailChangeConfirmLink = %q, attendu %q", got, want)
+	}
+	if got, want := cfg.App.NewsletterUnsubscribeLink("x/y"), "http://localhost:3000/newsletter/desinscription?token=x%2Fy"; got != want {
+		t.Errorf("NewsletterUnsubscribeLink = %q, attendu %q", got, want)
+	}
+
+	env := validEnv()
+	env[envEmailChangeConfirmPath] = "/confirmer"
+	env[envNewsletterUnsubscribePath] = "/stop"
+	env[envEmailChangeConfirmTTL] = "1h"
+	cfg, err = Load(fakeEnv(env))
+	if err != nil || cfg.App.EmailChangeConfirmPath != "/confirmer" || cfg.App.NewsletterUnsubscribePath != "/stop" ||
+		cfg.Security.Tokens.EmailChangeConfirmTTL != time.Hour {
+		t.Errorf("surcharges : %+v %v", cfg.App, err)
+	}
+}
+
+// Les paramètres d'argon2 sont convertis vers des types plus étroits (uint32, uint8) : une valeur hors limites
+// doit être refusée, jamais tronquée en silence (300 threads deviendraient 44).
+func TestArgon2SettingsAreBoundedToTheirType(t *testing.T) {
+	tests := map[string]struct {
+		name, value string
+	}{
+		"threads au-delà d'un octet":    {envArgon2Threads, "300"},
+		"mémoire au-delà de 32 bits":    {envArgon2MemoryKiB, "4294967296"},
+		"itérations au-delà de 32 bits": {envArgon2Time, "5000000000"},
+		"threads nuls":                  {envArgon2Threads, "0"},
+	}
+	for label, tc := range tests {
+		t.Run(label, func(t *testing.T) {
+			env := validEnv()
+			env[tc.name] = tc.value
+			_, err := Load(fakeEnv(env))
+			if err == nil || !strings.Contains(err.Error(), tc.name) {
+				t.Errorf("%s=%s devrait être refusé, reçu %v", tc.name, tc.value, err)
+			}
+		})
+	}
+
+	env := validEnv()
+	env[envArgon2Threads] = "255"
+	cfg, err := Load(fakeEnv(env))
+	if err != nil || cfg.Security.Argon2.Threads != 255 {
+		t.Errorf("255 threads (la borne) doivent passer : %d, %v", cfg.Security.Argon2.Threads, err)
+	}
+}
+
+func TestCleanupTimeoutHasADefaultAndMustBePositive(t *testing.T) {
+	cfg, err := Load(fakeEnv(validEnv()))
+	if err != nil || cfg.Jobs.CleanupTimeout != defaultCleanupTimeout {
+		t.Errorf("durée par défaut = %v, %v", cfg.Jobs.CleanupTimeout, err)
+	}
+	env := validEnv()
+	env[envCleanupTimeout] = "0s"
+	if _, err := Load(fakeEnv(env)); err == nil || !strings.Contains(err.Error(), envCleanupTimeout) {
+		t.Errorf("un délai nul doit être refusé : %v", err)
+	}
+}
+
+func TestLogFormatDefaultsToJSONInProductionAndTextElsewhere(t *testing.T) {
+	development, err := Load(fakeEnv(validEnv()))
+	if err != nil || development.LogFormat != LogFormatText {
+		t.Errorf("développement : %q, %v, attendu text", development.LogFormat, err)
+	}
+	production, err := Load(fakeEnv(productionEnv()))
+	if err != nil || production.LogFormat != LogFormatJSON {
+		t.Errorf("production : %q, %v, attendu json", production.LogFormat, err)
+	}
+
+	env := validEnv()
+	env[envLogFormat] = "json"
+	if cfg, err := Load(fakeEnv(env)); err != nil || cfg.LogFormat != LogFormatJSON {
+		t.Errorf("json demandé en développement : %q, %v", cfg.LogFormat, err)
+	}
+	env[envLogFormat] = "xml"
+	if _, err := Load(fakeEnv(env)); err == nil || !strings.Contains(err.Error(), envLogFormat) {
+		t.Errorf("un format inconnu doit être refusé : %v", err)
+	}
+}
+
+func TestDashboardStatsTTLHasADefaultAndMayBeZero(t *testing.T) {
+	cfg, err := Load(fakeEnv(validEnv()))
+	if err != nil || cfg.Dashboard.StatsTTL != defaultDashboardStatsTTL {
+		t.Fatalf("défaut : %v, %v", cfg.Dashboard.StatsTTL, err)
+	}
+	for value, want := range map[string]time.Duration{"0": 0, "5m": 5 * time.Minute} {
+		env := validEnv()
+		env[envDashboardStatsTTL] = value
+		cfg, err := Load(fakeEnv(env))
+		if err != nil || cfg.Dashboard.StatsTTL != want {
+			t.Errorf("%s = %q : %v, %v", envDashboardStatsTTL, value, cfg.Dashboard.StatsTTL, err)
+		}
+	}
+	for _, value := range []string{"-1s", "bientôt"} {
+		env := validEnv()
+		env[envDashboardStatsTTL] = value
+		if _, err := Load(fakeEnv(env)); err == nil || !strings.Contains(err.Error(), envDashboardStatsTTL) {
+			t.Errorf("%s = %q doit être refusé : %v", envDashboardStatsTTL, value, err)
+		}
+	}
+}
+
+func TestDashboardWarmupIsOnByDefaultAndMayBeSwitchedOff(t *testing.T) {
+	cfg, err := Load(fakeEnv(validEnv()))
+	if err != nil || !cfg.Dashboard.Warmup {
+		t.Fatalf("défaut : %v, %v", cfg.Dashboard.Warmup, err)
+	}
+	env := validEnv()
+	env[envDashboardWarmup] = "false"
+	if cfg, err := Load(fakeEnv(env)); err != nil || cfg.Dashboard.Warmup {
+		t.Errorf("%s = false : %v, %v", envDashboardWarmup, cfg.Dashboard.Warmup, err)
+	}
+	env[envDashboardWarmup] = "peut-être"
+	if _, err := Load(fakeEnv(env)); err == nil || !strings.Contains(err.Error(), envDashboardWarmup) {
+		t.Errorf("une valeur qui n'est pas un booléen doit être refusée : %v", err)
+	}
+}
+
+func TestEventSettingsHaveDefaultsAndMustBePositive(t *testing.T) {
+	cfg, err := Load(fakeEnv(validEnv()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := Events{
+		PollInterval: defaultEventsPollInterval, BatchSize: defaultEventsBatchSize, Heartbeat: defaultEventsHeartbeat,
+		MaxStreamsPerUser: defaultEventsMaxStreamsPerUser, StreamMaxAge: defaultEventsStreamMaxAge, StreamBuffer: defaultEventsStreamBuffer,
+	}
+	if cfg.Events != want {
+		t.Errorf("réglages = %+v, attendu %+v", cfg.Events, want)
+	}
+	if cfg.Jobs.CommandRetention != defaultCommandRetention {
+		t.Errorf("conservation des commandes = %v", cfg.Jobs.CommandRetention)
+	}
+	for _, name := range []string{envEventsPollInterval, envEventsBatchSize, envEventsHeartbeat, envEventsMaxStreamsPerUser, envEventsStreamMaxAge, envEventsStreamBuffer, envCommandRetention} {
+		env := validEnv()
+		env[name] = "0"
+		if _, err := Load(fakeEnv(env)); err == nil || !strings.Contains(err.Error(), name) {
+			t.Errorf("%s = 0 doit être refusé : %v", name, err)
+		}
+	}
+}
+
+// ---- File de mails RabbitMQ ---------------------------------------------------------------------
+
+func TestMailQueueIsInMemoryByDefault(t *testing.T) {
+	cfg, err := Load(fakeEnv(validEnv()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Mail.Queue != MailQueueMemory {
+		t.Errorf("file de mails = %q, attendu %q : RabbitMQ s'active explicitement", cfg.Mail.Queue, MailQueueMemory)
+	}
+	if cfg.Mail.RabbitMQ.ConfirmTimeout != defaultRabbitMQConfirmTimeout || cfg.Mail.RabbitMQ.ReconnectDelay != defaultRabbitMQReconnectDelay {
+		t.Errorf("délais RabbitMQ par défaut = %+v", cfg.Mail.RabbitMQ)
+	}
+}
+
+func TestRabbitMQMailQueueNeedsAValidBrokerURL(t *testing.T) {
+	env := validEnv()
+	env[envMailQueue] = "rabbitmq"
+	if _, err := Load(fakeEnv(env)); err == nil || !strings.Contains(err.Error(), envRabbitMQURL) {
+		t.Errorf("sans URL, erreur = %v, attendu un message sur %s", err, envRabbitMQURL)
+	}
+
+	env[envRabbitMQURL] = "amqp://heros:heros@rabbitmq:5672/"
+	cfg, err := Load(fakeEnv(env))
+	if err != nil || cfg.Mail.Queue != MailQueueRabbitMQ || cfg.Mail.RabbitMQ.URL != env[envRabbitMQURL] {
+		t.Fatalf("configuration RabbitMQ valide refusée : %v (%+v)", err, cfg.Mail)
+	}
+	env[envRabbitMQURL] = "amqps://heros:heros@rabbitmq.example:5671/"
+	if _, err := Load(fakeEnv(env)); err != nil {
+		t.Errorf("amqps:// doit être accepté : %v", err)
+	}
+
+	for name, bad := range map[string]string{
+		"mauvais schéma": "http://rabbitmq:5672/", "sans hôte": "amqp:///", "illisible": "amqp://%zz",
+	} {
+		env[envRabbitMQURL] = bad
+		_, err := Load(fakeEnv(env))
+		if err == nil || !strings.Contains(err.Error(), envRabbitMQURL) {
+			t.Errorf("%s : erreur = %v, attendu un message sur %s", name, err, envRabbitMQURL)
+		}
+	}
+}
+
+func TestMailQueueRejectsUnknownValuesAndNeverEchoesTheBrokerPassword(t *testing.T) {
+	env := validEnv()
+	env[envMailQueue] = "kafka"
+	if _, err := Load(fakeEnv(env)); err == nil || !strings.Contains(err.Error(), envMailQueue) {
+		t.Errorf("erreur = %v, attendu un message sur %s", err, envMailQueue)
+	}
+
+	env[envMailQueue] = "rabbitmq"
+	env[envRabbitMQURL] = "http://heros:mot-de-passe-secret@rabbitmq:5672/"
+	_, err := Load(fakeEnv(env))
+	if err == nil || strings.Contains(err.Error(), "mot-de-passe-secret") {
+		t.Errorf("l'erreur doit exister sans citer le mot de passe de l'URL : %v", err)
+	}
+}
+
+func TestRabbitMQURLCanComeFromASecretFile(t *testing.T) {
+	env := validEnv()
+	env[envMailQueue] = "rabbitmq"
+	env[envRabbitMQURL+fileSuffix] = writeSecret(t, "amqp://heros:secret@rabbitmq:5672/\n")
+	cfg, err := Load(fakeEnv(env))
+	if err != nil || cfg.Mail.RabbitMQ.URL != "amqp://heros:secret@rabbitmq:5672/" {
+		t.Fatalf("URL lue dans le fichier = %q, %v", cfg.Mail.RabbitMQ.URL, err)
+	}
+}
+
+func TestMailWorkerNeedsNeitherTheDatabaseNorTheEncryptionKeys(t *testing.T) {
+	env := map[string]string{
+		envMailQueue:   "rabbitmq",
+		envRabbitMQURL: "amqp://heros:heros@rabbitmq:5672/",
+		envSMTPHost:    "mailpit",
+		envSMTPPort:    "1025",
+		envMailDriver:  "smtp",
+	}
+	worker, err := LoadMailWorker(fakeEnv(env))
+	if err != nil {
+		t.Fatalf("le worker ne doit exiger ni %s ni %s : %v", envDatabaseURL, envCryptoKeys, err)
+	}
+	if worker.Mail.Queue != MailQueueRabbitMQ || worker.Mail.SMTP.Host != "mailpit" || worker.Mail.Driver != MailDriverSMTP {
+		t.Errorf("configuration du worker = %+v", worker.Mail)
+	}
+}
+
+func TestMailWorkerRefusesTheInMemoryQueueAndInheritsProductionRules(t *testing.T) {
+	env := map[string]string{envRabbitMQURL: "amqp://heros:heros@rabbitmq:5672/"}
+	if _, err := LoadMailWorker(fakeEnv(env)); err == nil || !strings.Contains(err.Error(), envMailQueue) {
+		t.Errorf("file en mémoire : erreur = %v, attendu un message sur %s", err, envMailQueue)
+	}
+
+	production := map[string]string{
+		envEnvironment: string(EnvironmentProduction), envMailQueue: "rabbitmq",
+		envRabbitMQURL: "amqp://heros:heros@rabbitmq:5672/", envSMTPHost: "smtp.example",
+	}
+	worker, err := LoadMailWorker(fakeEnv(production))
+	if err != nil || worker.LogFormat != LogFormatJSON || worker.Mail.SMTP.TLSMode != TLSModeStartTLS {
+		t.Fatalf("production : %v (%+v)", err, worker)
+	}
+	production[envMailDriver] = "log"
+	if _, err := LoadMailWorker(fakeEnv(production)); err == nil || !strings.Contains(err.Error(), envMailDriver) {
+		t.Errorf("le driver log doit rester interdit en production, y compris pour le worker : %v", err)
 	}
 }

@@ -5,6 +5,8 @@ on:
     branches: [develop]
     paths:
       - "frontend/**"
+      # Le contrat de l'API génère les types du frontend (`npm run api:types`).
+      - "backend/openapi/openapi.yaml"
       - ".github/workflows/frontend-ci.yml"
 
 concurrency:
@@ -43,5 +45,46 @@ jobs:
       - name: Check formatting
         run: npx prettier --check .
 
+      # `next build` ne lance plus ESLint depuis Next 16 : le lint doit avoir sa propre étape.
+      - name: Lint
+        run: npm run lint -- --max-warnings=0
+
+      - name: Unit tests
+        run: npm test
+
+      # Types de l'API à jour avec backend/openapi/openapi.yaml (sinon : `npm run api:types`).
+      - name: Check API types
+        run: npm run api:types:check
+
       - name: Build
         run: npm run build
+
+  # Parcours dans le navigateur (Playwright), sur le build de production en mode mock.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      # Le serveur (build + start, API_URL vide) est lancé par playwright.config.ts.
+      - name: End-to-end tests
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report
+          retention-days: 7

@@ -9,6 +9,7 @@ import (
 func registerFilmRoutes(router *Router, c *components) {
 	h := c.filmHandler
 	router.HandleFunc(http.MethodGet, "/films", h.PublicFilms)
+	router.HandleFunc(http.MethodGet, "/films/heroes", h.FilmHeroes)
 	router.HandleFunc(http.MethodGet, "/heroes/{heroId}/films", h.PublicHeroFilms)
 	router.HandleFunc(http.MethodGet, "/villains/{villainId}/films", h.PublicVillainFilms)
 	router.Handle(http.MethodGet, "/imdb/titles", c.protected(h.SearchTitles, user.RoleHero, user.RoleModerator))

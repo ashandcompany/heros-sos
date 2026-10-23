@@ -1,29 +1,65 @@
+import type { ApiFailure } from "./api";
+import type { AccountStatus } from "./account";
 import type { Civility, PostalAddress } from "./auth";
-import type { Incident, IncidentType, InterventionRating } from "./incident";
+import type { Incident, IncidentType, InterventionTeam } from "./incident";
 import type { ModerationStatus } from "./moderation";
 import type { VillainSummary } from "./villain";
 
-/** Demande d'inscription d'un nouveau super-héros, validée ou refusée par la modération. */
+/**
+ * Demande de statut super-héros déposée par un citoyen, vue par la modération (schéma
+ * `HeroApplicant`). Un compte n'a qu'une demande : elle est identifiée par son demandeur.
+ */
 export interface HeroApplication {
-  id: string;
+  /** Identifiant du compte demandeur (routes de décision). */
+  userId: string;
   alias: string;
-  power: string;
-  civility: Civility;
+  /** Description publique proposée (peut être vide). */
+  bio: string;
+  /** Message adressé aux modérateurs, jamais public (peut être vide). */
+  requestMessage: string;
   firstName: string;
   lastName: string;
-  /** Date ISO `YYYY-MM-DD`. */
-  birthDate: string;
   email: string;
-  mobilePhone: string;
-  address: PostalAddress;
-  /** Présentation et motivations du candidat. */
-  motivation: string;
   /** Date ISO 8601 du dépôt de la demande. */
   submittedAt: string;
   status: ModerationStatus;
-  /** Date ISO 8601 de la décision, `null` tant que la demande est en attente. */
-  reviewedAt: string | null;
 }
+
+/** Ce que le citoyen saisit pour demander le statut de super-héros (`HeroRequestPayload`). */
+export interface HeroRequestInput {
+  alias: string;
+  bio: string;
+  requestMessage: string;
+}
+
+/** État de la demande du citoyen connecté (`HeroRequestStatus`). */
+export interface MyHeroRequest {
+  status: ModerationStatus;
+  alias: string;
+  /** Motif communiqué par la modération, seulement pour une demande refusée. */
+  rejectionReason: string | null;
+}
+
+export type HeroRequestResult =
+  | { ok: true }
+  | {
+      ok: false;
+      error:
+        | "already-pending"
+        | "already-hero"
+        | "alias-already-used"
+        /** Compte qui ne peut pas faire de demande (désactivé, non citoyen…). */
+        | "not-eligible";
+    }
+  /** Champs refusés par l'API : champ (`alias`, `bio`, `requestMessage`) → code (`invalid`…). */
+  | { ok: false; error: "invalid-fields"; fields: Record<string, string> }
+  | ApiFailure;
+
+export type HeroReviewResult =
+  | { ok: true }
+  | { ok: false; error: "not-found" | "already-reviewed" }
+  | { ok: false; error: "invalid-reason" }
+  | ApiFailure;
 
 export interface SuperHero {
   id: string;
@@ -61,6 +97,30 @@ export interface SuperHeroProfile extends SuperHero {
   registeredAt: string;
   /** Date ISO 8601 de la dernière intervention, `null` si aucune. */
   lastInterventionAt: string | null;
+  /** État du compte : un héros désactivé reste dans l'annuaire, mais ne peut plus se connecter. */
+  accountStatus: AccountStatus;
+}
+
+/**
+ * « Mon profil » : la fiche du super-héros connecté (`GET /me`). Sans les statistiques (note
+ * moyenne, interventions) que `/me` ne fournit pas : `power` y est la description publique (`bio`).
+ */
+export type MyHeroProfile = Omit<
+  SuperHeroProfile,
+  "averageRating" | "interventionsCount" | "lastInterventionAt" | "accountStatus"
+> & {
+  /** Le titulaire de `pendingEmail` a confirmé cette nouvelle adresse par le lien reçu. */
+  pendingEmailConfirmed: boolean;
+  /** Date ISO 8601 du consentement au partage de position, `null` sans consentement. */
+  locationConsentAt: string | null;
+};
+
+/** Position actuelle déclarée par un super-héros (`PUT /hero/location`). */
+export interface HeroPosition {
+  latitude: number;
+  longitude: number;
+  /** Précision de la mesure en mètres. */
+  accuracyM?: number;
 }
 
 /** Tableau de bord professionnel d'un super-héros. */
@@ -68,7 +128,8 @@ export interface HeroDashboard {
   /** Statistiques de toute la plateforme. */
   global: {
     interventions: number;
-    incidentsByType: Record<IncidentType, number>;
+    /** Incidents par type, du plus fréquent au moins fréquent. */
+    incidentsByType: Array<{ type: IncidentType; count: number }>;
     rescuedCitizens: number;
     villainsIdentified: number;
     villainsImprisoned: number;
@@ -85,22 +146,10 @@ export interface HeroDashboard {
     mainEnemies: Array<VillainSummary & { encounters: number }>;
   };
   /** Incidents sur lesquels le héros intervient en ce moment. */
-  myOngoingIncidents: Incident[];
+  myOngoingIncidents: DashboardIncident[];
   /** Derniers incidents signalés et non résolus, tous héros confondus. */
-  recentIncidents: Incident[];
+  recentIncidents: DashboardIncident[];
 }
 
-/**
- * Évaluation reçue par le héros. `comment` vaut `null` tant que la modération ne l'a pas publié
- * (ou s'il a été masqué) : `commentModeration` permet d'afficher la raison.
- */
-export interface ReceivedRating extends InterventionRating {
-  incident: Pick<Incident, "id" | "title">;
-}
-
-export interface HeroReputation {
-  /** Note globale sur 5. */
-  averageRating: number;
-  ratingsCount: number;
-  ratings: ReceivedRating[];
-}
+/** Incident d'une liste du tableau de bord ; avec l'API, il embarque l'équipe qui intervient dessus. */
+export type DashboardIncident = Incident & { team?: InterventionTeam | null };

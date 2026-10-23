@@ -3,10 +3,10 @@ import type { ReactNode } from "react";
 import { EmptyState } from "@/components/admin/ModerationFilter";
 import { RatingStars } from "@/components/ui/RatingStars";
 import { getHeroDashboard } from "@/lib/api";
-import { formatInteger, incidentTypeLabels } from "@/lib/format";
+import { formatInteger } from "@/lib/format";
 import { routes } from "@/lib/routes";
 import { requireHeroSession } from "@/lib/server-session";
-import type { IncidentType } from "@/types";
+import type { HeroDashboard } from "@/types";
 import { HeroIncidentCard } from "./HeroIncidentCard";
 
 function StatTile({
@@ -36,11 +36,13 @@ function SectionTitle({ id, children }: { id: string; children: ReactNode }) {
 }
 
 /** Incidents par type : barres horizontales d'une seule teinte, valeurs écrites en clair. */
-function IncidentTypesBreakdown({ counts }: { counts: Record<IncidentType, number> }) {
-  const rows = (Object.entries(counts) as Array<[IncidentType, number]>).sort(
-    ([, a], [, b]) => b - a,
-  );
-  const max = Math.max(1, ...rows.map(([, count]) => count));
+function IncidentTypesBreakdown({
+  rows,
+}: {
+  /** Déjà triées, du type le plus signalé au moins signalé. */
+  rows: HeroDashboard["global"]["incidentsByType"];
+}) {
+  const max = Math.max(1, ...rows.map(({ count }) => count));
 
   return (
     <div className="border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-5">
@@ -55,10 +57,10 @@ function IncidentTypesBreakdown({ counts }: { counts: Record<IncidentType, numbe
           </tr>
         </thead>
         <tbody>
-          {rows.map(([type, count]) => (
-            <tr key={type}>
+          {rows.map(({ type, count }) => (
+            <tr key={type.code}>
               <th scope="row" className="w-36 py-1.5 pr-3 text-left font-normal">
-                {incidentTypeLabels[type]}
+                {type.label}
               </th>
               <td className="py-1.5">
                 <span className="flex items-center gap-3">
@@ -170,7 +172,7 @@ export async function HeroDashboardContent() {
               value={formatInteger(global.villainsImprisoned)}
             />
           </dl>
-          <IncidentTypesBreakdown counts={global.incidentsByType} />
+          <IncidentTypesBreakdown rows={global.incidentsByType} />
         </div>
       </section>
 

@@ -60,6 +60,64 @@ createmoderator: ## Crée un modérateur : make createmoderator EMAIL=… FIRST=
 	$(WITH_ENV) HEROS_MODERATOR_PASSWORD="$$password" go run ./cmd/createmoderator \
 		-email "$(EMAIL)" -first-name "$(FIRST)" -last-name "$(LAST)" -birth-date "$(BIRTH)"
 
+.PHONY: seed
+seed: ## Remplit la base de démonstration (univers Marvel) ; RESET=1 efface d'abord TOUTES les données
+	@$(WITH_ENV) go run ./cmd/seed $(if $(RESET),-reset)
+
+# --- Mesures de performance : 5 millions d'incidents ---------------------------------------------------
+# Tout se passe dans une base dédiée (PERF_DB_NAME) : jamais celle du développement quotidien, qui recevrait
+# plusieurs Go de données fictives. Ordre : perf-db (si la base est dans Docker), perf-prepare, seed-perf,
+# puis perf-run dans un terminal et perf dans un autre.
+PERF_DB_NAME      ?= herossos_perf
+PERF_DATABASE_URL ?= postgres://$(DB_USER):$(DB_PASSWORD)@localhost:$(DB_PORT)/$(PERF_DB_NAME)?sslmode=disable
+PERF_INCIDENTS    ?= 5000000
+PERF_MAX_SIZE_GB  ?= 0
+PERF_API_ADDR     ?= :8090
+PERF_API_URL      ?= http://127.0.0.1$(PERF_API_ADDR)/api/v1
+PERF_WORKERS      ?= 16
+PERF_DURATION     ?= 20s
+PERF_P95          ?= 350ms
+PERF_USER         ?= jane.foster@heros-sos.local
+
+# Les index de lecture sont seuls dans leur migration : les retirer puis les recréer (sans toucher aux données)
+# rejoue en direct la lenteur d'origine, puis le gain. psql lit l'URL de la base de mesures.
+PERF_PSQL         ?= psql '$(PERF_DATABASE_URL)' -v ON_ERROR_STOP=1 -q
+# Les deux migrations « que des index » : les listes, puis les derniers incidents résolus (qui demande une colonne ajoutée
+# entre les deux). Retirées dans l'ordre inverse de leur création.
+PERF_INDEXES_SQL  ?= migrations/20261022162000_add_incident_perf_indexes
+PERF_RESOLVED_SQL ?= migrations/20261022166000_add_incident_resolved_index
+
+.PHONY: perf-indexes-off
+perf-indexes-off: ## Démonstration : retire les index de lecture de la base de mesures (lenteur d'origine)
+	@$(PERF_PSQL) -f $(PERF_RESOLVED_SQL).down.sql && $(PERF_PSQL) -f $(PERF_INDEXES_SQL).down.sql && echo "Index de lecture retirés : lancez make perf pour voir la lenteur d'origine."
+
+.PHONY: perf-indexes-on
+perf-indexes-on: ## Démonstration : recrée les index de lecture de la base de mesures
+	@$(PERF_PSQL) -f $(PERF_INDEXES_SQL).up.sql && $(PERF_PSQL) -f $(PERF_RESOLVED_SQL).up.sql && echo "Index de lecture recréés."
+
+.PHONY: perf-db
+perf-db: ## Crée la base de mesures dans la base de la pile de développement (Docker)
+	@$(COMPOSE_DEV) exec -T db psql -U $(DB_USER) -d postgres -tc "SELECT 1 FROM pg_database WHERE datname='$(PERF_DB_NAME)'" | grep -q 1 || \
+		$(COMPOSE_DEV) exec -T db createdb -U $(DB_USER) $(PERF_DB_NAME)
+	@echo "Base $(PERF_DB_NAME) prête."
+
+.PHONY: perf-prepare
+perf-prepare: ## Migre la base de mesures et y charge les données Marvel (héros, vilains, citoyens)
+	@$(WITH_ENV) export HEROS_DATABASE_URL='$(PERF_DATABASE_URL)'; go run ./cmd/api -migrate && go run ./cmd/seed
+
+.PHONY: seed-perf
+seed-perf: ## Ajoute PERF_INCIDENTS (5 000 000) incidents à la base de mesures ; PERF_MAX_SIZE_GB=10 borne sa taille (8,2 Go mesurés)
+	@$(WITH_ENV) export HEROS_DATABASE_URL='$(PERF_DATABASE_URL)'; go run ./cmd/seedperf -incidents $(PERF_INCIDENTS) -max-size-gb $(PERF_MAX_SIZE_GB)
+
+.PHONY: perf-run
+perf-run: ## Lance l'API sur la base de mesures (migrations comprises), à laisser tourner pendant `make perf`
+	@$(WITH_ENV) export HEROS_DATABASE_URL='$(PERF_DATABASE_URL)' HEROS_HTTP_ADDR='$(PERF_API_ADDR)'; go run ./cmd/api
+
+.PHONY: perf
+perf: ## Mesure les temps de réponse (p95 ≤ PERF_P95) ; LOADTEST_PASSWORD=… ajoute « mes incidents » (compte PERF_USER)
+	@$(WITH_ENV) go run ./cmd/loadtest -base-url '$(PERF_API_URL)' -workers $(PERF_WORKERS) -duration $(PERF_DURATION) \
+		-p95 $(PERF_P95) $(if $(LOADTEST_PASSWORD),-identifier '$(PERF_USER)') $(if $(SCENARIOS),-scenarios '$(SCENARIOS)')
+
 .PHONY: build
 build: ## Compile tous les paquets
 	go build ./...
@@ -81,6 +139,14 @@ lint: ## Vérifie le formatage et lance go vet
 	@test -z "$$(gofmt -l .)" || { echo "Fichiers mal formatés :"; gofmt -l .; exit 1; }
 	go vet ./...
 
+# Options de golangci-lint en plus. Le CI y met --new-from-merge-base=origin/develop : seules les remarques
+# qu'une PR introduit la font échouer, celles qui existent déjà n'arrêtent pas les autres développeurs.
+GOLANGCI_FLAGS ?=
+
+.PHONY: golangci
+golangci: ## Analyse plus poussée (conventions Go, erreurs courantes) : voir .golangci.yml
+	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2 run $(GOLANGCI_FLAGS) ./...
+
 .PHONY: vuln
 vuln: ## Cherche les vulnérabilités connues atteignables dans le code
 	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
@@ -93,28 +159,54 @@ tidy: ## Nettoie go.mod et go.sum
 
 # Deux projets Compose distincts : conteneurs, réseaux et volumes séparés. Un `up-prod` ne peut jamais
 # toucher aux données de développement, ni l'inverse, même lancés sur la même machine.
-COMPOSE_DEV  = docker compose -p heros-sos-dev -f docker-compose.yml -f docker-compose.dev.yml
-COMPOSE_PROD = docker compose -p heros-sos-prod --env-file .env.production -f docker-compose.yml -f docker-compose.prod.yml
+#
+# Les fichiers Compose sont à la racine du dépôt (back et front se lancent ensemble) : Compose prend
+# alors la racine comme dossier du projet. Son `.env` automatique serait donc celui de la racine, d'où
+# --env-file explicite. Depuis la racine, `make up`, `make up-prod`… appellent ces cibles.
+COMPOSE_DEV  = docker compose -p heros-sos-dev --env-file .env -f ../docker-compose.yml -f ../docker-compose.dev.yml
+COMPOSE_PROD = docker compose -p heros-sos-prod --env-file .env.production -f ../docker-compose.yml -f ../docker-compose.prod.yml
+
+# Le disque de la machine virtuelle de Docker (Docker Desktop) se remplit vite : images, cache de build,
+# volumes. Faute de place, un build échoue et un conteneur peut redémarrer en boucle (ENOSPC) : on vérifie
+# donc l'espace libre AVANT de toucher aux conteneurs.
+# MSYS_NO_PATHCONV : sous Windows, Git Bash réécrirait le `/` de `df -k /` en `C:/Program Files/Git/`, df
+# échouerait et la cible annoncerait toujours 0 Mo libres. Sans effet sous Linux et macOS.
+DISK_MIN_MB ?= 1536
+.PHONY: disk-check
+disk-check:
+	@free=$$(MSYS_NO_PATHCONV=1 docker run --rm alpine:3 df -k / 2>/dev/null | awk 'NR==2 {print int($$4/1024)}'); \
+	if [ -z "$$free" ] || { [ "$$free" -lt $(DISK_MIN_MB) ] && [ -z "$(FORCE)" ]; }; then \
+		echo "Le disque de Docker est presque plein : $${free:-0} Mo libres, $(DISK_MIN_MB) Mo au moins sont nécessaires."; \
+		echo "Sinon un build échoue, ou un conteneur ne peut plus écrire et redémarre en boucle."; \
+		echo "  - libérer le cache de build (sans danger) : docker builder prune -a -f"; \
+		echo "  - agrandir le disque, durablement         : Docker Desktop > Settings > Resources > Virtual disk limit"; \
+		echo "  - continuer malgré tout                   : FORCE=1 make up"; \
+		exit 1; \
+	fi
 
 .PHONY: up-dev
-up-dev: ## Démarre la pile de développement (proxy, API, base, Mailpit, RabbitMQ, front)
+up-dev: disk-check ## Démarre la pile de développement (proxy, API, base, Mailpit, RabbitMQ, front, documentation)
 	@test -f .env || { echo "Créez .env d'abord : make env"; exit 1; }
 	@set -a; . ./.env; set +a; \
-	for port in $${PROXY_PORT:-8088} $${API_PORT:-8081} $${MAILPIT_PORT:-8025} $${POSTGRES_PORT:-5432} $${RABBITMQ_PORT:-5672} $${RABBITMQ_UI_PORT:-15672}; do \
+	for port in $${PROXY_PORT:-8088} $${API_PORT:-8081} $${MAILPIT_PORT:-8025} $${POSTGRES_PORT:-5432} $${RABBITMQ_PORT:-5672} $${RABBITMQ_UI_PORT:-15672} $${DOCS_PORT:-3001}; do \
 		if ! $(COMPOSE_DEV) ps --status running -q 2>/dev/null | grep -q . && command -v lsof >/dev/null && lsof -nP -iTCP:$$port -sTCP:LISTEN >/dev/null 2>&1; then \
-			echo "Le port $$port est déjà utilisé sur cette machine. Choisissez-en un autre dans .env (PROXY_PORT, API_PORT, MAILPIT_PORT, POSTGRES_PORT, RABBITMQ_PORT, RABBITMQ_UI_PORT)."; exit 1; \
+			echo "Le port $$port est déjà utilisé sur cette machine. Choisissez-en un autre dans .env (PROXY_PORT, API_PORT, MAILPIT_PORT, POSTGRES_PORT, RABBITMQ_PORT, RABBITMQ_UI_PORT, DOCS_PORT)."; exit 1; \
 		fi; \
 	done
-	@# Le front garde ses node_modules et son cache .next dans des volumes anonymes (voir
-	@# docker-compose.dev.yml). `rm -v` supprime l'ancien conteneur ET ces volumes : sans cela chaque
-	@# démarrage en abandonnerait une copie (~700 Mo) et les dépendances resteraient celles d'avant.
-	$(COMPOSE_DEV) rm -sfv web
-	$(COMPOSE_DEV) up -d --build
-	@set -a; . ./.env; set +a; echo "Application : http://localhost:$${PROXY_PORT:-8088}   API : http://localhost:$${PROXY_PORT:-8088}/api/v1/docs   Mails : http://localhost:$${MAILPIT_PORT:-8025}"
+	@# D'abord construire les images : si le build échoue (disque plein, réseau…), les conteneurs en cours
+	@# ne sont pas touchés. Supprimer web et docs avant aurait laissé l'application cassée.
+	$(COMPOSE_DEV) build
+	@# Le front et la documentation gardent leurs node_modules (et le cache .next, les pages d'API) dans
+	@# des volumes anonymes (voir docker-compose.dev.yml). `rm -v` supprime l'ancien conteneur ET ces
+	@# volumes : sans cela chaque démarrage en abandonnerait une copie (~700 Mo) et les dépendances
+	@# resteraient celles d'avant.
+	$(COMPOSE_DEV) rm -sfv web docs
+	$(COMPOSE_DEV) up -d
+	@set -a; . ./.env; set +a; echo "Application : http://localhost:$${PROXY_PORT:-8088}   API : http://localhost:$${PROXY_PORT:-8088}/api/v1/docs   Mails : http://localhost:$${MAILPIT_PORT:-8025}   Documentation : http://localhost:$${DOCS_PORT:-3001}/heros-sos/"
 
 .PHONY: down-dev
 down-dev: ## Arrête la pile de développement (V=1 supprime aussi les données)
-	$(COMPOSE_DEV) rm -sfv web
+	$(COMPOSE_DEV) rm -sfv web docs
 	$(COMPOSE_DEV) down $(if $(V),-v)
 
 .PHONY: logs-dev
@@ -124,6 +216,51 @@ logs-dev: ## Suit les journaux de la pile de développement
 .PHONY: moderator-dev
 moderator-dev: ## Crée un modérateur dans la pile de développement : EMAIL=… FIRST=… LAST=… BIRTH=AAAA-MM-JJ
 	$(call create_moderator,$(COMPOSE_DEV))
+
+# Monitoring ELK (profil Compose `elk`) : Elasticsearch, Logstash, Kibana et Filebeat, qui lit les journaux JSON de l'API.
+# Mesuré sur Docker Desktop (macOS) : l'ELK prend environ 3,3 Go de mémoire (Elasticsearch 1,5 ; Kibana 0,9 ; Logstash 0,8 ;
+# Filebeat 0,1), soit environ 5,7 Go avec toute la pile : donner 8 Go à Docker Desktop. Les images pèsent environ 6 Go sur le
+# disque de Docker (Kibana 2,3 ; Elasticsearch 1,6 ; Logstash 1,4 ; Filebeat 0,6) : au premier démarrage il faut la place de les
+# télécharger, ensuite une marge ordinaire suffit.
+ELK_DISK_MIN_MB       ?= 8192
+ELK_DISK_MIN_MB_READY ?= 2048
+ELK_SERVICES    = elasticsearch logstash kibana filebeat elk-setup
+
+.PHONY: elk-dev
+elk-dev: ## Démarre le monitoring ELK (journaux de l'API en JSON, Kibana sur http://localhost:5601)
+	@test -f .env || { echo "Créez .env d'abord : make env"; exit 1; }
+	@# Place exigée : celle de télécharger les images si l'une manque, une marge ordinaire sinon.
+	@set -a; . ./.env; set +a; version=$${ELASTIC_VERSION:-9.3.1}; missing=; \
+	for image in elasticsearch/elasticsearch kibana/kibana logstash/logstash beats/filebeat; do \
+		docker image inspect docker.elastic.co/$$image:$$version >/dev/null 2>&1 || missing=1; \
+	done; \
+	min=$(ELK_DISK_MIN_MB_READY); [ -z "$$missing" ] || min=$(ELK_DISK_MIN_MB); \
+	$(MAKE) --no-print-directory disk-check DISK_MIN_MB=$$min
+	@# L'API est recréée avec des journaux JSON ; elle reprend le texte lisible au prochain `make up`.
+	HEROS_LOG_FORMAT=json $(COMPOSE_DEV) --profile elk up -d api $(ELK_SERVICES)
+	@echo "Kibana : http://localhost:$${KIBANA_PORT:-5601} (le dashboard apparaît une fois elk-setup terminé : docker logs heros-sos-dev-elk-setup-1)"
+
+.PHONY: elk-down-dev
+elk-down-dev: ## Arrête le monitoring ELK (V=1 supprime aussi ses données) et remet les journaux de l'API en texte
+	$(COMPOSE_DEV) --profile elk stop $(ELK_SERVICES)
+	$(COMPOSE_DEV) --profile elk rm -f $(if $(V),-v) $(ELK_SERVICES)
+	$(if $(V),docker volume rm -f heros-sos-dev_esdata >/dev/null 2>&1 || true)
+	$(COMPOSE_DEV) up -d api
+
+.PHONY: seed-dev
+seed-dev: ## Remplit la base de la pile de développement (univers Marvel) ; RESET=1 efface d'abord TOUTES les données
+	$(COMPOSE_DEV) run --rm api /seed $(if $(RESET),-reset)
+
+# pg_stat_statements est chargé par docker-compose.dev.yml ; CREATE EXTENSION le rend interrogeable (idempotent, et
+# à refaire après `make reset`, qui efface la base). DB_NAME : la base à examiner (PERF_DB_NAME pour celle des mesures).
+.PHONY: slow-queries-dev
+slow-queries-dev: ## Classe les requêtes de la base de développement par temps total (DB_NAME=herossos_perf pour les mesures)
+	@$(COMPOSE_DEV) exec -T db psql -U $(DB_USER) -d $(DB_NAME) -q -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements" \
+		-c "SELECT round(total_exec_time::numeric / 1000, 2) AS total_s, calls, round(mean_exec_time::numeric, 2) AS mean_ms, round(max_exec_time::numeric, 2) AS max_ms, left(regexp_replace(query, '\s+', ' ', 'g'), 90) AS query FROM pg_stat_statements WHERE dbid = (SELECT oid FROM pg_database WHERE datname = current_database()) AND query NOT ILIKE '%pg_stat_statements%' ORDER BY total_exec_time DESC LIMIT 15"
+
+.PHONY: resetmfa-dev
+resetmfa-dev: ## Réinitialise la 2FA d'un compte (appareil perdu) dans la pile de développement : EMAIL=…
+	$(call reset_mfa,$(COMPOSE_DEV))
 
 .PHONY: secrets
 secrets: ## Génère secrets/ pour la production (ne remplace JAMAIS un secret existant)
@@ -136,7 +273,9 @@ secrets: ## Génère secrets/ pour la production (ne remplace JAMAIS un secret e
 	create csrf_secret "$$(openssl rand -base64 32 | tr -d '\n')"; \
 	create smtp_password ""; \
 	create omdb_api_key ""; \
-	create rabbitmq_password "$$(openssl rand -hex 24)"; \
+	[ -e secrets/rabbitmq_password ] || printf '%s' "$$(openssl rand -hex 24)" > secrets/rabbitmq_password; \
+	create rabbitmq_password "$$(cat secrets/rabbitmq_password)"; \
+	create rabbitmq_url "amqp://$${RABBITMQ_USER:-heros}:$$(cat secrets/rabbitmq_password)@rabbitmq:5672/"; \
 	echo; echo "Sauvegardez secrets/crypto_keys HORS du serveur : sans elle, les données chiffrées sont perdues."; \
 	echo "Renseignez secrets/smtp_password si votre serveur SMTP demande un mot de passe."; \
 	echo "Renseignez secrets/omdb_api_key avec votre clé OMDb avant de lancer l'API."
@@ -159,22 +298,33 @@ logs-prod: ## Suit les journaux de la pile de production
 moderator-prod: ## Crée un modérateur en production : EMAIL=… FIRST=… LAST=… BIRTH=AAAA-MM-JJ
 	$(call create_moderator,$(COMPOSE_PROD))
 
+.PHONY: resetmfa-prod
+resetmfa-prod: ## Réinitialise la 2FA d'un compte (appareil perdu) en production : EMAIL=… (vérifier l'identité d'abord)
+	$(call reset_mfa,$(COMPOSE_PROD))
+
 .PHONY: compose-check
 compose-check: ## Valide la syntaxe des fichiers Compose (développement et production), sur un clone neuf aussi
 	@# Les fichiers manquants (.env, .env.production, secrets/) sont créés le temps du contrôle, puis supprimés.
 	@set -e; created=""; \
 	[ -f .env ] || { cp .env.example .env; created="$$created .env"; }; \
 	[ -f .env.production ] || { cp .env.production.example .env.production; created="$$created .env.production"; }; \
-	[ -d secrets ] || { mkdir secrets; for f in database_url postgres_password crypto_keys csrf_secret smtp_password omdb_api_key rabbitmq_password; do : > secrets/$$f; done; created="$$created secrets"; }; \
+	[ -d secrets ] || { mkdir secrets; for f in database_url postgres_password crypto_keys csrf_secret smtp_password omdb_api_key rabbitmq_password rabbitmq_url; do : > secrets/$$f; done; created="$$created secrets"; }; \
 	trap 'rm -rf $$created' EXIT; \
 	$(COMPOSE_DEV) config -q && echo "développement : valide"; \
 	$(COMPOSE_PROD) config -q && echo "production : valide"
+
+# Lance la commande resetmfa (incluse dans l'image) : elle supprime la double authentification d'un compte et ferme
+# ses sessions. L'API ne le permet jamais, pour qu'un compte piraté ne puisse pas retirer sa propre protection.
+define reset_mfa
+	@test -n "$(EMAIL)" || { echo "EMAIL est obligatoire"; exit 1; }
+	$(1) run --rm api /resetmfa -email "$(EMAIL)"
+endef
 
 # Lance la commande createmoderator (incluse dans l'image) ; le mot de passe est demandé, jamais passé en argument.
 define create_moderator
 	@test -n "$(EMAIL)" -a -n "$(FIRST)" -a -n "$(LAST)" -a -n "$(BIRTH)" || { echo "EMAIL, FIRST, LAST et BIRTH sont obligatoires"; exit 1; }
 	@read -rsp "Mot de passe : " password; echo; \
-	$(1) run --rm -e HEROS_MODERATOR_PASSWORD="$$password" --entrypoint /createmoderator api \
+	$(1) run --rm -e HEROS_MODERATOR_PASSWORD="$$password" api /createmoderator \
 		-email "$(EMAIL)" -first-name "$(FIRST)" -last-name "$(LAST)" -birth-date "$(BIRTH)"
 endef
 

@@ -1,0 +1,48 @@
+# Configuration de golangci-lint (v2) : `make golangci`.
+#
+# Le CI lance déjà govulncheck et les tests ; `make check` ajoute gofmt et go vet en local. Ces analyseurs vont
+# plus loin sur les conventions Go et les erreurs courantes. La liste est volontairement courte : chacun dit
+# quelque chose d'utile ici, aucun ne réclame un style de code. Le CI les applique aux remarques nouvelles d'une
+# PR seulement (voir `.github/workflows/backend-ci.yml`).
+version: "2"
+
+run:
+  timeout: 10m
+
+linters:
+  # errcheck, govet, ineffassign, staticcheck, unused.
+  default: standard
+  enable:
+    - bodyclose # corps d'une réponse HTTP toujours fermé
+    - copyloopvar # copie inutile de la variable de boucle (Go 1.22+)
+    - errorlint # errors.Is / errors.As, et %w pour envelopper
+    - exhaustive # switch sur un type énuméré : aucune valeur oubliée
+    - intrange # for i := range n
+    - nilerr # return nil alors qu'une erreur vient d'être testée
+    - perfsprint # fmt.Sprintf là où strconv ou la concaténation suffisent
+    - predeclared # une variable nommée max, min, len… masque l'identifiant du langage
+    - sloglint # slog : paires clé-valeur cohérentes, slog.DiscardHandler
+    - unconvert # conversion inutile
+    - unparam # paramètre ou résultat que personne n'utilise
+    - usestdlibvars # http.MethodGet plutôt que "GET"
+    - wastedassign # affectation jamais lue
+  settings:
+    exhaustive:
+      # Un `default` est un choix explicite : les valeurs restantes sont traitées.
+      default-signifies-exhaustive: true
+    sloglint:
+      kv-only: true
+  exclusions:
+    rules:
+      # Les aides de test sont appelées avec la même valeur partout : un paramètre en moins n'apporterait rien.
+      - path: _test\.go
+        linters:
+          - unparam
+
+# Ce que ce fichier ne réclame pas, et pourquoi :
+#   - gocritic hugeParam / rangeValCopy : les structures de dépendances passées par valeur aux constructeurs
+#     (`NewService(deps ServiceDeps)`) sont un idiome, appelé une fois ; mesuré, aucune boucle n'en souffre.
+#   - gosec G101 / G115 : les noms de variables d'environnement contenant « PASSWORD » ou « SECRET » et les
+#     conversions déjà bornées (durées, longueurs de constantes) sont des faux positifs ; les vraies conversions
+#     de la configuration passent par loader.boundedInt.
+#   - contextcheck : les contextes détachés (`context.WithoutCancel`, file de mails, arrêt propre) sont voulus.

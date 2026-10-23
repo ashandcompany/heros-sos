@@ -74,6 +74,7 @@ type joinedInterventionRecord struct {
 type Repository interface {
 	Start(ctx context.Context, incidentID, leadID uuid.UUID, now time.Time) (*Intervention, error)
 	Find(ctx context.Context, id uuid.UUID) (*Intervention, error)
+	ListByIncident(ctx context.Context, incidentID uuid.UUID) ([]*Intervention, error)
 	Join(ctx context.Context, id, heroID uuid.UUID, now time.Time) error
 	Invite(ctx context.Context, id, actorID, heroID uuid.UUID, now time.Time) error
 	ConfirmInvitation(ctx context.Context, id, heroID uuid.UUID, now time.Time) error
@@ -94,16 +95,17 @@ func (r *gormRepository) conn(ctx context.Context) *gorm.DB { return database.Co
 
 func (r *gormRepository) Start(ctx context.Context, incidentID, leadID uuid.UUID, now time.Time) (*Intervention, error) {
 	var incident struct {
-		ID     uuid.UUID
-		Status string
+		ID         uuid.UUID
+		Status     string
+		Moderation string
 	}
-	if err := r.conn(ctx).Table("incidents").Select("id, status").Where("id = ?", incidentID).Take(&incident).Error; err != nil {
+	if err := r.conn(ctx).Table("incidents").Select("id, status, moderation").Where("id = ?", incidentID).Take(&incident).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("intervention : lecture de l'incident : %w", err)
 	}
-	if incident.Status != "reported" && incident.Status != "failed" {
+	if incident.Moderation != "approved" || incident.Status != "reported" && incident.Status != "failed" {
 		return nil, ErrIncidentNotAvailable
 	}
 
@@ -184,6 +186,32 @@ func (r *gormRepository) Find(ctx context.Context, id uuid.UUID) (*Intervention,
 			participant.Alias = *row.Alias
 		}
 		result.Participants[i] = participant
+	}
+	return result, nil
+}
+
+// ListByIncident retourne les interventions d'un incident, de la plus récente à la plus ancienne
+// (ErrNotFound si l'incident n'existe pas). Un incident n'en a que quelques-unes : chacune est lue par Find.
+func (r *gormRepository) ListByIncident(ctx context.Context, incidentID uuid.UUID) ([]*Intervention, error) {
+	var exists bool
+	if err := r.conn(ctx).Raw("SELECT EXISTS (SELECT 1 FROM incidents WHERE id = ?)", incidentID).Scan(&exists).Error; err != nil {
+		return nil, fmt.Errorf("intervention : lecture de l'incident : %w", err)
+	}
+	if !exists {
+		return nil, ErrNotFound
+	}
+	var interventionIDs []uuid.UUID
+	if err := r.conn(ctx).Table(tableInterventions).Where("incident_id = ?", incidentID).
+		Order("started_at DESC, id DESC").Pluck("id", &interventionIDs).Error; err != nil {
+		return nil, fmt.Errorf("intervention : liste de l'incident : %w", err)
+	}
+	result := make([]*Intervention, 0, len(interventionIDs))
+	for _, id := range interventionIDs {
+		found, err := r.Find(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, found)
 	}
 	return result, nil
 }

@@ -20,6 +20,8 @@ type Filter = keyof typeof filters;
 
 const isFilter = (value: string | undefined): value is Filter => !!value && value in filters;
 
+const filterKeys = Object.keys(filters) as Filter[];
+
 export type HeroIncidentsSearchParams = Promise<{ statut?: string | string[] }>;
 
 /** Liste des signalements. Lit la session et l'URL : à rendre sous <Suspense>. */
@@ -28,7 +30,7 @@ export async function HeroIncidentsList({
 }: {
   searchParams: HeroIncidentsSearchParams;
 }) {
-  const { token, user } = await requireHeroSession();
+  const { token } = await requireHeroSession();
   const raw = (await searchParams).statut;
   const value = Array.isArray(raw) ? raw[0] : raw;
   const current: Filter = isFilter(value) ? value : "a-traiter";
@@ -38,7 +40,7 @@ export async function HeroIncidentsList({
     <>
       <nav aria-label="Filtrer par statut" className="mb-6">
         <ul className="flex flex-wrap gap-2">
-          {(Object.keys(filters) as Filter[]).map((filter) => (
+          {filterKeys.map((filter) => (
             <li key={filter}>
               <Link
                 href={
@@ -72,7 +74,7 @@ export async function HeroIncidentsList({
         <ul className="grid gap-3 md:grid-cols-2">
           {incidents.map((incident) => (
             <li key={incident.id}>
-              <HeroIncidentCard incident={incident} heroId={user.id} />
+              <HeroIncidentCard incident={incident} />
             </li>
           ))}
         </ul>

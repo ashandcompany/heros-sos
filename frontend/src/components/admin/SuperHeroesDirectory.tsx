@@ -1,4 +1,5 @@
 import { Avatar } from "@/components/ui/Avatar";
+import { Badge } from "@/components/ui/Badge";
 import { DialogTrigger } from "@/components/ui/DialogTrigger";
 import { getSuperHeroProfiles } from "@/lib/api";
 import { requireAdminSession } from "@/lib/server-session";
@@ -12,6 +13,11 @@ const detailsButtonClasses =
 function FullName({ hero }: { hero: SuperHeroProfile }) {
   const fullName = formatFullName(hero.lastName, hero.firstName);
   return fullName ? <>{fullName}</> : <span className="text-muted italic">Non communiqué</span>;
+}
+
+/** Un héros dont le compte est désactivé reste dans l'annuaire, mais ne peut plus se connecter. */
+function DeactivatedBadge({ hero }: { hero: SuperHeroProfile }) {
+  return hero.accountStatus === "desactive" ? <Badge tone="danger">Compte désactivé</Badge> : null;
 }
 
 function DetailsButton({ hero }: { hero: SuperHeroProfile }) {
@@ -79,6 +85,7 @@ export async function SuperHeroesDirectory() {
                 <p className="text-sm">
                   <FullName hero={hero} />
                 </p>
+                <DeactivatedBadge hero={hero} />
               </div>
             </div>
             <dl className="mt-4 space-y-2 text-sm">
@@ -138,6 +145,7 @@ export async function SuperHeroesDirectory() {
                   <span className="flex items-center gap-3">
                     <Avatar name={hero.alias} src={hero.avatarUrl} size={36} />
                     <span className="font-display font-semibold">{hero.alias}</span>
+                    <DeactivatedBadge hero={hero} />
                   </span>
                 </th>
                 <td className="px-4 py-3">

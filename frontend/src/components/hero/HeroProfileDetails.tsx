@@ -1,10 +1,19 @@
 import {
+  removeHeroAvatarAction,
   requestHeroEmailChangeAction,
   updateHeroAvatarAction,
   updateHeroContactAction,
 } from "@/app/actions/hero";
-import { Panel } from "@/components/citizen/AccountDetails";
-import { AvatarForm, ContactForm, EmailChangeForm } from "@/components/citizen/AccountForms";
+import { MfaSection } from "@/components/auth/MfaPanel";
+import { Panel, PasswordPanel, SessionsPanel } from "@/components/citizen/AccountDetails";
+import {
+  AvatarForm,
+  ContactForm,
+  EmailChangeForm,
+  RemoveAvatarForm,
+} from "@/components/citizen/AccountForms";
+import { HeroPublicProfileForm } from "@/components/hero/HeroPublicProfileForm";
+import { LocationSharingPanel } from "@/components/hero/LocationSharingPanel";
 import { Avatar } from "@/components/ui/Avatar";
 import { getMyHeroProfile } from "@/lib/api";
 import { formatDate, formatFullName } from "@/lib/format";
@@ -33,6 +42,7 @@ export async function HeroProfileDetails() {
             </div>
           </div>
           <AvatarForm action={updateHeroAvatarAction} />
+          {profile.avatarUrl && <RemoveAvatarForm action={removeHeroAvatarAction} />}
         </Panel>
 
         <Panel
@@ -42,8 +52,6 @@ export async function HeroProfileDetails() {
         >
           <dl className="space-y-3">
             {[
-              ["Pseudo", profile.alias],
-              ["Pouvoir", profile.power],
               ["Civilité", civility],
               ["Nom", formatFullName(profile.lastName, profile.firstName)],
               ["Date de naissance", profile.birthDate && formatDate(profile.birthDate)],
@@ -58,6 +66,14 @@ export async function HeroProfileDetails() {
       </div>
 
       <div className="space-y-6">
+        <Panel
+          id="public-profile-title"
+          title="Profil public"
+          description="Votre pseudo et votre description apparaissent sur votre fiche de l'encyclopédie."
+        >
+          <HeroPublicProfileForm alias={profile.alias} power={profile.power} />
+        </Panel>
+
         <Panel id="contact-title" title="Coordonnées">
           <ContactForm contact={profile} action={updateHeroContactAction} withComplement={false} />
         </Panel>
@@ -67,12 +83,32 @@ export async function HeroProfileDetails() {
           <p className="mb-4 font-medium break-all">{profile.email}</p>
           {profile.pendingEmail && (
             <p className="mb-6 rounded-xl border border-rating/40 bg-rating/10 px-4 py-3 text-sm">
-              <span className="font-semibold text-rating">En attente de modération :</span>{" "}
+              <span className="font-semibold text-rating">
+                {profile.pendingEmailConfirmed
+                  ? "En attente de modération :"
+                  : "En attente de confirmation :"}
+              </span>{" "}
               <span className="break-all">{profile.pendingEmail}</span>
+              {!profile.pendingEmailConfirmed && (
+                <span className="mt-1 block text-muted">
+                  Ouvrez le lien du mail envoyé à cette adresse. Pas reçu ? Renvoyez la demande
+                  ci-dessous.
+                </span>
+              )}
             </p>
           )}
           <EmailChangeForm action={requestHeroEmailChangeAction} />
         </Panel>
+
+        <Panel id="location-title" title="Partage de position">
+          <LocationSharingPanel consentAt={profile.locationConsentAt} />
+        </Panel>
+
+        <PasswordPanel />
+
+        <MfaSection role="super-heros" />
+
+        <SessionsPanel />
       </div>
     </div>
   );

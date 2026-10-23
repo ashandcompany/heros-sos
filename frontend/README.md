@@ -10,30 +10,46 @@ npm install
 npm run dev
 ```
 
-| Script                 | Rôle                          |
-| ---------------------- | ----------------------------- |
-| `npm run dev`          | Serveur de développement      |
-| `npm run build`        | Build de production           |
-| `npm run lint`         | ESLint                        |
-| `npm run format`       | Formate le code avec Prettier |
-| `npm run format:check` | Vérifie le formatage (CI)     |
+| Script                    | Rôle                                                                     |
+| ------------------------- | ------------------------------------------------------------------------ |
+| `npm run dev`             | Serveur de développement                                                 |
+| `npm run build`           | Build de production                                                      |
+| `npm run lint`            | ESLint                                                                   |
+| `npm test`                | Tests unitaires (Vitest)                                                 |
+| `npm run test:e2e`        | Parcours dans le navigateur (Playwright), sur un build en mode mock      |
+| `npm run format`          | Formate le code avec Prettier                                            |
+| `npm run format:check`    | Vérifie le formatage (CI)                                                |
+| `npm run api:types`       | Régénère `src/lib/api/schema.d.ts` depuis `backend/openapi/openapi.yaml` |
+| `npm run api:types:check` | Vérifie que ces types sont à jour (CI)                                   |
 
 Sans configuration, toute l'application tourne sur les mocks (comptes de test dans
 [src/mocks/users.ts](src/mocks/users.ts), ex : `citoyen@heros-sos.fr` / `Citoyen123!`).
 
 ### Avec l'API Go
 
-Inscription, activation, connexion, session, déconnexion et réinitialisation du mot de passe
-passent par l'API dès que `API_URL` est renseignée ;
-le reste reste mocké (voir [docs/backend-contract.md](docs/backend-contract.md)). Les comptes
+Identité (inscription, activation, connexion avec « Rester connecté », session, déconnexion de tous les
+appareils, mot de passe, double authentification), demandes de super-héros,
+modération des comptes, annuaire admin des super-héros, types d'incident, incidents et interventions
+(dont l'historique public des héros et des vilains), vidéothèque, avis, blog, films des super-vilains, profil et photo, changements d'adresse email (confirmés
+par un lien), contact, newsletter (confirmation et désinscription par lien) et compteurs du tableau de bord de
+modération passent par l'API dès que
+`API_URL` est renseignée ; le reste reste mocké (voir [docs/backend-contract.md](docs/backend-contract.md)).
+Les photos de profil sont servies par l'API sous `/api/v1/avatars/…` : elles ne s'affichent que derrière le
+reverse proxy (`make up`, <http://localhost:8088>), pas avec `npm run dev` seul sur le port 3000.
+La recherche de films IMDb exige une clé OMDb côté API (`HEROS_OMDB_API_KEY` dans
+`backend/.env`). Après une mise à jour du backend, relancer `make up-dev` pour reconstruire
+l'image de l'API (sinon les nouvelles routes répondent 404). Les comptes
 sont alors ceux de l'API : à créer par `POST /auth/register`, puis à activer avec le lien reçu
-par mail (Mailpit, `http://localhost:8025`, avec `make up-dev`).
+par mail (Mailpit, `http://localhost:8025`, avec `make up`). Pour une base de démonstration déjà remplie
+(héros, vilains, incidents, films, articles…), lancer `make seed` à la racine : tous les comptes ont le mot de
+passe `Avengers2026!` (ex. `admin@heros-sos.local`).
 
-- **Tout dans Docker** (recommandé) : depuis `backend/`, `make env` puis `make up-dev`.
-  Front et API derrière le même proxy : <http://localhost:8088>. `API_URL` est déjà fixée dans
-  `backend/docker-compose.dev.yml` ; le code du front est monté et rechargé à chaud.
-- **Front sur la machine** : lancer l'API (`make up-dev`, ou `go run` dans `backend/`), puis
-  renseigner `API_URL` dans `.env.local` (`http://localhost:8081/api/v1` avec `make up-dev`) et
+- **Tout dans Docker** (recommandé) : depuis la racine du dépôt, `make up` (crée `backend/.env` au
+  premier lancement). Front et API derrière le même proxy : <http://localhost:8088>. `API_URL` est
+  déjà fixée dans `docker-compose.dev.yml` (à la racine) ; le code du front est monté et rechargé à
+  chaud.
+- **Front sur la machine** : lancer l'API (`make up` à la racine, ou `go run` dans `backend/`), puis
+  renseigner `API_URL` dans `.env.local` (`http://localhost:8081/api/v1` avec `make up`) et
   relancer `npm run dev`.
 
 ## Organisation
@@ -50,14 +66,15 @@ par mail (Mailpit, `http://localhost:8025`, avec `make up-dev`).
 Copier `.env.example` vers `.env.local` (jamais versionné). Next.js ne charge les variables qu'au
 démarrage : redémarrer `npm run dev` après modification.
 
-| Variable   | Obligatoire | Défaut                 | Lue par                                   | Rôle                                                                                             |
-| ---------- | ----------- | ---------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `API_URL`  | Non         | vide → données mockées | `src/lib/api/config.ts`                   | Base de l'API Go **avec son préfixe**, ex : `http://localhost:8081/api/v1`                       |
-| `NODE_ENV` | Non         | défini par Next        | `lib/cookies.ts`, `actions/newsletter.ts` | `production` : cookies `secure`, cookie de session `__Host-session`. Ne pas le définir à la main |
+| Variable   | Obligatoire | Défaut                  | Lue par                                   | Rôle                                                                                                       |
+| ---------- | ----------- | ----------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `API_URL`  | Non         | vide → données mockées  | `src/lib/api/config.ts`                   | Base de l'API Go **avec son préfixe**, ex : `http://localhost:8081/api/v1`                                 |
+| `NODE_ENV` | Non         | défini par Next         | `lib/cookies.ts`, `actions/newsletter.ts` | `production` : cookies `secure`, cookie de session `__Host-session`. Ne pas le définir à la main           |
+| `SITE_URL` | En prod     | `http://localhost:3000` | `src/lib/site.ts`                         | URL publique du site : liens absolus du sitemap, de robots.txt et des aperçus Open Graph. Lue au démarrage |
 
 - `API_URL` est lue **par le serveur, au démarrage** : elle n'est jamais envoyée au navigateur et
   n'est pas figée au build (la même image Docker sert dans tous les environnements). Dans la pile
-  Docker, elle vaut `http://api:8080/api/v1` (réseau interne, voir `backend/docker-compose.*.yml`).
+  Docker, elle vaut `http://api:8080/api/v1` (réseau interne, voir `docker-compose.*.yml` à la racine).
 - Le nom du cookie de session doit être celui de l'API : `session` en développement,
   `__Host-session` en production. Côté backend, c'est `HEROS_COOKIE_SECURE` (vrai par défaut en
   production) : un front en mode production face à une API de développement fait échouer la
@@ -88,14 +105,32 @@ Espace `/admin`, réservé au rôle `admin` (compte mock : `admin@heros-sos.fr` 
 | `/admin/videotheque`  | Publier / refuser / supprimer les films des vidéothèques         |
 | `/admin/commentaires` | Publier / masquer les commentaires des évaluations               |
 | `/admin/blog`         | Créer, modifier, supprimer les articles (éditeur riche Tiptap)   |
+| `/admin/securite`     | Double authentification : codes de secours, déconnexion partout  |
 
 Les listes à modérer affichent par défaut les éléments en attente (`?statut=valide|rejete|tous`
 pour les autres). Le HTML des articles doit être assaini côté API avant tout affichage public.
 
+Avec l'API, un modérateur doit activer sa double authentification (TOTP) : obligatoire en production,
+facultative en développement. Un citoyen ou un super-héros peut aussi l'activer, depuis « Mon compte » ou
+« Mon profil » (panneau `MfaSection`). Tant que la personne n'a pas saisi son code, sa session est limitée et il est envoyé à
+`/connexion/verification` ou `/connexion/double-authentification` (voir
+[docs/backend-contract.md](docs/backend-contract.md#double-authentification-et-session-limitée)).
+
+## Pages ouvertes depuis un mail
+
+Les liens reçus par mail mènent à des pages publiques où le jeton (`?token=`) n'est utilisé qu'au clic sur un
+bouton, car les scanners de mails ouvrent les liens sans cliquer :
+
+| Page                             | Lien                                                  |
+| -------------------------------- | ----------------------------------------------------- |
+| `/newsletter/confirmation`       | Confirmation de l'abonnement (double opt-in)          |
+| `/newsletter/desinscription`     | Désinscription, présente dans chaque newsletter       |
+| `/changement-email/confirmation` | Confirmation de la nouvelle adresse par son titulaire |
+
 ## Brancher l'API Go
 
-Connexion, session et déconnexion sont branchées ([src/lib/api/auth.ts](src/lib/api/auth.ts)
-sert de modèle). Pour une autre fonction de `src/lib/api/` : appeler `apiFetch()`
+Plusieurs domaines sont déjà branchés ([src/lib/api/auth.ts](src/lib/api/auth.ts) et
+[src/lib/api/videos.ts](src/lib/api/videos.ts) servent de modèles). Pour une autre fonction de `src/lib/api/` : appeler `apiFetch()`
 ([src/lib/api/http.ts](src/lib/api/http.ts)) quand `isApiEnabled`, garder le mock sinon, et
 conserver la signature. Les composants n'ont pas à être modifiés. Checklist complète :
 [docs/backend-contract.md](docs/backend-contract.md#checklist-de-branchement-dune-fonction).

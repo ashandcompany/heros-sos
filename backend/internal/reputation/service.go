@@ -20,6 +20,7 @@ const entityType = "hero_review"
 
 const (
 	actionCreated         = "hero_review.create"
+	actionReviewUpdated   = "hero_review.update"
 	actionReplySaved      = "hero_review.reply"
 	actionReviewModerated = "hero_review.moderate"
 	actionReplyModerated  = "hero_review.reply_moderate"
@@ -58,17 +59,50 @@ func (s *Service) Rate(ctx context.Context, citizenID, interventionID, heroID uu
 	if comment != "" {
 		commentValue = &comment
 	}
+	status := ReviewPublished
+	if commentValue != nil {
+		status = ReviewPending
+	}
 	review := Review{
 		ID: ids.New(), InterventionID: interventionID, HeroID: heroID,
 		CitizenID: &citizenID, Rating: rating, Comment: commentValue,
-		Status: ReviewPublished, CreatedAt: s.Clock.Now(),
+		Status: status, CreatedAt: s.Clock.Now(),
 	}
 	return s.Tx.WithinTx(ctx, func(ctx context.Context) error {
 		if err := s.Repo.CreateReview(ctx, review); err != nil {
 			return err
 		}
 		return s.record(ctx, citizenID, review.ID, actionCreated, ip, map[string]any{
-			"interventionId": interventionID.String(), "heroId": heroID.String(), "status": ReviewPublished,
+			"interventionId": interventionID.String(), "heroId": heroID.String(), "status": status,
+		})
+	})
+}
+
+func (s *Service) UpdateReview(ctx context.Context, citizenID, reviewID uuid.UUID, rating int16, comment string, ip netip.Addr) error {
+	fields := make(map[string]string)
+	if rating < 1 || rating > 5 {
+		fields["rating"] = "invalid"
+	}
+	comment = strings.TrimSpace(comment)
+	if len(comment) > MaxCommentLength {
+		fields["comment"] = "too_long"
+	}
+	if len(fields) > 0 {
+		return &validation.Error{Fields: fields}
+	}
+	var commentValue *string
+	status := ReviewPublished
+	if comment != "" {
+		commentValue = &comment
+		status = ReviewPending
+	}
+	now := s.Clock.Now()
+	return s.Tx.WithinTx(ctx, func(ctx context.Context) error {
+		if err := s.Repo.UpdateReview(ctx, reviewID, citizenID, rating, commentValue, status, now); err != nil {
+			return err
+		}
+		return s.record(ctx, citizenID, reviewID, actionReviewUpdated, ip, map[string]any{
+			"rating": rating, "hasComment": commentValue != nil, "status": status,
 		})
 	})
 }
@@ -101,7 +135,7 @@ func (s *Service) PublicReviews(ctx context.Context, heroID uuid.UUID, page Page
 }
 
 func (s *Service) ListModerationReviews(ctx context.Context, status string, page Page) ([]Review, int64, error) {
-	if status != "" && status != ReviewPublished && status != ReviewHidden {
+	if status != "" && status != ReviewPublished && status != ReviewPending && status != ReviewHidden {
 		return nil, 0, &validation.Error{Fields: map[string]string{"status": "invalid"}}
 	}
 	return s.Repo.ListModerationReviews(ctx, status, page)

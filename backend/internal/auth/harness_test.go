@@ -2,7 +2,6 @@ package auth_test
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"net/netip"
 	"regexp"
@@ -54,7 +53,7 @@ func newHarness(t *testing.T, overrides map[string]string) *harness {
 	t.Helper()
 	cfg := testutil.Config(t, overrides)
 	db := testutil.NewDB(t)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	clk := clock.NewFake(startTime)
 
 	sealer, err := crypto.NewSealer(cfg.Crypto.Keys, cfg.Crypto.ActiveKeyID)
@@ -63,7 +62,7 @@ func newHarness(t *testing.T, overrides map[string]string) *harness {
 	}
 	users := user.NewRepository(db, sealer)
 	tokens := auth.NewTokenStore(db)
-	sessions := auth.NewSessionService(auth.NewSessionStore(db), clk, cfg.Session, logger)
+	sessions := auth.NewSessionService(auth.NewSessionStore(db), clk, cfg.Session, cfg.Security.MFA, logger)
 	hasher := auth.NewPasswordHasher(cfg.Security.Argon2)
 
 	recorder := mail.NewRecorder()
@@ -73,7 +72,7 @@ func newHarness(t *testing.T, overrides map[string]string) *harness {
 	}
 
 	service := auth.NewService(auth.ServiceDeps{
-		Users: users, Tokens: tokens, Sessions: sessions, Hasher: hasher, Mailer: mailService,
+		Users: users, Tokens: tokens, MFA: auth.NewMFAStore(db, sealer), Sessions: sessions, Hasher: hasher, Mailer: mailService,
 		Audit: audit.NewStore(db, clk), Tx: database.NewTransactor(db), Clock: clk,
 		Security: cfg.Security, App: cfg.App, Logger: logger,
 	})

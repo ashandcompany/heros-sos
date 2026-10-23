@@ -1,11 +1,6 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
-import {
-  formatDateTime,
-  incidentStatusLabels,
-  incidentTypeLabels,
-  reporterRoleLabels,
-} from "@/lib/format";
+import { formatDateTime, incidentStatusLabels, reporterRoleLabels } from "@/lib/format";
 import { citizenIncidentRoute } from "@/lib/routes";
 import type { Incident, IncidentStatus } from "@/types";
 
@@ -13,6 +8,13 @@ export const statusTone: Record<IncidentStatus, "paper" | "warning" | "success">
   signale: "paper",
   "en-cours": "warning",
   resolu: "success",
+};
+
+/** Héros inconnu : en attente, ou intervention dont le citoyen ne voit pas l'équipe (API). */
+const heroPlaceholders: Record<IncidentStatus, string> = {
+  signale: "En attente",
+  "en-cours": "En intervention",
+  resolu: "Intervention terminée",
 };
 
 interface IncidentListItemProps {
@@ -28,7 +30,7 @@ export function IncidentListItem({ incident, detailed = false }: IncidentListIte
     <article className="relative border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-4 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary hover:border-muted sm:p-5">
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone={statusTone[incident.status]}>{incidentStatusLabels[incident.status]}</Badge>
-        <Badge>{incidentTypeLabels[incident.type]}</Badge>
+        <Badge>{incident.type.label}</Badge>
         {detailed && incident.moderation === "rejete" && (
           <Badge tone="danger">Rejeté par la modération</Badge>
         )}
@@ -67,7 +69,9 @@ export function IncidentListItem({ incident, detailed = false }: IncidentListIte
         </div>
         <div className="flex gap-1">
           <dt className="text-muted">Super-héros :</dt>
-          <dd className="font-medium">{incident.hero?.alias ?? "En attente"}</dd>
+          <dd className="font-medium">
+            {incident.hero?.alias ?? heroPlaceholders[incident.status]}
+          </dd>
         </div>
       </dl>
     </article>

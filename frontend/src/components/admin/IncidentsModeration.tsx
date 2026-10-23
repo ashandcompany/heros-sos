@@ -2,12 +2,7 @@ import Link from "next/link";
 import { moderateIncidentAction } from "@/app/actions/admin";
 import { Badge } from "@/components/ui/Badge";
 import { getAllIncidents } from "@/lib/api";
-import {
-  formatDateTime,
-  incidentStatusLabels,
-  incidentTypeLabels,
-  reporterRoleLabels,
-} from "@/lib/format";
+import { formatDateTime, incidentStatusLabels, reporterRoleLabels } from "@/lib/format";
 import { adminIncidentRoute, routes } from "@/lib/routes";
 import { requireAdminSession } from "@/lib/server-session";
 import type { Incident } from "@/types";
@@ -40,7 +35,7 @@ function IncidentModerationCard({ incident }: { incident: Incident }) {
         <div className="flex flex-wrap items-center gap-2">
           <ModerationBadge status={incident.moderation} />
           <Badge>{incidentStatusLabels[incident.status]}</Badge>
-          <Badge>{incidentTypeLabels[incident.type]}</Badge>
+          <Badge>{incident.type.label}</Badge>
         </div>
         <h2 id={titleId} className="mt-3 font-display text-lg font-semibold">
           {incident.title}
@@ -82,7 +77,8 @@ function IncidentModerationCard({ incident }: { incident: Incident }) {
           href={adminIncidentRoute(incident.id)}
           className="inline-flex min-h-11 items-center text-sm font-semibold text-accent hover:underline"
         >
-          Corriger les informations<span className="sr-only"> : {incident.title}</span>
+          Corriger les informations
+          <span className="sr-only"> : {incident.title}</span>
         </Link>
       </div>
     </article>
@@ -104,7 +100,12 @@ export async function IncidentsModeration({
       <ModerationFilter
         basePath={routes.adminIncidents}
         current={filter}
-        labels={{ "en-attente": "À vérifier", valide: "Validés", rejete: "Rejetés", tous: "Tous" }}
+        labels={{
+          "en-attente": "À vérifier",
+          valide: "Validés",
+          rejete: "Rejetés",
+          tous: "Tous",
+        }}
       />
       {incidents.length === 0 ? (
         <EmptyState>

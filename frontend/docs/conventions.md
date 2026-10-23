@@ -114,9 +114,10 @@ Exigence de base, pas une finition :
   métier) est un **résultat** `{ ok: false, error }`, pas une exception. Une exception signale un
   bug ou une panne.
 - Une ressource introuvable renvoie `null` côté `lib/api/`, et la page appelle `notFound()`.
-- Aucun fichier `error.tsx`, `not-found.tsx` ni `loading.tsx` n'existe encore : les pages
-  utilisent `<Suspense>` + squelettes. Quand l'API réelle sera branchée, ajouter au minimum un
-  `error.tsx` et un `not-found.tsx` racine.
+- `app/error.tsx` (erreur inattendue, bouton « Réessayer ») et `app/not-found.tsx` (404, y
+  compris `notFound()`) existent à la racine, sur le gabarit `StatusPage`. Pas de `loading.tsx` :
+  les pages utilisent `<Suspense>` + squelettes. Une erreur dans le layout racine (en-tête) n'est
+  pas couverte : il faudrait un `global-error.tsx`.
 
 ## Sécurité côté frontend
 
@@ -141,10 +142,28 @@ Exigence de base, pas une finition :
   pas ce que le code dit déjà. Les fonctions de `lib/api/` documentent l'endpoint futur.
   Un composant exporté a un commentaire `/** … */` d'une ou deux lignes.
 - La CI ([frontend-ci.yml](../../.github/workflows/frontend-ci.yml)) exécute sur chaque PR vers
-  `develop` : audit des dépendances (high/critical), `prettier --check`, `npm run build`.
-  **Elle n'exécute ni le lint ni de tests** : lancer `npm run lint` en local avant la PR.
-- Il n'existe pas encore de tests automatisés côté frontend. Les logiques pures
-  (`lib/validation/`, `lib/format.ts`) sont les premières candidates.
+  `develop` : audit des dépendances (high/critical), `prettier --check`, `npm run lint` (aucun
+  avertissement toléré : `next build` ne lance plus ESLint depuis Next 16), `npm test`, types de
+  l'API à jour, `npm run build`, puis les parcours Playwright dans un job séparé.
+
+## Tests
+
+- **Unitaires** (Vitest, `npm test`, `npm run test:watch`) : fichiers `*.test.ts` à côté du
+  module testé, pour le code pur de `src/lib/` (validation, formatage, pagination). Les règles
+  de validation doivent rester celles du backend : un test fixe chaque borne.
+- **Conversions de l'API** : les `fromApi*` restent privées, on les teste à travers les fonctions
+  publiques avec l'API activée et `fetch` simulé, grâce à
+  [src/lib/api/test-utils.ts](../src/lib/api/test-utils.ts) (`withApi`, `mockFetch`,
+  `jsonResponse`). Voir `blog.test.ts` comme modèle.
+- **Parcours** (Playwright, `npm run test:e2e`, dossier `e2e/`) : build de production en mode
+  mock sur le port 3100 (jamais un `npm run dev` branché sur l'API). Les mocks étant partagés
+  en mémoire, les parcours tournent l'un après l'autre et ne supposent pas un état neuf (ils
+  prennent « le premier incident en attente », pas un identifiant fixe). Sélecteurs par rôle
+  et par libellé accessible (`getByRole`, `getByLabel`). Première fois :
+  `npx playwright install chromium`.
+- Limite connue du mode mock : `proxy.ts` est un bundle à part, avec sa propre copie des mocks.
+  Un compte créé par l'inscription ne passe donc pas le proxy (`/profil` renvoie à la
+  connexion) ; les parcours utilisent les comptes de `src/mocks/users.ts`.
 
 ## Git
 

@@ -1,7 +1,8 @@
 export {
-  getCitizenAccounts,
+  confirmEmailChange,
+  getEmailChangeRequests,
   getMyAccount,
-  moderateAccount,
+  removeMyAvatar,
   requestEmailChange,
   reviewEmailChange,
   updateMyAvatar,
@@ -10,16 +11,35 @@ export {
 } from "./account";
 export {
   activateAccount,
+  changePassword,
   confirmPasswordReset,
+  getMfaSession,
   getSessionUser,
   login,
   logout,
+  logoutAll,
   register,
   requestPasswordReset,
   resendActivation,
 } from "./auth";
 export { getMyAvatar, type AvatarData } from "./avatar";
-export { asMockDataUser } from "./session-user";
+export {
+  enableMfa,
+  getMfaOverview,
+  regenerateMfaRecoveryCodes,
+  startMfaSetup,
+  verifyMfa,
+} from "./mfa";
+export {
+  getHeroApplications,
+  getMyHeroRequest,
+  requestHeroStatus,
+  reviewHeroApplication,
+  type HeroReviewDecision,
+} from "./hero-requests";
+export { createIncidentType, getAllIncidentTypes, getIncidentTypes } from "./incident-types";
+export { pagePosition } from "./pagination";
+export { getAccounts, moderateAccount } from "./user-moderation";
 export {
   createArticle,
   deleteArticle,
@@ -35,6 +55,7 @@ export { searchImdbTitles } from "./imdb";
 export {
   declareIncident,
   finishIntervention,
+  canSetPriority,
   getAllIncidents,
   getCitizenIncident,
   getHeroIncident,
@@ -52,36 +73,73 @@ export {
   takeChargeOfIncident,
   updateIncident,
 } from "./incidents";
+export {
+  arbitrateIntervention,
+  inviteHeroes,
+  joinIntervention,
+  respondToInvitation,
+  voteOnOutcome,
+} from "./interventions";
 export { getModerationSummary } from "./moderation";
-export { subscribeToNewsletter } from "./newsletter";
 export {
-  getMyInterventions,
+  confirmNewsletterSubscription,
+  subscribeToNewsletter,
+  unsubscribeFromNewsletter,
+} from "./newsletter";
+export {
+  createNewsletterIssue,
+  deleteNewsletterIssue,
+  getNewsletterIssue,
+  getNewsletterIssues,
+  sendNewsletterIssue,
+  updateNewsletterIssue,
+} from "./newsletter-issues";
+export {
   getHeroPublicReviews,
+  getMyInterventions,
   getMyReputation,
-  getRatingsForModeration,
-  moderateComment,
+  getRepliesForModeration,
+  getReviewsForModeration,
+  moderateReply,
+  moderateReview,
   rateIntervention,
-  replyToRating,
-} from "./ratings";
+  replyToReview,
+} from "./reviews";
 export {
+  deleteHeroLocation,
   getFeaturedSuperHeroes,
-  getHeroApplications,
   getMyHeroProfile,
   getSuperHero,
   getSuperHeroes,
   getSuperHeroProfiles,
+  grantHeroLocationConsent,
+  removeMyHeroAvatar,
   requestHeroEmailChange,
-  reviewHeroApplication,
+  revokeHeroLocationConsent,
+  saveHeroLocation,
   updateMyHeroAvatar,
   updateMyHeroContact,
+  updateMyHeroPublicProfile,
 } from "./super-heroes";
 export {
+  addHeroVideo,
   addMyVideo,
+  addVillainFilm,
   deleteMyVideo,
   deleteVideo,
+  deleteVillainFilm,
+  FILM_QUERY_MAX_LENGTH,
+  getFilmHeroes,
+  getHeroesForVideos,
   getHeroVideos,
+  getHeroVideosPage,
   getMyVideos,
+  getMyVideosPage,
+  getPublishedFilmsPage,
   getPublishedVideos,
+  getVillainFilms,
+  heroVideoKey,
   moderateVideo,
+  parseHeroVideoKey,
 } from "./videos";
-export { getVillain, getVillains } from "./villains";
+export { createVillain, getVillain, getVillains, getVillainsPage, updateVillain } from "./villains";

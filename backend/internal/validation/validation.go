@@ -113,6 +113,35 @@ func (c *Collector) Err() error {
 	return &Error{Fields: c.fields}
 }
 
+// Address est une adresse postale telle que saisie.
+type Address struct {
+	Street     string
+	Complement string
+	PostalCode string
+	City       string
+	Country    string
+}
+
+// Address valide et normalise une adresse postale complète. Les erreurs sont ajoutées au collecteur
+// sous le nom de champ « <prefix>.street », « <prefix>.postalCode »… : c'est la forme imbriquée du
+// JSON de l'API.
+func (c *Collector) Address(prefix string, raw Address) Address {
+	var address Address
+	var code string
+
+	address.Street, code = RequiredText(raw.Street, MaxStreetLength)
+	c.Add(prefix+".street", code)
+	address.Complement, code = OptionalText(raw.Complement, MaxAddressComplementLength)
+	c.Add(prefix+".complement", code)
+	address.City, code = RequiredText(raw.City, MaxCityLength)
+	c.Add(prefix+".city", code)
+	address.Country, code = Country(raw.Country)
+	c.Add(prefix+".country", code)
+	address.PostalCode, code = PostalCode(raw.PostalCode, address.Country)
+	c.Add(prefix+".postalCode", code)
+	return address
+}
+
 // Email normalise (minuscules, sans espaces) et valide une adresse email.
 func Email(raw string) (normalized, code string) {
 	normalized = strings.ToLower(strings.TrimSpace(raw))

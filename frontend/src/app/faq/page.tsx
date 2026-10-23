@@ -81,10 +81,11 @@ const categories: Category[] = [
         question: "Comment devenir super-héros sur Heros-SOS ?",
         answer: (
           <p>
-            Créez d&apos;abord un compte, comme tout citoyen, puis adressez votre demande de statut
-            de super-héros au Bureau via la <Link href={routes.contact}>page de contact</Link>. Le
-            Bureau l&apos;examine : votre espace professionnel s&apos;ouvre une fois la demande
-            validée.
+            Créez d&apos;abord un compte, comme tout citoyen, puis déposez votre demande de statut
+            de super-héros depuis <Link href={routes.profile}>Mon compte</Link> : choisissez votre
+            pseudo et présentez-vous au Bureau. Il examine la demande : votre espace professionnel
+            s&apos;ouvre dès qu&apos;elle est acceptée. En cas de refus, le motif vous est indiqué
+            et vous pouvez déposer une nouvelle demande.
           </p>
         ),
       },

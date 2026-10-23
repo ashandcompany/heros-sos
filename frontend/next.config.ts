@@ -1,7 +1,35 @@
 import type { NextConfig } from "next";
 
+const apiUrl = (process.env.API_URL ?? "").replace(/\/+$/, "");
+
 const nextConfig: NextConfig = {
   output: "standalone",
+  // Photos de profil (`avatarUrl` : `/api/v1/avatars/…`, même origine que l'API). Derrière le proxy,
+  // Caddy envoie `/api/v1/*` à l'API et ce rewrite ne sert jamais ; il prend le relais quand le
+  // front est ouvert directement (`npm run dev` sur le port 3000).
+  async rewrites() {
+    return apiUrl
+      ? [{ source: "/api/v1/avatars/:name", destination: `${apiUrl}/avatars/:name` }]
+      : [];
+  },
+  // Le service worker (public/sw.js) ne doit jamais être servi depuis un cache : une version corrigée doit
+  // atteindre les navigateurs tout de suite, c'est lui qui contrôle ce qu'ils gardent hors ligne.
+  async headers() {
+    return [
+      {
+        source: "/sw.js",
+        headers: [
+          { key: "Content-Type", value: "application/javascript; charset=utf-8" },
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+        ],
+      },
+    ];
+  },
+  // La sonde de santé du conteneur (`/api/health`) passe toutes les 10 secondes : sans ceci, chaque passage ajoute
+  // une ligne « GET … 200 » au journal de `next dev`.
+  logging: {
+    incomingRequests: { ignore: [/^\/api\/health$/] },
+  },
   cacheComponents: true,
   partialPrefetching: true,
   experimental: {

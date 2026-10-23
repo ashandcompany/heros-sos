@@ -85,4 +85,7 @@ type Intervention struct {
 	StartedAt      time.Time
 	EndedAt        *time.Time
 	Participants   []Participant
+	// Version est la version de l'intervention dans le journal d'événements : à renvoyer comme version
+	// attendue pour qu'une action faite sur une lecture périmée soit refusée plutôt qu'appliquée.
+	Version int
 }

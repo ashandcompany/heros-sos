@@ -195,7 +195,7 @@ func (r *gormRepository) CreateReview(ctx context.Context, review Review) error 
 	record := reviewRecord{
 		ID: review.ID, InterventionID: review.InterventionID, HeroID: review.HeroID,
 		CitizenID: review.CitizenID, Rating: review.Rating, Comment: review.Comment,
-		Status: ReviewPublished, CreatedAt: review.CreatedAt,
+		Status: review.Status, CreatedAt: review.CreatedAt,
 	}
 	if err := r.conn(ctx).Create(&record).Error; err != nil {
 		if database.IsUniqueViolation(err, "hero_reviews_intervention_hero_key") {
@@ -204,6 +204,24 @@ func (r *gormRepository) CreateReview(ctx context.Context, review Review) error 
 		return fmt.Errorf("reputation : création de l'avis : %w", err)
 	}
 	return nil
+}
+
+func (r *gormRepository) UpdateReview(ctx context.Context, reviewID, citizenID uuid.UUID, rating int16, comment *string, status string, now time.Time) error {
+	var review reviewRecord
+	if err := r.conn(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("id = ?", reviewID).Take(&review).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("reputation : lecture de l'avis avant modification : %w", err)
+	}
+	if review.CitizenID == nil || *review.CitizenID != citizenID {
+		return ErrNotEligible
+	}
+	result := r.conn(ctx).Model(&reviewRecord{}).Where("id = ?", reviewID).Updates(map[string]any{
+		"rating": rating, "comment": comment, "status": status, "moderated_by": nil, "moderated_at": nil,
+	})
+	return updateStatusResult(result, "reputation : modification de l'avis")
 }
 
 func (r *gormRepository) ListHeroReviews(ctx context.Context, heroID uuid.UUID, page Page) (HeroReputation, error) {
@@ -398,6 +416,18 @@ func (r *gormRepository) SaveReply(ctx context.Context, reviewID, heroID uuid.UU
 }
 
 func (r *gormRepository) SetReviewStatus(ctx context.Context, reviewID, moderatorID uuid.UUID, status string, now time.Time) error {
+	// Un modérateur déclarant peut noter les héros, mais son avis est validé par un autre modérateur.
+	var review reviewRecord
+	if err := r.conn(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("id = ?", reviewID).Take(&review).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("reputation : lecture de l'avis avant modération : %w", err)
+	}
+	if review.CitizenID != nil && *review.CitizenID == moderatorID {
+		return ErrOwnReview
+	}
 	result := r.conn(ctx).Model(&reviewRecord{}).Where("id = ?", reviewID).Updates(map[string]any{
 		"status": status, "moderated_by": moderatorID, "moderated_at": now,
 	})

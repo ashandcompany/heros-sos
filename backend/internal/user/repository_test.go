@@ -557,3 +557,190 @@ func TestActiveEmailsByRole(t *testing.T) {
 		t.Fatalf("adresses = %v, attendu %v", got, want)
 	}
 }
+
+func ptr[T any](value T) *T { return &value }
+
+func TestUpdateContactReplacesOnlyWhatIsGiven(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	u := f.create(t, newUser("contact@example.org"))
+	later := baseTime.Add(time.Hour)
+
+	// Le téléphone seul : l'adresse (et son complément) reste intacte.
+	if err := f.repo.UpdateContact(ctx, u.ID, user.ContactUpdate{Phone: ptr("0699887766")}, later); err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.repo.FindByID(ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Phone != "0699887766" || got.Address != u.Address || !got.UpdatedAt.Equal(later) {
+		t.Errorf("après le téléphone : %+v (mis à jour %v)", got, got.UpdatedAt)
+	}
+
+	// L'adresse sans complément : le complément actuel est conservé.
+	address := &user.AddressUpdate{Street: "10 rue de Rivoli", PostalCode: "75004", City: "Paris", Country: "FR"}
+	if err := f.repo.UpdateContact(ctx, u.ID, user.ContactUpdate{Address: address}, later); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = f.repo.FindByID(ctx, u.ID)
+	want := user.Address{Street: "10 rue de Rivoli", Complement: "Bâtiment B", PostalCode: "75004", City: "Paris", Country: "FR"}
+	if got.Address != want || got.Phone != "0699887766" {
+		t.Errorf("après l'adresse : %+v", got)
+	}
+
+	// Un complément vide l'efface (stocké NULL, comme à la création).
+	address.Complement = ptr("")
+	if err := f.repo.UpdateContact(ctx, u.ID, user.ContactUpdate{Address: address}, later); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = f.repo.FindByID(ctx, u.ID)
+	if got.Address.Complement != "" {
+		t.Errorf("complément = %q", got.Address.Complement)
+	}
+	var stored struct{ IsNull bool }
+	if err := f.db.Raw(`SELECT address_complement IS NULL AS is_null FROM users WHERE id = ?`, u.ID).Scan(&stored).Error; err != nil || !stored.IsNull {
+		t.Errorf("complément effacé non NULL : %v %v", stored, err)
+	}
+
+	// Un complément renseigné le remplace.
+	address.Complement = ptr("3e étage")
+	if err := f.repo.UpdateContact(ctx, u.ID, user.ContactUpdate{Address: address}, later); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ = f.repo.FindByID(ctx, u.ID); got.Address.Complement != "3e étage" {
+		t.Errorf("complément = %q", got.Address.Complement)
+	}
+}
+
+func TestUpdateContactKeepsDataEncryptedAndBoundToTheRow(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	u := f.create(t, newUser("chiffre@example.org"))
+	other := f.create(t, newUser("autre@example.org"))
+
+	update := user.ContactUpdate{
+		Phone:   ptr("0699887766"),
+		Address: &user.AddressUpdate{Street: "10 rue de Rivoli", PostalCode: "75004", City: "Paris", Country: "FR"},
+	}
+	if err := f.repo.UpdateContact(ctx, u.ID, update, baseTime); err != nil {
+		t.Fatal(err)
+	}
+
+	var raw struct{ Phone, Street, City []byte }
+	if err := f.db.Raw(`SELECT phone, street, city FROM users WHERE id = ?`, u.ID).Scan(&raw).Error; err != nil {
+		t.Fatal(err)
+	}
+	for name, stored := range map[string][]byte{"phone": raw.Phone, "street": raw.Street, "city": raw.City} {
+		for _, secret := range []string{"0699887766", "Rivoli", "Paris"} {
+			if bytes.Contains(stored, []byte(secret)) {
+				t.Errorf("la colonne %s contient %q en clair", name, secret)
+			}
+		}
+	}
+
+	// Le chiffré d'une ligne ne se lit pas sur une autre : le contexte authentifié lie la valeur à son compte.
+	if err := f.db.Exec(`UPDATE users SET phone = ? WHERE id = ?`, raw.Phone, other.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.repo.FindByID(ctx, other.ID); err == nil {
+		t.Error("un chiffré déplacé vers un autre compte ne doit pas être lisible")
+	}
+}
+
+func TestUpdateContactUnknownUser(t *testing.T) {
+	f := newFixture(t)
+	err := f.repo.UpdateContact(context.Background(), uuid.New(), user.ContactUpdate{Phone: ptr("0612345678")}, baseTime)
+	if !errors.Is(err, user.ErrNotFound) {
+		t.Errorf("erreur = %v", err)
+	}
+}
+
+func TestChangeEmail(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	u := f.create(t, newUser("ancien@example.org"))
+	other := f.create(t, newUser("occupee@example.org"))
+
+	if err := f.repo.ChangeEmail(ctx, u.ID, "nouveau@example.org", baseTime); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.repo.FindByEmail(ctx, "ancien@example.org"); !errors.Is(err, user.ErrNotFound) {
+		t.Errorf("l'ancienne adresse ne doit plus désigner le compte : %v", err)
+	}
+	if got, err := f.repo.FindByEmail(ctx, "NOUVEAU@example.org"); err != nil || got.ID != u.ID {
+		t.Errorf("la nouvelle adresse (casse ignorée) doit désigner le compte : %v %v", got, err)
+	}
+
+	// Une adresse déjà prise, quelle que soit sa casse, est refusée par la base.
+	if err := f.repo.ChangeEmail(ctx, u.ID, "OCCUPEE@example.org", baseTime); !errors.Is(err, user.ErrEmailTaken) {
+		t.Errorf("adresse prise : %v", err)
+	}
+	if got, _ := f.repo.FindByID(ctx, other.ID); got.Email != "occupee@example.org" {
+		t.Errorf("l'autre compte a été modifié : %q", got.Email)
+	}
+	if err := f.repo.ChangeEmail(ctx, uuid.New(), "personne@example.org", baseTime); !errors.Is(err, user.ErrNotFound) {
+		t.Errorf("compte inconnu : %v", err)
+	}
+}
+
+func TestSetAvatarPathReturnsThePreviousOne(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	u := f.create(t, newUser("photo@example.org"))
+
+	previous, err := f.repo.SetAvatarPath(ctx, u.ID, "premiere.jpg", baseTime)
+	if err != nil || previous != "" {
+		t.Fatalf("première photo : %q %v", previous, err)
+	}
+	previous, err = f.repo.SetAvatarPath(ctx, u.ID, "seconde.jpg", baseTime)
+	if err != nil || previous != "premiere.jpg" {
+		t.Fatalf("seconde photo : %q %v", previous, err)
+	}
+	if got, _ := f.repo.FindByID(ctx, u.ID); got.AvatarPath != "seconde.jpg" {
+		t.Errorf("chemin = %q", got.AvatarPath)
+	}
+	if _, err := f.repo.SetAvatarPath(ctx, uuid.New(), "x.jpg", baseTime); !errors.Is(err, user.ErrNotFound) {
+		t.Errorf("compte inconnu : %v", err)
+	}
+}
+
+// Deux remplacements simultanés doivent chacun recevoir un « ancien » chemin différent : sinon une
+// photo resterait sur le disque sans personne pour la supprimer.
+func TestConcurrentAvatarReplacementsLeaveNoOrphan(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	u := f.create(t, newUser("course@example.org"))
+	if _, err := f.repo.SetAvatarPath(ctx, u.ID, "depart.jpg", baseTime); err != nil {
+		t.Fatal(err)
+	}
+
+	const writers = 8
+	var wg sync.WaitGroup
+	previous := make([]string, writers)
+	for i := range writers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			got, err := f.repo.SetAvatarPath(ctx, u.ID, fmt.Sprintf("photo-%d.jpg", i), baseTime)
+			if err != nil {
+				t.Error(err)
+			}
+			previous[i] = got
+		}()
+	}
+	wg.Wait()
+
+	// Chaque fichier écrit (« depart » et les huit nouveaux) sauf le dernier est l'ancien de quelqu'un.
+	seen := make(map[string]bool)
+	for _, path := range previous {
+		if seen[path] {
+			t.Fatalf("l'ancien chemin %q a été retourné deux fois : %v", path, previous)
+		}
+		seen[path] = true
+	}
+	final, _ := f.repo.FindByID(ctx, u.ID)
+	if seen[final.AvatarPath] {
+		t.Errorf("la photo finale %q a aussi été retournée comme ancienne", final.AvatarPath)
+	}
+}

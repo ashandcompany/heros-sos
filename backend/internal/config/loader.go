@@ -72,6 +72,20 @@ func (l *loader) duration(name string, fallback time.Duration) time.Duration {
 	return parsed
 }
 
+// durationOrZero lit une durée qui peut être nulle (le réglage désactive alors la fonction).
+func (l *loader) durationOrZero(name string, fallback time.Duration) time.Duration {
+	value, ok := l.lookup(name)
+	if !ok {
+		return fallback
+	}
+	parsed, err := time.ParseDuration(value)
+	if err != nil || parsed < 0 {
+		l.fail("%s : durée invalide %q (exemples : 30s, 5m ; 0 désactive)", name, value)
+		return fallback
+	}
+	return parsed
+}
+
 func (l *loader) positiveInt(name string, fallback int) int {
 	value, ok := l.lookup(name)
 	if !ok {
@@ -80,6 +94,21 @@ func (l *loader) positiveInt(name string, fallback int) int {
 	parsed, err := strconv.Atoi(value)
 	if err != nil || parsed <= 0 {
 		l.fail("%s : entier strictement positif attendu, reçu %q", name, value)
+		return fallback
+	}
+	return parsed
+}
+
+// boundedInt lit un entier compris entre 1 et max. La borne protège les conversions vers un type plus étroit
+// (uint8, uint32) : sans elle, une valeur trop grande serait tronquée en silence.
+func (l *loader) boundedInt(name string, fallback, upper int) int {
+	value, ok := l.lookup(name)
+	if !ok {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 || parsed > upper {
+		l.fail("%s : entier entre 1 et %d attendu, reçu %q", name, upper, value)
 		return fallback
 	}
 	return parsed
@@ -150,6 +179,20 @@ func (l *loader) logLevel() slog.Level {
 		return slog.LevelInfo
 	}
 	return level
+}
+
+// logFormat lit le format des journaux. Par défaut : JSON en production (le monitoring le lit), texte sinon.
+func (l *loader) logFormat(production bool) LogFormat {
+	fallback := LogFormatText
+	if production {
+		fallback = LogFormatJSON
+	}
+	format := LogFormat(l.text(envLogFormat, string(fallback)))
+	if format != LogFormatJSON && format != LogFormatText {
+		l.fail("%s : valeur inconnue %q (json ou text)", envLogFormat, format)
+		return fallback
+	}
+	return format
 }
 
 func (l *loader) trustedProxies() []netip.Prefix {

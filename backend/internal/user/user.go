@@ -12,6 +12,7 @@ import (
 // Role détermine les droits d'un compte.
 type Role string
 
+// Rôles d'un compte.
 const (
 	RoleCitizen   Role = "citizen"
 	RoleHero      Role = "hero"
@@ -30,6 +31,7 @@ func (r Role) Valid() bool {
 // Status décrit le cycle de vie d'un compte.
 type Status string
 
+// États d'un compte : à activer par mail, actif, désactivé par un modérateur.
 const (
 	StatusPendingActivation Status = "pending_activation"
 	StatusActive            Status = "active"
@@ -52,6 +54,22 @@ type Address struct {
 	Country    string
 }
 
+// ContactUpdate liste les coordonnées à remplacer. Un champ nil est conservé tel quel.
+type ContactUpdate struct {
+	Phone   *string
+	Address *AddressUpdate
+}
+
+// AddressUpdate remplace l'adresse postale d'un compte.
+type AddressUpdate struct {
+	Street     string
+	PostalCode string
+	City       string
+	Country    string
+	// Complement nil conserve le complément actuel ; une chaîne vide l'efface.
+	Complement *string
+}
+
 // User est un compte, avec ses données personnelles en clair (le chiffrement n'existe que
 // dans la couche de stockage).
 type User struct {
@@ -70,10 +88,12 @@ type User struct {
 	// Alias est le pseudo public d'un super-héros (vide pour les autres comptes).
 	Alias string
 
-	ActivatedAt      *time.Time
-	VerifiedAt       *time.Time
-	VerifiedBy       *uuid.UUID
-	DeactivatedAt    *time.Time
+	ActivatedAt   *time.Time
+	VerifiedAt    *time.Time
+	VerifiedBy    *uuid.UUID
+	DeactivatedAt *time.Time
+	// DeletedAt date l'anonymisation d'un compte supprimé (droit à l'effacement) ; nil pour un compte en service.
+	DeletedAt        *time.Time
 	FailedLoginCount int
 	LockedUntil      *time.Time
 	LastLoginAt      *time.Time

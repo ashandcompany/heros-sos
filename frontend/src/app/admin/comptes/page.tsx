@@ -11,7 +11,7 @@ export default function AdminAccountsPage({ searchParams }: PageProps<"/admin/co
     <>
       <AdminPageHeader
         title="Comptes"
-        description="Contrôle des créations de comptes et des changements d'adresse email des citoyens."
+        description="Désactivez, réactivez ou vérifiez les comptes de la plateforme, et traitez les changements d'adresse email."
       />
       <Suspense fallback={<AdminListSkeleton />}>
         <AccountsModeration searchParams={searchParams} />

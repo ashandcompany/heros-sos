@@ -5,17 +5,18 @@ import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { DeclareIncidentForm } from "@/components/citizen/DeclareIncidentForm";
 import { IncidentListItem } from "@/components/citizen/IncidentListItem";
 import { ListSkeleton } from "@/components/citizen/IncidentsSections";
-import { getMyIncidents, getVillains } from "@/lib/api";
+import { getIncidentTypes, getMyIncidents, getVillains } from "@/lib/api";
 import { requireHeroSession } from "@/lib/server-session";
 
 export const metadata: Metadata = { title: "Signaler un incident" };
 
 async function HeroDeclareIncident() {
-  await requireHeroSession();
-  const villains = await getVillains();
+  const { token } = await requireHeroSession();
+  const [villains, types] = await Promise.all([getVillains(), getIncidentTypes(token)]);
   return (
     <DeclareIncidentForm
       villains={villains.map(({ id, alias }) => ({ id, alias }))}
+      types={types}
       action={heroDeclareIncidentAction}
     />
   );
@@ -45,7 +46,7 @@ export default function HeroDeclareIncidentPage() {
     <>
       <AdminPageHeader
         title="Signaler un incident"
-        description="Témoin d'un méfait en dehors d'une intervention ? Déclarez-le comme n'importe quel citoyen : après vérification par la modération, les super-héros à proximité seront prévenus."
+        description="Témoin d'un méfait en dehors d'une intervention ? Déclarez-le comme n'importe quel citoyen : après vérification par la modération, il est diffusé aux super-héros."
       />
       <section
         aria-label="Déclaration"

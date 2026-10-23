@@ -11,17 +11,15 @@ export interface AvatarData {
 
 /**
  * Photo de profil de l'utilisateur connecté, pour la barre de navigation. Le nom vient du même
- * profil que la photo (prénom du citoyen, pseudo du héros), comme sur la page de profil : sinon
- * initiales et couleur du placeholder différeraient entre les deux.
- * `null` sans profil (administrateur) ou en cas d'échec : une photo introuvable ne doit pas
- * empêcher d'afficher la navigation.
- * Future implémentation : un champ `avatarUrl` dans la réponse de `GET ${API_URL}/auth/me`, pour
- * éviter cet appel supplémentaire.
+ * profil que la photo (prénom du citoyen ou du modérateur, pseudo du héros), comme sur la page de
+ * profil : sinon initiales et couleur du placeholder différeraient entre les deux.
+ * `null` en cas d'échec : une photo introuvable ne doit pas empêcher d'afficher la navigation.
+ * API : `GET /me`, mémorisé le temps d'un rendu : la page de profil le relit sans nouvel appel.
  */
 export async function getMyAvatar(token: string): Promise<AvatarData | null> {
   try {
     const user = await getSessionUser(token);
-    if (user?.role === "citoyen") {
+    if (user?.role === "citoyen" || user?.role === "admin") {
       const account = await getMyAccount(token);
       return { name: account.firstName, src: account.avatarUrl };
     }

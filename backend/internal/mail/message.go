@@ -13,6 +13,7 @@ import (
 	"mime/quotedprintable"
 	"net/mail"
 	"net/textproto"
+	"net/url"
 	"strings"
 	"time"
 
@@ -24,10 +25,16 @@ const fallbackMessageIDDomain = "localhost"
 
 // Message est un mail à envoyer, avec une version texte et une version HTML.
 type Message struct {
-	To      string
+	To string
+	// ReplyTo, facultatif, est l'adresse qui reçoit la réponse du destinataire (formulaire de contact).
+	ReplyTo string
 	Subject string
 	Text    string
 	HTML    string
+	// ListUnsubscribe, facultatif, est l'adresse (http ou https) où se désabonner : elle devient l'en-tête
+	// List-Unsubscribe (RFC 2369), que les messageries affichent comme un lien « Se désabonner ». Elle
+	// est obligatoire pour une newsletter (voir Service.SendNewsletter).
+	ListUnsubscribe string
 }
 
 // Mailer envoie un mail. Les implémentations sont sûres pour un usage concurrent.
@@ -49,19 +56,39 @@ func (s Sender) header() string {
 }
 
 // validate refuse un message qui permettrait une injection d'en-têtes : saut de ligne dans le
-// destinataire ou le sujet, adresse qui n'est pas une adresse simple.
+// destinataire, l'adresse de réponse ou le sujet, adresse qui n'est pas une adresse simple.
 func (m Message) validate() (recipient *mail.Address, err error) {
-	if strings.ContainsAny(m.To, "\r\n") || strings.ContainsAny(m.Subject, "\r\n") {
+	if strings.ContainsAny(m.To, "\r\n") || strings.ContainsAny(m.ReplyTo, "\r\n") || strings.ContainsAny(m.Subject, "\r\n") {
 		return nil, fmt.Errorf("%w : saut de ligne dans un en-tête", ErrInvalidMessage)
 	}
-	recipient, err = mail.ParseAddress(m.To)
-	if err != nil || recipient.Name != "" {
+	recipient, ok := bareAddress(m.To)
+	if !ok {
 		return nil, fmt.Errorf("%w : destinataire", ErrInvalidMessage)
+	}
+	if _, ok := bareAddress(m.ReplyTo); m.ReplyTo != "" && !ok {
+		return nil, fmt.Errorf("%w : adresse de réponse", ErrInvalidMessage)
 	}
 	if strings.TrimSpace(m.Subject) == "" || (m.Text == "" && m.HTML == "") {
 		return nil, fmt.Errorf("%w : sujet ou contenu vide", ErrInvalidMessage)
 	}
+	if m.ListUnsubscribe != "" && !isWebLink(m.ListUnsubscribe) {
+		return nil, fmt.Errorf("%w : adresse de désinscription", ErrInvalidMessage)
+	}
 	return recipient, nil
+}
+
+// bareAddress lit une adresse simple : « a@b.c », sans nom affiché.
+func bareAddress(raw string) (*mail.Address, bool) {
+	address, err := mail.ParseAddress(raw)
+	return address, err == nil && address.Name == ""
+}
+
+// isWebLink dit si raw est un lien http(s) sûr à placer entre chevrons dans un en-tête : ni chevron, ni espace,
+// ni saut de ligne, qui casseraient l'en-tête.
+func isWebLink(raw string) bool {
+	link, err := url.Parse(raw)
+	return err == nil && (link.Scheme == "http" || link.Scheme == "https") && link.Host != "" &&
+		!strings.ContainsAny(raw, "\r\n<> ")
 }
 
 // build écrit le message au format MIME multipart/alternative : texte puis HTML, encodés en
@@ -83,6 +110,12 @@ func build(sender Sender, message Message, now time.Time) ([]byte, error) {
 		{"Message-ID", fmt.Sprintf("<%s@%s>", ids.New(), domainOf(sender.Address))},
 		{"MIME-Version", "1.0"},
 		{"Content-Type", fmt.Sprintf("multipart/alternative; boundary=%q", parts.Boundary())},
+	}
+	if message.ReplyTo != "" {
+		headers = append(headers, struct{ name, value string }{"Reply-To", (&mail.Address{Address: message.ReplyTo}).String()})
+	}
+	if message.ListUnsubscribe != "" {
+		headers = append(headers, struct{ name, value string }{"List-Unsubscribe", "<" + message.ListUnsubscribe + ">"})
 	}
 	var output bytes.Buffer
 	for _, header := range headers {

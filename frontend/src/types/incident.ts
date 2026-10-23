@@ -1,9 +1,40 @@
+import type { ApiFailure } from "./api";
 import type { ModerationStatus } from "./moderation";
+import type { HeroReview } from "./review";
 import type { SuperHeroSummary } from "./super-hero";
 import type { VillainSummary } from "./villain";
 
-export type IncidentType =
-  "vol" | "cambriolage" | "prise-d-otages" | "agression" | "sabotage" | "enlevement";
+/**
+ * Type d'un incident, tel qu'il est embarqué dans l'incident (`typeCode` et `typeLabel` de
+ * l'API). Les types forment un référentiel géré par la modération : aucune liste n'est écrite en dur.
+ */
+export interface IncidentType {
+  /** Code stable (`vol`, `prise-d-otages`…). */
+  code: string;
+  /** Libellé affiché. */
+  label: string;
+}
+
+/** Type du référentiel (`GET /intervention-types`), proposé dans les formulaires. */
+export interface IncidentTypeDefinition extends IncidentType {
+  /** Identifiant envoyé à l'API (`typeId`). */
+  id: number;
+  /** Le type d'incident met des vies en danger. */
+  endangersLife: boolean;
+}
+
+/** Saisie d'un nouveau type par la modération (`InterventionTypePayload`). */
+export interface IncidentTypeInput {
+  code: string;
+  label: string;
+  endangersLife: boolean;
+}
+
+export type IncidentTypeCreationResult =
+  | { ok: true; type: IncidentTypeDefinition }
+  | { ok: false; error: "code-already-used" }
+  | { ok: false; error: "invalid-fields"; fields: Record<string, string> }
+  | ApiFailure;
 
 export type IncidentStatus = "signale" | "en-cours" | "resolu";
 
@@ -72,10 +103,17 @@ export type ResolvedIncident = Incident & {
 
 /** Données saisies par un citoyen pour déclarer un incident. */
 export interface IncidentDeclaration {
-  type: IncidentType;
+  /**
+   * Identifiant choisi par l'appareil (UUID), facultatif : il reconnaît son incident même si l'envoi est rejoué
+   * (hors ligne, ou réponse perdue). Sans lui, c'est l'API qui en choisit un.
+   */
+  id?: string;
+  /** Identifiant du type dans le référentiel (`typeId` de l'API). */
+  typeId: number;
   title: string;
   description: string;
-  reporterRole: ReporterRole;
+  /** `null` quand le formulaire ne le demande pas (l'API ne le connaît pas). */
+  reporterRole: ReporterRole | null;
   location: { address: string; city: string };
   /** Date ISO 8601 des faits, `null` si l'incident est en cours. */
   occurredAt: string | null;
@@ -83,48 +121,17 @@ export interface IncidentDeclaration {
   villainId: string | null;
 }
 
-/** Évaluation d'une intervention par le citoyen impliqué. */
-export interface InterventionRating {
-  incidentId: string;
-  heroId: string;
-  /** Note entière de 1 à 5. */
-  rating: number;
-  comment: string | null;
-  /** Modération du commentaire : un commentaire rejeté est masqué (la note reste comptée). */
-  commentModeration: ModerationStatus;
-  ratedAt: string;
-  /** Réponse du super-héros au commentaire. */
-  reply?: HeroReply | null;
-}
-
-export interface HeroReply {
-  content: string;
-  /** Date ISO 8601. */
-  repliedAt: string;
-}
-
-/** Évaluation affichée dans le back-office, avec l'incident et le héros concernés. */
-export interface RatingForModeration extends InterventionRating {
-  incident: Pick<Incident, "id" | "title">;
-  hero: SuperHeroSummary;
-}
-
 /** Modifications d'un incident par la modération. */
 export interface IncidentUpdate {
   title: string;
-  type: IncidentType;
+  /** Identifiant du type dans le référentiel. */
+  typeId: number;
   status: IncidentStatus;
   description: string;
   location: { address: string; city: string };
   villainId: string | null;
   /** Obligatoire dès que l'incident est pris en charge. */
   heroId: string | null;
-}
-
-/** Intervention terminée sur un incident du citoyen, avec sa note s'il l'a déjà donnée. */
-export interface RateableIntervention {
-  incident: ResolvedIncident;
-  rating: InterventionRating | null;
 }
 
 /**
@@ -142,24 +149,60 @@ export interface HeroIntervention {
   outcome: InterventionOutcome | null;
 }
 
-/** Incident vu depuis l'espace super-héros : priorité et historique des interventions. */
-export interface HeroIncident extends Incident {
-  priority: IncidentPriority;
-  /** Interventions sur cet incident, des plus récentes aux plus anciennes. */
-  interventions: HeroIntervention[];
+/** Place d'un héros dans l'équipe : le lead a démarré l'intervention. */
+export type TeamRole = "lead" | "membre";
+
+/** Un héros invité doit confirmer sa présence avant de faire partie de l'équipe. */
+export type TeamParticipation = "invite" | "confirme";
+
+/** Vote d'un membre confirmé sur le résultat proposé. */
+export type OutcomeVote = "en-attente" | "approuve" | "refuse";
+
+export interface TeamMember {
+  hero: SuperHeroSummary;
+  role: TeamRole;
+  participation: TeamParticipation;
+  vote: OutcomeVote;
+  /** Le membre est le super-héros connecté. */
+  isMe: boolean;
 }
 
 /**
- * Avis affiché sur la fiche publique d'un super-héros : uniquement les commentaires publiés
- * par la modération, sans aucune information sur le citoyen qui l'a écrit.
+ * Équipe engagée sur un incident (`Intervention` de l'API). Un héros seul clôt directement
+ * l'intervention ; une équipe soumet le résultat proposé au vote unanime de ses membres confirmés.
+ * Un refus renvoie la décision à la modération, qui arbitre.
  */
-export interface PublicReview {
-  incidentId: string;
-  rating: number;
-  comment: string;
-  ratedAt: string;
-  reply: HeroReply | null;
+export interface InterventionTeam {
+  /** Identifiant de l'intervention (routes `/interventions/{id}`). */
+  id: string;
+  /** Date ISO 8601 du début de l'intervention. */
+  startedAt: string;
+  members: TeamMember[];
+  /** Résultat proposé, en attente du vote de l'équipe ; `null` s'il n'y en a pas. */
+  proposedOutcome: InterventionOutcome | null;
+  /** Auteur de la proposition. */
+  proposedBy: SuperHeroSummary | null;
+  /** Compte rendu joint au résultat proposé. */
+  notes: string;
 }
+
+/** Incident vu depuis l'espace super-héros : priorité, équipe et historique des interventions. */
+export interface HeroIncident extends Incident {
+  priority: IncidentPriority;
+  /** Interventions terminées sur cet incident, des plus récentes aux plus anciennes. */
+  interventions: HeroIntervention[];
+  /** Équipe de l'intervention en cours, `null` si personne n'intervient. */
+  team: InterventionTeam | null;
+}
+
+/** Désignation d'une intervention dans les formulaires : l'API la retrouve par son id, le mock par son incident. */
+export interface InterventionRef {
+  incidentId: string;
+  interventionId: string;
+}
+
+/** Résultat d'une déclaration de résultat : clos aussitôt (héros seul) ou soumis au vote de l'équipe. */
+export type OutcomeProposalResult = { ok: true; closed: boolean } | { ok: false; error: string };
 
 /** Détail d'un incident consulté depuis l'espace citoyen. */
 export interface CitizenIncidentDetail {
@@ -169,8 +212,8 @@ export interface CitizenIncidentDetail {
   isMine: boolean;
   /** Interventions des super-héros, des plus anciennes aux plus récentes (en cours comprise). */
   interventions: HeroIntervention[];
-  /** Note déjà donnée par le citoyen (uniquement pour ses propres incidents). */
-  rating: InterventionRating | null;
+  /** Avis déjà donné par le citoyen (uniquement pour ses propres incidents). */
+  review: HeroReview | null;
 }
 
 /** Incident placé sur la carte des super-héros : uniquement ce qu'il faut pour l'afficher. */
@@ -192,7 +235,10 @@ export interface MapIncident {
  * ne suit pas la géolocalisation des héros en temps réel.
  */
 export interface MapTeam {
+  /** Lead de l'équipe. */
   hero: SuperHeroSummary;
+  /** Le super-héros connecté fait partie de l'équipe. */
+  isMe: boolean;
   incidentId: string;
   position: GeoPoint;
   /** Date ISO 8601 du début de l'intervention, `null` si elle n'est pas connue. */

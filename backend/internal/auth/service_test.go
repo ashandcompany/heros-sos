@@ -171,7 +171,7 @@ func TestActivateOpensTheAccountOnlyOnce(t *testing.T) {
 
 func TestActivateRejectsBadTokens(t *testing.T) {
 	h := newHarness(t, nil)
-	h.service.Register(ctx, registration("jeton@example.org"))
+	_, _ = h.service.Register(ctx, registration("jeton@example.org"))
 	valid := h.lastToken()
 
 	h.clock.Advance(25 * time.Hour) // au-delà des 24 h de validité
@@ -219,7 +219,7 @@ func TestActivateIsAtomicWithTheTokenConsumption(t *testing.T) {
 
 func TestConcurrentActivationsWithSameTokenSucceedOnce(t *testing.T) {
 	h := newHarness(t, nil)
-	h.service.Register(ctx, registration("double-clic@example.org"))
+	_, _ = h.service.Register(ctx, registration("double-clic@example.org"))
 	token := h.lastToken()
 
 	const clicks = 10
@@ -247,7 +247,7 @@ func TestConcurrentActivationsWithSameTokenSucceedOnce(t *testing.T) {
 
 func TestResendActivation(t *testing.T) {
 	h := newHarness(t, nil)
-	h.service.Register(ctx, registration("renvoi@example.org"))
+	_, _ = h.service.Register(ctx, registration("renvoi@example.org"))
 	first := h.lastToken()
 
 	if err := h.service.ResendActivation(ctx, "RENVOI@example.org"); err != nil {
@@ -334,7 +334,7 @@ func TestLoginGivesTheSameAnswerForUnknownAccountAndWrongPassword(t *testing.T) 
 
 func TestLoginRequiresActivationButOnlyRevealsItWithTheRightPassword(t *testing.T) {
 	h := newHarness(t, nil)
-	h.service.Register(ctx, registration("inactif@example.org"))
+	_, _ = h.service.Register(ctx, registration("inactif@example.org"))
 
 	if _, err := h.login("inactif@example.org", goodPassword); !errors.Is(err, auth.ErrAccountNotActivated) {
 		t.Errorf("bon mot de passe : %v, attendu ErrAccountNotActivated", err)
@@ -347,7 +347,7 @@ func TestLoginRequiresActivationButOnlyRevealsItWithTheRightPassword(t *testing.
 func TestLoginRejectsDeactivatedAccountsOnlyWithTheRightPassword(t *testing.T) {
 	h := newHarness(t, nil)
 	u := h.registerAndActivate("banni@example.org")
-	h.users.Deactivate(ctx, u.ID, h.clock.Now())
+	_, _ = h.users.Deactivate(ctx, u.ID, h.clock.Now())
 
 	if _, err := h.login("banni@example.org", goodPassword); !errors.Is(err, auth.ErrAccountDeactivated) {
 		t.Errorf("bon mot de passe : %v", err)
@@ -599,13 +599,13 @@ func TestSessionTouchIsThrottled(t *testing.T) {
 
 	created := lastSeen()
 	h.clock.Advance(h.cfg.Session.TouchPeriod / 2)
-	h.sessions.Authenticate(ctx, result.Session.Token)
+	_, _ = h.sessions.Authenticate(ctx, result.Session.Token)
 	if !lastSeen().Equal(created) {
 		t.Error("moins d'une période : aucune écriture attendue")
 	}
 
 	h.clock.Advance(h.cfg.Session.TouchPeriod)
-	h.sessions.Authenticate(ctx, result.Session.Token)
+	_, _ = h.sessions.Authenticate(ctx, result.Session.Token)
 	if !lastSeen().After(created) {
 		t.Error("après une période : last_seen_at doit être mis à jour")
 	}
@@ -624,7 +624,7 @@ func TestCleanupRemovesOnlyStaleSessionsAndTokens(t *testing.T) {
 	h := newHarness(t, nil)
 	h.registerAndActivate("menage@example.org")
 	old, _ := h.login("menage@example.org", goodPassword)
-	h.service.Logout(ctx, old.Session.Token)
+	_ = h.service.Logout(ctx, old.Session.Token)
 
 	h.clock.Advance(10 * 24 * time.Hour)
 	fresh, _ := h.login("menage@example.org", goodPassword)
@@ -682,9 +682,9 @@ func TestPasswordResetFullFlow(t *testing.T) {
 func TestPasswordResetRequestNeverRevealsAccounts(t *testing.T) {
 	h := newHarness(t, nil)
 	h.registerAndActivate("actif@example.org")
-	h.service.Register(ctx, registration("en-attente@example.org"))
+	_, _ = h.service.Register(ctx, registration("en-attente@example.org"))
 	deactivated := h.registerAndActivate("banni@example.org")
-	h.users.Deactivate(ctx, deactivated.ID, h.clock.Now())
+	_, _ = h.users.Deactivate(ctx, deactivated.ID, h.clock.Now())
 
 	before := len(h.mailer.Messages())
 	for _, email := range []string{"inconnu@example.org", "en-attente@example.org", "banni@example.org"} {
@@ -706,9 +706,9 @@ func TestNewPasswordResetRequestInvalidatesThePreviousLink(t *testing.T) {
 	h := newHarness(t, nil)
 	h.registerAndActivate("deux-demandes@example.org")
 
-	h.service.RequestPasswordReset(ctx, "deux-demandes@example.org")
+	_ = h.service.RequestPasswordReset(ctx, "deux-demandes@example.org")
 	first := h.lastToken()
-	h.service.RequestPasswordReset(ctx, "deux-demandes@example.org")
+	_ = h.service.RequestPasswordReset(ctx, "deux-demandes@example.org")
 	second := h.lastToken()
 
 	if err := h.service.ConfirmPasswordReset(ctx, first, otherPassword, testIP); !errors.Is(err, auth.ErrTokenInvalid) {
@@ -722,7 +722,7 @@ func TestNewPasswordResetRequestInvalidatesThePreviousLink(t *testing.T) {
 func TestPasswordResetWithWeakPasswordKeepsTheLinkUsable(t *testing.T) {
 	h := newHarness(t, nil)
 	h.registerAndActivate("faible@example.org")
-	h.service.RequestPasswordReset(ctx, "faible@example.org")
+	_ = h.service.RequestPasswordReset(ctx, "faible@example.org")
 	token := h.lastToken()
 
 	var validationErr *validation.Error
@@ -737,7 +737,7 @@ func TestPasswordResetWithWeakPasswordKeepsTheLinkUsable(t *testing.T) {
 func TestPasswordResetRejectsExpiredAndForgedTokens(t *testing.T) {
 	h := newHarness(t, nil)
 	h.registerAndActivate("expire@example.org")
-	h.service.RequestPasswordReset(ctx, "expire@example.org")
+	_ = h.service.RequestPasswordReset(ctx, "expire@example.org")
 	token := h.lastToken()
 	activationToken := strings.Repeat("B", 43)
 
@@ -751,7 +751,7 @@ func TestPasswordResetRejectsExpiredAndForgedTokens(t *testing.T) {
 
 func TestPasswordResetCannotBeDoneWithAnActivationToken(t *testing.T) {
 	h := newHarness(t, nil)
-	h.service.Register(ctx, registration("croise@example.org"))
+	_, _ = h.service.Register(ctx, registration("croise@example.org"))
 	activationToken := h.lastToken()
 
 	if err := h.service.ConfirmPasswordReset(ctx, activationToken, otherPassword, testIP); !errors.Is(err, auth.ErrTokenInvalid) {
@@ -766,13 +766,13 @@ func TestPasswordResetLiftsLockout(t *testing.T) {
 	h := newHarness(t, map[string]string{"HEROS_LOCKOUT_MAX_FAILURES": "2"})
 	h.registerAndActivate("verrouille@example.org")
 	for range 2 {
-		h.login("verrouille@example.org", otherPassword)
+		_, _ = h.login("verrouille@example.org", otherPassword)
 	}
 	if _, err := h.login("verrouille@example.org", goodPassword); !errors.Is(err, auth.ErrAccountLocked) {
 		t.Fatalf("le compte devrait être verrouillé : %v", err)
 	}
 
-	h.service.RequestPasswordReset(ctx, "verrouille@example.org")
+	_ = h.service.RequestPasswordReset(ctx, "verrouille@example.org")
 	if err := h.service.ConfirmPasswordReset(ctx, h.lastToken(), otherPassword, testIP); err != nil {
 		t.Fatal(err)
 	}
@@ -784,7 +784,7 @@ func TestPasswordResetLiftsLockout(t *testing.T) {
 func TestConcurrentPasswordResetsWithSameTokenSucceedOnce(t *testing.T) {
 	h := newHarness(t, nil)
 	h.registerAndActivate("course-reset@example.org")
-	h.service.RequestPasswordReset(ctx, "course-reset@example.org")
+	_ = h.service.RequestPasswordReset(ctx, "course-reset@example.org")
 	token := h.lastToken()
 
 	var wg sync.WaitGroup

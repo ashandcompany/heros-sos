@@ -1,14 +1,17 @@
+import Link from "next/link";
 import { deleteMyVideoAction } from "@/app/actions/hero";
 import { ConfirmDeleteButton } from "@/components/admin/ConfirmDeleteButton";
 import { ModerationBadge } from "@/components/admin/ModerationBadge";
 import { EmptyState } from "@/components/admin/ModerationFilter";
+import { Pagination, readPageNumber } from "@/components/admin/Pagination";
 import { buttonClasses } from "@/components/ui/ButtonLink";
 import { cn } from "@/components/ui/cn";
-import { getMyVideos, searchImdbTitles } from "@/lib/api";
+import { getMyVideos, getMyVideosPage, searchImdbTitles } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import { routes } from "@/lib/routes";
 import { requireHeroSession } from "@/lib/server-session";
-import type { ModerationStatus } from "@/types";
+import { apiFailureMessage } from "@/lib/validation/form-state";
+import type { HeroVideo, ModerationStatus } from "@/types";
 import { AddVideoForm } from "./AddVideoForm";
 
 /*
@@ -21,17 +24,19 @@ const videoStatusLabels: Record<ModerationStatus, string> = {
   rejete: "Refusé par la modération",
 };
 
-export type VideoSearchParams = Promise<{ q?: string | string[] }>;
+/** Recherche IMDb (`q`) et page de « Mes films » (`page`). */
+export type VideoSearchParams = Promise<{ q?: string | string[]; page?: string | string[] }>;
 
 export async function ImdbSearch({ searchParams }: { searchParams: VideoSearchParams }) {
   const { token } = await requireHeroSession();
   const raw = (await searchParams).q;
   const query = (Array.isArray(raw) ? raw[0] : raw)?.trim() ?? "";
-  const [results, videos] = await Promise.all([
-    query ? searchImdbTitles(token, query) : [],
+  const [search, videos] = await Promise.all([
+    query ? searchImdbTitles(token, query) : null,
     getMyVideos(token),
   ]);
   const owned = new Set(videos.map(({ imdbId }) => imdbId));
+  const results = search?.ok ? search.titles : [];
 
   return (
     <>
@@ -53,8 +58,14 @@ export async function ImdbSearch({ searchParams }: { searchParams: VideoSearchPa
         </button>
       </form>
 
-      {query &&
-        (results.length === 0 ? (
+      {search &&
+        (!search.ok ? (
+          <p role="alert" className="text-sm text-danger">
+            {search.error === "catalog-unavailable"
+              ? "Le catalogue IMDb est momentanément indisponible. Réessayez dans quelques instants."
+              : apiFailureMessage(search)}
+          </p>
+        ) : results.length === 0 ? (
           <EmptyState>Aucun film ne correspond à «&nbsp;{query}&nbsp;» sur IMDb.</EmptyState>
         ) : (
           <>
@@ -69,10 +80,14 @@ export async function ImdbSearch({ searchParams }: { searchParams: VideoSearchPa
                 >
                   <div className="min-w-0 flex-1">
                     <p className="font-display font-semibold">
-                      {title.title}{" "}
-                      <span className="font-mono text-sm text-muted">({title.year})</span>
+                      {title.title}
+                      {title.year && (
+                        <span className="font-mono text-sm text-muted"> ({title.year})</span>
+                      )}
                     </p>
-                    <p className="mt-1 text-sm text-pretty text-muted">{title.plot}</p>
+                    {title.plot && (
+                      <p className="mt-1 text-sm text-pretty text-muted">{title.plot}</p>
+                    )}
                   </div>
                   {owned.has(title.id) ? (
                     <p className="text-sm text-muted">Déjà dans votre vidéothèque</p>
@@ -88,18 +103,56 @@ export async function ImdbSearch({ searchParams }: { searchParams: VideoSearchPa
   );
 }
 
-export async function MyVideos() {
-  const { token } = await requireHeroSession();
-  const videos = await getMyVideos(token);
+const MY_VIDEOS_PAGE_SIZE = 10;
+const MY_VIDEOS_ANCHOR = "my-videos-title";
 
-  if (videos.length === 0) {
+export async function MyVideos({ searchParams }: { searchParams: VideoSearchParams }) {
+  const { token } = await requireHeroSession();
+  const pageNumber = await readPageNumber(searchParams);
+  const rawQuery = (await searchParams).q;
+  const imdbQuery = (Array.isArray(rawQuery) ? rawQuery[0] : rawQuery)?.trim() || undefined;
+  const page = await getMyVideosPage(token, {
+    limit: MY_VIDEOS_PAGE_SIZE,
+    offset: (pageNumber - 1) * MY_VIDEOS_PAGE_SIZE,
+  });
+
+  if (page.total === 0) {
     return (
       <EmptyState>
         Votre vidéothèque est vide. Recherchez un film sur IMDb pour l&apos;ajouter.
       </EmptyState>
     );
   }
+  // Page au-delà de la dernière (après un retrait, ou lien saisi à la main).
+  if (page.items.length === 0) {
+    return (
+      <EmptyState>
+        Cette page n&apos;existe pas.{" "}
+        <Link href={routes.heroVideos} className="text-accent hover:underline">
+          Revenir à vos premiers films
+        </Link>
+      </EmptyState>
+    );
+  }
 
+  return (
+    <>
+      <p role="status" className="mb-3 text-sm text-muted">
+        {page.total} film{page.total > 1 ? "s" : ""} dans votre vidéothèque
+      </p>
+      <MyVideosList videos={page.items} />
+      {/* Garde la recherche IMDb affichée à côté. */}
+      <Pagination
+        page={page}
+        basePath={routes.heroVideos}
+        query={{ q: imdbQuery }}
+        anchor={MY_VIDEOS_ANCHOR}
+      />
+    </>
+  );
+}
+
+function MyVideosList({ videos }: { videos: HeroVideo[] }) {
   return (
     <ul className="space-y-4">
       {videos.map((video) => {

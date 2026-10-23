@@ -14,6 +14,7 @@ import (
 	"github.com/ashandcompany/heros-sos/backend/internal/clock"
 	"github.com/ashandcompany/heros-sos/backend/internal/config"
 	"github.com/ashandcompany/heros-sos/backend/internal/database"
+	"github.com/ashandcompany/heros-sos/backend/internal/events"
 	"github.com/ashandcompany/heros-sos/backend/internal/hero"
 	"github.com/ashandcompany/heros-sos/backend/internal/user"
 )
@@ -52,6 +53,7 @@ type ServiceDeps struct {
 	Users    user.Repository
 	Heroes   HeroFinder
 	Audit    audit.Recorder
+	Events   events.Recorder
 	Tx       database.Transactor
 	Clock    clock.Clock
 	App      config.App
@@ -74,11 +76,19 @@ func (s *Service) Start(ctx context.Context, heroID, incidentID uuid.UUID, ip ne
 	}
 	var created *Intervention
 	err := s.Tx.WithinTx(ctx, func(ctx context.Context) error {
+		if err := s.Events.Lock(ctx); err != nil {
+			return err
+		}
 		var err error
 		created, err = s.Repo.Start(ctx, incidentID, heroID, s.Clock.Now())
 		if err != nil {
 			return err
 		}
+		appended, err := s.emit(ctx, heroID, created.ID, events.InterventionStarted, map[string]any{"heroId": heroID.String()}, nil)
+		if err != nil {
+			return err
+		}
+		created.Version = appended.Version
 		return s.record(ctx, heroID, created.ID, ActionStarted, ip)
 	})
 	if err != nil {
@@ -93,7 +103,13 @@ func (s *Service) Join(ctx context.Context, heroID, interventionID uuid.UUID, ip
 		return err
 	}
 	return s.Tx.WithinTx(ctx, func(ctx context.Context) error {
+		if err := s.Events.Lock(ctx); err != nil {
+			return err
+		}
 		if err := s.Repo.Join(ctx, interventionID, heroID, s.Clock.Now()); err != nil {
+			return err
+		}
+		if _, err := s.emit(ctx, heroID, interventionID, events.InterventionJoined, map[string]any{"heroId": heroID.String()}, nil); err != nil {
 			return err
 		}
 		return s.record(ctx, heroID, interventionID, ActionJoined, ip)
@@ -123,8 +139,15 @@ func (s *Service) Invite(ctx context.Context, actorID, interventionID uuid.UUID,
 	}
 	invited := make([]uuid.UUID, 0, len(unique))
 	err := s.Tx.WithinTx(ctx, func(ctx context.Context) error {
+		if err := s.Events.Lock(ctx); err != nil {
+			return err
+		}
 		for heroID := range unique {
 			if err := s.Repo.Invite(ctx, interventionID, actorID, heroID, s.Clock.Now()); err != nil {
+				return err
+			}
+			invitation := map[string]any{"heroId": heroID.String(), "invitedBy": actorID.String()}
+			if _, err := s.emit(ctx, actorID, interventionID, events.InterventionInvited, invitation, nil); err != nil {
 				return err
 			}
 			if err := s.record(ctx, actorID, interventionID, ActionInvited, ip); err != nil {
@@ -156,7 +179,13 @@ func (s *Service) ConfirmInvitation(ctx context.Context, heroID, interventionID 
 		return err
 	}
 	return s.Tx.WithinTx(ctx, func(ctx context.Context) error {
+		if err := s.Events.Lock(ctx); err != nil {
+			return err
+		}
 		if err := s.Repo.ConfirmInvitation(ctx, interventionID, heroID, s.Clock.Now()); err != nil {
+			return err
+		}
+		if _, err := s.emit(ctx, heroID, interventionID, events.InterventionInvitationConfirmed, map[string]any{"heroId": heroID.String()}, nil); err != nil {
 			return err
 		}
 		return s.record(ctx, heroID, interventionID, ActionInvitationAccepted, ip)
@@ -169,15 +198,23 @@ func (s *Service) DeclineInvitation(ctx context.Context, heroID, interventionID 
 		return err
 	}
 	return s.Tx.WithinTx(ctx, func(ctx context.Context) error {
+		if err := s.Events.Lock(ctx); err != nil {
+			return err
+		}
 		if err := s.Repo.DeclineInvitation(ctx, interventionID, heroID); err != nil {
+			return err
+		}
+		if _, err := s.emit(ctx, heroID, interventionID, events.InterventionInvitationDeclined, map[string]any{"heroId": heroID.String()}, nil); err != nil {
 			return err
 		}
 		return s.record(ctx, heroID, interventionID, ActionInvitationDeclined, ip)
 	})
 }
 
-// ProposeOutcome clôt immédiatement une intervention solo ou soumet le résultat au vote de l'équipe.
-func (s *Service) ProposeOutcome(ctx context.Context, heroID, interventionID uuid.UUID, status Status, notes string, ip netip.Addr) error {
+// ProposeOutcome clôt immédiatement une intervention solo ou soumet le résultat au vote de l'équipe. Si
+// expectedVersion est renseignée, l'action n'est appliquée que si l'intervention est toujours à cette version
+// (voir Intervention.Version) : sinon l'écriture de l'événement échoue (ErrVersionConflict) et tout est annulé.
+func (s *Service) ProposeOutcome(ctx context.Context, heroID, interventionID uuid.UUID, status Status, notes string, expectedVersion *int, ip netip.Addr) error {
 	if err := s.requireApprovedHero(ctx, heroID); err != nil {
 		return err
 	}
@@ -188,14 +225,21 @@ func (s *Service) ProposeOutcome(ctx context.Context, heroID, interventionID uui
 	var participants []uuid.UUID
 	closed := false
 	err := s.Tx.WithinTx(ctx, func(ctx context.Context) error {
+		if err := s.Events.Lock(ctx); err != nil {
+			return err
+		}
 		var err error
 		closed, participants, err = s.Repo.ProposeOutcome(ctx, interventionID, heroID, status, notes, s.Clock.Now())
 		if err != nil {
 			return err
 		}
-		action := ActionOutcomeProposed
+		action, eventType := ActionOutcomeProposed, events.InterventionOutcomeProposed
 		if closed {
-			action = ActionOutcomeClosed
+			action, eventType = ActionOutcomeClosed, events.InterventionClosed
+		}
+		details := map[string]any{"heroId": heroID.String(), "proposedStatus": string(status)}
+		if _, err := s.emit(ctx, heroID, interventionID, eventType, details, expectedVersion); err != nil {
+			return err
 		}
 		return s.record(ctx, heroID, interventionID, action, ip)
 	})
@@ -210,22 +254,32 @@ func (s *Service) ProposeOutcome(ctx context.Context, heroID, interventionID uui
 	return nil
 }
 
-// ValidateOutcome approuve ou refuse le résultat proposé par l'équipe.
-func (s *Service) ValidateOutcome(ctx context.Context, heroID, interventionID uuid.UUID, approved bool, ip netip.Addr) error {
+// ValidateOutcome approuve ou refuse le résultat proposé par l'équipe. expectedVersion a le même sens que pour
+// ProposeOutcome.
+func (s *Service) ValidateOutcome(ctx context.Context, heroID, interventionID uuid.UUID, approved bool, expectedVersion *int, ip netip.Addr) error {
 	if err := s.requireApprovedHero(ctx, heroID); err != nil {
 		return err
 	}
 	closed, disputed := false, false
 	var participants []uuid.UUID
 	err := s.Tx.WithinTx(ctx, func(ctx context.Context) error {
+		if err := s.Events.Lock(ctx); err != nil {
+			return err
+		}
 		var err error
 		closed, disputed, participants, err = s.Repo.ValidateOutcome(ctx, interventionID, heroID, approved, s.Clock.Now())
 		if err != nil {
 			return err
 		}
-		action := ActionOutcomeValidated
-		if disputed {
-			action = ActionOutcomeDisputed
+		action, eventType := ActionOutcomeValidated, events.InterventionOutcomeValidated
+		switch {
+		case disputed:
+			action, eventType = ActionOutcomeDisputed, events.InterventionOutcomeDisputed
+		case closed:
+			eventType = events.InterventionClosed
+		}
+		if _, err := s.emit(ctx, heroID, interventionID, eventType, map[string]any{"heroId": heroID.String(), "approved": approved}, expectedVersion); err != nil {
+			return err
 		}
 		return s.record(ctx, heroID, interventionID, action, ip)
 	})
@@ -254,9 +308,15 @@ func (s *Service) Arbitrate(ctx context.Context, moderatorID, interventionID uui
 	}
 	var participants []uuid.UUID
 	err = s.Tx.WithinTx(ctx, func(ctx context.Context) error {
+		if err := s.Events.Lock(ctx); err != nil {
+			return err
+		}
 		var err error
 		participants, err = s.Repo.Arbitrate(ctx, interventionID, moderatorID, status, strings.TrimSpace(notes), s.Clock.Now())
 		if err != nil {
+			return err
+		}
+		if _, err := s.emit(ctx, moderatorID, interventionID, events.InterventionArbitrated, map[string]any{"decidedBy": moderatorID.String()}, nil); err != nil {
 			return err
 		}
 		return s.record(ctx, moderatorID, interventionID, ActionOutcomeArbitrated, ip)
@@ -270,7 +330,28 @@ func (s *Service) Arbitrate(ctx context.Context, moderatorID, interventionID uui
 
 // Get retourne une intervention à ses participants ou aux modérateurs.
 func (s *Service) Get(ctx context.Context, id uuid.UUID) (*Intervention, error) {
-	return s.Repo.Find(ctx, id)
+	found, err := s.Repo.Find(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if found.Version, err = s.Events.Version(ctx, id); err != nil {
+		return nil, err
+	}
+	return found, nil
+}
+
+// ListByIncident retourne les interventions d'un incident, en cours et terminées, avec leur version.
+func (s *Service) ListByIncident(ctx context.Context, incidentID uuid.UUID) ([]*Intervention, error) {
+	found, err := s.Repo.ListByIncident(ctx, incidentID)
+	if err != nil {
+		return nil, err
+	}
+	for _, in := range found {
+		if in.Version, err = s.Events.Version(ctx, in.ID); err != nil {
+			return nil, err
+		}
+	}
+	return found, nil
 }
 
 func (s *Service) requireApprovedHero(ctx context.Context, userID uuid.UUID) error {
@@ -286,6 +367,26 @@ func (s *Service) requireApprovedHero(ctx context.Context, userID uuid.UUID) err
 		return ErrHeroNotApproved
 	}
 	return err
+}
+
+// emit écrit l'événement d'une action dans la transaction en cours. L'intervention est relue après sa mise à
+// jour : l'incident concerné et l'état courant (statut de l'intervention) viennent d'elle, ce qui évite à chaque
+// appelant de les reconstituer. Le contenu ne comporte que des identifiants et des états.
+func (s *Service) emit(ctx context.Context, actorID, interventionID uuid.UUID, eventType string, details map[string]any, expectedVersion *int) (events.Appended, error) {
+	current, err := s.Repo.Find(ctx, interventionID)
+	if err != nil {
+		return events.Appended{}, err
+	}
+	payload := map[string]any{
+		"interventionId": interventionID.String(), "incidentId": current.IncidentID.String(), "status": string(current.Status),
+	}
+	for key, value := range details {
+		payload[key] = value
+	}
+	return s.Events.Append(ctx, events.Event{
+		Type: eventType, AggregateType: events.AggregateIntervention, AggregateID: interventionID,
+		IncidentID: current.IncidentID, ActorID: &actorID, Payload: payload, ExpectedVersion: expectedVersion,
+	})
 }
 
 func (s *Service) record(ctx context.Context, actorID, id uuid.UUID, action string, ip netip.Addr) error {

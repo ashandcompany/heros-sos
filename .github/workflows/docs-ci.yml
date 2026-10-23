@@ -1,0 +1,54 @@
+name: Docs CI
+
+# Vérifie que le site de documentation (docs-site/) se construit. Il ne publie rien : la publication est
+# dans docs-deploy.yml, après la fusion dans develop. Le build lit aussi backend/STACK.md, MVP.md, TABLES.md,
+# stack/, tables/, l'OpenAPI, ainsi que frontend/README.md et frontend/docs/, d'où ces chemins : un lien
+# cassé ou un OpenAPI que le générateur ne sait pas lire fait échouer le job.
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - "docs-site/**"
+      - "backend/STACK.md"
+      - "backend/stack/**"
+      - "backend/MVP.md"
+      - "backend/TABLES.md"
+      - "backend/tables/**"
+      - "backend/openapi/openapi.yaml"
+      - "frontend/README.md"
+      - "frontend/docs/**"
+      - ".github/workflows/docs-ci.yml"
+
+concurrency:
+  group: docs-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: docs-site
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: docs-site/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # `prebuild` génère d'abord les pages d'API depuis backend/openapi/openapi.yaml.
+      - name: Build
+        run: npm run build
+
+      # Après le build : sidebars.ts importe les pages d'API générées.
+      - name: Type-check
+        run: npm run typecheck

@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -17,7 +16,7 @@ import (
 	"github.com/ashandcompany/heros-sos/backend/internal/validation"
 )
 
-func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
+func discardLogger() *slog.Logger { return slog.New(slog.DiscardHandler) }
 
 func bufferLogger() (*slog.Logger, *bytes.Buffer) {
 	var buffer bytes.Buffer
@@ -364,4 +363,74 @@ func TestChainOrder(t *testing.T) {
 	if got := strings.Join(order, ", "); got != want {
 		t.Errorf("ordre = %q, attendu %q", got, want)
 	}
+}
+
+func TestAccessLogRecordsTheMatchedRouteInsteadOfTheRawPath(t *testing.T) {
+	logger, logs := bufferLogger()
+	handler := AccessLog(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		SetRoute(r.Context(), "GET /api/v1/incidents/{id}")
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/v1/incidents/0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10", nil))
+
+	// Les durées se regroupent par motif : avec l'identifiant dans la route, chaque incident aurait la sienne.
+	if output := logs.String(); !strings.Contains(output, `route="GET /api/v1/incidents/{id}"`) {
+		t.Errorf("le motif de route doit être journalisé :\n%s", output)
+	}
+}
+
+// Une sonde de santé réussie ne se journalise qu'en DEBUG : Docker et le proxy l'interrogent toutes les 10 secondes.
+func TestAccessLogKeepsSuccessfulQuietRoutesAtDebug(t *testing.T) {
+	logger, logs := bufferLogger()
+	handler := AccessLog(logger, "GET /api/v1/health")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		SetRoute(r.Context(), r.Method+" "+r.URL.Path)
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/v1/health", nil))
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/v1/incidents", nil))
+
+	lines := strings.Split(strings.TrimSpace(logs.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("deux requêtes, %d lignes de log :\n%s", len(lines), logs.String())
+	}
+	if !strings.Contains(lines[0], "level=DEBUG") || !strings.Contains(lines[0], "path=/api/v1/health") {
+		t.Errorf("la sonde réussie doit être en DEBUG :\n%s", lines[0])
+	}
+	if !strings.Contains(lines[1], "level=INFO") {
+		t.Errorf("une requête ordinaire reste en INFO :\n%s", lines[1])
+	}
+}
+
+// Une sonde qui échoue est le signal qu'on cherche : elle ne doit jamais être rendue silencieuse.
+func TestAccessLogStillReportsAFailingQuietRoute(t *testing.T) {
+	logger, logs := bufferLogger()
+	handler := AccessLog(logger, "GET /api/v1/ready")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		SetRoute(r.Context(), "GET /api/v1/ready")
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/v1/ready", nil))
+
+	if output := logs.String(); !strings.Contains(output, "level=ERROR") || !strings.Contains(output, "status=503") {
+		t.Errorf("une sonde en échec doit être journalisée en ERROR :\n%s", output)
+	}
+}
+
+func TestAccessLogMarksRequestsNoRouteMatched(t *testing.T) {
+	logger, logs := bufferLogger()
+	handler := AccessLog(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		WriteError(w, NotFound("absent"))
+	}))
+
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/v1/inconnu", nil))
+
+	if output := logs.String(); !strings.Contains(output, "route=unmatched") {
+		t.Errorf("une requête sans route doit être marquée unmatched :\n%s", output)
+	}
+}
+
+func TestSetRouteOutsideAccessLogDoesNothing(t *testing.T) {
+	SetRoute(context.Background(), "GET /x") // ne doit ni paniquer ni rien noter
 }

@@ -13,6 +13,8 @@ func registerRoutes(router *Router, c *components) {
 	registerHealthRoutes(router, c)
 	registerAuthRoutes(router, c)
 	registerHeroRoutes(router, c)
+	registerHeroDashboardRoutes(router, c)
+	registerHeroLocationRoutes(router, c)
 	registerModerationRoutes(router, c)
 	registerDocsRoutes(router, c)
 	registerInterventionTypeRoutes(router, c)
@@ -21,17 +23,35 @@ func registerRoutes(router *Router, c *components) {
 	registerInterventionRoutes(router, c)
 	registerReputationRoutes(router, c)
 	registerFilmRoutes(router, c)
+	registerAccountRoutes(router, c)
+	registerPublicMailRoutes(router, c)
+	registerBlogRoutes(router, c)
+	registerEventRoutes(router, c)
 }
 
-// protected exige une session valide (et le jeton CSRF sur les écritures) ; avec des rôles, il
-// restreint en plus l'accès à ces rôles.
+// protected exige une session valide et complète (double authentification validée quand elle s'applique) et
+// le jeton CSRF sur les écritures ; avec des rôles, il restreint en plus l'accès à ces rôles.
 func (c *components) protected(h http.HandlerFunc, roles ...user.Role) http.Handler {
 	return c.authMiddleware.Protected(roles...)(h)
 }
 
+// protectedPendingMFA est protected pour les routes qu'une session limitée (code 2FA à saisir, ou activation
+// obligatoire pas encore faite) doit pouvoir appeler : la 2FA elle-même, l'état de la session, la déconnexion.
+func (c *components) protectedPendingMFA(h http.HandlerFunc) http.Handler {
+	return c.authMiddleware.ProtectedPendingMFA()(h)
+}
+
+const livePath = "/health"
+
+// probeRoutes sont les motifs des sondes de santé, tels que le routeur les note pour AccessLog.
+var probeRoutes = []string{
+	http.MethodGet + " " + APIPrefix + livePath,
+	http.MethodGet + " " + APIPrefix + readyPath,
+}
+
 func registerHealthRoutes(router *Router, c *components) {
-	router.HandleFunc(http.MethodGet, "/health", c.health.live)
-	router.HandleFunc(http.MethodGet, "/ready", c.health.ready)
+	router.HandleFunc(http.MethodGet, livePath, c.health.live)
+	router.HandleFunc(http.MethodGet, readyPath, c.health.ready)
 }
 
 func registerAuthRoutes(router *Router, c *components) {
@@ -43,18 +63,33 @@ func registerAuthRoutes(router *Router, c *components) {
 	router.HandleFunc(http.MethodPost, "/auth/password-reset", h.RequestPasswordReset)
 	router.HandleFunc(http.MethodPost, "/auth/password-reset/confirm", h.ConfirmPasswordReset)
 
-	router.Handle(http.MethodPost, "/auth/logout", c.protected(h.Logout))
-	router.Handle(http.MethodPost, "/auth/logout-all", c.protected(h.LogoutAll))
-	router.Handle(http.MethodGet, "/auth/me", c.protected(h.Me))
+	// Une session limitée (2FA pas encore validée) peut se déconnecter et lire son état.
+	router.Handle(http.MethodPost, "/auth/logout", c.protectedPendingMFA(h.Logout))
+	router.Handle(http.MethodPost, "/auth/logout-all", c.protectedPendingMFA(h.LogoutAll))
+	router.Handle(http.MethodPost, "/me/password", c.protected(h.ChangePassword))
+	router.Handle(http.MethodGet, "/auth/me", c.protectedPendingMFA(h.Me))
+
+	// Double authentification : obligatoire pour les modérateurs, facultative pour les autres comptes, qui peuvent
+	// l'activer comme eux. L'activation et la validation se font avec une session limitée ; les nouveaux codes de
+	// secours exigent une session complète.
+	router.Handle(http.MethodGet, "/auth/mfa", c.protectedPendingMFA(h.MFAStatus))
+	router.Handle(http.MethodPost, "/auth/mfa/setup", c.protectedPendingMFA(h.MFASetup))
+	router.Handle(http.MethodPost, "/auth/mfa/enable", c.protectedPendingMFA(h.MFAEnable))
+	router.Handle(http.MethodPost, "/auth/mfa/verify", c.protectedPendingMFA(h.MFAVerify))
+	router.Handle(http.MethodPost, "/auth/mfa/recovery-codes", c.protected(h.MFARecoveryCodes))
 }
 
 func registerHeroRoutes(router *Router, c *components) {
 	h := c.heroHandler
+	router.HandleFunc(http.MethodGet, "/heroes", h.PublicList)
+	router.HandleFunc(http.MethodGet, "/heroes/{heroId}", h.PublicGet)
+
 	// Tous les rôles connectés passent : c'est le service qui répond « déjà héros » (409) ou
 	// « compte non éligible » (403, modérateur), avec un code d'erreur explicite.
 	router.Handle(http.MethodPost, "/heroes/requests", c.protected(h.Request))
 	router.Handle(http.MethodGet, "/heroes/requests/me", c.protected(h.Mine))
 
+	router.Handle(http.MethodGet, "/admin/heroes", c.protected(h.AdminList, user.RoleModerator))
 	router.Handle(http.MethodGet, "/admin/hero-requests", c.protected(h.List, user.RoleModerator))
 	router.Handle(http.MethodPost, "/admin/hero-requests/{userId}/approve", c.protected(h.Approve, user.RoleModerator))
 	router.Handle(http.MethodPost, "/admin/hero-requests/{userId}/reject", c.protected(h.Reject, user.RoleModerator))
@@ -62,6 +97,7 @@ func registerHeroRoutes(router *Router, c *components) {
 
 func registerModerationRoutes(router *Router, c *components) {
 	h := c.moderationHandler
+	router.Handle(http.MethodGet, "/admin/moderation/summary", c.protected(h.Summary, user.RoleModerator))
 	router.Handle(http.MethodGet, "/admin/users", c.protected(h.ListUsers, user.RoleModerator))
 	router.Handle(http.MethodPost, "/admin/users/{id}/deactivate", c.protected(h.Deactivate, user.RoleModerator))
 	router.Handle(http.MethodPost, "/admin/users/{id}/reactivate", c.protected(h.Reactivate, user.RoleModerator))

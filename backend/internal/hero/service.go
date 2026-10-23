@@ -85,23 +85,70 @@ func (s *Service) Mine(ctx context.Context, userID uuid.UUID) (*Profile, error) 
 }
 
 // List retourne les demandes d'un statut, les plus anciennes d'abord, avec l'identité des
-// demandeurs. L'identité est lue demande par demande (déchiffrement) : la page est bornée.
+// demandeurs, lue en une seule requête pour toute la page.
 func (s *Service) List(ctx context.Context, status VerificationStatus, limit, offset int) ([]Applicant, int64, error) {
 	profiles, total, err := s.repo.List(ctx, status, limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}
+	ids := make([]uuid.UUID, len(profiles))
+	for i := range profiles {
+		ids[i] = profiles[i].UserID
+	}
+	accounts, err := s.users.FindByIDs(ctx, ids)
+	if err != nil {
+		return nil, 0, fmt.Errorf("hero : demandeurs : %w", err)
+	}
 	applicants := make([]Applicant, 0, len(profiles))
 	for _, profile := range profiles {
-		account, err := s.users.FindByID(ctx, profile.UserID)
-		if err != nil {
-			return nil, 0, fmt.Errorf("hero : demandeur %s : %w", profile.UserID, err)
+		account, ok := accounts[profile.UserID]
+		if !ok {
+			return nil, 0, fmt.Errorf("hero : demandeur %s : %w", profile.UserID, user.ErrNotFound)
 		}
 		applicants = append(applicants, Applicant{
 			Profile: profile, Email: account.Email, FirstName: account.FirstName, LastName: account.LastName,
 		})
 	}
 	return applicants, total, nil
+}
+
+// ListDirectory retourne l'annuaire des super-héros pour les modérateurs, par pseudo, avec leur identité
+// civile, lue en une seule requête pour toute la page.
+func (s *Service) ListDirectory(ctx context.Context, limit, offset int) ([]DirectoryView, int64, error) {
+	entries, total, err := s.repo.ListDirectory(ctx, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	ids := make([]uuid.UUID, len(entries))
+	for i := range entries {
+		ids[i] = entries[i].UserID
+	}
+	accounts, err := s.users.FindByIDs(ctx, ids)
+	if err != nil {
+		return nil, 0, fmt.Errorf("hero : comptes des héros : %w", err)
+	}
+	views := make([]DirectoryView, len(entries))
+	for i, entry := range entries {
+		account, ok := accounts[entry.UserID]
+		if !ok {
+			return nil, 0, fmt.Errorf("hero : compte du héros %s : %w", entry.UserID, user.ErrNotFound)
+		}
+		views[i] = DirectoryView{
+			DirectoryEntry: entry, Civility: account.Civility, FirstName: account.FirstName,
+			LastName: account.LastName, BirthDate: account.BirthDate, Phone: account.Phone, Address: account.Address,
+		}
+	}
+	return views, total, nil
+}
+
+// ListPublic retourne les fiches des héros publics selon l'ordre demandé.
+func (s *Service) ListPublic(ctx context.Context, sort PublicSort, limit, offset int) ([]PublicProfile, int64, error) {
+	return s.repo.ListPublic(ctx, sort, limit, offset)
+}
+
+// FindPublic retourne une fiche uniquement si le compte est actif et le profil approuvé.
+func (s *Service) FindPublic(ctx context.Context, userID uuid.UUID) (*PublicProfile, error) {
+	return s.repo.FindPublic(ctx, userID)
 }
 
 // Approve accepte une demande : le demandeur devient super-héros. Le changement de statut, celui

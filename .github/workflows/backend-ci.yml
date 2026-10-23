@@ -39,11 +39,29 @@ jobs:
           --health-timeout 5s
           --health-retries 10
 
+      # Courtier jetable pour les tests de la file de mails (Publisher, Worker). Chaque test crée ses propres files.
+      rabbitmq:
+        image: rabbitmq:4-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: heros
+          RABBITMQ_DEFAULT_PASS: heros
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 5s
+          --health-timeout 10s
+          --health-retries 12
+
     env:
       HEROS_TEST_DATABASE_URL: postgres://heros:heros@localhost:5432/herossos_test?sslmode=disable
+      HEROS_TEST_RABBITMQ_URL: amqp://heros:heros@localhost:5672/
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          # L'historique complet : golangci-lint compare la PR à sa branche de base (voir « Lint »).
+          fetch-depth: 0
 
       - uses: actions/setup-go@v7
         with:
@@ -54,6 +72,13 @@ jobs:
         run: |
           go mod tidy
           git diff --exit-code go.mod go.sum
+
+      # Conventions Go et erreurs courantes (backend/.golangci.yml). N'échoue que sur les remarques que la PR
+      # introduit : celles déjà présentes sur la branche de base restent à corriger, sans bloquer les autres PR.
+      - name: Lint (golangci-lint)
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: make golangci GOLANGCI_FLAGS="--new-from-merge-base=origin/$BASE_REF"
 
       # Échoue uniquement si une vulnérabilité atteignable dans le code est détectée
       - name: Vulnerability check

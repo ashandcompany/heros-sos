@@ -33,9 +33,9 @@ info:
 
     | Rôle | Qui | Ce qu'il peut faire |
     |---|---|---|
-    | `citizen` | tout compte activé | demander le statut de super-héros et suivre sa demande |
+    | `citizen` | tout compte activé | demander le statut de super-héros et suivre sa demande ; gérer son profil (`/me`) |
     | `hero` | citoyen accepté par un modérateur | idem ; une nouvelle demande répond `already_hero` |
-    | `moderator` | créé en ligne de commande | décider des demandes, lister, désactiver, réactiver et vérifier les comptes |
+    | `moderator` | créé en ligne de commande, avec la **double authentification (TOTP)** obligatoire en production | décider des demandes, lister, désactiver, réactiver et vérifier les comptes ; valider les changements d'adresse email (une fois l'adresse confirmée par son titulaire) |
 
     ## Pagination
 
@@ -63,11 +63,12 @@ info:
     | Code | Statut | Quand |
     |---|---|---|
     | `bad_request` | 400 | JSON invalide, champ inconnu, corps vide |
-    | `invalid_token` | 400 | lien d'activation ou de réinitialisation invalide, expiré ou déjà utilisé |
+    | `invalid_token` | 400 | lien (activation, réinitialisation, confirmation ou désinscription de la newsletter, confirmation d'adresse) invalide, expiré ou déjà utilisé |
     | `unauthenticated` | 401 | session absente ou expirée |
     | `invalid_credentials` | 401 | identifiant ou mot de passe incorrect |
     | `origin_not_allowed` | 403 | `Origin` absente de la liste du serveur (écritures) |
     | `csrf_invalid` | 403 | en-tête `X-CSRF-Token` absent ou invalide |
+    | `mfa_required` | 403 | session limitée : la double authentification doit d'abord être validée ou activée (voir `GET /auth/mfa`) |
     | `forbidden` | 403 | rôle insuffisant |
     | `protected_account` | 403 | action interdite sur un compte de modérateur |
     | `account_not_activated` | 403 | compte pas encore activé (révélé avec le bon mot de passe) |
@@ -75,18 +76,25 @@ info:
     | `hero_request_not_eligible` | 403 | compte qui ne peut pas faire de demande (modérateur) |
     | `not_found` | 404 | ressource ou route introuvable |
     | `hero_request_not_found` | 404 | aucune demande déposée par l'utilisateur |
-    | `email_already_used` | 409 | adresse email déjà inscrite |
+    | `email_change_not_found` | 404 | demande de changement d'adresse inconnue, ou remplacée par son titulaire |
+    | `email_already_used` | 409 | adresse email déjà inscrite (inscription, changement d'adresse) |
+    | `email_unchanged` | 409 | la nouvelle adresse demandée est déjà celle du compte |
+    | `email_change_not_pending` | 409 | demande de changement d'adresse déjà traitée |
+    | `email_change_not_confirmed` | 409 | la nouvelle adresse n'a pas encore été confirmée par son titulaire : la demande ne peut pas être acceptée |
+    | `mfa_already_enabled` | 409 | double authentification déjà activée (elle ne se réinitialise pas par l'API) |
+    | `mfa_not_set_up` | 409 | double authentification pas (encore) configurée pour ce compte |
     | `hero_request_pending` | 409 | demande déjà en attente |
     | `already_hero` | 409 | utilisateur déjà super-héros |
     | `alias_already_used` | 409 | pseudo déjà pris |
     | `hero_request_not_pending` | 409 | demande déjà traitée |
     | `self_action_forbidden` | 409 | action interdite sur son propre compte |
     | `payload_too_large` | 413 | corps de requête trop volumineux |
-    | `unsupported_media_type` | 415 | corps qui n'est pas en `application/json` |
+    | `unsupported_media_type` | 415 | corps qui n'est pas en `application/json` (ou, pour `PUT /me/avatar`, pas une image JPEG, PNG ou WebP) |
     | `validation_failed` | 422 | données invalides ; `fields` détaille chaque champ |
     | `rate_limited` | 429 | trop de requêtes ; `Retry-After` indique le délai |
     | `account_locked` | 429 | compte verrouillé après plusieurs échecs ; `Retry-After` indique le délai |
     | `internal_error` | 500 | erreur interne, sans détail |
+    | `contact_delivery_unavailable` | 503 | message de contact non confié au service d'envoi : réessayer |
   contact:
     name: Équipe Heros-SOS
     url: https://github.com/ashandcompany/heros-sos
@@ -114,13 +122,23 @@ tags:
     description: Notes des citoyens après intervention, réponses des héros et modération des avis.
   - name: Films
     description: Catalogue OMDb, vidéothèques des héros, associations des vilains et modération.
+  - name: Compte
+    description: "Profil de l'utilisateur connecté (citoyen ou super-héros) : coordonnées, photo, changement d'adresse email soumis à un modérateur, préférence de newsletter."
+  - name: Contact et newsletter
+    description: "Formulaires publics qui passent par le Mailer, sans session : message à l'équipe et abonnement à la newsletter (double opt-in)."
+  - name: Blog
+    description: |
+      Articles du blog. Tout le monde lit les articles publiés ; les modérateurs les rédigent sous
+      `/admin/articles` et voient aussi les brouillons. Le contenu est du HTML limité aux balises
+      de l'éditeur (`p`, `br`, `h2`, `h3`, `strong`, `em`, `s`, `ul`, `ol`, `li`, `blockquote`,
+      `hr`, `a`), assaini par l'API à l'enregistrement.
 
 paths:
   /me/interventions:
     get:
       tags: [Réputation]
       summary: Interventions terminées à noter
-      description: Liste les héros confirmés des interventions clôturées sur les incidents déclarés par l'utilisateur connecté (citoyen ou héros), avec ses avis déjà déposés. Un héros déclarant ne peut pas se noter lui-même.
+      description: Liste les héros confirmés des interventions clôturées sur les incidents déclarés par l'utilisateur connecté (citoyen, héros ou modérateur), avec ses avis déjà déposés. Un héros déclarant ne peut pas se noter lui-même.
       operationId: listMyRateableInterventions
       security: [{ sessionCookie: [] }]
       parameters:
@@ -141,7 +159,7 @@ paths:
     post:
       tags: [Réputation]
       summary: Noter un héros de l'intervention
-      description: Seul le déclarant connecté (citoyen ou héros) peut noter chaque participant confirmé d'une intervention clôturée, une fois par héros; un héros déclarant ne peut pas se noter lui-même.
+      description: Seul le déclarant connecté (citoyen, héros ou modérateur) peut noter chaque participant confirmé d'une intervention clôturée, une fois par héros; un héros déclarant ne peut pas se noter lui-même. Une note seule est publiée immédiatement; un avis avec commentaire attend la modération.
       operationId: createHeroReview
       security: [{ sessionCookie: [], csrfToken: [] }]
       parameters:
@@ -155,7 +173,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/HeroReviewPayload" }
       responses:
-        "204": { description: Avis créé et publié. }
+        "204": { description: Avis créé; une note seule est publiée immédiatement et un avis commenté est placé en attente de modération. }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
@@ -168,6 +186,130 @@ paths:
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /me/reviews/{reviewId}:
+    put:
+      tags: [Réputation]
+      summary: Modifier son avis
+      description: Seul l'auteur connecté peut modifier la note et le commentaire de son avis. Un avis avec commentaire est remis en attente de modération; une note seule est publiée immédiatement.
+      operationId: updateMyHeroReview
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - name: reviewId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HeroReviewEditPayload" }
+      responses:
+        "204": { description: Avis modifié. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /hero/dashboard:
+    get:
+      tags: [Super-héros]
+      summary: Tableau de bord du héros connecté
+      description: >-
+        Réservé aux super-héros. Statistiques de toute la plateforme (interventions terminées, incidents par type,
+        citoyens secourus, vilains identifiés et emprisonnés), statistiques personnelles du héros (interventions
+        réussies et échouées, avis publiés, films, vilains les plus affrontés), l'incident sur lequel il intervient
+        en ce moment et les derniers incidents non résolus. Calculé à la demande, en lecture seule. Seuls les incidents
+        approuvés par la modération sont comptés et listés, comme dans `GET /incidents` pour un héros.
+      operationId: getHeroDashboard
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Le tableau de bord.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HeroDashboard" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /hero/location:
+    put:
+      tags: [Super-héros]
+      summary: Partager sa position actuelle
+      description: >-
+        Réservé aux super-héros. Remplace la position actuelle du héros (aucun historique). Elle est arrondie à environ
+        110 m, conservée en clair 30 minutes au plus (`HEROS_LOCATION_TTL`) puis supprimée, et n'est relue par aucune
+        route : le serveur s'en sert seulement pour prévenir les héros à proximité (`HEROS_ALERT_RADIUS_KM`, 10 km par
+        défaut) d'un nouvel incident avec coordonnées. Sans héros proche, ou sans coordonnées, tous les héros actifs
+        sont prévenus. Limité à 60 envois par heure et par héros (`HEROS_RATE_HERO_LOCATION_PER_USER`).
+      operationId: saveHeroLocation
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [latitude, longitude]
+              properties:
+                latitude: { type: number, format: double, minimum: -90, maximum: 90 }
+                longitude: { type: number, format: double, minimum: -180, maximum: 180 }
+                accuracyM: { type: integer, minimum: 0, description: Précision de la mesure en mètres (facultatif). }
+      responses:
+        "204": { description: Position enregistrée. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { description: "Consentement absent (`hero_location_consent_required`)." }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    delete:
+      tags: [Super-héros]
+      summary: Cesser de partager sa position
+      description: Réservé aux super-héros. Supprime la position du héros en conservant son consentement (pour retirer le consentement, voir `/hero/location/consent`); sans position enregistrée, ne fait rien.
+      operationId: deleteHeroLocation
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      responses:
+        "204": { description: Position supprimée. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /hero/location/consent:
+    put:
+      tags: [Super-héros]
+      summary: Consentir au partage de sa position
+      description: >-
+        Réservé aux super-héros. Enregistre (avec sa date) le consentement explicite du héros au partage de sa position;
+        déjà consenti, la date d'origine est conservée. `PUT /hero/location` est refusé (409) tant que ce consentement
+        n'est pas donné.
+      operationId: grantHeroLocationConsent
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      responses:
+        "204": { description: Consentement enregistré. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    delete:
+      tags: [Super-héros]
+      summary: Retirer son consentement au partage de position
+      description: Réservé aux super-héros. Retire le consentement et supprime la position, dans la même transaction. Sans effet si rien n'était partagé.
+      operationId: revokeHeroLocationConsent
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      responses:
+        "204": { description: Consentement retiré et position supprimée. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   /hero/reviews:
@@ -256,7 +398,7 @@ paths:
       parameters:
         - name: status
           in: query
-          schema: { type: string, enum: [published, hidden] }
+          schema: { type: string, enum: [published, pending, hidden] }
         - { $ref: "#/components/parameters/Limit" }
         - { $ref: "#/components/parameters/Offset" }
       responses:
@@ -274,6 +416,7 @@ paths:
     patch:
       tags: [Réputation]
       summary: Publier ou masquer un avis
+      description: Un modérateur ne peut pas modérer un avis qu'il a lui-même déposé (403 hero_review_own_review).
       operationId: moderateHeroReview
       security: [{ sessionCookie: [], csrfToken: [] }]
       parameters:
@@ -558,6 +701,18 @@ paths:
                       email: natasha.romanoff@example.org
                     csrfToken: t3rS7fGZpLRHk0evrzh9Q1oSSA0NxbjgQsTImRWH0IA
                     expiresAt: "2026-10-27T10:30:00Z"
+                    mfa: not_enrolled
+                moderateur-2fa:
+                  summary: "Modérateur : session limitée, le code de double authentification reste à saisir"
+                  value:
+                    user:
+                      id: 5b1f7c0e-2a4d-4b8e-9d63-1c7a8e2f4b90
+                      displayName: Nick
+                      role: moderator
+                      email: nick.fury@example.org
+                    csrfToken: t3rS7fGZpLRHk0evrzh9Q1oSSA0NxbjgQsTImRWH0IA
+                    expiresAt: "2026-10-22T18:30:00Z"
+                    mfa: verification_required
         "400": { $ref: "#/components/responses/BadRequest" }
         "401":
           description: Identifiant ou mot de passe incorrect (`invalid_credentials`).
@@ -653,7 +808,317 @@ paths:
                       role: citizen
                       email: natasha.romanoff@example.org
                     csrfToken: t3rS7fGZpLRHk0evrzh9Q1oSSA0NxbjgQsTImRWH0IA
+                    mfa: not_enrolled
         "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /auth/mfa:
+    get:
+      tags: [Authentification]
+      summary: État de la double authentification
+      description: |
+        Où en est la double authentification de la session, et combien de codes de secours restent. Une
+        session **limitée** (`verification_required`, `enrollment_required`) peut l'appeler.
+      operationId: getMfaStatus
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: L'état de la double authentification.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MfaStatusResponse" }
+              examples:
+                activee:
+                  summary: Activée et validée pour cette session
+                  value:
+                    status: verified
+                    recoveryCodesRemaining: 9
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /auth/mfa/setup:
+    post:
+      tags: [Authentification]
+      summary: Commencer l'activation de la double authentification
+      description: |
+        Ouvert à tous les comptes : obligatoire pour un modérateur, facultative pour les autres. Tire un secret
+        TOTP et le rend, pour le configurer dans une application d'authentification (Google Authenticator, Aegis,
+        1Password…) : `otpauthUrl` s'ouvre dans l'application (lien ou QR code), `secret` se saisit à la main.
+        La double authentification n'est active qu'une fois confirmée par un premier code
+        (`POST /auth/mfa/enable`) ; recommencer remplace le secret d'une activation non confirmée. Une double authentification **déjà activée** ne se réinitialise pas par
+        l'API (`mfa_already_enabled`) : un compte piraté ne doit pas pouvoir remplacer sa propre protection ;
+        l'exploitation la réinitialise (`make resetmfa-dev`).
+
+        Une session **limitée** peut l'appeler.
+      operationId: setupMfa
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      responses:
+        "200":
+          description: Le secret à configurer.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MfaSetupResponse" }
+              examples:
+                secret:
+                  summary: Le secret et son adresse otpauth
+                  value:
+                    secret: JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP
+                    otpauthUrl: "otpauth://totp/Heros-SOS:nick.fury@example.org?algorithm=SHA1&digits=6&issuer=Heros-SOS&period=30&secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: La double authentification est déjà activée (`mfa_already_enabled`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                deja-activee:
+                  summary: Déjà activée
+                  value:
+                    error:
+                      code: mfa_already_enabled
+                      message: La double authentification est déjà activée.
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /auth/mfa/enable:
+    post:
+      tags: [Authentification]
+      summary: Activer la double authentification
+      description: |
+        Ouvert à tous les comptes (voir `POST /auth/mfa/setup`). Le premier code de l'application confirme l'activation. La réponse donne
+        **les codes de secours, montrés cette seule fois** (à garder hors ligne : chacun remplace un code TOTP
+        une fois), et ouvre une **session complète avec un nouveau cookie et un nouveau jeton CSRF** : les
+        autres sessions du compte sont fermées, celles ouvertes avant n'ayant jamais passé le second facteur.
+
+        Un code faux compte comme un échec de connexion (verrouillage progressif du compte).
+
+        Une session **limitée** peut l'appeler.
+      operationId: enableMfa
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MfaCodeRequest" }
+            examples:
+              premier-code:
+                summary: Le code à 6 chiffres affiché par l'application
+                value:
+                  code: "123456"
+      responses:
+        "200":
+          description: Double authentification activée ; session complète.
+          headers:
+            Set-Cookie:
+              description: Le nouveau cookie de session (le précédent est révoqué).
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MfaEnabledResponse" }
+              examples:
+                activee:
+                  summary: Activée, avec ses codes de secours
+                  value:
+                    user:
+                      id: 5b1f7c0e-2a4d-4b8e-9d63-1c7a8e2f4b90
+                      displayName: Nick
+                      role: moderator
+                      email: nick.fury@example.org
+                    csrfToken: t3rS7fGZpLRHk0evrzh9Q1oSSA0NxbjgQsTImRWH0IA
+                    expiresAt: "2026-10-22T18:30:00Z"
+                    mfa: verified
+                    recoveryCodes:
+                      - K3JV-7QXD-W2MP-RT4N
+                      - 6BHE-ZC5S-LN9A-YG2F
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: La double authentification est déjà activée (`mfa_already_enabled`), ou son activation n'a pas été commencée (`mfa_not_set_up`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                pas-commencee:
+                  summary: Aucun secret en attente
+                  value:
+                    error:
+                      code: mfa_not_set_up
+                      message: La double authentification n'est pas configurée.
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422":
+          description: Code absent (`required`) ou faux, périmé ou déjà utilisé (`invalid`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                code-faux:
+                  summary: Code faux
+                  value:
+                    error:
+                      code: validation_failed
+                      message: Certaines informations sont invalides.
+                      fields:
+                        code: invalid
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /auth/mfa/verify:
+    post:
+      tags: [Authentification]
+      summary: Valider la double authentification
+      description: |
+        Pour un compte qui a activé la double authentification, la session ouverte par `POST /auth/login`
+        est **limitée** (`mfa: verification_required`) : elle ne donne accès qu'à cette route, à l'état de la
+        session et à la déconnexion (toute autre route répond `mfa_required`). Un code de l'application
+        (`code`), ou à défaut un code de secours (`recoveryCode`, à usage unique), ouvre une **session
+        complète avec un nouveau cookie et un nouveau jeton CSRF**.
+
+        Un code TOTP ne sert qu'une fois. Un code faux compte comme un échec de connexion : après quelques-uns,
+        le compte est verrouillé avec un délai croissant (`account_locked`, 429) et ses sessions sont fermées.
+        Le mot de passe seul ne remet pas ce compteur à zéro, pour qu'on ne puisse pas alterner connexion et
+        devinette.
+      operationId: verifyMfa
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MfaVerifyRequest" }
+            examples:
+              code:
+                summary: Le code à 6 chiffres de l'application
+                value:
+                  code: "123456"
+              secours:
+                summary: Un code de secours (appareil perdu)
+                value:
+                  recoveryCode: K3JV-7QXD-W2MP-RT4N
+      responses:
+        "200":
+          description: Session complète.
+          headers:
+            Set-Cookie:
+              description: Le nouveau cookie de session (le précédent est révoqué).
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResponse" }
+              examples:
+                valide:
+                  summary: Session complète
+                  value:
+                    user:
+                      id: 5b1f7c0e-2a4d-4b8e-9d63-1c7a8e2f4b90
+                      displayName: Nick
+                      role: moderator
+                      email: nick.fury@example.org
+                    csrfToken: t3rS7fGZpLRHk0evrzh9Q1oSSA0NxbjgQsTImRWH0IA
+                    expiresAt: "2026-10-22T18:30:00Z"
+                    mfa: verified
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: La double authentification n'est pas activée pour ce compte (`mfa_not_set_up`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                pas-activee:
+                  summary: Pas de 2FA
+                  value:
+                    error:
+                      code: mfa_not_set_up
+                      message: La double authentification n'est pas configurée.
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422":
+          description: Aucun code (`required`), ou code faux, périmé, déjà utilisé (`invalid`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                code-faux:
+                  summary: Code faux
+                  value:
+                    error:
+                      code: validation_failed
+                      message: Certaines informations sont invalides.
+                      fields:
+                        code: invalid
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /auth/mfa/recovery-codes:
+    post:
+      tags: [Authentification]
+      summary: Régénérer les codes de secours
+      description: |
+        Ouvert à tous les comptes qui ont activé la double authentification, avec une **session complète**. Remplace tous les codes de secours (utilisés
+        ou non) par de nouveaux, montrés cette seule fois. Demande le code TOTP courant : une session volée ne
+        suffit pas à s'en procurer.
+      operationId: regenerateMfaRecoveryCodes
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MfaCodeRequest" }
+            examples:
+              code:
+                summary: Le code à 6 chiffres de l'application
+                value:
+                  code: "123456"
+      responses:
+        "200":
+          description: Les nouveaux codes de secours.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecoveryCodesResponse" }
+              examples:
+                nouveaux:
+                  summary: Dix nouveaux codes
+                  value:
+                    recoveryCodes:
+                      - K3JV-7QXD-W2MP-RT4N
+                      - 6BHE-ZC5S-LN9A-YG2F
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: La double authentification n'est pas activée (`mfa_not_set_up`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                pas-activee:
+                  summary: Pas de 2FA
+                  value:
+                    error:
+                      code: mfa_not_set_up
+                      message: La double authentification n'est pas configurée.
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422":
+          description: Code absent (`required`) ou faux (`invalid`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                code-faux:
+                  summary: Code faux
+                  value:
+                    error:
+                      code: validation_failed
+                      message: Certaines informations sont invalides.
+                      fields:
+                        code: invalid
+        "429": { $ref: "#/components/responses/RateLimited" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   /auth/password-reset:
@@ -710,6 +1175,51 @@ paths:
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /heroes:
+    get:
+      tags: [Super-héros]
+      summary: Lister les super-héros publics
+      description: |
+        Liste les profils dont la demande est approuvée et dont le compte est actif. La réponse
+        n'expose aucune identité civile. `power` reprend la description publique (`bio`) du profil;
+        `avatarUrl` n'est renseigné que si `avatar_path` contient une référence publiquement exploitable.
+      operationId: listPublicHeroes
+      parameters:
+        - name: sort
+          in: query
+          description: "Ordre de tri : pseudo croissant par défaut, ou note moyenne décroissante."
+          schema:
+            { type: string, enum: [alias, -averageRating], default: alias }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Une page de profils publics.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicHeroPage" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /heroes/{heroId}:
+    get:
+      tags: [Super-héros]
+      summary: Consulter la fiche publique d'un super-héros
+      description: |
+        Retourne la fiche d'un héros approuvé avec un compte actif. Les données civiles et les
+        chemins de stockage internes ne sont jamais exposés.
+      operationId: getPublicHero
+      parameters:
+        - { $ref: "#/components/parameters/HeroId" }
+      responses:
+        "200":
+          description: Fiche publique du super-héros.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicHero" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   /heroes/requests:
@@ -823,6 +1333,7 @@ paths:
                     alias: Veuve Noire
                     rejectionReason: Le dossier ne permet pas de vérifier l'identité du demandeur.
         "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404":
           description: Aucune demande (`hero_request_not_found`).
           content:
@@ -835,6 +1346,64 @@ paths:
                     error:
                       code: hero_request_not_found
                       message: Aucune demande trouvée.
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/heroes:
+    get:
+      tags: [Modération]
+      summary: Annuaire des super-héros
+      description: |
+        Réservé aux modérateurs. Liste les super-héros approuvés par pseudo, avec ce que seule la
+        modération voit : identité civile, coordonnées, adresse email, état du compte et demande de
+        changement d'adresse en attente. **Ces données sont confidentielles** : la liste publique
+        (`GET /heroes`) n'en expose aucune. Un héros dont le compte est désactivé reste listé
+        (`accountStatus`).
+
+        `averageRating` et `interventionsCount` se calculent comme sur la liste publique ;
+        `lastInterventionAt` est le début de la dernière intervention à laquelle le héros a participé
+        (`null` s'il n'a jamais participé).
+      operationId: listAdminHeroes
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Une page de super-héros.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminHeroPage" }
+              examples:
+                un-heros:
+                  summary: Un super-héros actif
+                  value:
+                    items:
+                      - id: 7d0e4a52-9c3b-4f18-b6a1-5e2f8c9d1a37
+                        alias: Captain America
+                        avatarUrl: /api/v1/avatars/3f2a8c1e-5b7d-4e90-8a16-2c4d9e7f0b53.jpg
+                        power: Un super-soldat au bouclier indestructible.
+                        averageRating: 4.5
+                        interventionsCount: 12
+                        civility: monsieur
+                        firstName: Steve
+                        lastName: Rogers
+                        birthDate: "1990-07-04"
+                        email: steve.rogers@example.org
+                        mobilePhone: "+33612345678"
+                        address:
+                          street: 569 Leaman Place
+                          postalCode: "11201"
+                          city: Brooklyn
+                          country: US
+                        accountStatus: active
+                        createdAt: "2026-10-19T12:00:00Z"
+                        lastInterventionAt: "2026-10-20T08:30:00Z"
+                    total: 1
+                    limit: 20
+                    offset: 0
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   /admin/hero-requests:
@@ -949,6 +1518,31 @@ paths:
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/moderation/summary:
+    get:
+      tags: [Modération]
+      summary: Compteurs du tableau de bord
+      description: Réservé aux modérateurs. Nombre d'éléments en attente dans chaque section, calculé en une seule requête.
+      operationId: getModerationSummary
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Les compteurs.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModerationSummary" }
+              example:
+                incidents: 3
+                heroApplications: 2
+                videos: 1
+                comments: 0
+                emailChanges: 1
+                draftArticles: 4
+                draftNewsletters: 2
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   /admin/users:
@@ -1082,6 +1676,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/InterventionTypePage" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/InternalError" }
 
@@ -1170,9 +1765,8 @@ paths:
     get:
       tags: [Vilains]
       summary: Liste des vilains
-      description: Par alias. Le filtre `q` porte sur le début de l'alias.
+      description: Publique (encyclopédie), par alias. Le filtre `q` porte sur le début de l'alias.
       operationId: listVillains
-      security: [{ sessionCookie: [] }]
       parameters:
         - name: q
           in: query
@@ -1185,20 +1779,189 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/VillainPage" }
-        "401": { $ref: "#/components/responses/Unauthenticated" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /articles:
+    get:
+      tags: [Blog]
+      summary: Articles publiés
+      description: |
+        Publique, sans session. Uniquement les articles publiés, du plus récent au plus ancien ;
+        le contenu n'est pas inclus (utiliser `GET /articles/{slug}`).
+      operationId: listPublishedArticles
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Une page d'articles publiés.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ArticleSummaryPage" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /articles/{slug}:
+    get:
+      tags: [Blog]
+      summary: Lire un article publié
+      description: Publique, sans session. Un brouillon ou un slug inconnu répond 404.
+      operationId: getPublishedArticle
+      parameters:
+        - { $ref: "#/components/parameters/ArticleSlug" }
+      responses:
+        "200":
+          description: L'article, contenu HTML compris.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Article" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/articles:
+    get:
+      tags: [Blog]
+      summary: Tous les articles (modérateur)
+      description: |
+        Brouillons compris, les derniers modifiés d'abord. Le filtre `status` restreint la liste
+        à un statut. Le contenu n'est pas inclus.
+      operationId: listArticles
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/ArticleStatus" }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Une page d'articles.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ArticleSummaryPage" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    post:
+      tags: [Blog]
+      summary: Créer un article
+      description: |
+        Le slug dérive du titre (suffixe numérique s'il est déjà pris). Publier à la création
+        fixe `publishedAt`.
+      operationId: createArticle
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ArticlePayload" }
+      responses:
+        "201":
+          description: Article créé.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Article" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: Aucun slug unique n'a pu être généré (`article_slug_already_used`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/articles/{id}:
+    get:
+      tags: [Blog]
+      summary: Consulter un article, brouillon compris (modérateur)
+      operationId: getArticle
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/ArticleId" }
+      responses:
+        "200":
+          description: L'article.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Article" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    put:
+      tags: [Blog]
+      summary: Modifier un article
+      description: |
+        Remplace titre, chapeau, contenu et statut. `publishedAt` est fixé à la première
+        publication et conservé ensuite (même après un retour en brouillon). Le slug ne change
+        plus une fois l'article publié.
+      operationId: updateArticle
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/ArticleId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ArticlePayload" }
+      responses:
+        "200":
+          description: Article modifié.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Article" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Aucun slug unique n'a pu être généré (`article_slug_already_used`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    delete:
+      tags: [Blog]
+      summary: Supprimer un article
+      operationId: deleteArticle
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/ArticleId" }
+      responses:
+        "204": { description: Article supprimé. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   /films:
     get:
       tags: [Films]
       summary: Vidéothèque publique
-      description: Films ayant au moins un rattachement validé à un super-héros.
+      description: >
+        Films ayant au moins un rattachement validé à un super-héros validé, une seule entrée par
+        film avec la liste de tous ses héros. Du rattachement le plus récent au plus ancien.
       operationId: listPublicFilms
       parameters:
         - name: hero
           in: query
+          description: >
+            Films rattachés à ce super-héros (leurs autres héros restent listés). Un héros inconnu
+            donne une page vide.
           schema: { type: string, format: uuid }
+        - name: q
+          in: query
+          description: Extrait du titre, sans tenir compte de la casse.
+          schema: { type: string, maxLength: 100 }
         - { $ref: "#/components/parameters/Limit" }
         - { $ref: "#/components/parameters/Offset" }
       responses:
@@ -1206,8 +1969,24 @@ paths:
           description: Une page de films publiés.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/HeroFilmPage" }
+              schema: { $ref: "#/components/schemas/PublicFilmPage" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /films/heroes:
+    get:
+      tags: [Films]
+      summary: Super-héros de la vidéothèque publique
+      description: Super-héros ayant au moins un film publié, par pseudo, avec leur nombre de films.
+      operationId: listFilmHeroes
+      responses:
+        "200":
+          description: Liste complète (non paginée).
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/FilmHeroCount" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   /heroes/{heroId}/films:
@@ -1390,6 +2169,14 @@ paths:
         - name: status
           in: query
           schema: { type: string, enum: [pending, approved, rejected] }
+        - name: hero
+          in: query
+          description: Films de ce super-héros uniquement (404 s'il est inconnu ou non validé).
+          schema: { type: string, format: uuid }
+        - name: q
+          in: query
+          description: Extrait du titre, sans tenir compte de la casse.
+          schema: { type: string, maxLength: 100 }
         - { $ref: "#/components/parameters/Limit" }
         - { $ref: "#/components/parameters/Offset" }
       responses:
@@ -1400,6 +2187,7 @@ paths:
               schema: { $ref: "#/components/schemas/HeroFilmPage" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/InternalError" }
     post:
@@ -1539,6 +2327,21 @@ paths:
         "500": { $ref: "#/components/responses/InternalError" }
 
   /villains/{id}:
+    get:
+      tags: [Vilains]
+      summary: Fiche d'un vilain
+      description: Publique (encyclopédie).
+      operationId: getVillain
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: Le vilain.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Villain" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
     patch:
       tags: [Vilains]
       summary: Modifier un vilain et remplacer ses spécialités
@@ -1575,24 +2378,70 @@ paths:
   /incidents:
     get:
       tags: [Incidents]
-      summary: Incidents disponibles pour une intervention
-      description: Liste les incidents signalés, en cours ou échoués, sans identité civile du déclarant.
+      summary: Liste publique des incidents
+      description: |
+        Accessible sans session. Ne renvoie que les incidents approuvés, sans identité civile du
+        déclarant. Un déclarant connecté peut consulter ses propres incidents quel que soit leur
+        statut de modération; un modérateur peut tous les consulter. Les valeurs d'un même filtre
+        sont combinées par OU, les filtres entre eux par ET.
+        Les filtres multiples s'écrivent avec un paramètre répété (?status=a&status=b)
+        (20 identifiants au maximum pour heroId et villainId).
       operationId: listIncidents
-      security: [{ sessionCookie: [] }]
       parameters:
         - name: reporterId
           in: query
-          description: Identifiant du déclarant; un citoyen ne peut filtrer que sur son propre identifiant.
+          description: Identifiant facultatif du déclarant; un citoyen connecté ne peut filtrer que sur son propre identifiant.
           schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          description: Statuts retenus.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items: { type: string, enum: [reported, in_progress, succeeded, failed] }
+        - name: heroId
+          in: query
+          description: Incidents où au moins un de ces héros est intervenu.
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 20
+            items: { type: string, format: uuid }
+        - name: villainId
+          in: query
+          description: Incidents liés à au moins un de ces vilains.
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 20
+            items: { type: string, format: uuid }
+        - name: sort
+          in: query
+          description: |
+            Ordre : les plus récemment déclarés d'abord (`-createdAt`, par défaut), ou les plus
+            récemment résolus d'abord (`-resolvedAt`, les incidents non résolus en dernier). Le tri par résolution se
+            pagine par `offset` : il n'a pas de `nextCursor`, et un `cursor` avec lui est refusé (422).
+          schema: { type: string, enum: [-createdAt, -resolvedAt], default: -createdAt }
         - { $ref: "#/components/parameters/Limit" }
         - { $ref: "#/components/parameters/Offset" }
+        - name: cursor
+          in: query
+          description: |
+            Position de la page à lire, telle que renvoyée par `nextCursor` de la page précédente (valeur opaque,
+            à renvoyer telle quelle). Elle remplace `offset` (les deux ensemble sont refusés) et coûte autant à la
+            millionième page qu'à la première ; elle ne saute ni ne répète d'incident quand de nouveaux incidents
+            arrivent entre deux pages. C'est la position dans l'ordre par date de déclaration : elle ne se combine pas
+            avec `sort=-resolvedAt`.
+          schema: { type: string }
       responses:
         "200":
           description: Une page d'incidents.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/IncidentPage" }
-        "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/InternalError" }
@@ -1602,9 +2451,13 @@ paths:
       description: |
         Tout utilisateur connecté peut déclarer un incident classé par un type existant. Les vilains
         sont facultatifs et plusieurs vilains peuvent être associés. L'adresse est conservée en clair
-        pour permettre la détection des doublons prévue par le schéma.
+        pour permettre la détection des doublons prévue par le schéma. Les déclarations de citoyens et
+        de héros sont en attente de modération; celles des modérateurs sont approuvées d'office.
       operationId: createIncident
       security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { $ref: "#/components/parameters/ClientCreatedAt" }
       requestBody:
         required: true
         content:
@@ -1623,14 +2476,22 @@ paths:
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "409":
+          description: Un incident porte déjà l'identifiant choisi par le client (`incident_already_exists`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   /incidents/{id}:
     get:
       tags: [Incidents]
-      summary: Détail d'un incident
+      summary: Détail public d'un incident
+      description: |
+        Accessible sans session pour les incidents approuvés. Le déclarant connecté peut aussi
+        consulter son propre signalement quel que soit son statut de modération; les modérateurs
+        peuvent consulter tous les incidents.
       operationId: getIncident
-      security: [{ sessionCookie: [] }]
       parameters:
         - { $ref: "#/components/parameters/Id" }
       responses:
@@ -1639,12 +2500,222 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Incident" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/incidents/{id}/moderation:
+    put:
+      tags: [Incidents]
+      summary: Modérer un incident
+      description: Réservé aux modérateurs. Approuve ou rejette le signalement.
+      operationId: moderateIncident
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IncidentModerationPayload" }
+      responses:
+        "204": { description: Décision enregistrée. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/incidents/{id}:
+    patch:
+      tags: [Incidents]
+      summary: Corriger un incident
+      description: |
+        Réservé aux modérateurs. Remplace les informations éditables et synchronise le héros et
+        le statut de l'intervention. Les coordonnées géographiques sont fournies par le client.
+      operationId: updateIncident
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IncidentUpdatePayload" }
+      responses:
+        "200":
+          description: Incident corrigé.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Incident" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: L'intervention ou le héros ne peut pas être synchronisé.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /hero/incidents/{id}/priority:
+    put:
+      tags: [Incidents]
+      summary: Modifier la priorité d'un incident
+      description: Réservé aux héros. Disponible uniquement pour un incident approuvé qui n'a pas d'intervention active.
+      operationId: setIncidentPriority
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IncidentPriorityPayload" }
+      responses:
+        "204": { description: Priorité modifiée. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: L'incident n'est pas disponible pour une modification de priorité.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /heroes/{heroId}/incidents:
+    get:
+      tags: [Incidents]
+      summary: Incidents résolus par un héros
+      description: |
+        Publique (encyclopédie). Incidents résolus par une intervention réussie à laquelle le héros a
+        participé, les plus récemment résolus d'abord. Contrairement à `GET /incidents`, la liste
+        contient les incidents résolus, sans description ni adresse précise. 404 si le héros n'est pas
+        public (demande non approuvée ou compte inactif).
+      operationId: listHeroIncidents
+      parameters:
+        - { $ref: "#/components/parameters/HeroId" }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Page d'incidents résolus.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IncidentSummaryPage" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /villains/{id}/incidents:
+    get:
+      tags: [Vilains]
+      summary: Incidents d'un vilain
+      description: |
+        Publique (encyclopédie). Incidents auxquels le vilain est associé, quel que soit leur état, les
+        plus récents d'abord, sans description ni adresse précise. `lead` est le héros qui mène la
+        dernière intervention.
+      operationId: listVillainIncidents
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Page d'incidents.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IncidentSummaryPage" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /events/stream:
+    get:
+      tags: [Incidents]
+      summary: Flux temps réel des événements (SSE)
+      description: |
+        Flux Server-Sent Events : la réponse reste ouverte et le serveur y écrit chaque événement du journal dès
+        qu'il est enregistré (déclaration, modération, correction ou priorité d'un incident, démarrage d'une
+        intervention, résultat…). Chaque message porte `id` (numéro de l'événement), `event` (type, par exemple
+        `incident.declared`) et `data` (JSON : `seq`, `type`, `aggregateType`, `aggregateId`, `incidentId`, `version`,
+        `actorId`, `payload`, `recordedAt`). Le contenu ne comporte que des identifiants et des états.
+
+        Visibilité : un modérateur reçoit tout ; un héros ne reçoit que les événements des incidents approuvés par la
+        modération (comme `GET /incidents`) ; un citoyen ne reçoit que ceux de ses propres incidents, quel que soit
+        leur état de modération.
+
+        L'auteur d'une déclaration n'est révélé qu'à lui et aux modérateurs.
+
+        À la reconnexion, le navigateur renvoie l'en-tête `Last-Event-ID` : le serveur rejoue d'abord les événements
+        manqués depuis le journal, puis continue en direct. Un flux trop lent est fermé (il se reconnecte et rattrape
+        son retard), et chaque flux est fermé après une durée maximale pour revérifier la session. Un signal de vie
+        (commentaire SSE) est envoyé régulièrement.
+      operationId: streamEvents
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: Last-Event-ID
+          in: header
+          required: false
+          description: Numéro du dernier événement reçu ; envoyé automatiquement par `EventSource` à la reconnexion.
+          schema: { type: integer, format: int64, minimum: 0 }
+        - name: lastEventId
+          in: query
+          required: false
+          description: Équivalent du `Last-Event-ID` pour un client qui ne maîtrise pas les en-têtes.
+          schema: { type: integer, format: int64, minimum: 0 }
+      responses:
+        "200":
+          description: Flux d'événements (`text/event-stream`).
+          content:
+            text/event-stream:
+              schema: { type: string }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /incidents/{incidentId}/interventions:
+    get:
+      tags: [Incidents]
+      summary: Interventions d'un incident
+      description: |
+        Toutes les interventions de l'incident, en cours et terminées, de la plus récente à la plus ancienne.
+        Réservé aux héros et aux modérateurs, comme le détail d'une intervention.
+      operationId: listIncidentInterventions
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: incidentId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Interventions de l'incident (liste vide s'il n'y en a aucune).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Intervention" }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/InternalError" }
-
-  /incidents/{incidentId}/interventions:
     post:
       tags: [Incidents]
       summary: Démarrer une intervention
@@ -1652,6 +2723,8 @@ paths:
       operationId: startIntervention
       security: [{ sessionCookie: [], csrfToken: [] }]
       parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { $ref: "#/components/parameters/ClientCreatedAt" }
         - name: incidentId
           in: path
           required: true
@@ -1670,6 +2743,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   /interventions/{id}:
@@ -1700,6 +2775,8 @@ paths:
       operationId: joinIntervention
       security: [{ sessionCookie: [], csrfToken: [] }]
       parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { $ref: "#/components/parameters/ClientCreatedAt" }
         - { $ref: "#/components/parameters/Id" }
       responses:
         "204": { description: Participation confirmée. }
@@ -1711,6 +2788,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   /interventions/{id}/invitations:
@@ -1721,6 +2800,8 @@ paths:
       operationId: inviteHeroes
       security: [{ sessionCookie: [], csrfToken: [] }]
       parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { $ref: "#/components/parameters/ClientCreatedAt" }
         - { $ref: "#/components/parameters/Id" }
       requestBody:
         required: true
@@ -1750,6 +2831,8 @@ paths:
       operationId: confirmInterventionInvitation
       security: [{ sessionCookie: [], csrfToken: [] }]
       parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { $ref: "#/components/parameters/ClientCreatedAt" }
         - { $ref: "#/components/parameters/Id" }
       responses:
         "204": { description: Invitation confirmée. }
@@ -1761,6 +2844,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   /interventions/{id}/invitations/me/decline:
@@ -1771,6 +2856,8 @@ paths:
       operationId: declineInterventionInvitation
       security: [{ sessionCookie: [], csrfToken: [] }]
       parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { $ref: "#/components/parameters/ClientCreatedAt" }
         - { $ref: "#/components/parameters/Id" }
       responses:
         "204": { description: Invitation refusée. }
@@ -1782,6 +2869,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   /interventions/{id}/outcome:
@@ -1792,6 +2881,8 @@ paths:
       operationId: proposeInterventionOutcome
       security: [{ sessionCookie: [], csrfToken: [] }]
       parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { $ref: "#/components/parameters/ClientCreatedAt" }
         - { $ref: "#/components/parameters/Id" }
       requestBody:
         required: true
@@ -1821,6 +2912,8 @@ paths:
       operationId: validateInterventionOutcome
       security: [{ sessionCookie: [], csrfToken: [] }]
       parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { $ref: "#/components/parameters/ClientCreatedAt" }
         - { $ref: "#/components/parameters/Id" }
       requestBody:
         required: true
@@ -1857,6 +2950,8 @@ paths:
       operationId: arbitrateInterventionOutcome
       security: [{ sessionCookie: [], csrfToken: [] }]
       parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { $ref: "#/components/parameters/ClientCreatedAt" }
         - { $ref: "#/components/parameters/Id" }
       requestBody:
         required: true
@@ -1876,6 +2971,915 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /me:
+    get:
+      tags: [Compte]
+      summary: Mon profil
+      description: |
+        Retourne le profil complet de l'utilisateur connecté, quel que soit son rôle : identité,
+        coordonnées, photo, abonnement à la newsletter et, pour un super-héros, son pseudo public et sa
+        description (`hero`). Un super-héros n'a pas de profil à part : c'est le même compte, avec
+        `role: hero`.
+
+        `pendingEmail` n'est présent que pendant l'examen d'une demande de changement d'adresse. Un
+        compte créé hors inscription (un modérateur) peut avoir un téléphone et une adresse vides.
+      operationId: getMyAccount
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Le profil de l'utilisateur connecté.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+              examples:
+                citoyen:
+                  summary: Un citoyen avec une demande de changement d'adresse en attente
+                  value:
+                    id: 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
+                    role: citizen
+                    civility: madame
+                    firstName: Natasha
+                    lastName: Romanoff
+                    birthDate: "1984-11-22"
+                    email: natasha.romanoff@example.org
+                    pendingEmail: natasha.r@example.org
+                    mobilePhone: "0612345678"
+                    address:
+                      street: 10 rue de Rivoli
+                      complement: Bâtiment B, 3e étage
+                      postalCode: "75004"
+                      city: Paris
+                      country: FR
+                    avatarUrl: /api/v1/avatars/3f2a8c1e-5b7d-4e90-8a16-2c4d9e7f0b53.jpg
+                    newsletterSubscribed: true
+                    createdAt: "2026-10-19T12:00:00Z"
+                super-heros:
+                  summary: Un super-héros
+                  value:
+                    id: 7d0e4a52-9c3b-4f18-b6a1-5e2f8c9d1a37
+                    role: hero
+                    civility: monsieur
+                    firstName: Steve
+                    lastName: Rogers
+                    birthDate: "1990-07-04"
+                    email: steve.rogers@example.org
+                    mobilePhone: "+33612345678"
+                    address:
+                      street: 569 Leaman Place
+                      postalCode: "11201"
+                      city: Brooklyn
+                      country: US
+                    newsletterSubscribed: false
+                    createdAt: "2026-10-19T12:00:00Z"
+                    hero:
+                      alias: Captain America
+                      bio: Un super-soldat au bouclier indestructible.
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    patch:
+      tags: [Compte]
+      summary: Modifier mes coordonnées
+      description: |
+        Remplace le téléphone et/ou l'adresse postale, selon les règles de l'inscription. Un champ
+        absent n'est pas modifié. `address` est remplacée en bloc, sauf `complement` : absent ou
+        `null`, le complément actuel est conservé ; chaîne vide, il est effacé. Le formulaire du profil
+        d'un super-héros, qui n'a pas de complément, ne l'efface donc pas.
+
+        Un super-héros peut aussi changer son pseudo (`alias`, unique sans tenir compte de la casse) et
+        sa description publique (`bio`), aussitôt visibles sur sa fiche. Un autre compte qui les envoie
+        reçoit `403 hero_profile_required` ; un pseudo déjà pris, `409 alias_already_used`.
+
+        Retourne le profil à jour. Le nom, la date de naissance et l'adresse email ne se modifient pas
+        ici (l'adresse email passe par `POST /me/email-change-requests`).
+      operationId: updateMyContact
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ContactUpdateRequest" }
+            examples:
+              adresse-et-telephone:
+                summary: Nouveau téléphone et nouvelle adresse
+                value:
+                  mobilePhone: 06 98 76 54 32
+                  address:
+                    street: 12 rue des Archives
+                    complement: Interphone Dupont
+                    postalCode: "75003"
+                    city: Paris
+                    country: FR
+              telephone-seul:
+                summary: Le téléphone seulement
+                value:
+                  mobilePhone: "+33698765432"
+              profil-de-heros:
+                summary: Le pseudo et la description d'un super-héros
+                value:
+                  alias: Captain America
+                  bio: Un super-soldat au bouclier indestructible.
+      responses:
+        "200":
+          description: Coordonnées modifiées ; le profil à jour.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403":
+          description: |
+            Session sans le jeton CSRF (`forbidden`), ou pseudo et description envoyés par un compte qui
+            n'est pas super-héros (`hero_profile_required`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Pseudo déjà utilisé par un autre super-héros (`alias_already_used`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    delete:
+      tags: [Compte]
+      summary: Supprimer mon compte
+      description: |
+        Droit à l'effacement (RGPD). Le compte est **anonymisé** : identité, coordonnées, photo et adresse
+        email effacées, sessions, 2FA, abonnement et vidéothèque supprimés, compte désactivé pour de bon. Les
+        incidents, interventions et avis restent, rattachés à un « compte supprimé ». Le mot de passe est
+        redemandé, et le code TOTP (`code`) si la 2FA est activée. Un mail confirme la suppression.
+      operationId: deleteMyAccount
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeleteAccountRequest" }
+            examples:
+              supprimer:
+                summary: Supprimer le compte
+                value:
+                  password: Mon-mot-de-passe-1
+      responses:
+        "204":
+          description: Compte supprimé ; la session n'existe plus.
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: Compte déjà supprimé (`account_already_erased`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          description: "`validation_failed` : `password` ou `code` vaut `required` ou `invalid`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /me/avatar:
+    put:
+      tags: [Compte]
+      summary: Changer ma photo de profil
+      description: |
+        Le corps de la requête est **l'image elle-même** (ni JSON, ni multipart), avec son type dans
+        `Content-Type` : `image/jpeg`, `image/png` ou `image/webp`. Limites : 2 Mio (`413`) et
+        1024 × 1024 pixels (`422`, champ `avatar` : `too_large`).
+
+        L'image est décodée puis ré-encodée en JPEG : un fichier qui n'est pas une vraie image est
+        refusé (`422`, `avatar` : `invalid`), et les métadonnées (EXIF, position GPS) sont effacées.
+        L'adresse de la photo (`avatarUrl`) change à chaque envoi : un navigateur peut la garder
+        indéfiniment en cache. La photo d'un super-héros est publique (encyclopédie).
+      operationId: updateMyAvatar
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          image/jpeg: { schema: { type: string, format: binary } }
+          image/png: { schema: { type: string, format: binary } }
+          image/webp: { schema: { type: string, format: binary } }
+      responses:
+        "200":
+          description: Photo remplacée.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AvatarResponse" }
+              examples:
+                nouvelle-photo:
+                  summary: L'adresse de la nouvelle photo
+                  value:
+                    avatarUrl: /api/v1/avatars/3f2a8c1e-5b7d-4e90-8a16-2c4d9e7f0b53.jpg
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415":
+          description: Le `Content-Type` n'est ni `image/jpeg`, ni `image/png`, ni `image/webp` (`unsupported_media_type`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                pas-une-image:
+                  summary: Type de contenu refusé
+                  value:
+                    error:
+                      code: unsupported_media_type
+                      message: Le corps de la requête doit être une image JPEG, PNG ou WebP.
+        "422":
+          description: |
+            Image refusée (`validation_failed`) : `avatar` vaut `required` (corps vide), `invalid` (ce
+            n'est pas une image JPEG, PNG ou WebP lisible) ou `too_large` (plus de 1024 pixels de côté).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                image-trop-grande:
+                  summary: Image de plus de 1024 pixels
+                  value:
+                    error:
+                      code: validation_failed
+                      message: Certaines informations sont invalides.
+                      fields:
+                        avatar: too_large
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    delete:
+      tags: [Compte]
+      summary: Retirer ma photo de profil
+      description: Retire la photo de profil et supprime son fichier. Sans photo, c'est sans effet.
+      operationId: deleteMyAvatar
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      responses:
+        "204":
+          description: Photo retirée.
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /me/export:
+    get:
+      tags: [Compte]
+      summary: Exporter mes données
+      description: |
+        Droit d'accès (RGPD) : le profil (comme `GET /me`) et toute l'activité du compte, en un fichier JSON
+        à télécharger (`Content-Disposition: attachment`). Limité par utilisateur (`429`).
+      operationId: exportMyData
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Les données du compte.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExportedData" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/users/{id}/anonymize:
+    post:
+      tags: [Modération]
+      summary: Anonymiser un compte
+      description: |
+        Droit à l'effacement exercé par un modérateur (demande reçue par le formulaire de contact) : comme
+        `DELETE /me`, sans mail. Ni son propre compte, ni celui d'un modérateur (`409 account_not_erasable`).
+      operationId: anonymizeUser
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "204":
+          description: Compte anonymisé.
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Compte non anonymisable (`account_not_erasable`) ou déjà supprimé (`account_already_erased`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /me/password:
+    post:
+      tags: [Compte]
+      summary: Changer mon mot de passe
+      description: |
+        Le mot de passe actuel est redemandé. Le nouveau suit les règles de l'inscription. Toutes les
+        autres sessions du compte sont fermées, et la session courante reçoit un **nouveau cookie** et un
+        nouveau jeton CSRF (réponse comme celle de la connexion). Le titulaire est prévenu par mail.
+
+        Un mot de passe actuel faux répond `422` (champ `currentPassword` : `invalid`) : il ne compte pas
+        dans le verrouillage de la connexion, mais la route est limitée à quelques essais par utilisateur
+        (`429`).
+      operationId: changeMyPassword
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PasswordChangeRequest" }
+            examples:
+              nouveau-mot-de-passe:
+                summary: Remplacer le mot de passe
+                value:
+                  currentPassword: Ancien-mot-de-passe-1
+                  newPassword: Nouveau-mot-de-passe-2
+      responses:
+        "200":
+          description: Mot de passe changé ; la session courante continue avec un nouveau cookie.
+          headers:
+            Set-Cookie:
+              description: Le nouveau cookie de session (le précédent est révoqué).
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422":
+          description: |
+            `validation_failed` : `currentPassword` vaut `required` ou `invalid` (mot de passe actuel faux),
+            `newPassword` vaut `too_short`, `too_long` ou `weak`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                mot-de-passe-actuel-faux:
+                  summary: Le mot de passe actuel est faux
+                  value:
+                    error:
+                      code: validation_failed
+                      message: Certaines informations sont invalides.
+                      fields:
+                        currentPassword: invalid
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /avatars/{name}:
+    get:
+      tags: [Compte]
+      summary: Photo de profil
+      description: |
+        Sert une photo de profil. La route est publique : les photos des super-héros sont visibles de
+        tous. L'adresse d'une photo (`avatarUrl`) contient un identifiant aléatoire et change à chaque
+        envoi ; le contenu d'une adresse ne change jamais, d'où le cache d'un an (`immutable`).
+      operationId: getAvatar
+      parameters:
+        - name: name
+          in: path
+          required: true
+          description: Nom du fichier, tel que donné par `avatarUrl`.
+          schema: { type: string }
+          example: 3f2a8c1e-5b7d-4e90-8a16-2c4d9e7f0b53.jpg
+      responses:
+        "200":
+          description: La photo, en JPEG.
+          headers:
+            Cache-Control:
+              description: Mise en cache d'un an, sans revalidation.
+              schema:
+                { type: string, example: "public, max-age=31536000, immutable" }
+          content:
+            image/jpeg: { schema: { type: string, format: binary } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /me/email-change-requests:
+    post:
+      tags: [Compte]
+      summary: Demander un changement d'adresse email
+      description: |
+        Dépose une demande qui aboutit en deux temps : **le titulaire de la nouvelle adresse la
+        confirme** par le lien qui lui est envoyé (`POST /email-change-requests/confirm`), puis **un
+        modérateur l'accepte**. L'adresse de connexion ne change qu'à ce moment-là ; d'ici là `GET /me`
+        la montre dans `pendingEmail` (`pendingEmailConfirmed` dit si le lien a été utilisé). Une nouvelle
+        demande remplace la précédente tant qu'elle n'est pas traitée, ce qui invalide l'ancien lien et
+        renvoie un mail.
+
+        Réservé aux citoyens et aux super-héros : le compte d'un modérateur se gère hors ligne.
+        L'adresse est vérifiée une seconde fois à la validation : si quelqu'un l'a prise entre-temps, le
+        modérateur reçoit `email_already_used` et doit refuser la demande.
+      operationId: requestMyEmailChange
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmailChangeRequestPayload" }
+            examples:
+              nouvelle-adresse:
+                summary: La nouvelle adresse souhaitée
+                value:
+                  email: natasha.r@example.org
+      responses:
+        "201":
+          description: Demande déposée, en attente de validation.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EmailChangeRequestStatus" }
+              examples:
+                en-attente:
+                  summary: Demande déposée
+                  value:
+                    newEmail: natasha.r@example.org
+                    status: pending
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: L'adresse est déjà prise par un autre compte (`email_already_used`) ou c'est déjà celle de ce compte (`email_unchanged`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                adresse-prise:
+                  summary: Adresse déjà utilisée
+                  value:
+                    error:
+                      code: email_already_used
+                      message: Cette adresse email est déjà utilisée.
+                adresse-inchangee:
+                  summary: C'est déjà l'adresse du compte
+                  value:
+                    error:
+                      code: email_unchanged
+                      message: C'est déjà l'adresse email de ce compte.
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /email-change-requests/confirm:
+    post:
+      tags: [Compte]
+      summary: Confirmer une nouvelle adresse email
+      description: |
+        Route publique : le lien reçu à la nouvelle adresse s'ouvre souvent sur un autre appareil que
+        celui de la demande, et il se prouve par sa signature. Elle confirme que le titulaire de
+        l'adresse y a accès ; elle **ne change pas** l'adresse du compte, qui reste décidée par un
+        modérateur. Cliquer deux fois sur le lien réussit les deux fois. Un lien falsifié, expiré, ou
+        devenu sans objet (demande remplacée par son titulaire, ou refusée) répond `invalid_token`.
+      operationId: confirmEmailChange
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TokenRequest" }
+            examples:
+              lien-recu:
+                summary: Le jeton du lien reçu par mail (à remplacer)
+                value:
+                  token: collez-ici-le-jeton-du-lien-recu-par-mail
+      responses:
+        "204": { description: Nouvelle adresse confirmée. }
+        "400": { $ref: "#/components/responses/BadRequestOrInvalidToken" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /me/newsletter:
+    put:
+      tags: [Compte]
+      summary: Recevoir ou non la newsletter
+      description: |
+        Abonne ou désabonne le titulaire du compte. Il n'y a pas de mail de confirmation : l'adresse du
+        compte a déjà été vérifiée à l'activation (contrairement à `POST /newsletter/subscriptions`).
+        L'opération est idempotente. `newsletterSubscribed` de `GET /me` donne l'état courant.
+      operationId: setMyNewsletterPreference
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewsletterPreferencePayload" }
+            examples:
+              abonner:
+                summary: S'abonner
+                value:
+                  subscribed: true
+      responses:
+        "204": { description: Préférence enregistrée. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/email-change-requests:
+    get:
+      tags: [Modération]
+      summary: Demandes de changement d'adresse email
+      description: |
+        Réservé aux modérateurs. Les demandes les plus anciennes viennent d'abord. Chaque demande porte
+        l'identité du demandeur et son adresse actuelle, pour décider sans autre appel.
+      operationId: listEmailChangeRequests
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: status
+          in: query
+          description: Ne garde que les demandes dans cet état. Sans valeur, toutes les demandes sont listées.
+          schema: { type: string, enum: [pending, approved, rejected] }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Une page de demandes.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EmailChangeRequestPage" }
+              examples:
+                une-demande:
+                  summary: Une demande en attente
+                  value:
+                    items:
+                      - id: 5c1d7e92-3a40-4b86-9f0e-6d8a2b4c1e75
+                        userId: 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
+                        firstName: Natasha
+                        lastName: Romanoff
+                        currentEmail: natasha.romanoff@example.org
+                        newEmail: natasha.r@example.org
+                        status: pending
+                        createdAt: "2026-10-21T09:15:00Z"
+                        confirmedAt: "2026-10-21T09:40:00Z"
+                    total: 1
+                    limit: 20
+                    offset: 0
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/email-change-requests/{id}/approve:
+    post:
+      tags: [Modération]
+      summary: Accepter un changement d'adresse
+      description: |
+        Réservé aux modérateurs. L'adresse de connexion du compte devient la nouvelle adresse, et son
+        abonnement à la newsletter la suit. **Seule une demande dont l'adresse est confirmée** (`confirmedAt`)
+        peut être acceptée : sinon `email_change_not_confirmed`, et il ne reste qu'à la refuser ou à
+        attendre. La nouvelle adresse et l'ancienne en sont ensuite prévenues par mail. Si l'adresse a été
+        prise entre-temps, rien n'est modifié : `email_already_used`, et la demande reste à refuser. Une demande remplacée par son titulaire
+        change d'identifiant : l'ancien identifiant répond `email_change_not_found`, pour qu'un
+        modérateur ne valide jamais une adresse qu'il n'a pas vue.
+      operationId: approveEmailChangeRequest
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/EmailChangeRequestId" }
+      responses:
+        "204": { description: "Demande acceptée, adresse changée." }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/EmailChangeNotFound" }
+        "409":
+          description: La demande a déjà été traitée (`email_change_not_pending`), son adresse n'est pas confirmée (`email_change_not_confirmed`), ou l'adresse est maintenant prise (`email_already_used`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                deja-traitee:
+                  summary: Demande déjà traitée
+                  value:
+                    error:
+                      code: email_change_not_pending
+                      message: Cette demande a déjà été traitée.
+                pas-confirmee:
+                  summary: Adresse pas encore confirmée par son titulaire
+                  value:
+                    error:
+                      code: email_change_not_confirmed
+                      message: Le titulaire de la nouvelle adresse ne l'a pas encore confirmée.
+                adresse-prise:
+                  summary: L'adresse a été prise entre-temps
+                  value:
+                    error:
+                      code: email_already_used
+                      message: Cette adresse email est déjà utilisée.
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/email-change-requests/{id}/reject:
+    post:
+      tags: [Modération]
+      summary: Refuser un changement d'adresse
+      description: Réservé aux modérateurs. L'adresse du compte ne change pas, son titulaire en est prévenu par mail et peut déposer une nouvelle demande. Une demande dont l'adresse n'est pas confirmée peut être refusée.
+      operationId: rejectEmailChangeRequest
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/EmailChangeRequestId" }
+      responses:
+        "204": { description: Demande refusée. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/EmailChangeNotFound" }
+        "409":
+          description: La demande a déjà été traitée (`email_change_not_pending`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                deja-traitee:
+                  summary: Demande déjà traitée
+                  value:
+                    error:
+                      code: email_change_not_pending
+                      message: Cette demande a déjà été traitée.
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /contact/messages:
+    post:
+      tags: [Contact et newsletter]
+      summary: Écrire à l'équipe
+      description: |
+        Formulaire de contact, ouvert à tous. Le message est transmis par mail à l'équipe (adresse
+        `HEROS_CONTACT_RECIPIENT`), avec l'adresse du visiteur en réponse : le visiteur ne reçoit
+        jamais de mail de cette route. Rien n'est conservé en base.
+
+        Limité par adresse IP. `503` (`contact_delivery_unavailable`) si le message n'a pas pu être
+        confié au service d'envoi : il n'est alors pas parti, et le visiteur peut réessayer.
+      operationId: sendContactMessage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ContactMessageRequest" }
+            examples:
+              question:
+                summary: Une question sur le service
+                value:
+                  name: Natasha Romanoff
+                  email: natasha.romanoff@example.org
+                  subject: question
+                  message: Bonjour, comment puis-je devenir super-héros sur la plateforme ?
+      responses:
+        "202": { description: Message accepté pour envoi. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503":
+          description: Le message n'a pas pu être envoyé (`contact_delivery_unavailable`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                envoi-impossible:
+                  summary: File d'envoi saturée ou fermée
+                  value:
+                    error:
+                      code: contact_delivery_unavailable
+                      message: Le message n'a pas pu être envoyé. Veuillez réessayer plus tard.
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /newsletter/subscriptions:
+    post:
+      tags: [Contact et newsletter]
+      summary: S'abonner à la newsletter
+      description: |
+        Abonnement d'un visiteur, en deux temps (double opt-in) : cette route enregistre la demande et
+        envoie un lien de confirmation à l'adresse ; aucune newsletter n'est envoyée avant le clic
+        (`POST /newsletter/subscriptions/confirm`). Le lien est signé et valable 48 h par défaut.
+
+        La réponse est la même pour toute adresse valide, inconnue, en attente ou déjà abonnée : elle ne
+        révèle rien (une adresse déjà abonnée ne reçoit pas de mail de plus). Une adresse qui s'était
+        désabonnée doit confirmer de nouveau. Limité par IP et par adresse, pour que le formulaire ne
+        serve pas à inonder la boîte de quelqu'un d'autre.
+      operationId: subscribeToNewsletter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              { $ref: "#/components/schemas/NewsletterSubscriptionRequest" }
+            examples:
+              visiteur:
+                summary: Un visiteur
+                value:
+                  email: natasha.romanoff@example.org
+      responses:
+        "202":
+          {
+            description: Demande prise en compte ; un lien de confirmation est envoyé si l'adresse n'était pas déjà abonnée.,
+          }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /newsletter/subscriptions/confirm:
+    post:
+      tags: [Contact et newsletter]
+      summary: Confirmer l'abonnement à la newsletter
+      description: |
+        Valide l'abonnement avec le jeton du lien reçu par mail ; la date de confirmation est la preuve de
+        consentement. Cliquer deux fois sur le lien réussit les deux fois. Un lien falsifié, expiré, ou
+        devenu sans objet (l'abonné s'est retiré entre-temps) répond `invalid_token`.
+      operationId: confirmNewsletterSubscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TokenRequest" }
+            examples:
+              lien-recu:
+                summary: Le jeton du lien reçu par mail (à remplacer)
+                value:
+                  token: collez-ici-le-jeton-du-lien-recu-par-mail
+      responses:
+        "204": { description: Abonnement confirmé. }
+        "400": { $ref: "#/components/responses/BadRequestOrInvalidToken" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /newsletter/subscriptions/unsubscribe:
+    post:
+      tags: [Contact et newsletter]
+      summary: Se désabonner de la newsletter
+      description: |
+        Route publique : chaque newsletter porte un lien de désinscription, qui s'ouvre sans connexion.
+        Il désigne l'abonnement (jamais l'adresse) et n'expire pas : le lien d'une ancienne newsletter
+        reste utilisable. Cliquer deux fois sur le lien réussit les deux fois. Un lien falsifié, ou fabriqué
+        pour une autre action (confirmation), répond `invalid_token`.
+
+        La désinscription garde la ligne de l'abonné : se réabonner depuis le pied de page redemande un
+        consentement (`POST /newsletter/subscriptions`, puis confirmation par lien).
+      operationId: unsubscribeFromNewsletter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TokenRequest" }
+            examples:
+              lien-recu:
+                summary: Le jeton du lien de désinscription d'une newsletter (à remplacer)
+                value:
+                  token: collez-ici-le-jeton-du-lien-recu-par-mail
+      responses:
+        "204": { description: Abonné retiré de la newsletter. }
+        "400": { $ref: "#/components/responses/BadRequestOrInvalidToken" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/newsletters:
+    get:
+      tags: [Contact et newsletter]
+      summary: Numéros de la newsletter (modérateur)
+      description: Brouillons et numéros envoyés, les plus récents d'abord. Le corps n'est pas inclus.
+      operationId: listNewsletters
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: Une page de numéros.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NewsletterSummaryPage" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    post:
+      tags: [Contact et newsletter]
+      summary: Enregistrer un brouillon de newsletter
+      description: |
+        Le destinataire est un compte précis (`recipientUserId`) ou, s'il est absent, tous les abonnés
+        confirmés. Le HTML est assaini à l'enregistrement.
+      operationId: createNewsletter
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewsletterPayload" }
+      responses:
+        "201":
+          description: Brouillon créé.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Newsletter" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/newsletters/{id}:
+    get:
+      tags: [Contact et newsletter]
+      summary: Consulter un numéro de la newsletter (modérateur)
+      operationId: getNewsletter
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/NewsletterId" }
+      responses:
+        "200":
+          description: Le numéro.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Newsletter" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    put:
+      tags: [Contact et newsletter]
+      summary: Modifier un brouillon
+      description: Un numéro déjà envoyé est en lecture seule (`newsletter_already_sent`).
+      operationId: updateNewsletter
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/NewsletterId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewsletterPayload" }
+      responses:
+        "200":
+          description: Brouillon modifié.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Newsletter" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/NewsletterAlreadySent" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    delete:
+      tags: [Contact et newsletter]
+      summary: Supprimer un brouillon
+      description: Un numéro déjà envoyé ne peut pas être supprimé (`newsletter_already_sent`).
+      operationId: deleteNewsletter
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/NewsletterId" }
+      responses:
+        "204": { description: Brouillon supprimé. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/NewsletterAlreadySent" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/newsletters/{id}/send:
+    post:
+      tags: [Contact et newsletter]
+      summary: Envoyer un numéro
+      description: |
+        Envoie le brouillon aux abonnés confirmés (`status = subscribed`), ou au seul compte désigné s'il
+        est abonné. Le numéro est daté « envoyé » avant les mails, de façon atomique : il ne part qu'une
+        fois. Les mails sont déposés en arrière-plan dans la file d'envoi, chacun avec le lien de
+        désinscription de son destinataire ; la réponse `202` n'attend pas leur remise. Sans aucun
+        destinataire abonné, `422` (`no_subscribed_recipient`) et le numéro reste un brouillon.
+      operationId: sendNewsletter
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/NewsletterId" }
+      responses:
+        "202":
+          description: Envoi pris en charge.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NewsletterSendResult" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/NewsletterAlreadySent" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/InternalError" }
 
@@ -1910,6 +3914,24 @@ components:
       required: true
       description: Identifiant du super-vilain.
       schema: { type: string, format: uuid }
+    ArticleId:
+      name: id
+      in: path
+      required: true
+      description: Identifiant de l'article.
+      schema: { type: string, format: uuid }
+    NewsletterId:
+      name: id
+      in: path
+      required: true
+      description: Identifiant du numéro de la newsletter.
+      schema: { type: string, format: uuid }
+    ArticleSlug:
+      name: slug
+      in: path
+      required: true
+      description: Identifiant d'URL de l'article.
+      schema: { type: string }
     FilmId:
       name: filmId
       in: path
@@ -1930,6 +3952,13 @@ components:
       description: Identifiant de l'utilisateur (champ `id` de la liste des comptes).
       schema: { type: string, format: uuid }
       example: 0b8c1c3e-6f1d-4c7e-9a52-3d2f7b9e4a10
+    EmailChangeRequestId:
+      name: id
+      in: path
+      required: true
+      description: Identifiant de la demande de changement d'adresse (champ `id` de la liste des demandes).
+      schema: { type: string, format: uuid }
+      example: 5c1d7e92-3a40-4b86-9f0e-6d8a2b4c1e75
     Limit:
       name: limit
       in: query
@@ -1940,6 +3969,26 @@ components:
       in: query
       description: Nombre d'éléments à sauter.
       schema: { type: integer, minimum: 0, default: 0 }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: |
+        UUID choisi par le client pour cette action. Si la même clé revient (rejeu après une coupure de connexion,
+        action faite hors ligne puis synchronisée), la réponse du premier passage est rendue telle quelle, avec
+        l'en-tête `Idempotent-Replayed: true`, sans rien refaire. Seules les réussites sont conservées : après une
+        erreur, la même clé se rejoue. La même clé avec une autre requête est refusée (422, `idempotency_key_reused`).
+        La clé est propre à son auteur.
+      schema: { type: string, format: uuid }
+    ClientCreatedAt:
+      name: X-Client-Created-At
+      in: header
+      required: false
+      description: |
+        Date (RFC 3339) à laquelle l'action a été créée sur l'appareil, pour une action faite hors ligne. Elle sert à
+        mesurer le délai de synchronisation, et reste sans effet sans `Idempotency-Key`. Une date plus avancée que
+        l'heure du serveur est ramenée à l'heure de réception.
+      schema: { type: string, format: date-time }
 
   responses:
     BadRequest:
@@ -1987,7 +4036,8 @@ components:
     Forbidden:
       description: |
         Refusé : origine non autorisée (`origin_not_allowed`), jeton CSRF absent ou invalide
-        (`csrf_invalid`), ou rôle insuffisant (`forbidden`, `protected_account`).
+        (`csrf_invalid`), rôle insuffisant (`forbidden`, `protected_account`), ou **session limitée**
+        (`mfa_required` : la double authentification doit d'abord être validée ou activée, voir `GET /auth/mfa`).
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -2010,6 +4060,12 @@ components:
                 error:
                   code: forbidden
                   message: Vous n'avez pas les droits nécessaires.
+            session-limitee:
+              summary: Session limitée (double authentification pas encore validée)
+              value:
+                error:
+                  code: mfa_required
+                  message: La double authentification doit d'abord être validée.
             compte-protege:
               summary: Compte de modérateur
               value:
@@ -2028,6 +4084,18 @@ components:
                 error:
                   code: not_found
                   message: Utilisateur introuvable.
+    EmailChangeNotFound:
+      description: Aucune demande de changement d'adresse ne porte cet identifiant (`email_change_not_found`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            demande-introuvable:
+              summary: Demande introuvable, ou remplacée par son titulaire
+              value:
+                error:
+                  code: email_change_not_found
+                  message: Demande de changement d'adresse introuvable.
     PayloadTooLarge:
       description: Corps de requête trop volumineux (`payload_too_large`).
       content:
@@ -2101,6 +4169,11 @@ components:
                 error:
                   code: internal_error
                   message: Une erreur interne est survenue.
+    NewsletterAlreadySent:
+      description: "Le numéro a déjà été envoyé (`newsletter_already_sent`), il est en lecture seule."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
 
   schemas:
     Health:
@@ -2126,7 +4199,7 @@ components:
               description: Message destiné à l'affichage.
             fields:
               type: object
-              description: Pour les erreurs de validation, champ → code (`required`, `invalid`, `too_short`, `too_long`, `weak`).
+              description: Pour les erreurs de validation, champ → code (`required`, `invalid`, `too_short`, `too_long`, `weak`, et `too_large` pour une photo).
               additionalProperties: { type: string }
 
     UserView:
@@ -2259,9 +4332,91 @@ components:
           type: boolean
           description: Prolonge la session (sans effet pour un modérateur).
 
+    MfaStatus:
+      type: string
+      enum: [verified, verification_required, enrollment_required, not_enrolled]
+      description: |
+        Où en est la double authentification de la session :
+
+        - `verified` : activée et validée, la session est complète ;
+        - `verification_required` : activée, le code reste à saisir (`POST /auth/mfa/verify`) ; la session est **limitée** ;
+        - `enrollment_required` : obligatoire pour ce compte (modérateur en production) et pas encore activée (`POST /auth/mfa/setup`, puis `enable`) ; la session est **limitée** ;
+        - `not_enrolled` : ni activée ni obligatoire, la session est complète.
+
+        Une session limitée ne donne accès qu'à `/auth/me`, `/auth/mfa*`, `/auth/logout` et `/auth/logout-all` : toute autre route répond `mfa_required` (403).
+
+    MfaStatusResponse:
+      type: object
+      required: [status, recoveryCodesRemaining]
+      properties:
+        status: { $ref: "#/components/schemas/MfaStatus" }
+        recoveryCodesRemaining:
+          type: integer
+          minimum: 0
+          description: Nombre de codes de secours qui n'ont pas servi (0 sans double authentification).
+
+    MfaSetupResponse:
+      type: object
+      required: [secret, otpauthUrl]
+      properties:
+        secret:
+          type: string
+          description: Le secret TOTP en base32, à saisir à la main dans l'application.
+        otpauthUrl:
+          type: string
+          description: "Adresse `otpauth://` que lisent les applications d'authentification (lien ou QR code)."
+
+    MfaCodeRequest:
+      type: object
+      required: [code]
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          description: Le code à 6 chiffres de l'application d'authentification (les espaces sont ignorés).
+
+    MfaVerifyRequest:
+      type: object
+      additionalProperties: false
+      description: Un code de l'application, ou à défaut un code de secours (à usage unique).
+      properties:
+        code:
+          type: string
+          description: Le code à 6 chiffres de l'application d'authentification.
+        recoveryCode:
+          type: string
+          description: Un code de secours (la casse, les tirets et les espaces sont ignorés).
+
+    MfaEnabledResponse:
+      type: object
+      required: [user, csrfToken, expiresAt, mfa, recoveryCodes]
+      properties:
+        user: { $ref: "#/components/schemas/UserView" }
+        csrfToken:
+          type: string
+          description: Jeton CSRF de la nouvelle session.
+        expiresAt:
+          type: string
+          format: date-time
+          description: Fin de la session (inchangée par l'activation).
+        mfa: { $ref: "#/components/schemas/MfaStatus" }
+        recoveryCodes:
+          type: array
+          description: Les codes de secours, montrés cette seule fois.
+          items: { type: string }
+
+    RecoveryCodesResponse:
+      type: object
+      required: [recoveryCodes]
+      properties:
+        recoveryCodes:
+          type: array
+          description: Les nouveaux codes de secours, montrés cette seule fois.
+          items: { type: string }
+
     LoginResponse:
       type: object
-      required: [user, csrfToken, expiresAt]
+      required: [user, csrfToken, expiresAt, mfa]
       properties:
         user: { $ref: "#/components/schemas/UserView" }
         csrfToken:
@@ -2271,15 +4426,17 @@ components:
           type: string
           format: date-time
           description: Durée de vie maximale de la session.
+        mfa: { $ref: "#/components/schemas/MfaStatus" }
 
     MeResponse:
       type: object
-      required: [user, csrfToken]
+      required: [user, csrfToken, mfa]
       properties:
         user: { $ref: "#/components/schemas/UserView" }
         csrfToken:
           type: string
           description: Jeton CSRF à jour, à renvoyer dans `X-CSRF-Token` sur les écritures authentifiées.
+        mfa: { $ref: "#/components/schemas/MfaStatus" }
 
     PasswordResetConfirmRequest:
       type: object
@@ -2291,6 +4448,44 @@ components:
             type: string,
             description: Jeton du lien de réinitialisation reçu par mail.,
           }
+        newPassword:
+          type: string
+          format: password
+          description: Au moins 10 caractères, avec une minuscule, une majuscule et un chiffre.
+
+    DeleteAccountRequest:
+      type: object
+      required: [password]
+      additionalProperties: false
+      properties:
+        password: { type: string, format: password, description: Le mot de passe actuel. }
+        code: { type: string, description: "Code TOTP, si la double authentification est activée." }
+
+    ExportedData:
+      type: object
+      required: [exportedAt, account, incidents, interventions, reviewsGiven, reviewsReceived, films, emailChangeRequests, sessions, mfaEnabled]
+      properties:
+        exportedAt: { type: string, format: date-time }
+        account: { $ref: "#/components/schemas/Account" }
+        incidents: { type: array, nullable: true, items: { type: object } }
+        interventions: { type: array, nullable: true, items: { type: object } }
+        reviewsGiven: { type: array, nullable: true, items: { type: object } }
+        reviewsReceived: { type: array, nullable: true, items: { type: object } }
+        films: { type: array, nullable: true, items: { type: object } }
+        emailChangeRequests: { type: array, nullable: true, items: { type: object } }
+        newsletter: { type: object }
+        sessions: { type: array, nullable: true, items: { type: object } }
+        mfaEnabled: { type: boolean }
+
+    PasswordChangeRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      additionalProperties: false
+      properties:
+        currentPassword:
+          type: string
+          format: password
+          description: Le mot de passe actuel.
         newPassword:
           type: string
           format: password
@@ -2327,6 +4522,110 @@ components:
             type: string,
             description: "Motif du refus, présent seulement si la demande est `rejected`.",
           }
+
+    PublicHero:
+      type: object
+      required: [id, alias, avatarUrl, power, averageRating, interventionsCount]
+      properties:
+        id: { type: string, format: uuid }
+        alias: { type: string, description: Pseudo public du super-héros. }
+        avatarUrl:
+          {
+            type: string,
+            format: uri-reference,
+            nullable: true,
+            description: "Référence publique de l'avatar; null si aucune référence publique n'est disponible.",
+          }
+        power:
+          {
+            type: string,
+            description: "Description publique du profil (`hero_profiles.bio`), exposée sous le nom attendu par le frontend.",
+          }
+        averageRating: { type: number, format: double, minimum: 0, maximum: 5 }
+        interventionsCount:
+          {
+            type: integer,
+            minimum: 0,
+            description: Nombre d'interventions auxquelles le héros a participé avec le statut confirmed.,
+          }
+
+    PublicHeroPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/PublicHero" }
+        total: { type: integer, minimum: 0 }
+        limit: { type: integer, minimum: 1 }
+        offset: { type: integer, minimum: 0 }
+
+    AdminHero:
+      type: object
+      description: Un super-héros vu par un modérateur. Confidentiel.
+      required:
+        [
+          id,
+          alias,
+          avatarUrl,
+          power,
+          averageRating,
+          interventionsCount,
+          civility,
+          firstName,
+          lastName,
+          birthDate,
+          email,
+          mobilePhone,
+          address,
+          accountStatus,
+          createdAt,
+          lastInterventionAt,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        alias: { type: string, description: Pseudo public du super-héros. }
+        avatarUrl:
+          type: string
+          format: uri-reference
+          nullable: true
+          description: "Adresse de la photo (`GET /avatars/{name}`) ; `null` tant qu'aucune photo n'a été envoyée."
+        power: { type: string, description: "Description publique du profil (`hero_profiles.bio`)." }
+        averageRating: { type: number, format: double, minimum: 0, maximum: 5 }
+        interventionsCount:
+          { type: integer, minimum: 0, description: "Nombre d'interventions auxquelles le héros a participé avec le statut confirmed." }
+        civility: { type: string, enum: [madame, monsieur, non-precise] }
+        firstName: { type: string, description: Prénom. }
+        lastName: { type: string, description: Nom de famille. }
+        birthDate: { type: string, format: date, description: "Date de naissance (AAAA-MM-JJ)." }
+        email: { type: string, format: email, description: Adresse de connexion. }
+        pendingEmail:
+          type: string
+          format: email
+          description: Nouvelle adresse demandée, en attente de décision d'un modérateur. Absente sinon.
+        mobilePhone: { type: string, description: "Numéro de portable, sans séparateurs." }
+        address: { $ref: "#/components/schemas/AccountAddress" }
+        accountStatus:
+          type: string
+          enum: [pending_activation, active, deactivated]
+          description: État du compte.
+        createdAt: { type: string, format: date-time, description: Date de création du compte. }
+        lastInterventionAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Début de la dernière intervention à laquelle le héros a participé ; `null` s'il n'a jamais participé.
+
+    AdminHeroPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/AdminHero" }
+        total: { type: integer, minimum: 0 }
+        limit: { type: integer, minimum: 1 }
+        offset: { type: integer, minimum: 0 }
 
     RejectPayload:
       type: object
@@ -2441,6 +4740,27 @@ components:
             description: Date de création du compte.,
           }
 
+    ModerationSummary:
+      type: object
+      required:
+        [
+          incidents,
+          heroApplications,
+          videos,
+          comments,
+          emailChanges,
+          draftArticles,
+          draftNewsletters,
+        ]
+      properties:
+        incidents: { type: integer, description: "Incidents signalés (`reported`)." }
+        heroApplications: { type: integer, description: Demandes de super-héros en attente. }
+        videos: { type: integer, description: Films de héros en attente de validation. }
+        comments: { type: integer, description: Réponses de héros en attente de vérification. }
+        emailChanges: { type: integer, description: Changements d'email en attente. }
+        draftArticles: { type: integer, description: Articles du blog en brouillon. }
+        draftNewsletters: { type: integer, description: Numéros de la newsletter en brouillon (à envoyer). }
+
     UserSummaryPage:
       type: object
       required: [items, total, limit, offset]
@@ -2529,6 +4849,7 @@ components:
           id,
           alias,
           typeIds,
+          specialties,
           threatLevel,
           status,
           reportedIncidentsCount,
@@ -2544,11 +4865,135 @@ components:
         typeIds:
           type: array
           items: { type: integer, format: int32 }
+        specialties:
+          type: array
+          description: Spécialités détaillées (types d'incident de `typeIds`), par libellé.
+          items: { $ref: "#/components/schemas/VillainSpecialty" }
         threatLevel: { type: string, enum: [faible, modere, eleve, critique] }
         status: { type: string, enum: [en-liberte, emprisonne] }
         reportedIncidentsCount: { type: integer, minimum: 0 }
         createdAt: { type: string, format: date-time }
 
+    VillainSpecialty:
+      type: object
+      required: [id, code, label]
+      properties:
+        id: { type: integer, format: int32 }
+        code: { type: string }
+        label: { type: string }
+
+    ArticleStatus:
+      type: string
+      enum: [brouillon, publie]
+    ArticlePayload:
+      type: object
+      required: [title, excerpt, content, status]
+      properties:
+        title: { type: string, minLength: 5, maxLength: 120 }
+        excerpt:
+          {
+            type: string,
+            minLength: 1,
+            maxLength: 300,
+            description: Chapeau affiché dans les listes.,
+          }
+        content:
+          type: string
+          description: |
+            HTML (balises de l'éditeur uniquement, le reste est retiré). Au moins 20 caractères de
+            texte visible, 200 000 octets au plus.
+        status: { $ref: "#/components/schemas/ArticleStatus" }
+    ArticleSummary:
+      type: object
+      required:
+        [
+          id,
+          title,
+          slug,
+          excerpt,
+          status,
+          authorName,
+          createdAt,
+          updatedAt,
+          publishedAt,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        slug: { type: string }
+        excerpt: { type: string }
+        status: { $ref: "#/components/schemas/ArticleStatus" }
+        authorName: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        publishedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Vide tant que l'article n'a jamais été publié.
+    Article:
+      allOf:
+        - { $ref: "#/components/schemas/ArticleSummary" }
+        - type: object
+          required: [content]
+          properties:
+            content: { type: string, description: HTML assaini. }
+    ArticleSummaryPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ArticleSummary" }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+    NewsletterPayload:
+      type: object
+      required: [subject, body]
+      additionalProperties: false
+      properties:
+        subject: { type: string, minLength: 1, maxLength: 200 }
+        body:
+          type: string
+          description: HTML (balises de l'éditeur uniquement, le reste est retiré), 200 000 octets au plus.
+        recipientUserId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Compte destinataire. Absent ou nul pour tous les abonnés confirmés.
+    NewsletterSummary:
+      type: object
+      required: [id, subject, recipientUserId, sent, createdAt, sentAt]
+      properties:
+        id: { type: string, format: uuid }
+        subject: { type: string }
+        recipientUserId: { type: string, format: uuid, nullable: true }
+        sent: { type: boolean, description: Un numéro envoyé est en lecture seule. }
+        createdAt: { type: string, format: date-time }
+        sentAt: { type: string, format: date-time, nullable: true }
+    Newsletter:
+      allOf:
+        - { $ref: "#/components/schemas/NewsletterSummary" }
+        - type: object
+          required: [body]
+          properties:
+            body: { type: string, description: HTML assaini. }
+    NewsletterSummaryPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/NewsletterSummary" }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+    NewsletterSendResult:
+      type: object
+      required: [recipients]
+      properties:
+        recipients: { type: integer, description: Nombre de mails confiés à la file d'envoi. }
     VillainPage:
       type: object
       required: [items, total, limit, offset]
@@ -2643,6 +5088,45 @@ components:
         limit: { type: integer }
         offset: { type: integer }
 
+    PublicFilm:
+      type: object
+      required: [id, title, plot, addedAt, heroes]
+      properties:
+        id: { type: string, format: uuid }
+        imdbId: { type: string }
+        videoUrl: { type: string, format: uri }
+        title: { type: string }
+        releaseYear: { type: integer, format: int32 }
+        posterUrl: { type: string, format: uri }
+        plot: { type: string }
+        addedAt:
+          type: string
+          format: date-time
+          description: Date du rattachement publié le plus récent.
+        heroes:
+          type: array
+          description: Super-héros auxquels le film est rattaché, par pseudo.
+          items: { $ref: "#/components/schemas/FilmHero" }
+
+    PublicFilmPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/PublicFilm" }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+
+    FilmHeroCount:
+      type: object
+      required: [id, alias, filmCount]
+      properties:
+        id: { type: string, format: uuid }
+        alias: { type: string }
+        filmCount: { type: integer }
+
     VillainFilmPage:
       type: object
       required: [items, total, limit, offset]
@@ -2656,11 +5140,26 @@ components:
 
     IncidentPayload:
       type: object
-      required: [typeId, description, location]
+      required: [typeId, title, description, location]
       additionalProperties: false
       properties:
+        id:
+          type: string
+          format: uuid
+          description: |
+            Identifiant choisi par le client (facultatif). Un appareil hors ligne le fixe à la déclaration pour
+            reconnaître son incident une fois synchronisé. 409 (`incident_already_exists`) s'il est déjà pris.
         typeId: { type: integer, format: int32 }
+        title:
+          type: string
+          maxLength: 80
+          description: Titre court, affiché dans les listes.
         description: { type: string }
+        reporterRole:
+          type: string
+          enum: [witness, victim]
+          nullable: true
+          description: Rôle du déclarant au moment des faits.
         citizensRescued:
           { type: integer, format: int32, minimum: 0, default: 0 }
         location:
@@ -2686,12 +5185,16 @@ components:
         [
           id,
           typeId,
+          title,
           description,
           status,
           priority,
+          moderation,
           citizensRescued,
           location,
           villainIds,
+          resolvedAt,
+          lead,
           createdAt,
         ]
       properties:
@@ -2699,10 +5202,18 @@ components:
         typeId: { type: integer, format: int32 }
         typeCode: { type: string }
         typeLabel: { type: string }
+        title:
+          type: string
+          description: Titre court de l'incident ; vide pour un incident déclaré avant son introduction.
         description: { type: string }
         status:
           { type: string, enum: [reported, in_progress, succeeded, failed] }
-        priority: { type: string, enum: [high, normal, low] }
+        priority: { type: string, enum: [critical, high, normal, low] }
+        moderation: { type: string, enum: [pending, approved, rejected] }
+        reporterRole:
+          type: string
+          enum: [witness, victim]
+          nullable: true
         citizensRescued: { type: integer, format: int32 }
         location:
           type: object
@@ -2728,7 +5239,57 @@ components:
             properties:
               id: { type: string, format: uuid }
               alias: { type: string }
+        resolvedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Fin de l'intervention réussie ; `null` si l'incident n'est pas résolu.
+        lead:
+          type: object
+          nullable: true
+          description: |
+            Héros qui mène la dernière intervention (en cours ou terminée) ; `null` sans intervention
+            ou si son profil n'est plus public. Mêmes règles que l'historique d'un vilain.
+          required: [id, alias]
+          properties:
+            id: { type: string, format: uuid }
+            alias: { type: string }
         createdAt: { type: string, format: date-time }
+
+    IncidentModerationPayload:
+      type: object
+      required: [decision]
+      additionalProperties: false
+      properties:
+        decision: { type: string, enum: [approved, rejected] }
+
+    IncidentPriorityPayload:
+      type: object
+      required: [priority]
+      additionalProperties: false
+      properties:
+        priority: { type: string, enum: [critical, high, normal, low] }
+
+    IncidentUpdatePayload:
+      type: object
+      required: [typeId, title, description, status, location, villainId, heroId]
+      additionalProperties: false
+      properties:
+        typeId: { type: integer, format: int32 }
+        title: { type: string, maxLength: 80 }
+        description: { type: string }
+        status: { type: string, enum: [reported, in_progress, succeeded, failed] }
+        location:
+          type: object
+          required: [address, city, latitude, longitude]
+          additionalProperties: false
+          properties:
+            address: { type: string }
+            city: { type: string }
+            latitude: { type: number, format: double, nullable: true }
+            longitude: { type: number, format: double, nullable: true }
+        villainId: { type: string, format: uuid, nullable: true }
+        heroId: { type: string, format: uuid, nullable: true }
 
     IncidentPage:
       type: object
@@ -2737,6 +5298,69 @@ components:
         items:
           type: array
           items: { $ref: "#/components/schemas/Incident" }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+        nextCursor:
+          type: string
+          description: Valeur du paramètre `cursor` qui donne la page suivante. Absente de la dernière page.
+
+    IncidentSummary:
+      type: object
+      description: Incident vu depuis la fiche publique d'un héros ou d'un vilain.
+      required:
+        [
+          id,
+          title,
+          typeCode,
+          typeLabel,
+          status,
+          city,
+          createdAt,
+          resolvedAt,
+          lead,
+          villains,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        title:
+          type: string
+          description: Titre court de l'incident ; vide pour un incident déclaré avant son introduction.
+        typeCode: { type: string }
+        typeLabel: { type: string }
+        status:
+          { type: string, enum: [reported, in_progress, succeeded, failed] }
+        city: { type: string }
+        createdAt: { type: string, format: date-time }
+        resolvedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Fin de l'intervention réussie ; `null` si l'incident n'est pas résolu.
+        lead:
+          type: object
+          nullable: true
+          description: Héros qui mène la dernière intervention ; `null` sans intervention ou si son profil n'est plus public.
+          required: [id, alias]
+          properties:
+            id: { type: string, format: uuid }
+            alias: { type: string }
+        villains:
+          type: array
+          items:
+            type: object
+            required: [id, alias]
+            properties:
+              id: { type: string, format: uuid }
+              alias: { type: string }
+
+    IncidentSummaryPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/IncidentSummary" }
         total: { type: integer }
         limit: { type: integer }
         offset: { type: integer }
@@ -2784,6 +5408,14 @@ components:
         rating: { type: integer, minimum: 1, maximum: 5 }
         comment: { type: string, maxLength: 500 }
 
+    HeroReviewEditPayload:
+      type: object
+      required: [rating]
+      additionalProperties: false
+      properties:
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: string, maxLength: 500 }
+
     HeroReview:
       type: object
       required: [id, interventionId, heroId, rating, status, createdAt]
@@ -2794,7 +5426,7 @@ components:
         heroAlias: { type: string }
         rating: { type: integer, minimum: 1, maximum: 5 }
         comment: { type: string, nullable: true }
-        status: { type: string, enum: [published, hidden] }
+        status: { type: string, enum: [published, pending, hidden] }
         moderatedAt: { type: string, format: date-time }
         createdAt: { type: string, format: date-time }
         reply: { $ref: "#/components/schemas/HeroReviewReply" }
@@ -2809,6 +5441,94 @@ components:
         total: { type: integer }
         limit: { type: integer }
         offset: { type: integer }
+
+    HeroDashboard:
+      type: object
+      required: [global, personal, myOngoingIncidents, recentIncidents]
+      properties:
+        global:
+          type: object
+          description: Statistiques de toute la plateforme.
+          required: [interventions, incidentsByType, rescuedCitizens, villainsIdentified, villainsImprisoned]
+          properties:
+            interventions:
+              type: integer
+              minimum: 0
+              description: "Interventions terminées (réussies ou échouées) : une par équipe, pas une par héros."
+            incidentsByType:
+              type: array
+              description: Tous les types du catalogue, y compris ceux sans incident, du plus fréquent au moins fréquent.
+              items: { $ref: "#/components/schemas/HeroDashboardTypeCount" }
+            rescuedCitizens:
+              type: integer
+              minimum: 0
+              description: "Citoyens secourus : somme des incidents réussis, une seule fois par incident."
+            villainsIdentified: { type: integer, minimum: 0, description: "Vilains connus de la plateforme." }
+            villainsImprisoned: { type: integer, minimum: 0, description: "Vilains dont le statut est `emprisonne`." }
+        personal:
+          type: object
+          description: Statistiques du héros connecté.
+          required:
+            [
+              interventions,
+              successfulInterventions,
+              failedInterventions,
+              averageRating,
+              ratingsCount,
+              videos,
+              publishedVideos,
+              mainEnemies,
+            ]
+          properties:
+            interventions:
+              type: integer
+              minimum: 0
+              description: Interventions terminées auxquelles le héros a participé (participation confirmée).
+            successfulInterventions: { type: integer, minimum: 0 }
+            failedInterventions: { type: integer, minimum: 0 }
+            averageRating:
+              type: number
+              format: double
+              minimum: 0
+              maximum: 5
+              description: Moyenne des avis publiés; 0 sans avis.
+            ratingsCount: { type: integer, minimum: 0, description: "Nombre d'avis publiés." }
+            videos: { type: integer, minimum: 0, description: "Films liés au héros, tous statuts de modération confondus." }
+            publishedVideos: { type: integer, minimum: 0, description: Films approuvés par la modération. }
+            mainEnemies:
+              type: array
+              maxItems: 3
+              description: Vilains les plus souvent affrontés, du plus fréquent au moins fréquent.
+              items: { $ref: "#/components/schemas/HeroDashboardEnemy" }
+        myOngoingIncidents:
+          type: array
+          description: Incidents sur lesquels le héros intervient en ce moment (au plus un en pratique).
+          items: { $ref: "#/components/schemas/Incident" }
+        recentIncidents:
+          type: array
+          maxItems: 5
+          description: "Derniers incidents non résolus (signalés, en cours ou échoués : un incident échoué peut être repris), tous héros confondus, du plus récent au plus ancien."
+          items: { $ref: "#/components/schemas/Incident" }
+
+    HeroDashboardTypeCount:
+      type: object
+      required: [type, count]
+      properties:
+        type:
+          type: object
+          required: [code, label]
+          properties:
+            code: { type: string }
+            label: { type: string }
+        count: { type: integer, minimum: 0 }
+
+    HeroDashboardEnemy:
+      type: object
+      required: [id, alias, encounters]
+      properties:
+        id: { type: string, format: uuid }
+        alias: { type: string }
+        encounters: { type: integer, minimum: 1, description: "Nombre d'incidents où le héros a affronté ce vilain." }
 
     HeroReputation:
       type: object
@@ -2872,7 +5592,7 @@ components:
         heroAlias: { type: string }
         rating: { type: integer, minimum: 1, maximum: 5 }
         comment: { type: string, nullable: true }
-        reviewStatus: { type: string, enum: [published, hidden] }
+        reviewStatus: { type: string, enum: [published, pending, hidden] }
 
     HeroReviewReplyModerationPage:
       type: object
@@ -2901,10 +5621,16 @@ components:
 
     Intervention:
       type: object
-      required: [id, incidentId, status, startedAt, participants]
+      required: [id, incidentId, version, status, startedAt, participants]
       properties:
         id: { type: string, format: uuid }
         incidentId: { type: string, format: uuid }
+        version:
+          type: integer
+          description: |
+            Version de l'intervention dans le journal d'événements (une de plus à chaque action). À renvoyer comme
+            `expectedVersion` pour qu'une action faite sur une lecture périmée soit refusée (409,
+            `intervention_version_conflict`) plutôt qu'appliquée.
         status: { type: string, enum: [in_progress, succeeded, failed] }
         proposedStatus: { type: string, enum: [succeeded, failed] }
         proposedBy: { type: string, format: uuid }
@@ -2933,6 +5659,9 @@ components:
       properties:
         status: { type: string, enum: [succeeded, failed] }
         notes: { type: string }
+        expectedVersion:
+          type: integer
+          description: Version de l'intervention lue par le client (facultative). Voir `Intervention.version`.
 
     InterventionOutcomeValidationPayload:
       type: object
@@ -2940,3 +5669,280 @@ components:
       additionalProperties: false
       properties:
         approved: { type: boolean }
+        expectedVersion:
+          type: integer
+          description: Version de l'intervention lue par le client (facultative). Voir `Intervention.version`.
+
+    Account:
+      type: object
+      required:
+        [
+          id,
+          role,
+          civility,
+          firstName,
+          lastName,
+          birthDate,
+          email,
+          mobilePhone,
+          address,
+          newsletterSubscribed,
+          createdAt,
+        ]
+      properties:
+        id: { type: string, format: uuid, description: Identifiant du compte. }
+        role:
+          {
+            type: string,
+            enum: [citizen, hero, moderator],
+            description: Rôle du compte.,
+          }
+        civility:
+          {
+            type: string,
+            enum: [madame, monsieur, non-precise],
+            description: Civilité.,
+          }
+        firstName: { type: string, description: Prénom. }
+        lastName: { type: string, description: Nom de famille. }
+        birthDate:
+          {
+            type: string,
+            format: date,
+            description: "Date de naissance (AAAA-MM-JJ).",
+          }
+        email:
+          { type: string, format: email, description: Adresse de connexion. }
+        pendingEmail:
+          type: string
+          format: email
+          description: Nouvelle adresse demandée, en attente de validation par un modérateur. Absente sinon.
+        pendingEmailConfirmed:
+          type: boolean
+          description: "Présent (vrai) quand le titulaire de `pendingEmail` l'a confirmée par le lien reçu. Absent tant que ce n'est pas fait, et sans demande en attente."
+        mobilePhone:
+          type: string
+          description: Numéro de portable, sans séparateurs. Vide pour un compte créé hors inscription.
+        address: { $ref: "#/components/schemas/AccountAddress" }
+        avatarUrl:
+          type: string
+          description: |
+            Adresse de la photo de profil, chemin absolu sur la même origine que l'API
+            (`GET /avatars/{name}`). Absente tant qu'aucune photo n'a été envoyée.
+        newsletterSubscribed:
+          type: boolean
+          description: Vrai si l'adresse du compte reçoit la newsletter.
+        createdAt:
+          {
+            type: string,
+            format: date-time,
+            description: Date de création du compte.,
+          }
+        hero: { $ref: "#/components/schemas/AccountHero" }
+
+    AccountAddress:
+      type: object
+      required: [street, postalCode, city, country]
+      properties:
+        street: { type: string, description: Numéro et nom de la voie. }
+        complement:
+          {
+            type: string,
+            description: "Complément d'adresse, absent s'il n'y en a pas.",
+          }
+        postalCode: { type: string, description: Code postal. }
+        city: { type: string, description: Commune. }
+        country:
+          {
+            type: string,
+            description: Code pays ISO 3166-1 alpha-2.,
+            example: FR,
+          }
+
+    AccountHero:
+      type: object
+      description: Profil public d'un super-héros. Présent seulement quand `role` vaut `hero`.
+      required: [alias, bio]
+      properties:
+        alias: { type: string, description: Pseudo public. }
+        bio: { type: string, description: Description publique. }
+        locationConsentAt:
+          {
+            type: string,
+            format: date-time,
+            description: "Date du consentement au partage de position (`PUT /hero/location/consent`), absente sans consentement.",
+          }
+
+    ContactUpdateRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        mobilePhone:
+          type: string
+          description: Portable français (06 ou 07) ou international (+33…) ; espaces, points et tirets sont ignorés.
+        address: { $ref: "#/components/schemas/AddressUpdate" }
+        alias:
+          type: string
+          description: "Super-héros seulement : nouveau pseudo public (2 à 30 caractères : lettres, chiffres, espaces, tirets)."
+        bio:
+          type: string
+          maxLength: 1000
+          description: Super-héros seulement. Nouvelle description publique ; chaîne vide pour l'effacer.
+
+    AddressUpdate:
+      type: object
+      required: [street, postalCode, city, country]
+      additionalProperties: false
+      properties:
+        street:
+          {
+            type: string,
+            maxLength: 200,
+            description: Numéro et nom de la voie.,
+          }
+        complement:
+          type: string
+          nullable: true
+          maxLength: 200
+          description: "Complément d'adresse. Absent ou `null` : le complément actuel est conservé. Chaîne vide : il est effacé."
+        postalCode:
+          {
+            type: string,
+            description: Code postal (cinq chiffres pour la France).,
+          }
+        city: { type: string, maxLength: 100, description: Commune. }
+        country:
+          {
+            type: string,
+            description: "Code pays ISO 3166-1 alpha-2, en majuscules.",
+            example: FR,
+          }
+
+    AvatarResponse:
+      type: object
+      required: [avatarUrl]
+      properties:
+        avatarUrl:
+          type: string
+          description: Adresse de la nouvelle photo (chemin absolu sur la même origine que l'API).
+
+    EmailChangeRequestPayload:
+      type: object
+      required: [email]
+      additionalProperties: false
+      properties:
+        email:
+          {
+            type: string,
+            format: email,
+            description: Nouvelle adresse souhaitée.,
+          }
+
+    EmailChangeRequestStatus:
+      type: object
+      required: [newEmail, status]
+      properties:
+        newEmail:
+          {
+            type: string,
+            format: email,
+            description: "La nouvelle adresse, normalisée en minuscules.",
+          }
+        status:
+          {
+            type: string,
+            enum: [pending, approved, rejected],
+            description: État de la demande.,
+          }
+
+    NewsletterPreferencePayload:
+      type: object
+      required: [subscribed]
+      additionalProperties: false
+      properties:
+        subscribed:
+          {
+            type: boolean,
+            description: "Vrai pour recevoir la newsletter, faux pour s'en retirer.",
+          }
+
+    EmailChangeRequestItem:
+      type: object
+      required:
+        [
+          id,
+          userId,
+          firstName,
+          lastName,
+          currentEmail,
+          newEmail,
+          status,
+          createdAt,
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identifiant de la demande (paramètre `id` des routes de décision). Il change quand le titulaire remplace sa demande.
+        userId:
+          {
+            type: string,
+            format: uuid,
+            description: Identifiant du compte concerné.,
+          }
+        firstName: { type: string, description: Prénom du demandeur. }
+        lastName: { type: string, description: Nom du demandeur. }
+        currentEmail: { type: string, format: email, description: Adresse actuelle du compte. }
+        newEmail: { type: string, format: email, description: Adresse demandée. }
+        status: { type: string, enum: [pending, approved, rejected], description: État de la demande. }
+        createdAt: { type: string, format: date-time, description: Date de dépôt de la demande. }
+        confirmedAt:
+          type: string
+          format: date-time
+          description: "Date à laquelle le titulaire de la nouvelle adresse l'a confirmée par le lien reçu. Absente tant qu'elle ne l'est pas : un modérateur ne peut alors que refuser la demande."
+        reviewedAt: { type: string, format: date-time, description: "Date de la décision, absente tant que la demande est en attente." }
+
+    EmailChangeRequestPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/EmailChangeRequestItem" }
+        total:
+          {
+            type: integer,
+            description: "Nombre total de demandes correspondant au filtre, toutes pages confondues.",
+          }
+        limit: { type: integer, description: Taille de page appliquée. }
+        offset: { type: integer, description: Nombre d'éléments sautés. }
+
+    ContactMessageRequest:
+      type: object
+      required: [name, email, subject, message]
+      additionalProperties: false
+      properties:
+        name: { type: string, maxLength: 80, description: Nom du visiteur. }
+        email:
+          {
+            type: string,
+            format: email,
+            description: Adresse où l'équipe répondra.,
+          }
+        subject:
+          type: string
+          enum: [question, compte, donnees, partenariat, autre]
+          description: "Objet de la demande : question sur le service, problème de compte, données personnelles, presse ou partenariat, autre."
+        message:
+          type: string
+          minLength: 20
+          maxLength: 2000
+          description: Le message. Les retours à la ligne sont conservés.
+
+    NewsletterSubscriptionRequest:
+      type: object
+      required: [email]
+      additionalProperties: false
+      properties:
+        email: { type: string, format: email, description: Adresse à abonner. }

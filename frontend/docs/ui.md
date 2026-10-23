@@ -117,6 +117,7 @@ Pour **2 à 4 options** courtes. Le groupe est un `<fieldset>` avec `legend`.
 />
 ```
 
+> [!TIP]
 > Pour une saisie spécifique (ex : note en étoiles de `RatingForm`), le motif est le même :
 > vrais `<input type="radio">` masqués visuellement (`sr-only`), pour garder clavier et lecteurs
 > d'écran. Ne pas construire de widget à base de `<div onClick>`.
@@ -130,7 +131,7 @@ Un `<Link>` Next avec l'apparence d'un bouton. À utiliser pour **naviguer**.
 | Prop      | Valeurs                                                       | Usage                                                                       |
 | --------- | ------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | `variant` | `primary` (défaut), `secondary`, `danger`, `ghost`, `console` | `danger` pour refuser / supprimer ; `console` pour le gros appel à l'action |
-| `size`    | `md` (défaut), `lg`                                           |                                                                             |
+| `size`    | `sm`, `md` (défaut), `lg`                                     | `sm` pour les barres compactes (en-tête sur desktop)                        |
 
 `buttonClasses(variant, size)` renvoie les mêmes classes pour styler un `<button>` natif.
 
@@ -195,7 +196,8 @@ Note sur 5 en lecture seule, avec un libellé complet pour les lecteurs d'écran
 
 ## Décoratifs
 
-Masqués aux lecteurs d'écran, ne jamais y mettre d'information essentielle :
+> [!WARNING]
+> Masqués aux lecteurs d'écran : ne jamais y mettre d'information essentielle.
 
 - `WallPoster` : affiche punaisée, cachée en dessous de `lg`.
 - `Typewriter` : texte révélé lettre à lettre ; le texte complet reste dans un `sr-only`.

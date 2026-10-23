@@ -34,6 +34,11 @@ func (e *e2e) declareIncident(reporter, moderator *actor, code string) string {
 	if created.status != http.StatusCreated {
 		e.t.Fatalf("déclaration d'incident : %d %s", created.status, created.body)
 	}
+	if got := moderator.request(http.MethodPut, "/admin/incidents/"+incident.ID+"/moderation", map[string]string{
+		"decision": "approved",
+	}); got.status != http.StatusNoContent {
+		e.t.Fatalf("approbation de l'incident : %d %s", got.status, got.body)
+	}
 	return incident.ID
 }
 
@@ -187,5 +192,85 @@ func TestInterventionLifecycle(t *testing.T) {
 	}
 	if e.count("incidents", "id = ? AND status = 'succeeded'", teamIncidentID) != 1 {
 		t.Error("l'unanimité doit clôturer l'incident comme réussi")
+	}
+
+	ids := func(query string) map[string]bool {
+		got := lead.get("/incidents" + query)
+		if got.status != http.StatusOK {
+			t.Fatalf("liste %q : %d %s", query, got.status, got.body)
+		}
+		var page struct{ Items []struct{ ID string } }
+		got.decode(t, &page)
+		found := map[string]bool{}
+		for _, item := range page.Items {
+			found[item.ID] = true
+		}
+		return found
+	}
+	if all := ids(""); len(all) != 4 || !all[soloIncidentID] || !all[teamIncidentID] {
+		t.Errorf("la liste doit contenir les incidents résolus : %v", all)
+	}
+	if got := ids("?status=succeeded"); len(got) != 2 || !got[soloIncidentID] || !got[teamIncidentID] {
+		t.Errorf("filtre status=succeeded : %v", got)
+	}
+	if got := ids("?status=failed&status=reported"); len(got) != 2 || !got[incidentID] || !got[secondIncidentID] {
+		t.Errorf("filtre status multiple : %v", got)
+	}
+	if got := ids("?heroId=" + member.userID()); len(got) != 2 || !got[incidentID] || !got[teamIncidentID] {
+		t.Errorf("filtre heroId : %v", got)
+	}
+	if got := ids("?heroId=" + member.userID() + "&status=succeeded"); len(got) != 1 || !got[teamIncidentID] {
+		t.Errorf("filtres combinés : %v", got)
+	}
+	if got := ids("?heroId=" + outsider.userID()); len(got) != 0 {
+		t.Errorf("héros sans intervention : %v", got)
+	}
+	for _, query := range []string{"?status=inconnu", "?heroId=x", "?villainId=x"} {
+		if got := lead.get("/incidents" + query); got.status != http.StatusUnprocessableEntity {
+			t.Errorf("%s : %d", query, got.status)
+		}
+	}
+}
+
+func TestIncidentInterventionsHistory(t *testing.T) {
+	e := newE2E(t, nil)
+	reporter := e.signUpAndLogin("reporter@example.org")
+	moderator := e.newModerator("mod@shield.example")
+	lead := e.approvedHero(moderator, "lead@example.org", "Lead")
+	incidentID := e.declareIncident(reporter, moderator, "rescue")
+	path := "/incidents/" + incidentID + "/interventions"
+
+	var history struct{ Items []interventionView }
+	if got := lead.get(path); got.status != http.StatusOK {
+		t.Fatalf("historique vide : %d %s", got.status, got.body)
+	} else if got.decode(t, &history); len(history.Items) != 0 {
+		t.Fatalf("aucune intervention attendue : %s", got.body)
+	}
+
+	var failed, retried interventionView
+	lead.post(path, nil).decode(t, &failed)
+	if got := lead.post("/interventions/"+failed.ID+"/outcome", map[string]string{"status": "failed"}); got.status != http.StatusNoContent {
+		t.Fatalf("échec de la première intervention : %d %s", got.status, got.body)
+	}
+	if got := lead.post(path, nil); got.status != http.StatusCreated {
+		t.Fatalf("nouvelle intervention après un échec : %d %s", got.status, got.body)
+	} else {
+		got.decode(t, &retried)
+	}
+
+	for _, viewer := range []*actor{lead, moderator} {
+		got := viewer.get(path)
+		got.decode(t, &history)
+		if got.status != http.StatusOK || len(history.Items) != 2 ||
+			history.Items[0].ID != retried.ID || history.Items[0].Status != "in_progress" ||
+			history.Items[1].ID != failed.ID || history.Items[1].Status != "failed" {
+			t.Fatalf("historique, de la plus récente à la plus ancienne : %d %s", got.status, got.body)
+		}
+	}
+	if got := reporter.get(path); got.status != http.StatusForbidden {
+		t.Errorf("un citoyen ne lit pas les interventions : %d", got.status)
+	}
+	if got := lead.get("/incidents/00000000-0000-0000-0000-000000000000/interventions"); got.status != http.StatusNotFound {
+		t.Errorf("incident inconnu : %d %s", got.status, got.body)
 	}
 }

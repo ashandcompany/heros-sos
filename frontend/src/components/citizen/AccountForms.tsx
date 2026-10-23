@@ -3,14 +3,21 @@
 import { useActionState, useEffect, useState, type ChangeEvent } from "react";
 import Cropper from "react-easy-crop";
 import {
+  removeAvatarAction,
   requestEmailChangeAction,
   updateAvatarAction,
   updateContactAction,
   updateNewsletterAction,
 } from "@/app/actions/account";
+import {
+  changePasswordAction,
+  logoutAllAction,
+  type PasswordChangeField,
+} from "@/app/actions/auth";
 import { AddressField } from "@/components/ui/AddressField";
 import { buttonClasses } from "@/components/ui/ButtonLink";
 import { FormMessage } from "@/components/ui/FormMessage";
+import { PasswordField } from "@/components/ui/PasswordField";
 import { SelectField } from "@/components/ui/SelectField";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { TextField } from "@/components/ui/TextField";
@@ -18,11 +25,12 @@ import { cropAvatar, type CropArea } from "@/lib/avatar-image";
 import { countries, DEFAULT_COUNTRY } from "@/lib/countries";
 import { AVATAR_TYPES, type ContactField } from "@/lib/validation/account";
 import { idleFormState, type FormState } from "@/lib/validation/form-state";
+import { PASSWORD_RULES } from "@/lib/validation/signup";
 import type { PostalAddress } from "@/types";
 
 /*
- * Formulaires du compte. Ils servent aussi au profil des super-héros : l'action par défaut
- * (espace citoyen) peut être remplacée par celle d'un autre espace.
+ * Formulaires du compte. Ils servent aussi aux profils des super-héros et des modérateurs : l'action
+ * par défaut (espace citoyen) peut être remplacée par celle d'un autre espace.
  */
 
 type FormAction<Field extends string> = (
@@ -239,7 +247,7 @@ export function EmailChangeForm({
     <form action={formAction} noValidate className="space-y-4">
       <TextField
         label="Nouvelle adresse email"
-        hint="Elle remplacera l'adresse actuelle après validation par la modération."
+        hint="Un lien de confirmation y sera envoyé. Elle remplacera l'adresse actuelle une fois confirmée, puis validée par la modération."
         name="email"
         type="email"
         inputMode="email"
@@ -258,8 +266,14 @@ export function EmailChangeForm({
   );
 }
 
-export function NewsletterSettingsForm({ subscribed }: { subscribed: boolean }) {
-  const [state, formAction] = useActionState(updateNewsletterAction, idleFormState);
+export function NewsletterSettingsForm({
+  subscribed,
+  action = updateNewsletterAction,
+}: {
+  subscribed: boolean;
+  action?: FormAction<string>;
+}) {
+  const [state, formAction] = useActionState(action, idleFormState);
 
   return (
     <form action={formAction} className="space-y-4">
@@ -285,6 +299,77 @@ export function NewsletterSettingsForm({ subscribed }: { subscribed: boolean }) 
       <FormMessage state={state} />
       <SubmitButton variant="secondary" pendingLabel="Enregistrement…">
         Enregistrer ma préférence
+      </SubmitButton>
+    </form>
+  );
+}
+
+/** « Me déconnecter partout » : ferme toutes les sessions du compte, celle-ci comprise. */
+export function LogoutAllForm() {
+  const [state, formAction] = useActionState(logoutAllAction, idleFormState);
+
+  return (
+    <form action={formAction} className="space-y-4">
+      <FormMessage state={state} />
+      <SubmitButton variant="secondary" pendingLabel="Déconnexion…">
+        Me déconnecter partout
+      </SubmitButton>
+    </form>
+  );
+}
+
+/** Nouveau mot de passe, contre l'actuel. La session continue ; les autres appareils sont déconnectés. */
+export function PasswordChangeForm() {
+  const [state, formAction] = useActionState(
+    changePasswordAction,
+    idleFormState as FormState<PasswordChangeField>,
+  );
+  const errors = state.fieldErrors;
+
+  return (
+    // React vide les champs après chaque envoi : un mot de passe n'est jamais renvoyé pour les remplir.
+    <form action={formAction} noValidate className="space-y-4">
+      <PasswordField
+        label="Mot de passe actuel"
+        name="currentPassword"
+        autoComplete="current-password"
+        required
+        error={errors.currentPassword}
+      />
+      <PasswordField
+        label="Nouveau mot de passe"
+        hint={PASSWORD_RULES}
+        name="newPassword"
+        autoComplete="new-password"
+        required
+        error={errors.newPassword}
+      />
+      <PasswordField
+        label="Confirmer le nouveau mot de passe"
+        name="confirmPassword"
+        autoComplete="new-password"
+        required
+        error={errors.confirmPassword}
+      />
+      <FormMessage state={state} />
+      <SubmitButton variant="secondary" pendingLabel="Modification…">
+        Changer le mot de passe
+      </SubmitButton>
+    </form>
+  );
+}
+
+/** « Retirer la photo » : à n'afficher que si le compte en a une. */
+export function RemoveAvatarForm({
+  action = removeAvatarAction,
+}: { action?: () => Promise<FormState> } = {}) {
+  const [state, formAction] = useActionState(action, idleFormState);
+
+  return (
+    <form action={formAction} className="mt-3 space-y-3">
+      <FormMessage state={state} />
+      <SubmitButton variant="ghost" pendingLabel="Retrait…">
+        Retirer la photo
       </SubmitButton>
     </form>
   );

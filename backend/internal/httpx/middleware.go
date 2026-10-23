@@ -25,6 +25,10 @@ var validRequestID = regexp.MustCompile(fmt.Sprintf(`^[A-Za-z0-9_-]{%d,%d}$`, mi
 
 type requestIDKey struct{}
 
+// routeKey porte, d'AccessLog (le plus externe) au routeur (le plus interne), la place où noter la route
+// reconnue : un middleware externe ne voit pas ce que le routeur décide plus bas.
+type routeKey struct{}
+
 // Middleware transforme un handler en un autre.
 type Middleware func(http.Handler) http.Handler
 
@@ -109,14 +113,35 @@ func wrap(w http.ResponseWriter) *statusWriter {
 	return &statusWriter{ResponseWriter: w, status: http.StatusOK}
 }
 
+// SetRoute note la route qui a reconnu la requête (son motif, par exemple « GET /api/v1/incidents/{id} »), pour
+// que AccessLog la journalise : regrouper les durées par motif plutôt que par chemin avec identifiants. Sans effet
+// hors AccessLog.
+func SetRoute(ctx context.Context, pattern string) {
+	if route, ok := ctx.Value(routeKey{}).(*string); ok {
+		*route = pattern
+	}
+}
+
+// unmatchedRoute est la route journalisée d'une requête qu'aucune route ne reconnaît (404, 405).
+const unmatchedRoute = "unmatched"
+
 // AccessLog journalise chaque requête : méthode, chemin (jamais la query string, qui peut
-// contenir un jeton), statut, durée et adresse du client.
-func AccessLog(logger *slog.Logger) Middleware {
+// contenir un jeton), motif de route, statut, durée et adresse du client.
+//
+// Les motifs de quietRoutes (les sondes de santé, interrogées toutes les 10 secondes par Docker et par le proxy)
+// ne sont journalisés qu'au niveau DEBUG tant qu'ils réussissent : ils noieraient les vraies requêtes. Une sonde
+// qui échoue reste journalisée en WARN ou ERROR.
+func AccessLog(logger *slog.Logger, quietRoutes ...string) Middleware {
+	quiet := make(map[string]struct{}, len(quietRoutes))
+	for _, pattern := range quietRoutes {
+		quiet[pattern] = struct{}{}
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 			recorder := wrap(w)
-			next.ServeHTTP(recorder, r)
+			route := unmatchedRoute
+			next.ServeHTTP(recorder, r.WithContext(context.WithValue(r.Context(), routeKey{}, &route)))
 
 			level := slog.LevelInfo
 			switch {
@@ -124,10 +149,15 @@ func AccessLog(logger *slog.Logger) Middleware {
 				level = slog.LevelError
 			case recorder.status >= http.StatusBadRequest:
 				level = slog.LevelWarn
+			default:
+				if _, ok := quiet[route]; ok {
+					level = slog.LevelDebug
+				}
 			}
 			logger.Log(r.Context(), level, "requête",
 				"method", r.Method,
 				"path", r.URL.Path,
+				"route", route,
 				"status", recorder.status,
 				"duration_ms", time.Since(start).Milliseconds(),
 				"bytes", recorder.bytes,

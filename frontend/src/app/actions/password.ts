@@ -3,6 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { confirmPasswordReset, requestPasswordReset } from "@/lib/api";
+import { formatRetryDelay } from "@/lib/format";
 import { SESSION_COOKIE, sessionCookieAttributes } from "@/lib/cookies";
 import { getAccountHome } from "@/lib/session";
 import { PASSWORD_RULES, validateNewPassword } from "@/lib/validation/signup";
@@ -32,14 +33,12 @@ export async function forgotPasswordAction(
   switch (result.error) {
     case "invalid-email":
       return { status: "error", message: invalidEmail, email };
-    case "too-many-attempts": {
-      const minutes = Math.ceil((result.retryAfterSeconds ?? 60) / 60);
+    case "too-many-attempts":
       return {
         status: "error",
-        message: `Trop de demandes. Réessayez dans ${minutes} minute${minutes > 1 ? "s" : ""}.`,
+        message: `Trop de demandes. Réessayez dans ${formatRetryDelay(result.retryAfterSeconds)}.`,
         email,
       };
-    }
     case "unavailable":
       return {
         status: "error",

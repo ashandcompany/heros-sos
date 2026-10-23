@@ -87,3 +87,25 @@ export const citizensMock: CitizenAccount[] = [
     moderation: "en-attente",
   },
 ];
+
+/**
+ * Comptes modérateurs (mock en mémoire, modifiable depuis « Mon profil » du back-office). Créés hors
+ * ligne, sans téléphone ni adresse (voir backend/internal/bootstrap) : à compléter depuis le profil.
+ */
+export const moderatorAccountsMock: CitizenAccount[] = [
+  {
+    id: "admin-1",
+    civility: "non-precise",
+    firstName: "Équipe",
+    lastName: "Heros-SOS",
+    birthDate: "1990-01-01",
+    email: "admin@heros-sos.fr",
+    pendingEmail: null,
+    mobilePhone: "",
+    address: { street: "", complement: null, postalCode: "", city: "", country: "" },
+    avatarUrl: null,
+    newsletterSubscribed: false,
+    registeredAt: "2025-01-06T09:00:00+01:00",
+    moderation: "valide",
+  },
+];

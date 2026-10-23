@@ -48,6 +48,9 @@ func (c Config) validate() error {
 		fail("%s ne peut pas dépasser %s", envLockoutBaseDelay, envLockoutMaxDelay)
 	}
 	if production {
+		if !c.Security.MFA.ModeratorRequired {
+			fail("%s ne peut pas valoir false en production : la 2FA des modérateurs est obligatoire avant toute mise en ligne", envMFAModeratorRequired)
+		}
 		if c.Security.Argon2.MemoryKiB < productionMinArgon2MemoryKiB || c.Security.Argon2.Time < productionMinArgon2Time {
 			fail("argon2id trop faible pour la production (mémoire ≥ %d Kio, itérations ≥ %d)",
 				productionMinArgon2MemoryKiB, productionMinArgon2Time)
@@ -125,6 +128,9 @@ func (c Config) validateMail(fail func(string, ...any), production bool) {
 	if _, err := mail.ParseAddress(c.Mail.FromAddress); err != nil {
 		fail("%s : adresse invalide %q", envMailFromAddress, c.Mail.FromAddress)
 	}
+	if address, err := mail.ParseAddress(c.Mail.ContactRecipient); err != nil || address.Name != "" {
+		fail("%s : adresse simple attendue, reçu %q", envContactRecipient, c.Mail.ContactRecipient)
+	}
 	if c.Mail.Driver == MailDriverSMTP && c.Mail.SMTP.Host == "" {
 		fail("%s est obligatoire avec le driver smtp", envSMTPHost)
 	}
@@ -133,5 +139,21 @@ func (c Config) validateMail(fail func(string, ...any), production bool) {
 	}
 	if production && c.Mail.SMTP.TLSMode == TLSModeNone {
 		fail("%s ne peut pas valoir none en production", envSMTPTLSMode)
+	}
+	if c.Mail.Queue == MailQueueRabbitMQ {
+		c.validateRabbitMQ(fail)
+	}
+}
+
+// validateRabbitMQ vérifie l'adresse du courtier. Les messages d'erreur ne citent jamais la valeur : l'URL
+// contient un mot de passe.
+func (c Config) validateRabbitMQ(fail func(string, ...any)) {
+	if c.Mail.RabbitMQ.URL == "" {
+		fail("%s est obligatoire avec %s=%s", envRabbitMQURL, envMailQueue, MailQueueRabbitMQ)
+		return
+	}
+	target, err := url.Parse(c.Mail.RabbitMQ.URL)
+	if err != nil || (target.Scheme != "amqp" && target.Scheme != "amqps") || target.Hostname() == "" {
+		fail("%s : URL amqp:// ou amqps:// attendue", envRabbitMQURL)
 	}
 }

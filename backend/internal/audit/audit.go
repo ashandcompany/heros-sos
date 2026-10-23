@@ -25,25 +25,56 @@ const (
 
 // Actions enregistrées. Le préfixe indique le domaine.
 const (
-	ActionHeroRequested     = "hero.request"
-	ActionHeroApproved      = "hero.approve"
-	ActionHeroRejected      = "hero.reject"
-	ActionUserDeactivated   = "user.deactivate"
-	ActionUserReactivated   = "user.reactivate"
-	ActionUserVerified      = "user.verify"
-	ActionPasswordReset     = "auth.password_reset"
-	ActionLogoutAllSessions = "auth.logout_all"
+	ActionHeroRequested      = "hero.request"
+	ActionHeroApproved       = "hero.approve"
+	ActionHeroRejected       = "hero.reject"
+	ActionHeroProfileUpdated = "hero.profile_update"
+	ActionUserDeactivated    = "user.deactivate"
+	ActionUserReactivated    = "user.reactivate"
+	ActionUserVerified       = "user.verify"
+	ActionPasswordReset      = "auth.password_reset"
+	ActionPasswordChanged    = "auth.password_change"
+	ActionAccountExported    = "user.export"
+	ActionAccountErased      = "user.erase"
+	ActionLogoutAllSessions  = "auth.logout_all"
+
+	// Double authentification : jamais de code, de secret ni de code de secours dans le journal.
+	ActionMFAEnabled             = "auth.mfa_enabled"
+	ActionMFAFailed              = "auth.mfa_failed"
+	ActionMFARecoveryUsed        = "auth.mfa_recovery_used"
+	ActionMFARecoveryRegenerated = "auth.mfa_recovery_regenerated"
+	ActionMFAReset               = "auth.mfa_reset"
 
 	ActionInterventionTypeCreated = "intervention_type.create"
 	ActionVillainCreated          = "villain.create"
 	ActionVillainUpdated          = "villain.update"
 	ActionIncidentDeclared        = "incident.declare"
+	ActionIncidentModerated       = "incident.moderate"
+	ActionIncidentUpdated         = "incident.update"
+	ActionIncidentPrioritySet     = "incident.priority_set"
 	ActionHeroFilmAdded           = "hero_film.add"
 	ActionHeroFilmApproved        = "hero_film.approve"
 	ActionHeroFilmRejected        = "hero_film.reject"
 	ActionHeroFilmDeleted         = "hero_film.delete"
 	ActionVillainFilmLinked       = "villain_film.link"
 	ActionVillainFilmDeleted      = "villain_film.delete"
+
+	ActionEmailChangeRequested = "user.email_change_request"
+	ActionEmailChangeApproved  = "user.email_change_approve"
+	ActionEmailChangeRejected  = "user.email_change_reject"
+	// ActionEmailChangeConfirmed : le titulaire de la nouvelle adresse a cliqué sur le lien reçu.
+	ActionEmailChangeConfirmed = "user.email_change_confirm"
+
+	// Blog : création, modification et suppression d'un article par un modérateur.
+	ActionArticleCreated = "article.create"
+	ActionArticleUpdated = "article.update"
+	ActionArticleDeleted = "article.delete"
+
+	// Newsletter : un numéro rédigé, modifié, supprimé ou envoyé par un modérateur.
+	ActionNewsletterCreated = "newsletter.create"
+	ActionNewsletterUpdated = "newsletter.update"
+	ActionNewsletterDeleted = "newsletter.delete"
+	ActionNewsletterSent    = "newsletter.send"
 )
 
 // Entry décrit une action à journaliser.

@@ -3,25 +3,31 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { Container } from "@/components/ui/Container";
+import { RichContent } from "@/components/ui/RichContent";
 import { getPublishedArticle } from "@/lib/api";
 import { formatDate } from "@/lib/format";
-import { routes } from "@/lib/routes";
-import { sanitizeArticleHtml } from "@/lib/sanitize";
+import { blogArticleRoute, routes } from "@/lib/routes";
+import { getSiteUrl } from "@/lib/site";
 
 export async function generateMetadata({ params }: PageProps<"/blog/[slug]">): Promise<Metadata> {
   const article = await getPublishedArticle((await params).slug);
-  return article
-    ? { title: article.title, description: article.excerpt }
-    : { title: "Article introuvable" };
-}
+  if (!article?.publishedAt) return { title: "Article introuvable" };
 
-/** Mêmes styles que dans l'éditeur du back-office, à l'échelle d'une page de lecture. */
-const contentClasses = [
-  "max-w-prose text-lg leading-relaxed",
-  "[&_a]:text-accent [&_a]:underline [&_blockquote]:my-6 [&_blockquote]:border-l-2 [&_blockquote]:border-accent [&_blockquote]:pl-4 [&_blockquote]:italic",
-  "[&_h2]:mt-10 [&_h2]:font-display [&_h2]:text-2xl [&_h2]:font-bold [&_h3]:mt-8 [&_h3]:font-display [&_h3]:text-xl [&_h3]:font-semibold",
-  "[&_hr]:my-8 [&_hr]:border-border [&_li]:my-1 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-4 [&_ul]:list-disc [&_ul]:pl-6",
-].join(" ");
+  // Rendu à la requête (paramètre d'URL) : SITE_URL n'est pas figée au build.
+  return {
+    metadataBase: new URL(getSiteUrl()),
+    title: article.title,
+    description: article.excerpt,
+    alternates: { canonical: blogArticleRoute(article.slug) },
+    openGraph: {
+      type: "article",
+      title: article.title,
+      description: article.excerpt,
+      publishedTime: article.publishedAt,
+      authors: [article.authorName],
+    },
+  };
+}
 
 /** Lit les paramètres d'URL : rendu sous <Suspense>. */
 async function Article({ params }: { params: Promise<{ slug: string }> }) {
@@ -42,11 +48,7 @@ async function Article({ params }: { params: Promise<{ slug: string }> }) {
         <div aria-hidden="true" className="rule-thick mt-6 w-24" />
       </header>
 
-      <div
-        className={contentClasses}
-        // Contenu assaini (liste blanche de balises), voir src/lib/sanitize.ts.
-        dangerouslySetInnerHTML={{ __html: sanitizeArticleHtml(article.content) }}
-      />
+      <RichContent html={article.content} className="text-lg" />
     </article>
   );
 }

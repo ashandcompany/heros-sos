@@ -25,6 +25,9 @@ type IssueRequest struct {
 	RememberMe bool
 	IP         netip.Addr
 	UserAgent  string
+	// MFAVerified marque la session comme complète. Faux, elle n'ouvre que la 2FA (saisie du code, ou
+	// activation) et la déconnexion, jusqu'à ce qu'un code la valide (voir Rotate).
+	MFAVerified bool
 }
 
 // IssuedSession est une session qui vient d'être ouverte. Token n'existe qu'ici : il part dans
@@ -39,12 +42,20 @@ type SessionService struct {
 	store  *SessionStore
 	clock  clock.Clock
 	cfg    config.Session
+	mfa    config.MFA
 	logger *slog.Logger
 }
 
-// NewSessionService crée le service des sessions.
-func NewSessionService(store *SessionStore, clk clock.Clock, cfg config.Session, logger *slog.Logger) *SessionService {
-	return &SessionService{store: store, clock: clk, cfg: cfg, logger: logger}
+// NewSessionService crée le service des sessions. mfa dit pour qui la 2FA est obligatoire : une session de ce
+// compte n'est complète que s'il l'a activée et validée.
+func NewSessionService(store *SessionStore, clk clock.Clock, cfg config.Session, mfa config.MFA, logger *slog.Logger) *SessionService {
+	return &SessionService{store: store, clock: clk, cfg: cfg, mfa: mfa, logger: logger}
+}
+
+// mfaRequired indique si la 2FA est obligatoire pour ce rôle : seuls les modérateurs, et seulement si la
+// configuration l'impose (toujours en production).
+func (s *SessionService) mfaRequired(role user.Role) bool {
+	return role == user.RoleModerator && s.mfa.ModeratorRequired
 }
 
 // policy choisit les durées d'une session : les modérateurs ont des sessions courtes et sans
@@ -71,16 +82,16 @@ func (s *SessionService) Issue(ctx context.Context, req IssueRequest) (IssuedSes
 	now := s.clock.Now()
 	rememberMe := req.RememberMe && req.Role != user.RoleModerator
 	session := Session{
-		TokenHash:  hash,
-		UserID:     req.UserID,
-		CreatedAt:  now,
-		LastSeenAt: now,
-		ExpiresAt:  now.Add(s.policy(req.Role, rememberMe).MaxLifetime),
-		RememberMe: rememberMe,
-		// La double authentification (TOTP) arrive en version 2 : une session est aujourd'hui
-		// considérée comme complète dès l'ouverture.
-		MFAVerifiedAt: &now,
-		DeviceLabel:   deviceLabel(req.UserAgent),
+		TokenHash:   hash,
+		UserID:      req.UserID,
+		CreatedAt:   now,
+		LastSeenAt:  now,
+		ExpiresAt:   now.Add(s.policy(req.Role, rememberMe).MaxLifetime),
+		RememberMe:  rememberMe,
+		DeviceLabel: deviceLabel(req.UserAgent),
+	}
+	if req.MFAVerified {
+		session.MFAVerifiedAt = &now
 	}
 	if req.IP.IsValid() {
 		session.IPAddress = req.IP.String()
@@ -125,11 +136,70 @@ func (s *SessionService) Authenticate(ctx context.Context, rawToken string) (Pri
 		}
 	}
 
+	// La 2FA obligatoire qui n'est pas activée limite la session, même si elle a été ouverte avant : une
+	// 2FA réinitialisée par l'exploitation, ou l'obligation décidée après la connexion, prennent effet
+	// aussitôt.
+	verified := view.Session.MFAVerifiedAt != nil
+	if s.mfaRequired(role) && !view.MFAEnrolled {
+		verified = false
+	}
+
 	return Principal{
 		UserID:      view.Session.UserID,
 		Role:        role,
-		MFAVerified: view.Session.MFAVerifiedAt != nil,
+		MFAVerified: verified,
+		MFAEnrolled: view.MFAEnrolled,
 	}, nil
+}
+
+// Rotate valide la session d'un jeton (la double authentification vient d'être prouvée) en lui donnant un
+// NOUVEAU jeton : l'ancien est révoqué, et le nouveau garde la limite absolue de la session et l'appareil
+// d'origine. C'est la règle anti-fixation du STACK : un jeton qui aurait fuité avant la validation ne
+// devient jamais une session complète. Avec revokeOthers, toutes les autres sessions du compte sont aussi
+// fermées (activation de la 2FA : celles ouvertes avant n'ont jamais passé le second facteur).
+func (s *SessionService) Rotate(ctx context.Context, rawToken string, revokeOthers bool) (IssuedSession, error) {
+	if !isWellFormedToken(rawToken) {
+		return IssuedSession{}, ErrSessionInvalid
+	}
+	oldHash := hashToken(rawToken)
+	raw, hash, err := newToken()
+	if err != nil {
+		return IssuedSession{}, err
+	}
+
+	now := s.clock.Now()
+	var issued IssuedSession
+	err = s.store.withinTx(ctx, func(ctx context.Context) error {
+		view, err := s.store.find(ctx, oldHash)
+		if errors.Is(err, errSessionNotFound) || (err == nil && view.Session.RevokedAt != nil) {
+			return ErrSessionInvalid
+		}
+		if err != nil {
+			return err
+		}
+		if revokeOthers {
+			if _, err := s.store.RevokeAllForUser(ctx, view.Session.UserID, now); err != nil {
+				return err
+			}
+		} else if err := s.store.revoke(ctx, oldHash, now); err != nil {
+			return err
+		}
+
+		session := Session{
+			TokenHash: hash, UserID: view.Session.UserID, CreatedAt: now, LastSeenAt: now,
+			ExpiresAt: view.Session.ExpiresAt, RememberMe: view.Session.RememberMe, MFAVerifiedAt: &now,
+			DeviceLabel: view.Session.DeviceLabel,
+		}
+		if view.Session.IPAddress != nil {
+			session.IPAddress = *view.Session.IPAddress
+		}
+		if err := s.store.Create(ctx, &session); err != nil {
+			return err
+		}
+		issued = IssuedSession{Token: raw, ExpiresAt: session.ExpiresAt}
+		return nil
+	})
+	return issued, err
 }
 
 // Revoke invalide la session d'un jeton. C'est sans effet pour un jeton inconnu ou déjà révoqué,
@@ -138,8 +208,7 @@ func (s *SessionService) Revoke(ctx context.Context, rawToken string) error {
 	if !isWellFormedToken(rawToken) {
 		return nil
 	}
-	_, err := s.store.revoke(ctx, hashToken(rawToken), s.clock.Now())
-	return err
+	return s.store.revoke(ctx, hashToken(rawToken), s.clock.Now())
 }
 
 // RevokeAll invalide toutes les sessions d'un utilisateur.

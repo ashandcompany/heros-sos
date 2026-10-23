@@ -1,3 +1,4 @@
+import type { ApiFailure } from "./api";
 import type { ModerationStatus } from "./moderation";
 import type { SuperHeroSummary } from "./super-hero";
 
@@ -17,11 +18,75 @@ export interface HeroVideo {
   moderation: ModerationStatus;
 }
 
-/** Résultat d'une recherche dans le catalogue IMDb. */
+/**
+ * Film de la vidéothèque publique : une seule fois, même s'il est rattaché à plusieurs héros.
+ */
+export interface PublicFilm {
+  id: string;
+  /** Super-héros auxquels il est rattaché (rattachements publiés), par pseudo. */
+  heroes: SuperHeroSummary[];
+  title: string;
+  description: string;
+  /** Lien vers la vidéo (hébergeur externe ou fiche IMDb). */
+  videoUrl: string;
+  imdbId?: string;
+  year?: number;
+  /** Affiche du film (catalogue IMDb), absente pour une vidéo libre. */
+  posterUrl?: string;
+  /** Date ISO 8601 du rattachement publié le plus récent. */
+  addedAt: string;
+}
+
+/** Vidéo libre, hors catalogue IMDb : hébergée ailleurs et décrite à la main. */
+export interface FreeVideoInput {
+  title: string;
+  description: string;
+  /** Adresse `http` ou `https` de la vidéo. */
+  videoUrl: string;
+}
+
+/** Film à ajouter à une vidéothèque : identifiant IMDb (`tt…`) ou vidéo libre. */
+export type FilmSource = string | FreeVideoInput;
+
+/** Super-héros ayant au moins un film publié (filtre de la vidéothèque). */
+export interface FilmHero extends SuperHeroSummary {
+  filmCount: number;
+}
+
+/** Filtres des listes de films : héros et extrait du titre (sans tenir compte de la casse). */
+export interface FilmFilter {
+  heroId?: string;
+  query?: string;
+}
+
+/** Film rattaché à la fiche d'un super-vilain par la modération, visible aussitôt. */
+export interface VillainFilm {
+  id: string;
+  villain: { id: string; alias: string };
+  title: string;
+  description: string;
+  /** Lien vers la vidéo ou la fiche IMDb. */
+  videoUrl: string;
+  imdbId?: string;
+  year?: number;
+  /** Date ISO 8601 du rattachement. */
+  addedAt: string;
+}
+
+/** Film du catalogue IMDb. */
 export interface ImdbTitle {
   /** Identifiant IMDb, ex : `tt0000001`. */
   id: string;
   title: string;
-  year: number;
+  year?: number;
+  /** Résumé, vide si le catalogue n'en fournit pas. */
   plot: string;
+  posterUrl?: string;
 }
+
+/** Résultat d'une recherche dans le catalogue IMDb. */
+export type ImdbSearchResult =
+  | { ok: true; titles: ImdbTitle[] }
+  /** Catalogue OMDb injoignable depuis l'API (502). */
+  | { ok: false; error: "catalog-unavailable" }
+  | ApiFailure;

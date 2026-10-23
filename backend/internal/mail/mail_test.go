@@ -24,6 +24,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/ashandcompany/heros-sos/backend/internal/clock"
 	"github.com/ashandcompany/heros-sos/backend/internal/config"
 )
@@ -42,7 +44,7 @@ func testMessage() Message {
 	}
 }
 
-func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
+func discardLogger() *slog.Logger { return slog.New(slog.DiscardHandler) }
 
 // ---- Construction du message ----------------------------------------------------------------
 
@@ -107,6 +109,9 @@ func TestMessageValidationBlocksHeaderInjection(t *testing.T) {
 		"destinataire vide":                  {To: "", Subject: "ok", Text: "x"},
 		"sujet vide":                         {To: "a@b.co", Subject: "  ", Text: "x"},
 		"contenu vide":                       {To: "a@b.co", Subject: "ok"},
+		"saut de ligne dans la réponse":      {To: "a@b.co", ReplyTo: "v@b.co\r\nBcc: espion@evil.example", Subject: "ok", Text: "x"},
+		"nom d'affichage dans la réponse":    {To: "a@b.co", ReplyTo: "Pirate <v@b.co>", Subject: "ok", Text: "x"},
+		"réponse invalide":                   {To: "a@b.co", ReplyTo: "pas-un-email", Subject: "ok", Text: "x"},
 	}
 	for name, message := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -114,6 +119,30 @@ func TestMessageValidationBlocksHeaderInjection(t *testing.T) {
 				t.Fatalf("erreur = %v, attendu ErrInvalidMessage", err)
 			}
 		})
+	}
+}
+
+func TestBuildAddsReplyToOnlyWhenGiven(t *testing.T) {
+	withReply := testMessage()
+	withReply.ReplyTo = "visiteur@example.org"
+	raw, err := build(testSender, withReply, testNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := mail.ReadMessage(strings.NewReader(string(raw)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replyTo, _ := parsed.Header.AddressList("Reply-To"); len(replyTo) != 1 || replyTo[0].Address != "visiteur@example.org" {
+		t.Errorf("Reply-To = %v", replyTo)
+	}
+
+	raw, err = build(testSender, testMessage(), testNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "Reply-To") {
+		t.Error("sans adresse de réponse, aucun en-tête Reply-To ne doit être écrit")
 	}
 }
 
@@ -607,6 +636,61 @@ func TestServiceEscapesUserControlledValuesInHTML(t *testing.T) {
 	}
 }
 
+func TestServiceRendersContactMessageForTheTeam(t *testing.T) {
+	recorder := NewRecorder()
+	service, _ := NewService(recorder, "Heros-SOS", config.Tokens{})
+
+	err := service.SendContactMessage(context.Background(), "bureau@heros-sos.example", ContactMessage{
+		SenderName: `Eve <script>alert(1)</script>`, SenderEmail: "eve@example.org",
+		Subject: "Problème avec mon compte", Body: "Bonjour,\nje n'arrive plus à me connecter. <b>Merci</b>",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	message, _ := recorder.Last()
+
+	if message.To != "bureau@heros-sos.example" || message.ReplyTo != "eve@example.org" {
+		t.Errorf("destinataire = %q, réponse = %q", message.To, message.ReplyTo)
+	}
+	if message.Subject != "[Heros-SOS] Message de contact : Problème avec mon compte" {
+		t.Errorf("sujet = %q", message.Subject)
+	}
+	// Le nom et le texte, saisis par le visiteur, restent hors du sujet.
+	if strings.Contains(message.Subject, "Eve") || strings.Contains(message.Subject, "connecter") {
+		t.Errorf("le sujet ne doit pas contenir de saisie libre : %q", message.Subject)
+	}
+	if !strings.Contains(message.Text, "je n'arrive plus à me connecter") || !strings.Contains(message.Text, "eve@example.org") {
+		t.Errorf("texte = %q", message.Text)
+	}
+	for _, injected := range []string{"<script>", "<b>"} {
+		if strings.Contains(message.HTML, injected) {
+			t.Errorf("%s doit être échappé dans le HTML :\n%s", injected, message.HTML)
+		}
+	}
+	if !strings.Contains(message.HTML, "&lt;b&gt;Merci&lt;/b&gt;") {
+		t.Errorf("le corps échappé manque du HTML :\n%s", message.HTML)
+	}
+}
+
+func TestServiceRendersNewsletterConfirmation(t *testing.T) {
+	recorder := NewRecorder()
+	service, _ := NewService(recorder, "Heros-SOS", config.Tokens{NewsletterConfirmTTL: 48 * time.Hour})
+
+	const link = "https://heros-sos.example/newsletter/confirmation?token=abc"
+	if err := service.SendNewsletterConfirmation(context.Background(), "eve@example.org", link); err != nil {
+		t.Fatal(err)
+	}
+	message, _ := recorder.Last()
+	if message.To != "eve@example.org" || message.ReplyTo != "" || message.Subject != "Confirmez votre abonnement à la newsletter Heros-SOS" {
+		t.Errorf("message = %+v", message)
+	}
+	for name, content := range map[string]string{"texte": message.Text, "HTML": message.HTML} {
+		if !strings.Contains(content, link) || !strings.Contains(content, "48 heures") {
+			t.Errorf("%s : le lien ou la durée de validité manque :\n%s", name, content)
+		}
+	}
+}
+
 func TestServicePropagatesMailerFailure(t *testing.T) {
 	recorder := NewRecorder()
 	recorder.FailWith(ErrQueueFull)
@@ -614,6 +698,49 @@ func TestServicePropagatesMailerFailure(t *testing.T) {
 
 	if err := service.SendActivation(context.Background(), "a@b.co", "Steve", "https://x.example"); !errors.Is(err, ErrQueueFull) {
 		t.Fatalf("erreur = %v", err)
+	}
+}
+
+func TestEveryHTMLMailIsWrappedByTheCommonLayout(t *testing.T) {
+	recorder := NewRecorder()
+	const logo = "https://heros-sos.example/mail/logo.png"
+	service, err := NewService(recorder, "Heros-SOS", config.Tokens{ActivationTTL: time.Hour}, WithLogoURL(logo))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	_ = service.SendActivation(ctx, "a@b.co", "Steve", "https://x.example/a")
+	_ = service.SendReviewRequest(ctx, "a@b.co", "https://x.example/r")
+	_ = service.SendInterventionInvitation(ctx, "a@b.co", uuid.New())
+	_ = service.SendNewsletter(ctx, "a@b.co", "Octobre", "<p>Salut</p>", "https://x.example/u")
+
+	messages := recorder.Messages()
+	if len(messages) != 4 {
+		t.Fatalf("mails = %d", len(messages))
+	}
+	for _, message := range messages {
+		if strings.Count(message.HTML, "<html") != 1 || strings.Count(message.HTML, "<body") != 1 {
+			t.Errorf("%q : un seul document HTML attendu :\n%s", message.Subject, message.HTML)
+		}
+		for _, want := range []string{`src="` + logo + `"`, `class="card"`, "prefers-color-scheme: light", "Service d'intervention"} {
+			if !strings.Contains(message.HTML, want) {
+				t.Errorf("%q : %q absent du gabarit", message.Subject, want)
+			}
+		}
+	}
+	if strings.Contains(messages[0].HTML, "Se désabonner") {
+		t.Error("seule la newsletter porte le lien de désinscription")
+	}
+	if !strings.Contains(messages[3].HTML, "Se désabonner") {
+		t.Error("le pied de la newsletter doit porter le lien de désinscription")
+	}
+}
+
+func TestPlainTextFromNewsletterHTML(t *testing.T) {
+	got := plainText(`<h2>Titre</h2><p>Un <b>texte</b> avec <a href="https://x.example/a">un lien</a>.</p><ul><li>un</li><li>deux</li></ul><script>x()</script>`)
+	want := "Titre\n\nUn texte avec un lien (https://x.example/a).\n\n- un\n- deux"
+	if got != want {
+		t.Errorf("plainText = %q, attendu %q", got, want)
 	}
 }
 
@@ -654,5 +781,129 @@ func TestLogMailerRejectsInvalidMessages(t *testing.T) {
 	}
 	if err := mailer.Send(context.Background(), Message{To: "x"}); !errors.Is(err, ErrInvalidMessage) {
 		t.Fatalf("erreur = %v", err)
+	}
+}
+
+func TestServiceRendersEmailChangeMails(t *testing.T) {
+	recorder := NewRecorder()
+	service, _ := NewService(recorder, "Heros-SOS", config.Tokens{EmailChangeConfirmTTL: 48 * time.Hour})
+	ctx := context.Background()
+
+	const link = "https://heros-sos.example/changement-email/confirmation?token=abc"
+	if err := service.SendEmailChangeConfirmation(ctx, "nouvelle@example.org", "Steve", link); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SendEmailChangeApproved(ctx, "nouvelle@example.org", "Steve"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SendEmailChangeNotice(ctx, "ancienne@example.org", "Steve", "nouvelle@example.org"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SendEmailChangeRejected(ctx, "ancienne@example.org", "Steve"); err != nil {
+		t.Fatal(err)
+	}
+
+	sent := recorder.Messages()
+	if len(sent) != 4 {
+		t.Fatalf("%d mails, attendu 4", len(sent))
+	}
+	tests := []struct {
+		to       string
+		subject  string
+		contains []string
+	}{
+		{"nouvelle@example.org", "Confirmez votre nouvelle adresse email Heros-SOS", []string{link, "48 heures", "Steve"}},
+		{"nouvelle@example.org", "Votre nouvelle adresse email est active sur Heros-SOS", []string{"Steve", "adresse de connexion"}},
+		{"ancienne@example.org", "L'adresse email de votre compte Heros-SOS a été remplacée", []string{"nouvelle@example.org", "contactez-nous"}},
+		{"ancienne@example.org", "Votre demande de changement d'adresse email a été refusée", []string{"Steve", "ne change pas"}},
+	}
+	for i, want := range tests {
+		message := sent[i]
+		if message.To != want.to || message.Subject != want.subject {
+			t.Errorf("mail %d : %s / %q, attendu %s / %q", i, message.To, message.Subject, want.to, want.subject)
+		}
+		for name, content := range map[string]string{"texte": message.Text, "HTML": message.HTML} {
+			for _, expected := range want.contains {
+				if !strings.Contains(content, expected) {
+					t.Errorf("mail %d (%s) : %q manque :\n%s", i, name, expected, content)
+				}
+			}
+		}
+	}
+}
+
+func TestSendNewsletterAlwaysCarriesTheUnsubscribeLink(t *testing.T) {
+	recorder := NewRecorder()
+	service, _ := NewService(recorder, "Heros-SOS", config.Tokens{})
+	ctx := context.Background()
+
+	if err := service.SendNewsletter(ctx, "eve@example.org", "Octobre", "Bonjour <b>tout le monde</b>", ""); !errors.Is(err, ErrMissingUnsubscribeLink) {
+		t.Fatalf("sans lien de désinscription : %v", err)
+	}
+	if len(recorder.Messages()) != 0 {
+		t.Fatal("une newsletter sans lien de désinscription ne doit jamais partir")
+	}
+
+	const link = "https://heros-sos.example/newsletter/desinscription?token=abc"
+	if err := service.SendNewsletter(ctx, "eve@example.org", "Octobre", "Bonjour <b>tout le monde</b>", link); err != nil {
+		t.Fatal(err)
+	}
+	message, _ := recorder.Last()
+	if message.ListUnsubscribe != link {
+		t.Errorf("ListUnsubscribe = %q", message.ListUnsubscribe)
+	}
+	for name, content := range map[string]string{"texte": message.Text, "HTML": message.HTML} {
+		if !strings.Contains(content, link) {
+			t.Errorf("%s : le lien de désinscription manque :\n%s", name, content)
+		}
+	}
+	if strings.Contains(message.HTML, "&lt;b&gt;") {
+		t.Errorf("le corps HTML nettoyé doit être inséré tel quel :\n%s", message.HTML)
+	}
+	if !strings.Contains(message.HTML, "Bonjour <b>tout le monde</b>") || !strings.Contains(message.Text, "Bonjour tout le monde") {
+		t.Errorf("corps HTML ou texte dérivé manquant :\n%s\n%s", message.HTML, message.Text)
+	}
+
+	// L'en-tête List-Unsubscribe part dans le message MIME, et rien d'autre ne peut s'y glisser.
+	raw, err := build(Sender{Address: "no-reply@heros-sos.example", Name: "Heros-SOS"}, message, time.Date(2026, 10, 22, 8, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "List-Unsubscribe: <"+link+">\r\n") {
+		t.Errorf("en-tête List-Unsubscribe absent :\n%s", raw)
+	}
+	for _, bad := range []string{"ftp://x.example/u", "https://x.example/u>\r\nBcc: spy@example.org", "javascript:alert(1)", "not a url", "https://x.example/ u"} {
+		message.ListUnsubscribe = bad
+		if _, err := build(Sender{Address: "no-reply@heros-sos.example"}, message, time.Now()); !errors.Is(err, ErrInvalidMessage) {
+			t.Errorf("%q doit être refusée : %v", bad, err)
+		}
+	}
+}
+
+func TestServiceRendersPasswordChanged(t *testing.T) {
+	recorder := NewRecorder()
+	service, _ := NewService(recorder, "Heros-SOS", config.Tokens{})
+	if err := service.SendPasswordChanged(context.Background(), "steve@example.org", "Steve"); err != nil {
+		t.Fatal(err)
+	}
+	sent := recorder.Messages()
+	if len(sent) != 1 || sent[0].To != "steve@example.org" ||
+		sent[0].Subject != "Le mot de passe de votre compte Heros-SOS a été modifié" ||
+		!strings.Contains(sent[0].Text, "Steve") || !strings.Contains(sent[0].Text, "Mot de passe oublié") ||
+		!strings.Contains(sent[0].HTML, "Mot de passe oublié") {
+		t.Fatalf("mail = %+v", sent)
+	}
+}
+
+func TestServiceRendersAccountDeleted(t *testing.T) {
+	recorder := NewRecorder()
+	service, _ := NewService(recorder, "Heros-SOS", config.Tokens{})
+	if err := service.SendAccountDeleted(context.Background(), "steve@example.org", "Steve"); err != nil {
+		t.Fatal(err)
+	}
+	sent := recorder.Messages()
+	if len(sent) != 1 || sent[0].Subject != "Votre compte Heros-SOS a été supprimé" ||
+		!strings.Contains(sent[0].Text, "Steve") || !strings.Contains(sent[0].HTML, "compte supprimé") {
+		t.Fatalf("mail = %+v", sent)
 	}
 }

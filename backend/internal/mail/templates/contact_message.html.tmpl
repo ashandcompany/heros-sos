@@ -1,0 +1,7 @@
+    <p>Nouveau message reçu par le formulaire de contact de <strong>{{.AppName}}</strong>.</p>
+    <p>
+      <strong>Objet :</strong> {{.ContactSubject}}<br>
+      <strong>De :</strong> {{.SenderName}} &lt;{{.SenderEmail}}&gt;
+    </p>
+    <pre style="white-space: pre-wrap; font-family: inherit; border-left: 3px solid #cf6a3c; margin: 0; padding-left: 12px;">{{.Body}}</pre>
+    <p style="color: #666;">Répondre à ce mail répond directement à {{.SenderEmail}}.</p>

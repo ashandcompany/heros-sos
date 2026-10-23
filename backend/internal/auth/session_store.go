@@ -52,6 +52,9 @@ type sessionView struct {
 	Session    sessionRecord `gorm:"embedded"`
 	Role       string
 	UserStatus string
+	// MFAEnrolled : le propriétaire a activé la 2FA. Lu à chaque requête comme le rôle et le statut : une
+	// 2FA réinitialisée par l'exploitation prend effet aussitôt, sans attendre l'expiration de la session.
+	MFAEnrolled bool
 }
 
 // SessionStore est le stockage PostgreSQL des sessions.
@@ -65,6 +68,12 @@ func NewSessionStore(db *gorm.DB) *SessionStore {
 }
 
 func (s *SessionStore) conn(ctx context.Context) *gorm.DB { return database.Conn(ctx, s.db) }
+
+// withinTx exécute fn dans une transaction : toutes les écritures du store faites avec le contexte reçu en
+// font partie.
+func (s *SessionStore) withinTx(ctx context.Context, fn func(ctx context.Context) error) error {
+	return database.NewTransactor(s.db).WithinTx(ctx, fn)
+}
 
 // Create enregistre une session.
 func (s *SessionStore) Create(ctx context.Context, session *Session) error {
@@ -92,7 +101,8 @@ func (s *SessionStore) Create(ctx context.Context, session *Session) error {
 func (s *SessionStore) find(ctx context.Context, tokenHash []byte) (*sessionView, error) {
 	var view sessionView
 	err := s.conn(ctx).Table(tableSessions).
-		Select("sessions.*, users.role AS role, users.status AS user_status").
+		Select(`sessions.*, users.role AS role, users.status AS user_status,
+			EXISTS (SELECT 1 FROM user_mfa WHERE user_mfa.user_id = sessions.user_id AND user_mfa.confirmed_at IS NOT NULL) AS mfa_enrolled`).
 		Joins("JOIN users ON users.id = sessions.user_id").
 		Where("sessions.token_hash = ?", tokenHash).
 		Take(&view).Error
@@ -115,15 +125,16 @@ func (s *SessionStore) touch(ctx context.Context, tokenHash []byte, now time.Tim
 	return nil
 }
 
-// revoke invalide une session ; il retourne false si elle n'existait pas ou l'était déjà.
-func (s *SessionStore) revoke(ctx context.Context, tokenHash []byte, now time.Time) (bool, error) {
-	result := s.conn(ctx).Table(tableSessions).
+// revoke invalide une session. C'est sans effet pour une session inconnue ou déjà révoquée : la déconnexion
+// est idempotente.
+func (s *SessionStore) revoke(ctx context.Context, tokenHash []byte, now time.Time) error {
+	err := s.conn(ctx).Table(tableSessions).
 		Where("token_hash = ? AND revoked_at IS NULL", tokenHash).
-		Update("revoked_at", now)
-	if result.Error != nil {
-		return false, fmt.Errorf("auth : révocation de la session : %w", result.Error)
+		Update("revoked_at", now).Error
+	if err != nil {
+		return fmt.Errorf("auth : révocation de la session : %w", err)
 	}
-	return result.RowsAffected > 0, nil
+	return nil
 }
 
 // RevokeAllForUser invalide toutes les sessions ouvertes d'un utilisateur.

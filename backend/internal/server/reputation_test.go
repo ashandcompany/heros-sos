@@ -102,15 +102,43 @@ func TestHeroReputationWorkflow(t *testing.T) {
 		t.Errorf("note hors bornes : %d %s", got.status, got.body)
 	}
 
+	listed = reporter.get("/me/interventions")
+	listed.decode(t, &rateable)
+	var memberReviewID string
+	for _, item := range rateable.Items {
+		if item.HeroID == member.userID() && item.Review != nil {
+			memberReviewID = item.Review.ID
+			break
+		}
+	}
+	if memberReviewID == "" {
+		t.Fatal("avis sans commentaire absent des interventions du déclarant")
+	}
 	var public struct {
 		AverageRating float64      `json:"averageRating"`
 		RatingsCount  int          `json:"ratingsCount"`
 		Reviews       []reviewView `json:"reviews"`
 	}
+	memberPublic := e.newActor().get("/heroes/" + member.userID() + "/reviews")
+	memberPublic.decode(t, &public)
+	if memberPublic.status != http.StatusOK || public.RatingsCount != 1 || public.AverageRating != 3 ||
+		len(public.Reviews) != 1 || public.Reviews[0].Status != reputation.ReviewPublished {
+		t.Fatalf("la note sans commentaire doit être publiée dès sa création : %d %+v %s", memberPublic.status, public, memberPublic.body)
+	}
+	if got := reporter.request(http.MethodPut, "/me/reviews/"+memberReviewID, map[string]any{"rating": 4}); got.status != http.StatusNoContent {
+		t.Fatalf("modification de la note sans commentaire : %d %s", got.status, got.body)
+	}
+
+	publicAfterLead := public
 	publicResponse := e.newActor().get("/heroes/" + lead.userID() + "/reviews")
-	publicResponse.decode(t, &public)
-	if publicResponse.status != http.StatusOK || public.RatingsCount != 1 || public.AverageRating != 5 {
-		t.Fatalf("réputation publique : %d %+v %s", publicResponse.status, public, publicResponse.body)
+	publicResponse.decode(t, &publicAfterLead)
+	if publicResponse.status != http.StatusOK || publicAfterLead.RatingsCount != 0 || publicAfterLead.AverageRating != 0 {
+		t.Fatalf("réputation publique : %d %+v %s", publicResponse.status, publicAfterLead, publicResponse.body)
+	}
+	memberPublic = e.newActor().get("/heroes/" + member.userID() + "/reviews")
+	memberPublic.decode(t, &public)
+	if memberPublic.status != http.StatusOK || public.RatingsCount != 1 || public.AverageRating != 4 {
+		t.Fatalf("la note sans commentaire modifiée doit rester publiée : %d %+v %s", memberPublic.status, public, memberPublic.body)
 	}
 	var heroPage struct {
 		AverageRating float64      `json:"averageRating"`
@@ -122,8 +150,9 @@ func TestHeroReputationWorkflow(t *testing.T) {
 	}
 	heroReviews := lead.get("/hero/reviews")
 	heroReviews.decode(t, &heroPage)
-	if heroReviews.status != http.StatusOK || heroPage.AverageRating != 5 || heroPage.RatingsCount != 1 ||
-		heroPage.Total != 1 || len(heroPage.Ratings) != 1 || heroPage.Ratings[0].Comment == nil {
+	if heroReviews.status != http.StatusOK || heroPage.AverageRating != 0 || heroPage.RatingsCount != 0 ||
+		heroPage.Total != 1 || len(heroPage.Ratings) != 1 || heroPage.Ratings[0].Comment == nil ||
+		heroPage.Ratings[0].Status != reputation.ReviewPending {
 		t.Fatalf("avis du héros : %d %+v %s", heroReviews.status, heroPage, heroReviews.body)
 	}
 	if got := reporter.get("/hero/reviews"); got.status != http.StatusForbidden {
@@ -131,6 +160,49 @@ func TestHeroReputationWorkflow(t *testing.T) {
 	}
 
 	reviewID := heroPage.Ratings[0].ID
+	if got := otherCitizen.request(http.MethodPut, "/me/reviews/"+reviewID, map[string]any{"rating": 2}); got.status != http.StatusForbidden {
+		t.Errorf("un autre citoyen modifie l'avis : %d %s", got.status, got.body)
+	}
+	if got := reporter.request(http.MethodPut, "/me/reviews/"+reviewID, map[string]any{
+		"rating": 4, "comment": "Intervention bien menée, avis mis à jour.",
+	}); got.status != http.StatusNoContent {
+		t.Fatalf("modification de l'avis commenté : %d %s", got.status, got.body)
+	}
+	heroReviews = lead.get("/hero/reviews")
+	heroReviews.decode(t, &heroPage)
+	if heroPage.Ratings[0].Status != reputation.ReviewPending || heroPage.Ratings[0].Rating != 4 ||
+		heroPage.Ratings[0].Comment == nil || *heroPage.Ratings[0].Comment != "Intervention bien menée, avis mis à jour." {
+		t.Fatalf("l'avis modifié avec texte doit être remis en attente : %+v", heroPage.Ratings[0])
+	}
+	publicResponse = e.newActor().get("/heroes/" + lead.userID() + "/reviews")
+	publicResponse.decode(t, &publicAfterLead)
+	if publicAfterLead.RatingsCount != 0 || len(publicAfterLead.Reviews) != 0 {
+		t.Fatalf("un avis modifié en attente reste public : %+v", publicAfterLead)
+	}
+	moderationReviews := moderator.get("/admin/hero-reviews?status=pending")
+	var reviewPage struct {
+		Items []reviewView `json:"items"`
+		Total int          `json:"total"`
+	}
+	moderationReviews.decode(t, &reviewPage)
+	if moderationReviews.status != http.StatusOK || reviewPage.Total != 1 ||
+		len(reviewPage.Items) != 1 || reviewPage.Items[0].ID != reviewID {
+		t.Fatalf("avis commenté à modérer : %d %+v %s", moderationReviews.status, reviewPage, moderationReviews.body)
+	}
+	if got := moderator.request(http.MethodPatch, "/admin/hero-reviews/"+reviewID, map[string]string{"status": reputation.ReviewPublished}); got.status != http.StatusNoContent {
+		t.Fatalf("publication de l'avis commenté : %d %s", got.status, got.body)
+	}
+	publicResponse = e.newActor().get("/heroes/" + lead.userID() + "/reviews")
+	publicResponse.decode(t, &publicAfterLead)
+	if publicAfterLead.RatingsCount != 1 || publicAfterLead.AverageRating != 4 {
+		t.Fatalf("l'avis validé doit réapparaître au public : %+v", publicAfterLead)
+	}
+	heroReviews = lead.get("/hero/reviews")
+	heroReviews.decode(t, &heroPage)
+	if heroPage.RatingsCount != 1 || heroPage.AverageRating != 4 || heroPage.Ratings[0].Status != reputation.ReviewPublished {
+		t.Fatalf("l'avis validé doit réintégrer la moyenne : %+v", heroPage)
+	}
+
 	replyPath := "/hero/reviews/" + reviewID + "/reply"
 	if got := outsider.request(http.MethodPut, replyPath, map[string]string{"content": "Merci pour votre retour."}); got.status != http.StatusForbidden {
 		t.Errorf("un autre héros répond à l'avis : %d %s", got.status, got.body)
@@ -164,9 +236,9 @@ func TestHeroReputationWorkflow(t *testing.T) {
 		t.Fatalf("publication réponse : %d %s", got.status, got.body)
 	}
 	publicResponse = e.newActor().get("/heroes/" + lead.userID() + "/reviews")
-	publicResponse.decode(t, &public)
-	if len(public.Reviews) != 1 || public.Reviews[0].Reply == nil || public.Reviews[0].Reply.Content != "Merci, réponse mise à jour." {
-		t.Fatalf("réponse publiée absente du public : %+v", public)
+	publicResponse.decode(t, &publicAfterLead)
+	if len(publicAfterLead.Reviews) != 1 || publicAfterLead.Reviews[0].Reply == nil || publicAfterLead.Reviews[0].Reply.Content != "Merci, réponse mise à jour." {
+		t.Fatalf("réponse publiée absente du public : %+v", publicAfterLead)
 	}
 	if got := moderator.request(http.MethodPatch, "/admin/hero-reviews/"+reviewID, map[string]string{"status": reputation.ReviewHidden}); got.status != http.StatusNoContent {
 		t.Fatalf("masquage avis : %d %s", got.status, got.body)
@@ -178,9 +250,9 @@ func TestHeroReputationWorkflow(t *testing.T) {
 		t.Fatalf("avis masqué conservé dans la liste privée mais exclu du score : %d %+v", heroReviews.status, heroPage)
 	}
 	publicResponse = e.newActor().get("/heroes/" + lead.userID() + "/reviews")
-	publicResponse.decode(t, &public)
-	if publicResponse.status != http.StatusOK || public.RatingsCount != 0 || public.AverageRating != 0 || len(public.Reviews) != 0 {
-		t.Fatalf("l'avis masqué doit sortir du public et de la moyenne : %d %+v", publicResponse.status, public)
+	publicResponse.decode(t, &publicAfterLead)
+	if publicResponse.status != http.StatusOK || publicAfterLead.RatingsCount != 0 || publicAfterLead.AverageRating != 0 || len(publicAfterLead.Reviews) != 0 {
+		t.Fatalf("l'avis masqué doit sortir du public et de la moyenne : %d %+v", publicResponse.status, publicAfterLead)
 	}
 }
 
@@ -230,6 +302,65 @@ func TestHeroReporterCanRateOtherParticipantsButNotThemself(t *testing.T) {
 	}
 	if got := reporter.post(reviewPath, map[string]any{"heroId": reporter.userID(), "rating": 5}); got.status != http.StatusForbidden {
 		t.Errorf("le héros déclarant peut se noter lui-même : %d %s", got.status, got.body)
+	}
+}
+
+func TestModeratorReporterCanCommentOwnIntervention(t *testing.T) {
+	e := newE2E(t, nil)
+	reporter := e.newModerator("reporter-mod@shield.example")
+	otherModerator := e.newModerator("other-mod@shield.example")
+	hero := e.approvedHero(otherModerator, "hero@example.org", "Vigie")
+	ownIncident := e.declareIncident(reporter, otherModerator, "moderator_reporter_review")
+	foreignIncident := e.declareIncident(e.signUpAndLogin("citizen@example.org"), otherModerator, "citizen_reporter_review")
+
+	// Héros seul : sa proposition de résultat clôture l'intervention.
+	closeIntervention := func(incidentID string) string {
+		started := e.startIntervention(hero, incidentID)
+		e.mustPost(hero, "/interventions/"+started.ID+"/outcome", map[string]string{"status": "succeeded"}, http.StatusNoContent)
+		return started.ID
+	}
+	ownIntervention := closeIntervention(ownIncident)
+	foreignIntervention := closeIntervention(foreignIncident)
+
+	var page struct {
+		Items []struct {
+			InterventionID string `json:"interventionId"`
+		} `json:"items"`
+		Total int `json:"total"`
+	}
+	if got := reporter.get("/me/interventions"); got.status != http.StatusOK {
+		t.Fatalf("liste du modérateur déclarant : %d %s", got.status, got.body)
+	} else {
+		got.decode(t, &page)
+		if page.Total != 1 || len(page.Items) != 1 || page.Items[0].InterventionID != ownIntervention {
+			t.Fatalf("le modérateur ne doit voir que les interventions de ses incidents : %+v", page)
+		}
+	}
+
+	review := map[string]any{"heroId": hero.userID(), "rating": 5, "comment": "Intervention exemplaire."}
+	if got := reporter.post("/interventions/"+foreignIntervention+"/reviews", review); got.status != http.StatusForbidden {
+		t.Errorf("le modérateur commente une intervention dont il n'est pas l'auteur : %d %s", got.status, got.body)
+	}
+	if got := reporter.post("/interventions/"+ownIntervention+"/reviews", review); got.status != http.StatusNoContent {
+		t.Fatalf("commentaire du modérateur déclarant : %d %s", got.status, got.body)
+	}
+
+	var pending []struct {
+		ID     string `json:"id"`
+		Status string `json:"status"`
+	}
+	listed := otherModerator.get("/admin/hero-reviews?status=pending")
+	raw, _ := json.Marshal(decodeItems(t, listed.body))
+	if err := json.Unmarshal(raw, &pending); err != nil || len(pending) != 1 {
+		t.Fatalf("le commentaire du modérateur doit attendre la modération : %v %s", err, listed.body)
+	}
+	reviewPath := "/admin/hero-reviews/" + pending[0].ID
+	publish := map[string]string{"status": reputation.ReviewPublished}
+	if got := reporter.request(http.MethodPatch, reviewPath, publish); got.status != http.StatusForbidden {
+		t.Errorf("le modérateur publie son propre avis : %d %s", got.status, got.body)
+	}
+	if got := otherModerator.request(http.MethodPatch, reviewPath, publish); got.status != http.StatusNoContent {
+		t.Fatalf("publication par un autre modérateur : %d %s", got.status, got.body)
 	}
 }
 

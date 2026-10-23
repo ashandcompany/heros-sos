@@ -1,0 +1,206 @@
+# Production. À utiliser avec docker-compose.yml, via `make up-prod`, depuis la racine du dépôt :
+#
+#   docker compose --env-file backend/.env.production -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Principes :
+#   - un seul point d'entrée : le reverse proxy (80/443, TLS automatique) ; la base, l'API et le front
+#     n'ont AUCUN port publié, et le réseau `backend` n'a aucun accès extérieur ;
+#   - aucun secret dans l'environnement ni dans le dépôt : ils sont montés en fichiers (/run/secrets),
+#     générés par `make secrets` ; l'API les lit via HEROS_*_FILE ;
+#   - les migrations sont une tâche dédiée qui doit réussir avant le démarrage de l'API ;
+#   - ressources bornées, journaux tournants, systèmes de fichiers en lecture seule, sans capacités.
+#
+# Prérequis : `backend/.env.production` (voir backend/.env.production.example) et `backend/secrets/`
+# (voir `make secrets`). Les chemins de ce fichier sont relatifs à la racine du dépôt.
+
+# Même rotation que docker-compose.yml (api, db et proxy la reçoivent de là) pour les services ajoutés ici.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: ${LOG_MAX_SIZE:-10m}
+    max-file: ${LOG_MAX_FILE:-3}
+
+x-api-config: &api-config
+  image: heros-sos/api:${APP_VERSION:-dev}
+  env_file:
+    - backend/.env.production
+  environment: &api-environment
+    HEROS_ENV: production
+    HEROS_AUTO_MIGRATE: "false"
+    HEROS_DATABASE_URL_FILE: /run/secrets/database_url
+    HEROS_CRYPTO_KEYS_FILE: /run/secrets/crypto_keys
+    HEROS_CSRF_SECRET_FILE: /run/secrets/csrf_secret
+    HEROS_SMTP_PASSWORD_FILE: /run/secrets/smtp_password
+    HEROS_OMDB_API_KEY_FILE: /run/secrets/omdb_api_key
+    # Lue seulement avec HEROS_MAIL_QUEUE=rabbitmq (backend/.env.production) ; sinon sans effet.
+    HEROS_RABBITMQ_URL_FILE: /run/secrets/rabbitmq_url
+    HEROS_ALLOWED_ORIGINS: https://${DOMAIN:?DOMAIN est obligatoire (voir .env.production.example)}
+    HEROS_PUBLIC_BASE_URL: https://${DOMAIN}
+    HEROS_MAIL_DRIVER: smtp
+  secrets:
+    - database_url
+    - crypto_keys
+    - csrf_secret
+    - smtp_password
+    - omdb_api_key
+    - rabbitmq_url
+
+services:
+  # Applique les migrations puis s'arrête. L'API ne démarre que si elle a réussi.
+  migrate:
+    # Même image que l'API (construite une seule fois, par le service `api`).
+    <<: *api-config
+    command: ["/api", "-migrate"]
+    restart: "no"
+    logging: *logging
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - backend
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  api:
+    <<: *api-config
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    # Argon2id : 4 hachages simultanés × 64 Mio = 256 Mio, plus le tas Go.
+    mem_limit: 768m
+    cpus: 1.0
+
+  # Envoie les mails déposés dans RabbitMQ. À activer avec `COMPOSE_PROFILES=rabbitmq` ET `HEROS_MAIL_QUEUE=rabbitmq` dans
+  # backend/.env.production (voir ce fichier) : sans eux, l'API envoie elle-même ses mails, comme avant.
+  # Pas de base ni de clés de chiffrement : seulement le courtier et le serveur SMTP.
+  mail-worker:
+    profiles: ["rabbitmq"]
+    image: heros-sos/api:${APP_VERSION:-dev}
+    env_file:
+      - backend/.env.production
+    environment:
+      HEROS_ENV: production
+      HEROS_MAIL_DRIVER: smtp
+      HEROS_MAIL_QUEUE: rabbitmq
+      HEROS_RABBITMQ_URL_FILE: /run/secrets/rabbitmq_url
+      HEROS_SMTP_PASSWORD_FILE: /run/secrets/smtp_password
+    secrets:
+      - rabbitmq_url
+      - smtp_password
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    mem_limit: 128m
+    cpus: 0.5
+
+  db:
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    mem_limit: 1g
+    cpus: 1.0
+
+  proxy:
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp" # HTTP/3
+    environment:
+      SITE_ADDRESS: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL est obligatoire (voir .env.production.example)}
+    depends_on:
+      web:
+        condition: service_healthy
+    mem_limit: 128m
+    cpus: 0.5
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      # Cible `runtime` (dernière étape) : image de production sans dépendances de développement.
+    image: heros-sos/web:${APP_VERSION:-dev}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      # Le serveur Next appelle l'API directement sur le réseau `edge`, sans repasser par le proxy.
+      API_URL: http://api:8080/api/v1
+      # Liens absolus du sitemap, de robots.txt et des aperçus Open Graph (lue au démarrage).
+      SITE_URL: https://${DOMAIN}
+    networks:
+      edge:
+        ipv4_address: ${WEB_IP:-172.30.0.3}
+    # Le système de fichiers reste inscriptible : Next.js écrit son cache de rendu dans .next/.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging: *logging
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 256
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # La file des mails (voir backend/stack/rabbitmq.md). Activée avec le profil `rabbitmq`, en même temps que le service
+  # mail-worker, et avec HEROS_MAIL_QUEUE=rabbitmq pour que l'API y dépose ses mails.
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    profiles: ["rabbitmq"]
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-heros}
+    # L'image refuse de démarrer avec RABBITMQ_DEFAULT_PASS_FILE (variable abandonnée) : le mot de passe est lu dans le
+    # secret au lancement, pour le seul processus RabbitMQ. Il n'apparaît donc pas dans `docker inspect`.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - RABBITMQ_DEFAULT_PASS="$$(cat /run/secrets/rabbitmq_password)" exec docker-entrypoint.sh rabbitmq-server
+    secrets:
+      - rabbitmq_password
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - backend
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+# Fichiers générés par `make secrets` (le dossier backend/secrets/ n'est jamais versionné).
+secrets:
+  database_url:
+    file: ./backend/secrets/database_url
+  postgres_password:
+    file: ./backend/secrets/postgres_password
+  crypto_keys:
+    file: ./backend/secrets/crypto_keys
+  csrf_secret:
+    file: ./backend/secrets/csrf_secret
+  smtp_password:
+    file: ./backend/secrets/smtp_password
+  omdb_api_key:
+    file: ./backend/secrets/omdb_api_key
+  rabbitmq_password:
+    file: ./backend/secrets/rabbitmq_password
+  # amqp://utilisateur:mot de passe@rabbitmq:5672/ : lue par l'API et le worker (HEROS_RABBITMQ_URL_FILE).
+  rabbitmq_url:
+    file: ./backend/secrets/rabbitmq_url
+
+volumes:
+  rabbitmq_data:

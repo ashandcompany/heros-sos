@@ -1,7 +1,7 @@
 package ratelimit_test
 
 import (
-	"fmt"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -14,9 +14,9 @@ import (
 
 var start = time.Date(2026, time.October, 19, 12, 0, 0, 0, time.UTC)
 
-func newLimiter(max int, window time.Duration, maxKeys int) (*ratelimit.Limiter, *clock.Fake) {
+func newLimiter(limit int, window time.Duration, maxKeys int) (*ratelimit.Limiter, *clock.Fake) {
 	clk := clock.NewFake(start)
-	return ratelimit.New(config.RateRule{Max: max, Window: window}, maxKeys, clk), clk
+	return ratelimit.New(config.RateRule{Max: limit, Window: window}, maxKeys, clk), clk
 }
 
 func TestAllowsUpToMaxThenDenies(t *testing.T) {
@@ -71,7 +71,7 @@ func TestResetForgetsKey(t *testing.T) {
 func TestSweepReleasesExpiredKeys(t *testing.T) {
 	limiter, clk := newLimiter(1, time.Minute, 100)
 	for i := range 10 {
-		limiter.Allow(fmt.Sprint(i))
+		limiter.Allow(strconv.Itoa(i))
 	}
 	clk.Advance(30 * time.Second)
 	limiter.Allow("récente")
@@ -136,7 +136,7 @@ func TestConcurrentMixedOperationsAreRaceFree(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for i := range 200 {
-				key := fmt.Sprint((worker + i) % 32)
+				key := strconv.Itoa((worker + i) % 32)
 				limiter.Allow(key)
 				switch i % 20 {
 				case 0:

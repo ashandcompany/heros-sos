@@ -33,6 +33,8 @@ func Config(t testing.TB, overrides map[string]string) config.Config {
 		"HEROS_ARGON2_MEMORY_KIB":    "64",
 		"HEROS_ARGON2_THREADS":       "1",
 		"HEROS_ALLOWED_ORIGINS":      "http://localhost:3000",
+		// Un dossier par test : les photos de profil ne s'écrivent jamais dans le dépôt.
+		"HEROS_AVATAR_DIR": t.TempDir(),
 	}
 	for name, value := range overrides {
 		env[name] = value

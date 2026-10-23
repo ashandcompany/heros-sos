@@ -94,7 +94,8 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, in CreateInput, 
 	if err != nil {
 		return nil, err
 	}
-	return created, nil
+	// Relu : la réponse détaille les spécialités (libellés du référentiel).
+	return s.repo.Find(ctx, created.ID)
 }
 
 func (s *Service) Update(ctx context.Context, actorID uuid.UUID, role user.Role, id uuid.UUID, in UpdateInput, ip netip.Addr) (*Villain, error) {
@@ -164,7 +165,8 @@ func (s *Service) Update(ctx context.Context, actorID uuid.UUID, role user.Role,
 	if err != nil {
 		return nil, err
 	}
-	return updated, nil
+	// Relu : spécialités détaillées et nombre d'incidents à jour dans la réponse.
+	return s.repo.Find(ctx, id)
 }
 
 func (s *Service) validateTypeIDs(ctx context.Context, raw []int16, fields *validation.Collector) ([]int16, error) {
@@ -189,6 +191,11 @@ func (s *Service) validateTypeIDs(ctx context.Context, raw []int16, fields *vali
 		valid = append(valid, id)
 	}
 	return valid, nil
+}
+
+// Get retourne un vilain, ou ErrNotFound.
+func (s *Service) Get(ctx context.Context, id uuid.UUID) (*Villain, error) {
+	return s.repo.Find(ctx, id)
 }
 
 // List retourne une page de vilains, éventuellement filtrée par début de pseudo.

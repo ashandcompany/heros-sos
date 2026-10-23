@@ -9,11 +9,21 @@ export const routes = {
   blog: "/blog",
   login: "/connexion",
   signup: "/inscription",
+  /** Saisie du code de double authentification, après le mot de passe (session limitée). */
+  loginVerification: "/connexion/verification",
+  /** Activation obligatoire de la double authentification (modérateur en production, session limitée). */
+  loginTwoFactorSetup: "/connexion/double-authentification",
   forgotPassword: "/mot-de-passe-oublie",
   /** Lien du mail de réinitialisation (`?token=…`) : doit rester égal à HEROS_PASSWORD_RESET_PATH du backend. */
   passwordReset: "/reinitialisation-mot-de-passe",
   /** Lien du mail d'activation (`?token=…`) : doit rester égal à HEROS_ACTIVATION_PATH du backend. */
   activation: "/activation",
+  /** Lien du mail de confirmation de la newsletter (`?token=…`) : doit rester égal à HEROS_NEWSLETTER_CONFIRM_PATH du backend. */
+  newsletterConfirmation: "/newsletter/confirmation",
+  /** Lien de désinscription de chaque newsletter (`?token=…`) : doit rester égal à HEROS_NEWSLETTER_UNSUBSCRIBE_PATH du backend. */
+  newsletterUnsubscribe: "/newsletter/desinscription",
+  /** Lien du mail envoyé à la nouvelle adresse d'un compte (`?token=…`) : doit rester égal à HEROS_EMAIL_CHANGE_CONFIRM_PATH du backend. */
+  emailChangeConfirmation: "/changement-email/confirmation",
   profile: "/profil",
   profileIncidents: "/profil/incidents",
   profileInterventions: "/profil/interventions",
@@ -25,15 +35,23 @@ export const routes = {
   heroVideos: "/heros/films",
   heroReputation: "/heros/reputation",
   heroDeclare: "/heros/signaler",
+  heroRate: "/heros/noter",
   admin: "/admin",
   adminIncidents: "/admin/incidents",
   adminReportIncident: "/admin/incidents/signaler",
+  adminRate: "/admin/noter",
+  adminIncidentTypes: "/admin/types-incident",
+  adminVillains: "/admin/super-vilains",
   adminAccounts: "/admin/comptes",
   adminHeroes: "/admin/super-heros",
   adminVideos: "/admin/videotheque",
   adminComments: "/admin/commentaires",
+  adminProfile: "/admin/profil",
+  adminSecurity: "/admin/securite",
   adminBlog: "/admin/blog",
   adminNewArticle: "/admin/blog/nouveau",
+  adminNewsletters: "/admin/newsletter",
+  adminNewNewsletter: "/admin/newsletter/nouvelle",
   about: "/a-propos",
   contact: "/contact",
   faq: "/faq",
@@ -42,12 +60,16 @@ export const routes = {
 } as const;
 
 export const adminIncidentRoute = (id: string) => `${routes.adminIncidents}/${id}`;
+export const adminVillainRoute = (id: string) => `${routes.adminVillains}/${id}`;
 export const adminArticleRoute = (id: string) => `${routes.adminBlog}/${id}`;
+export const adminNewsletterRoute = (id: string) => `${routes.adminNewsletters}/${id}`;
 export const citizenIncidentRoute = (id: string) => `${routes.profileIncidents}/${id}`;
 export const heroIncidentRoute = (id: string) => `${routes.heroIncidents}/${id}`;
 export const blogArticleRoute = (slug: string) => `${routes.blog}/${slug}`;
 export const heroSheetRoute = (id: string) => `${routes.encyclopedia}/super-heros/${id}`;
 export const villainSheetRoute = (id: string) => `${routes.encyclopedia}/super-vilains/${id}`;
+/** Onglet des super-vilains de l'encyclopédie (celui des héros est `routes.encyclopedia`). */
+export const encyclopediaVillainsRoute = `${routes.encyclopedia}?onglet=vilains`;
 
 export interface NavItem {
   label: string;
@@ -76,24 +98,71 @@ export const citizenNav: NavItem[] = [
   { label: "Noter un super-héros", href: routes.profileInterventions },
 ];
 
-/** Sous-navigation de l'espace professionnel des super-héros. */
-export const heroNav: NavItem[] = [
+/** Sous-navigation de l'espace professionnel des super-héros, regroupée en menus déroulants. */
+export const heroNav: NavEntry[] = [
   { label: "Tableau de bord", href: routes.heroDashboard },
-  { label: "Incidents", href: routes.heroIncidents },
-  { label: "Carte", href: routes.heroMap },
-  { label: "Signaler un incident", href: routes.heroDeclare },
-  { label: "Ma vidéothèque", href: routes.heroVideos },
-  { label: "Ma réputation", href: routes.heroReputation },
+  {
+    label: "Incidents",
+    items: [
+      { label: "Incidents", href: routes.heroIncidents },
+      { label: "Carte", href: routes.heroMap },
+      { label: "Signaler un incident", href: routes.heroDeclare },
+    ],
+  },
+  {
+    label: "Mon activité",
+    items: [
+      { label: "Ma réputation", href: routes.heroReputation },
+      { label: "Noter un héros", href: routes.heroRate },
+      { label: "Ma vidéothèque", href: routes.heroVideos },
+    ],
+  },
   { label: "Mon profil", href: routes.heroProfile },
 ];
 
-/** Sous-navigation du back-office (modération). */
-export const adminNav: NavItem[] = [
+/** Groupe de liens d'une sous-navigation, affiché en menu déroulant (voir SpaceNav). */
+export interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
+
+export type NavEntry = NavItem | NavGroup;
+
+export const isNavGroup = (entry: NavEntry): entry is NavGroup => "items" in entry;
+
+/** Sous-navigation du back-office (modération), regroupée en menus déroulants. */
+export const adminNav: NavEntry[] = [
   { label: "Tableau de bord", href: routes.admin },
-  { label: "Incidents", href: routes.adminIncidents },
-  { label: "Comptes", href: routes.adminAccounts },
-  { label: "Super-héros", href: routes.adminHeroes },
-  { label: "Vidéothèque", href: routes.adminVideos },
-  { label: "Commentaires", href: routes.adminComments },
-  { label: "Blog", href: routes.adminBlog },
+  {
+    label: "Incidents",
+    items: [
+      { label: "Incidents", href: routes.adminIncidents },
+      { label: "Types d'incident", href: routes.adminIncidentTypes },
+    ],
+  },
+  {
+    label: "Utilisateurs",
+    items: [
+      { label: "Comptes", href: routes.adminAccounts },
+      { label: "Super-héros", href: routes.adminHeroes },
+      { label: "Noter un héros", href: routes.adminRate },
+    ],
+  },
+  {
+    label: "Contenus",
+    items: [
+      { label: "Super-vilains", href: routes.adminVillains },
+      { label: "Vidéothèque", href: routes.adminVideos },
+      { label: "Commentaires", href: routes.adminComments },
+      { label: "Blog", href: routes.adminBlog },
+      { label: "Newsletter", href: routes.adminNewsletters },
+    ],
+  },
+  {
+    label: "Mon compte",
+    items: [
+      { label: "Mon profil", href: routes.adminProfile },
+      { label: "Sécurité", href: routes.adminSecurity },
+    ],
+  },
 ];

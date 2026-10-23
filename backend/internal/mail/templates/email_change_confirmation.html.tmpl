@@ -1,0 +1,8 @@
+    <p>Bonjour {{.FirstName}},</p>
+    <p>Une demande de changement d'adresse email a été faite sur votre compte <strong>{{.AppName}}</strong> : cette adresse en serait la nouvelle adresse de connexion. Pour confirmer qu'elle est bien la vôtre, cliquez sur le bouton ci-dessous.</p>
+    <p>
+      <a href="{{.Link}}" style="display: inline-block; padding: 10px 18px; background: #cf6a3c; color: #111315; font-weight: bold; text-decoration: none; border-radius: 4px;">Confirmer cette adresse</a>
+    </p>
+    <p>Ce lien est valable {{.ExpiresIn}}. Une fois l'adresse confirmée, la demande est examinée par la modération : l'adresse de connexion ne change qu'à ce moment-là, et vous en serez prévenu·e par mail.</p>
+    <p>Si vous n'êtes pas à l'origine de cette demande, ignorez simplement ce message : l'adresse de connexion ne changera pas.</p>
+    <p>L'équipe {{.AppName}}</p>

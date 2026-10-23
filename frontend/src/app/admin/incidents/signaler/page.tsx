@@ -4,18 +4,19 @@ import { Suspense } from "react";
 import { adminDeclareIncidentAction } from "@/app/actions/incidents";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { DeclareIncidentForm } from "@/components/citizen/DeclareIncidentForm";
-import { getVillains } from "@/lib/api";
+import { getIncidentTypes, getVillains } from "@/lib/api";
 import { routes } from "@/lib/routes";
 import { requireAdminSession } from "@/lib/server-session";
 
 export const metadata: Metadata = { title: "Signaler un incident" };
 
 async function AdminDeclareIncident() {
-  await requireAdminSession();
-  const villains = await getVillains();
+  const token = await requireAdminSession();
+  const [villains, types] = await Promise.all([getVillains(), getIncidentTypes(token)]);
   return (
     <DeclareIncidentForm
       villains={villains.map(({ id, alias }) => ({ id, alias }))}
+      types={types}
       action={adminDeclareIncidentAction}
     />
   );

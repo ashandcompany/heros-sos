@@ -10,21 +10,60 @@ import (
 	"github.com/google/uuid"
 )
 
-var ErrNotFound = errors.New("incident : incident introuvable")
+var (
+	ErrNotFound     = errors.New("incident : incident introuvable")
+	ErrNotAvailable = errors.New("incident : incident non disponible")
+)
+
+// ErrAlreadyExists indique qu'un incident porte déjà l'identifiant fourni par le client. Rejouer une déclaration
+// faite hors ligne (même identifiant) tombe ici quand la clé d'idempotence ne l'a pas déjà absorbée.
+var ErrAlreadyExists = errors.New("incident : un incident porte déjà cet identifiant")
 
 // Status est l'état d'un incident.
 type Status string
 
-// StatusReported est l'état d'un incident venant d'être déclaré.
-const StatusReported Status = "reported"
+const (
+	// StatusReported est l'état d'un incident venant d'être déclaré.
+	StatusReported   Status = "reported"
+	StatusInProgress Status = "in_progress"
+	StatusSucceeded  Status = "succeeded"
+	StatusFailed     Status = "failed"
+)
+
+// ParseStatus valide un statut reçu en paramètre.
+func ParseStatus(raw string) (Status, bool) {
+	switch status := Status(raw); status {
+	case StatusReported, StatusInProgress, StatusSucceeded, StatusFailed:
+		return status, true
+	}
+	return "", false
+}
 
 // Priority est le niveau de priorité d'un incident.
 type Priority string
 
 const (
-	PriorityHigh   Priority = "high"
-	PriorityNormal Priority = "normal"
-	PriorityLow    Priority = "low"
+	PriorityCritical Priority = "critical"
+	PriorityHigh     Priority = "high"
+	PriorityNormal   Priority = "normal"
+	PriorityLow      Priority = "low"
+)
+
+// ModerationStatus est l'état de validation d'une déclaration.
+type ModerationStatus string
+
+const (
+	ModerationPending  ModerationStatus = "pending"
+	ModerationApproved ModerationStatus = "approved"
+	ModerationRejected ModerationStatus = "rejected"
+)
+
+// ReporterRole indique si le déclarant était témoin ou victime.
+type ReporterRole string
+
+const (
+	ReporterWitness ReporterRole = "witness"
+	ReporterVictim  ReporterRole = "victim"
 )
 
 // Incident est un incident déclaré.
@@ -34,9 +73,12 @@ type Incident struct {
 	TypeID            int16
 	TypeCode          string
 	TypeLabel         string
+	Title             string
 	Description       string
 	Status            Status
 	Priority          Priority
+	Moderation        ModerationStatus
+	ReporterRole      *ReporterRole
 	CitizensRescued   int16
 	Street            string
 	PostalCode        string
@@ -49,8 +91,12 @@ type Incident struct {
 	VillainIDs        []uuid.UUID
 	Villains          []VillainReference
 	InterventionID    *uuid.UUID
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	// ResolvedAt est la fin de l'intervention réussie (nil si l'incident n'est pas résolu).
+	ResolvedAt *time.Time
+	// Lead mène la dernière intervention, nil sans intervention ou si son profil n'est plus public.
+	Lead      *HeroReference
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // VillainReference est un vilain associé à un incident.

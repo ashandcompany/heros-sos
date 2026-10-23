@@ -1,5 +1,4 @@
-import { incidentTypeLabels } from "@/lib/format";
-import type { IncidentDeclaration, IncidentType, ReporterRole } from "@/types";
+import type { IncidentDeclaration, ReporterRole } from "@/types";
 
 export const declarationFields = [
   "reporterRole",
@@ -41,13 +40,13 @@ export function readDeclarationValues(formData: FormData): DeclarationValues {
  */
 export function validateDeclaration(
   values: DeclarationValues,
-  villainIds: string[],
+  { villainIds, typeIds }: { villainIds: string[]; typeIds: number[] },
 ): Partial<Record<DeclarationField, string>> {
   return {
     reporterRole: reporterRoleOptions.some((option) => option.value === values.reporterRole)
       ? undefined
       : "Précisez si vous êtes témoin ou victime.",
-    type: values.type in incidentTypeLabels ? undefined : "Choisissez le type d'incident.",
+    type: isKnownTypeId(values.type, typeIds) ? undefined : "Choisissez le type d'incident.",
     title: values.title
       ? length(values.title, 5, TITLE_MAX_LENGTH, "Le titre")
       : "Résumez l'incident en quelques mots.",
@@ -69,12 +68,17 @@ export function validateDeclaration(
 
 export function toDeclaration(values: DeclarationValues): IncidentDeclaration {
   return {
-    reporterRole: values.reporterRole as ReporterRole,
-    type: values.type as IncidentType,
+    reporterRole: (values.reporterRole as ReporterRole) || null,
+    typeId: Number(values.type),
     title: values.title,
     description: values.description,
     location: { address: values.address, city: values.city },
     occurredAt: values.occurredAt ? new Date(values.occurredAt).toISOString() : null,
     villainId: values.villainId || null,
   };
+}
+
+/** Le champ `type` porte l'identifiant d'un type du référentiel (`IncidentTypeDefinition.id`). */
+export function isKnownTypeId(value: string, typeIds: number[]): boolean {
+  return /^\d+$/.test(value) && typeIds.includes(Number(value));
 }

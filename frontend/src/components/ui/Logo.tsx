@@ -35,7 +35,7 @@ export function Logo({ className }: { className?: string }) {
       <Monogram className="h-10 w-auto shrink-0" />
       <span
         aria-hidden="true"
-        className="hidden flex-col justify-center border-l-[3px] border-edge px-2.5 leading-none sm:flex"
+        className="hidden flex-col justify-center border-l-[3px] border-edge px-2.5 leading-none whitespace-nowrap sm:flex"
       >
         <span className="font-display text-sm font-black tracking-[0.3em] uppercase">
           Heros-SOS

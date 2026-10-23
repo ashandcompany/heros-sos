@@ -31,12 +31,6 @@ export async function DashboardSummary() {
       cta: "Examiner",
     },
     {
-      label: "Nouveaux comptes à contrôler",
-      count: summary.accounts,
-      href: routes.adminAccounts,
-      cta: "Contrôler",
-    },
-    {
       label: "Changements d'email",
       count: summary.emailChanges,
       href: `${routes.adminAccounts}#emails`,
@@ -49,9 +43,9 @@ export async function DashboardSummary() {
       cta: "Visionner",
     },
     {
-      label: "Commentaires à modérer",
+      label: "Réponses de héros à vérifier",
       count: summary.comments,
-      href: routes.adminComments,
+      href: `${routes.adminComments}?type=reponses`,
       cta: "Modérer",
     },
     {
@@ -60,8 +54,18 @@ export async function DashboardSummary() {
       href: routes.adminBlog,
       cta: "Ouvrir le blog",
     },
+    {
+      label: "Newsletters en brouillon",
+      count: summary.draftNewsletters,
+      href: routes.adminNewsletters,
+      cta: "Ouvrir la newsletter",
+    },
   ];
-  const total = tiles.slice(0, -1).reduce((sum, tile) => sum + tile.count, 0);
+  // Les brouillons (articles, newsletters) ne sont pas des éléments à modérer.
+  const drafts: string[] = [routes.adminBlog, routes.adminNewsletters];
+  const total = tiles
+    .filter((tile) => !drafts.includes(tile.href))
+    .reduce((sum, tile) => sum + tile.count, 0);
 
   return (
     <>
@@ -104,7 +108,7 @@ export async function DashboardSummary() {
 export function DashboardSummarySkeleton() {
   return (
     <div aria-hidden="true" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      {Array.from({ length: 7 }, (_, index) => (
+      {Array.from({ length: 8 }, (_, index) => (
         <div
           key={index}
           className="h-40 border-2 border-border bg-surface motion-safe:animate-pulse"

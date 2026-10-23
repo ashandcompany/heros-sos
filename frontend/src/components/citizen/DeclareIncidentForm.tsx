@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState, useEffect, useRef, type FormEvent } from "react";
+import { useActionState, useCallback, useEffect, useRef, type FormEvent } from "react";
 import type { DeclareIncidentFormAction } from "@/app/actions/incidents";
+import { useOfflineAction } from "@/components/offline/useOfflineAction";
 import { AddressField } from "@/components/ui/AddressField";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { RadioGroup } from "@/components/ui/RadioGroup";
@@ -9,28 +10,81 @@ import { SelectField } from "@/components/ui/SelectField";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { TextAreaField } from "@/components/ui/TextAreaField";
 import { TextField } from "@/components/ui/TextField";
-import { incidentTypeLabels } from "@/lib/format";
-import { idleFormState, type FormState } from "@/lib/validation/form-state";
+import { commands } from "@/lib/offline/commands";
+import type { BuiltCommand } from "@/lib/offline/forms";
+import { hasFieldErrors, idleFormState, type FormState } from "@/lib/validation/form-state";
 import {
   declarationFields,
   DESCRIPTION_MAX_LENGTH,
   DESCRIPTION_MIN_LENGTH,
+  readDeclarationValues,
   reporterRoleOptions,
   TITLE_MAX_LENGTH,
+  toDeclaration,
+  validateDeclaration,
   type DeclarationField,
 } from "@/lib/validation/incident";
-import type { VillainSummary } from "@/types";
+import type { IncidentTypeDefinition, VillainSummary } from "@/types";
 
 interface DeclareIncidentFormProps {
   villains: VillainSummary[];
+  /** Types du référentiel, par libellé. */
+  types: Array<Pick<IncidentTypeDefinition, "id" | "label">>;
   /** Action de déclaration : citoyen (espace personnel) ou modérateur (back-office). */
   action: DeclareIncidentFormAction;
 }
 
-export function DeclareIncidentForm({ villains, action }: DeclareIncidentFormProps) {
-  const [state, formAction] = useActionState(action, idleFormState as FormState<DeclarationField>);
+/** « Témoin » ou « victime » dans le vocabulaire de l'API (schéma `IncidentPayload`). */
+const apiReporterRole = { temoin: "witness", victime: "victim" } as const;
+
+export function DeclareIncidentForm({ villains, types, action }: DeclareIncidentFormProps) {
+  // Hors ligne (ou réseau coupé pendant l'envoi), la déclaration est gardée sur l'appareil et partira au retour du
+  // réseau : même validation que côté serveur, sur les types et vilains que le formulaire affiche.
+  const buildOffline = useCallback(
+    (formData: FormData): BuiltCommand<FormState<DeclarationField>> => {
+      const values = readDeclarationValues(formData);
+      const occurredAtIso = String(formData.get("occurredAtIso") ?? "");
+      const validated = { ...values, occurredAt: occurredAtIso || values.occurredAt };
+      const fieldErrors = validateDeclaration(validated, {
+        villainIds: villains.map(({ id }) => id),
+        typeIds: types.map(({ id }) => id),
+      });
+      if (hasFieldErrors(fieldErrors)) {
+        return { ok: false, state: { status: "error", fieldErrors, values } };
+      }
+      const declaration = toDeclaration(validated);
+      const draft = commands.declareIncident({
+        id: String(formData.get("incidentId") ?? ""),
+        typeId: declaration.typeId,
+        title: declaration.title,
+        description: declaration.description,
+        citizensRescued: 0,
+        // Le géocodage demande le réseau : l'incident arrive sans coordonnées.
+        location: {
+          address: declaration.location.address,
+          city: declaration.location.city,
+          latitude: null,
+          longitude: null,
+        },
+        occurredAt: declaration.occurredAt,
+        villainIds: declaration.villainId ? [declaration.villainId] : [],
+        reporterRole: declaration.reporterRole ? apiReporterRole[declaration.reporterRole] : null,
+      });
+      if (!draft) {
+        return {
+          ok: false,
+          state: { status: "error", message: "Requête invalide.", fieldErrors: {}, values },
+        };
+      }
+      return { ok: true, draft, message: "Incident enregistré sur cet appareil." };
+    },
+    [villains, types],
+  );
+  const submit = useOfflineAction(action, buildOffline);
+  const [state, formAction] = useActionState(submit, idleFormState as FormState<DeclarationField>);
   const formRef = useRef<HTMLFormElement>(null);
   const occurredAtIsoRef = useRef<HTMLInputElement>(null);
+  const incidentIdRef = useRef<HTMLInputElement>(null);
   const errors = state.fieldErrors;
   const values = state.values ?? {};
 
@@ -49,7 +103,22 @@ export function DeclareIncidentForm({ villains, action }: DeclareIncidentFormPro
       occurredAtIsoRef.current.value =
         date && !Number.isNaN(date.getTime()) ? date.toISOString() : "";
     }
+    // Un identifiant par envoi, choisi par l'appareil : la même déclaration rejouée ne crée pas deux incidents.
+    if (incidentIdRef.current) incidentIdRef.current.value = crypto.randomUUID();
   };
+
+  // Référentiel vide (aucun type créé par la modération) : rien ne peut être déclaré.
+  if (types.length === 0) {
+    return (
+      <p
+        role="status"
+        className="rounded-2xl border border-dashed border-border p-5 text-sm text-muted"
+      >
+        La déclaration d&apos;incident est momentanément indisponible : aucun type d&apos;incident
+        n&apos;a encore été défini par le Bureau.
+      </p>
+    );
+  }
 
   return (
     <form
@@ -60,6 +129,7 @@ export function DeclareIncidentForm({ villains, action }: DeclareIncidentFormPro
       className="space-y-5"
     >
       <input ref={occurredAtIsoRef} type="hidden" name="occurredAtIso" />
+      <input ref={incidentIdRef} type="hidden" name="incidentId" />
 
       <RadioGroup
         legend="Vous êtes"
@@ -80,9 +150,9 @@ export function DeclareIncidentForm({ villains, action }: DeclareIncidentFormPro
         <option value="" disabled>
           Choisir…
         </option>
-        {Object.entries(incidentTypeLabels).map(([value, label]) => (
-          <option key={value} value={value}>
-            {label}
+        {types.map((type) => (
+          <option key={type.id} value={type.id}>
+            {type.label}
           </option>
         ))}
       </SelectField>
@@ -143,6 +213,11 @@ export function DeclareIncidentForm({ villains, action }: DeclareIncidentFormPro
         label="Super-vilain impliqué"
         name="villainId"
         defaultValue={values.villainId ?? ""}
+        hint={
+          villains.length === 0
+            ? "Aucun super-vilain n'est encore répertorié : précisez-le dans la description si vous le connaissez."
+            : undefined
+        }
         error={errors.villainId}
       >
         <option value="">Je ne sais pas</option>

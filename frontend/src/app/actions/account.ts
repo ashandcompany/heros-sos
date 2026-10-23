@@ -4,19 +4,30 @@ import { revalidatePath } from "next/cache";
 import { routes } from "@/lib/routes";
 import {
   requestEmailChange,
+  removeMyAvatar,
+  requestHeroStatus,
   updateMyAvatar,
   updateMyContact,
   updateNewsletterPreference,
 } from "@/lib/api";
 import { requireCitizenSession } from "@/lib/server-session";
 import {
+  avatarErrorMessage,
+  contactFailureState,
+  emailChangeFailureState,
   readContactValues,
   validateAvatar,
   validateContact,
   validateEmail,
   type ContactField,
 } from "@/lib/validation/account";
-import { hasFieldErrors, type FormState } from "@/lib/validation/form-state";
+import { apiFailureMessage, hasFieldErrors, type FormState } from "@/lib/validation/form-state";
+import {
+  heroRequestFieldErrors,
+  readHeroRequestValues,
+  validateHeroRequest,
+  type HeroRequestField,
+} from "@/lib/validation/hero";
 
 export async function updateContactAction(
   _previousState: FormState<ContactField>,
@@ -39,7 +50,7 @@ export async function updateContactAction(
     },
   });
 
-  if (!result.ok) return { status: "error", message: result.error, fieldErrors: {}, values };
+  if (!result.ok) return contactFailureState(result, values);
 
   revalidatePath(routes.profile);
   return { status: "success", message: "Vos coordonnées ont été mises à jour.", fieldErrors: {} };
@@ -57,7 +68,7 @@ export async function updateAvatarAction(
   if (error || !avatar) return { status: "error", fieldErrors: { avatar: error } };
 
   const result = await updateMyAvatar(token, avatar);
-  if (!result.ok) return { status: "error", message: result.error, fieldErrors: {} };
+  if (!result.ok) return { status: "error", message: avatarErrorMessage(result), fieldErrors: {} };
 
   revalidatePath(routes.profile);
   return {
@@ -78,15 +89,13 @@ export async function requestEmailChangeAction(
   if (error) return { status: "error", fieldErrors: { email: error }, values: { email } };
 
   const result = await requestEmailChange(token, email);
-  if (!result.ok) {
-    return { status: "error", fieldErrors: { email: result.error }, values: { email } };
-  }
+  if (!result.ok) return emailChangeFailureState(result, email);
 
   revalidatePath(routes.profile);
   return {
     status: "success",
     message:
-      "Demande envoyée : la nouvelle adresse sera active après validation par la modération.",
+      "Demande envoyée : un mail de confirmation vient d'être envoyé à la nouvelle adresse. Elle sera active une fois confirmée, puis validée par la modération.",
     fieldErrors: {},
   };
 }
@@ -99,7 +108,7 @@ export async function updateNewsletterAction(
   const subscribed = formData.get("newsletter") === "on";
 
   const result = await updateNewsletterPreference(token, subscribed);
-  if (!result.ok) return { status: "error", message: result.error, fieldErrors: {} };
+  if (!result.ok) return { status: "error", message: apiFailureMessage(result), fieldErrors: {} };
 
   revalidatePath(routes.profile);
   return {
@@ -109,4 +118,64 @@ export async function updateNewsletterAction(
       : "Vous ne recevrez plus la newsletter.",
     fieldErrors: {},
   };
+}
+
+/* ---------- Demande de statut super-héros ---------- */
+
+const heroRequestErrorMessages = {
+  "already-pending": "Votre demande est déjà en cours d'examen.",
+  "already-hero": "Vous êtes déjà super-héros : rechargez la page pour ouvrir votre espace.",
+  "not-eligible": "Votre compte ne peut pas faire cette demande. Contactez le Bureau.",
+} as const;
+
+export async function requestHeroStatusAction(
+  _previousState: FormState<HeroRequestField>,
+  formData: FormData,
+): Promise<FormState<HeroRequestField>> {
+  const token = await requireCitizenSession();
+  const values = readHeroRequestValues(formData);
+  const fieldErrors = validateHeroRequest(values);
+
+  if (hasFieldErrors(fieldErrors)) return { status: "error", fieldErrors, values };
+
+  const result = await requestHeroStatus(token, values);
+  if (!result.ok) {
+    switch (result.error) {
+      case "alias-already-used":
+        return {
+          status: "error",
+          fieldErrors: { alias: "Ce pseudo est déjà utilisé : choisissez-en un autre." },
+          values,
+        };
+      case "invalid-fields":
+        return { status: "error", fieldErrors: heroRequestFieldErrors(result.fields), values };
+      case "already-pending":
+      case "already-hero":
+      case "not-eligible":
+        return {
+          status: "error",
+          message: heroRequestErrorMessages[result.error],
+          fieldErrors: {},
+          values,
+        };
+      default:
+        return { status: "error", message: apiFailureMessage(result), fieldErrors: {}, values };
+    }
+  }
+
+  revalidatePath(routes.profile);
+  return {
+    status: "success",
+    message: "Demande envoyée : le Bureau l'examinera dans les meilleurs délais.",
+    fieldErrors: {},
+  };
+}
+
+export async function removeAvatarAction(): Promise<FormState> {
+  const token = await requireCitizenSession();
+  const result = await removeMyAvatar(token);
+  if (!result.ok) return { status: "error", message: result.error, fieldErrors: {} };
+
+  revalidatePath(routes.profile);
+  return { status: "success", message: "Votre photo a été retirée.", fieldErrors: {} };
 }

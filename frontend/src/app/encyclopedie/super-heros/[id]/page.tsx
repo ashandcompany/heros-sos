@@ -13,16 +13,25 @@ import {
   getSuperHero,
 } from "@/lib/api";
 import { dossierNumber } from "@/lib/dossier";
-import { formatDate, formatInteger, formatLocation, incidentTypeLabels } from "@/lib/format";
-import { routes, villainSheetRoute } from "@/lib/routes";
+import { formatDate, formatInteger, formatLocation } from "@/lib/format";
+import { heroSheetRoute, routes, villainSheetRoute } from "@/lib/routes";
+import { getSiteUrl } from "@/lib/site";
 
 export async function generateMetadata({
   params,
 }: PageProps<"/encyclopedie/super-heros/[id]">): Promise<Metadata> {
   const hero = await getSuperHero((await params).id);
-  return hero
-    ? { title: hero.alias, description: `${hero.alias} : ${hero.power}.` }
-    : { title: "Super-héros introuvable" };
+  if (!hero) return { title: "Super-héros introuvable" };
+
+  const description = `${hero.alias} : ${hero.power}.`;
+  // Rendu à la requête (paramètre d'URL) : SITE_URL n'est pas figée au build.
+  return {
+    metadataBase: new URL(getSiteUrl()),
+    title: hero.alias,
+    description,
+    alternates: { canonical: heroSheetRoute(hero.id) },
+    openGraph: { type: "profile", title: hero.alias, description },
+  };
 }
 
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
@@ -111,9 +120,7 @@ async function HeroSheet({ params }: { params: Promise<{ id: string }> }) {
                   >
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge tone="success">Résolu</Badge>
-                      <span className="text-xs text-muted">
-                        {incidentTypeLabels[incident.type]}
-                      </span>
+                      <span className="text-xs text-muted">{incident.type.label}</span>
                     </div>
                     <h3 className="mt-2 font-display font-semibold">{incident.title}</h3>
                     <p className="mt-1 text-sm text-muted">
@@ -133,13 +140,13 @@ async function HeroSheet({ params }: { params: Promise<{ id: string }> }) {
               <ul className="space-y-4">
                 {reviews.map((review) => (
                   <li
-                    key={review.incidentId}
+                    key={review.id}
                     className="border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-5"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <RatingStars rating={review.rating} />
-                      <time dateTime={review.ratedAt} className="font-mono text-xs text-muted">
-                        {formatDate(review.ratedAt)}
+                      <time dateTime={review.createdAt} className="font-mono text-xs text-muted">
+                        {formatDate(review.createdAt)}
                       </time>
                     </div>
                     <blockquote className="mt-3 border-l-2 border-border pl-3 text-pretty">
@@ -232,7 +239,7 @@ export default function HeroSheetPage({ params }: PageProps<"/encyclopedie/super
   return (
     <Container className="py-10 sm:py-14">
       <p className="mb-6 text-sm">
-        <Link href={`${routes.encyclopedia}#super-heros`} className="text-accent hover:underline">
+        <Link href={routes.encyclopedia} className="text-accent hover:underline">
           ← Tous les super-héros
         </Link>
       </p>

@@ -21,7 +21,11 @@ import (
 	"github.com/ashandcompany/heros-sos/backend/internal/villain"
 )
 
-const entityType = "hero_film"
+const (
+	entityType = "hero_film"
+	// titleQueryMaxLength borne la recherche par titre dans les listes de films.
+	titleQueryMaxLength = 100
+)
 
 var imdbIDPattern = regexp.MustCompile(`^tt[0-9]{7,12}$`)
 
@@ -184,16 +188,39 @@ func (s *Service) DeleteVillainFilm(ctx context.Context, moderatorID, villainID,
 	})
 }
 
-func (s *Service) ListHeroFilms(ctx context.Context, heroID *uuid.UUID, status string, limit, offset int) ([]HeroFilm, int64, error) {
-	if heroID != nil {
-		if err := s.requireApprovedHero(ctx, *heroID); err != nil {
+func (s *Service) ListHeroFilms(ctx context.Context, filter HeroFilmFilter, limit, offset int) ([]HeroFilm, int64, error) {
+	if filter.HeroID != nil {
+		if err := s.requireApprovedHero(ctx, *filter.HeroID); err != nil {
 			return nil, 0, err
 		}
 	}
-	if status != "" && status != "all" && status != StatusPending && status != StatusApproved && status != StatusRejected {
-		return nil, 0, &validation.Error{Fields: map[string]string{"status": validation.CodeInvalid}}
+	var fields validation.Collector
+	if status := filter.Status; status != "" && status != "all" && status != StatusPending && status != StatusApproved && status != StatusRejected {
+		fields.Add("status", validation.CodeInvalid)
 	}
-	return s.Repo.ListHeroFilms(ctx, heroID, status, limit, offset)
+	title, code := validation.OptionalText(filter.Title, titleQueryMaxLength)
+	fields.Add("q", code)
+	if err := fields.Err(); err != nil {
+		return nil, 0, err
+	}
+	filter.Title = title
+	return s.Repo.ListHeroFilms(ctx, filter, limit, offset)
+}
+
+// ListPublicFilms renvoie la vidéothèque publique, un film par entrée. Un héros inconnu ou non
+// validé donne une liste vide.
+func (s *Service) ListPublicFilms(ctx context.Context, filter PublicFilmFilter, limit, offset int) ([]PublicFilm, int64, error) {
+	title, code := validation.OptionalText(filter.Title, titleQueryMaxLength)
+	if code != "" {
+		return nil, 0, &validation.Error{Fields: map[string]string{"q": code}}
+	}
+	filter.Title = title
+	return s.Repo.ListPublicFilms(ctx, filter, limit, offset)
+}
+
+// ListFilmHeroes renvoie les super-héros ayant au moins un film publié, par pseudo.
+func (s *Service) ListFilmHeroes(ctx context.Context) ([]FilmHero, error) {
+	return s.Repo.ListFilmHeroes(ctx)
 }
 
 func (s *Service) ListVillainFilms(ctx context.Context, villainID uuid.UUID, limit, offset int) ([]VillainFilm, int64, error) {

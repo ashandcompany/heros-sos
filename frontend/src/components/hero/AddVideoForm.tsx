@@ -6,7 +6,7 @@ import { addVideoAction } from "@/app/actions/hero";
 import { buttonClasses } from "@/components/ui/ButtonLink";
 import { cn } from "@/components/ui/cn";
 import { FormMessage } from "@/components/ui/FormMessage";
-import { idleFormState } from "@/lib/validation/form-state";
+import { idleFormState, type FormState } from "@/lib/validation/form-state";
 
 function AddButton({ title }: { title: string }) {
   const { pending } = useFormStatus();
@@ -23,13 +23,31 @@ function AddButton({ title }: { title: string }) {
   );
 }
 
-/** Ajoute un film trouvé sur IMDb à la vidéothèque (publié après modération). */
-export function AddVideoForm({ imdbId, title }: { imdbId: string; title: string }) {
-  const [state, formAction] = useActionState(addVideoAction, idleFormState);
+/**
+ * Ajoute un film trouvé sur IMDb à une vidéothèque : celle du héros connecté (publié après
+ * modération, par défaut), ou, avec une action du back-office (publié aussitôt), celle de
+ * `heroId` ou la fiche de `villainId`.
+ */
+export function AddVideoForm({
+  imdbId,
+  title,
+  heroId,
+  villainId,
+  action = addVideoAction,
+}: {
+  imdbId: string;
+  title: string;
+  heroId?: string;
+  villainId?: string;
+  action?: (previousState: FormState, formData: FormData) => Promise<FormState>;
+}) {
+  const [state, formAction] = useActionState(action, idleFormState);
 
   return (
     <form action={formAction} className="space-y-2">
       <input type="hidden" name="imdbId" value={imdbId} />
+      {heroId && <input type="hidden" name="heroId" value={heroId} />}
+      {villainId && <input type="hidden" name="villainId" value={villainId} />}
       <AddButton title={title} />
       <FormMessage state={state} />
     </form>

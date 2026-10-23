@@ -13,7 +13,7 @@ export default function AdminIncidentsPage({ searchParams }: PageProps<"/admin/i
     <>
       <AdminPageHeader
         title="Incidents signalés"
-        description="Analysez chaque déclaration : validez-la si elle est conforme et réelle, corrigez les informations inexactes, rejetez les faux signalements (ils ne sont plus diffusés)."
+        description="Analysez chaque déclaration : validez-la si elle est conforme et réelle, corrigez les informations inexactes, rejetez les faux signalements (ils ne sont plus diffusés). Arbitrez les résultats contestés depuis le détail d'un incident."
         action={
           <ButtonLink href={routes.adminReportIncident} variant="secondary">
             Signaler un incident

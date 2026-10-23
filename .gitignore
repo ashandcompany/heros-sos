@@ -13,6 +13,9 @@ secrets/
 *.pem
 *.key
 
+# Surcharge locale de Docker Compose (à côté de docker-compose*.yml)
+docker-compose.override.yml
+
 # Go
 backend/bin/
 backend/tmp/

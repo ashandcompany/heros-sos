@@ -15,12 +15,13 @@ flowchart TB
         proxy["<b>proxy</b><br/>Caddy<br/>dev : 8088<br/>prod : 80 et 443 (TLS)"]
         web["<b>web</b><br/>Next.js<br/>port interne 3000"]
         api["<b>api</b><br/>Go<br/>port interne 8080"]
+        mailworker["<b>mail-worker</b><br/>Go<br/>envoie les mails<br/>(aussi sur backend)"]
     end
 
     subgraph backend["Réseau backend (fermé en production)"]
         db[("<b>db</b><br/>PostgreSQL 18")]
         mailpit["<b>mailpit</b><br/>faux SMTP (dev)"]
-        rabbit["<b>rabbitmq</b><br/>pas encore utilisé"]
+        rabbit["<b>rabbitmq</b><br/>file des mails"]
     end
 
     subgraph externes["Services externes"]
@@ -37,8 +38,10 @@ flowchart TB
     web -->|"API_URL + cookie de session"| api
     web -->|"autocomplétion /api/adresses"| geo
     api --> db
-    api -->|"dev"| mailpit
-    api -->|"prod"| smtp
+    api -->|"dépose les mails"| rabbit
+    rabbit -->|"relit"| mailworker
+    mailworker -->|"dev"| mailpit
+    mailworker -->|"prod"| smtp
     api -->|"fiches de films"| omdb
 ```
 
@@ -55,7 +58,9 @@ flowchart TB
   directement sur le réseau `edge`, sans repasser par le proxy.
 - **La base n'est jamais exposée.** Elle est sur le réseau `backend`, fermé en production : ni la base ni l'API
   n'ont de port publié (seul le proxy en a), et la base n'a aucun accès à Internet.
-- **Les mails passent par l'API.** En développement ils partent vers Mailpit (http://localhost:8025) ; en
-  production vers un vrai serveur SMTP chiffré. La file d'envoi est dans le processus de l'API : RabbitMQ est
-  démarré mais aucun code ne l'utilise encore.
+- **Les mails passent par une file.** L'API dépose chaque mail dans RabbitMQ (elle n'attend que la confirmation du
+  courtier) ; le service `mail-worker` le relit et l'envoie : vers Mailpit (http://localhost:8025) en développement,
+  vers un vrai serveur SMTP chiffré en production. Un mail accepté survit à l'arrêt de l'API ; en cas d'échec définitif
+  il part dans la file morte. Sans RabbitMQ (`HEROS_MAIL_QUEUE=memory`), l'API envoie elle-même, depuis une file en
+  mémoire.
 - **Deux volumes à sauvegarder** : `pgdata` (la base) et `avatars` (les photos de profil).

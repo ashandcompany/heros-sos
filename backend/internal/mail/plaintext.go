@@ -38,6 +38,8 @@ func plainText(markup string) string {
 					out.WriteByte(' ')
 				}
 			}
+		case html.CommentToken, html.DoctypeToken:
+			// Sans contenu visible.
 		case html.StartTagToken, html.SelfClosingTagToken:
 			name, hasAttr := tokenizer.TagName()
 			switch tag := string(name); tag {

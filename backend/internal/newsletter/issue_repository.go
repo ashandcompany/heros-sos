@@ -48,12 +48,7 @@ type issueRecord struct {
 
 func (issueRecord) TableName() string { return tableIssues }
 
-func (r issueRecord) toIssue() Issue {
-	return Issue{
-		ID: r.ID, Subject: r.Subject, BodyHTML: r.BodyHTML, RecipientUserID: r.RecipientUserID,
-		CreatedBy: r.CreatedBy, CreatedAt: r.CreatedAt, SentAt: r.SentAt,
-	}
-}
+func (r issueRecord) toIssue() Issue { return Issue(r) }
 
 type issueRepo struct{ db *gorm.DB }
 

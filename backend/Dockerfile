@@ -2,7 +2,7 @@
 
 # Image de l'API Heros-SOS : compilation statique, puis image `scratch` (ni shell, ni paquets, ni
 # gestionnaire d'identités) exécutée par un utilisateur non privilégié. La surface d'attaque se
-# réduit à quatre binaires et aux certificats racine.
+# réduit à cinq binaires et aux certificats racine.
 
 # Version de Go épinglée (même numéro que la directive `go` de go.mod) : un tag « 1.26 » flottant
 # laisserait une image en cache compiler avec une bibliothèque standard déjà vulnérable.
@@ -22,6 +22,7 @@ COPY . .
 # Les migrations SQL et les modèles de mails sont embarqués : le binaire est autonome.
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/mailworker ./cmd/mailworker && \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/createmoderator ./cmd/createmoderator && \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/resetmfa ./cmd/resetmfa && \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/seed ./cmd/seed && \
@@ -37,7 +38,9 @@ COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certifi
 #   docker compose run --rm --entrypoint /createmoderator api -email … -first-name … -last-name … -birth-date …
 #   docker compose run --rm --entrypoint /resetmfa api -email …
 # `seed` remplit une base de démonstration (refusé en production) : make seed
-COPY --from=builder /out/api /out/createmoderator /out/resetmfa /out/seed /
+# `mailworker` envoie les mails que l'API dépose dans RabbitMQ (service `mail-worker`, même image, autre
+# binaire : `entrypoint: ["/mailworker"]`). Voir backend/stack/rabbitmq.md.
+COPY --from=builder /out/api /out/mailworker /out/createmoderator /out/resetmfa /out/seed /
 
 LABEL org.opencontainers.image.title="heros-sos-api" \
       org.opencontainers.image.description="API REST de la plateforme Heros-SOS" \

@@ -32,6 +32,8 @@ x-api-config: &api-config
     HEROS_CSRF_SECRET_FILE: /run/secrets/csrf_secret
     HEROS_SMTP_PASSWORD_FILE: /run/secrets/smtp_password
     HEROS_OMDB_API_KEY_FILE: /run/secrets/omdb_api_key
+    # Lue seulement avec HEROS_MAIL_QUEUE=rabbitmq (backend/.env.production) ; sinon sans effet.
+    HEROS_RABBITMQ_URL_FILE: /run/secrets/rabbitmq_url
     HEROS_ALLOWED_ORIGINS: https://${DOMAIN:?DOMAIN est obligatoire (voir .env.production.example)}
     HEROS_PUBLIC_BASE_URL: https://${DOMAIN}
     HEROS_MAIL_DRIVER: smtp
@@ -41,6 +43,7 @@ x-api-config: &api-config
     - csrf_secret
     - smtp_password
     - omdb_api_key
+    - rabbitmq_url
 
 services:
   # Applique les migrations puis s'arrête. L'API ne démarre que si elle a réussi.
@@ -71,6 +74,29 @@ services:
     # Argon2id : 4 hachages simultanés × 64 Mio = 256 Mio, plus le tas Go.
     mem_limit: 768m
     cpus: 1.0
+
+  # Envoie les mails déposés dans RabbitMQ. À activer avec `COMPOSE_PROFILES=rabbitmq` ET `HEROS_MAIL_QUEUE=rabbitmq` dans
+  # backend/.env.production (voir ce fichier) : sans eux, l'API envoie elle-même ses mails, comme avant.
+  # Pas de base ni de clés de chiffrement : seulement le courtier et le serveur SMTP.
+  mail-worker:
+    profiles: ["rabbitmq"]
+    image: heros-sos/api:${APP_VERSION:-dev}
+    env_file:
+      - backend/.env.production
+    environment:
+      HEROS_ENV: production
+      HEROS_MAIL_DRIVER: smtp
+      HEROS_MAIL_QUEUE: rabbitmq
+      HEROS_RABBITMQ_URL_FILE: /run/secrets/rabbitmq_url
+      HEROS_SMTP_PASSWORD_FILE: /run/secrets/smtp_password
+    secrets:
+      - rabbitmq_url
+      - smtp_password
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    mem_limit: 128m
+    cpus: 0.5
 
   db:
     environment:
@@ -126,8 +152,8 @@ services:
       retries: 5
       start_period: 30s
 
-  # Pas encore utilisé : la file de mails est aujourd'hui interne à l'API. À activer avec
-  # `--profile rabbitmq` quand le worker de mails sera branché dessus.
+  # La file des mails (voir backend/stack/rabbitmq.md). Activée avec le profil `rabbitmq`, en même temps que le service
+  # mail-worker, et avec HEROS_MAIL_QUEUE=rabbitmq pour que l'API y dépose ses mails.
   rabbitmq:
     image: rabbitmq:4-management-alpine
     profiles: ["rabbitmq"]
@@ -172,6 +198,9 @@ secrets:
     file: ./backend/secrets/omdb_api_key
   rabbitmq_password:
     file: ./backend/secrets/rabbitmq_password
+  # amqp://utilisateur:mot de passe@rabbitmq:5672/ : lue par l'API et le worker (HEROS_RABBITMQ_URL_FILE).
+  rabbitmq_url:
+    file: ./backend/secrets/rabbitmq_url
 
 volumes:
   rabbitmq_data:

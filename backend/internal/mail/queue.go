@@ -11,7 +11,8 @@ import (
 )
 
 var (
-	// ErrQueueFull indique que la file d'envoi est saturée : le mail n'a pas été accepté.
+	// ErrQueueFull indique que la file d'envoi est saturée ou momentanément indisponible (courtier RabbitMQ
+	// injoignable ou bloqué) : le mail n'a pas été accepté, l'appelant peut réessayer plus tard.
 	ErrQueueFull = errors.New("mail : file d'envoi saturée")
 	// ErrQueueClosed indique que la file ne reçoit plus de mails (arrêt en cours).
 	ErrQueueClosed = errors.New("mail : file d'envoi fermée")
@@ -22,8 +23,9 @@ var (
 // croissant, et se vident proprement à l'arrêt. Queue est un Mailer : Send ne fait que mettre
 // le mail en file.
 //
-// Les mails en file sont perdus si le processus s'arrête brutalement ; RabbitMQ (ou une table
-// d'envoi) les rendrait durables, sans changer les appelants qui ne connaissent que Mailer.
+// Les mails en file sont perdus si le processus s'arrête brutalement. Avec HEROS_MAIL_QUEUE=rabbitmq, ils
+// attendent à la place dans RabbitMQ (Publisher dépose, Worker envoie) : durables, sans changer les appelants
+// qui ne connaissent que Mailer.
 type Queue struct {
 	mailer Mailer
 	cfg    config.Mail

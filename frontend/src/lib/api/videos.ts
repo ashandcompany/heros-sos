@@ -6,6 +6,7 @@ import { apiFailureMessage } from "@/lib/validation/form-state";
 import type {
   FilmFilter,
   FilmHero,
+  FilmSource,
   HeroVideo,
   ModerationStatus,
   MutationResult,
@@ -92,7 +93,12 @@ const filmErrorMessages: Record<string, string> = {
   not_found: "Film introuvable.",
   catalog_unavailable:
     "Le catalogue IMDb est momentanément indisponible. Réessayez dans quelques instants.",
+  validation_failed: "Certaines informations sont invalides. Vérifiez le formulaire.",
 };
+
+/** Corps de l'ajout d'un film : identifiant IMDb, ou titre, description et lien d'une vidéo libre. */
+const filmInput = (source: FilmSource): ApiSchema<"FilmInput"> =>
+  typeof source === "string" ? { imdbId: source } : source;
 
 /** Traduit l'échec d'une écriture sur une vidéothèque en message affichable. */
 function toFilmMutationFailure(error: unknown, context: string): MutationResult {
@@ -278,36 +284,26 @@ export async function getHeroesForVideos(token: string): Promise<SuperHeroSummar
 export async function addHeroVideo(
   token: string,
   heroId: string,
-  imdbId: string,
+  source: FilmSource,
 ): Promise<MutationResult> {
   if (!isApiEnabled) {
     await userFromToken(token, "admin");
     const hero = superHeroesMock.find(({ id }) => id === heroId);
-    const title = await getImdbTitle(token, imdbId);
-    if (!hero || !title) return mockResponse({ ok: false, error: "Film introuvable." });
-    if (videosMock.some((video) => video.hero.id === heroId && video.imdbId === imdbId)) {
-      return mockResponse({ ok: false, error: alreadyInHeroLibrary });
-    }
-
-    videosMock.push({
-      id: `video-${crypto.randomUUID()}`,
-      hero: { id: hero.id, alias: hero.alias },
-      title: title.title,
-      description: title.plot,
-      videoUrl: `https://www.imdb.com/title/${title.id}/`,
-      imdbId: title.id,
-      year: title.year,
-      addedAt: new Date().toISOString(),
-      moderation: "valide",
-    });
-    return mockResponse({ ok: true });
+    if (!hero) return mockResponse({ ok: false, error: "Film introuvable." });
+    return addMockVideo(
+      token,
+      { id: hero.id, alias: hero.alias },
+      source,
+      "valide",
+      alreadyInHeroLibrary,
+    );
   }
 
   try {
     await apiFetch("/admin/hero-films", {
       method: "POST",
       sessionToken: token,
-      body: { heroId, imdbId } satisfies ApiSchema<"AdminHeroFilmInput">,
+      body: { heroId, ...filmInput(source) } satisfies ApiSchema<"AdminHeroFilmInput">,
     });
     return { ok: true };
   } catch (error) {
@@ -358,14 +354,23 @@ export async function getMyVideosPage(
  * Ajoute un film du catalogue IMDb ; il sera publié après validation par la modération.
  * API : `POST /hero/films` avec `{ imdbId }`.
  */
-export async function addMyVideo(token: string, imdbId: string): Promise<MutationResult> {
-  if (!isApiEnabled) return addMyVideoWithMocks(token, imdbId);
+export async function addMyVideo(token: string, source: FilmSource): Promise<MutationResult> {
+  if (!isApiEnabled) {
+    const user = await userFromToken(token, "super-heros");
+    return addMockVideo(
+      token,
+      { id: user.id, alias: user.displayName },
+      source,
+      "en-attente",
+      "Ce film est déjà dans votre vidéothèque.",
+    );
+  }
 
   try {
     await apiFetch("/hero/films", {
       method: "POST",
       sessionToken: token,
-      body: { imdbId } satisfies ApiSchema<"FilmInput">,
+      body: filmInput(source),
     });
     return { ok: true };
   } catch (error) {
@@ -659,24 +664,37 @@ function matchesFilmFilter({ heroId, query }: FilmFilter) {
     (!needle || title.toLocaleLowerCase("fr").includes(needle));
 }
 
-async function addMyVideoWithMocks(token: string, imdbId: string): Promise<MutationResult> {
-  const user = await userFromToken(token, "super-heros");
-  const title = await getImdbTitle(token, imdbId);
-  if (!title) return mockResponse({ ok: false, error: "Film introuvable sur IMDb." });
-  if (videosMock.some((video) => video.hero.id === user.id && video.imdbId === imdbId)) {
-    return mockResponse({ ok: false, error: "Ce film est déjà dans votre vidéothèque." });
+/** Mock : ajoute un film IMDb (une fois par héros) ou une vidéo libre à la vidéothèque de `hero`. */
+async function addMockVideo(
+  token: string,
+  hero: SuperHeroSummary,
+  source: FilmSource,
+  moderation: ModerationStatus,
+  alreadyOwned: string,
+): Promise<MutationResult> {
+  const video = {
+    id: `video-${crypto.randomUUID()}`,
+    hero,
+    addedAt: new Date().toISOString(),
+    moderation,
+  };
+  if (typeof source !== "string") {
+    videosMock.push({ ...video, ...source });
+    return mockResponse({ ok: true });
   }
 
+  const title = await getImdbTitle(token, source);
+  if (!title) return mockResponse({ ok: false, error: "Film introuvable sur IMDb." });
+  if (videosMock.some(({ hero: { id }, imdbId }) => id === hero.id && imdbId === source)) {
+    return mockResponse({ ok: false, error: alreadyOwned });
+  }
   videosMock.push({
-    id: `video-${crypto.randomUUID()}`,
-    hero: { id: user.id, alias: user.displayName },
+    ...video,
     title: title.title,
     description: title.plot,
     videoUrl: `https://www.imdb.com/title/${title.id}/`,
     imdbId: title.id,
     year: title.year,
-    addedAt: new Date().toISOString(),
-    moderation: "en-attente",
   });
   return mockResponse({ ok: true });
 }

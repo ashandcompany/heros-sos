@@ -35,7 +35,18 @@ import {
 } from "@/lib/validation/account";
 import { hasFieldErrors, type FormState } from "@/lib/validation/form-state";
 import { OUTCOME_NOTES_MAX_LENGTH, REPLY_MAX_LENGTH } from "@/lib/validation/hero";
-import type { HeroPosition, InterventionOutcome, InterventionRef, MutationResult } from "@/types";
+import {
+  readFreeVideoValues,
+  validateFreeVideo,
+  type FreeVideoValues,
+} from "@/lib/validation/video";
+import type {
+  FilmSource,
+  HeroPosition,
+  InterventionOutcome,
+  InterventionRef,
+  MutationResult,
+} from "@/types";
 
 /*
  * Server Actions de l'espace super-héros. Chacune revérifie la session (le proxy ne suffit pas)
@@ -282,10 +293,22 @@ export async function addVideoAction(
   formData: FormData,
 ): Promise<FormState> {
   const { token } = await requireHeroSession();
-  const imdbId = String(formData.get("imdbId") ?? "");
-  if (!/^tt\d{7,}$/.test(imdbId)) return invalidRequest;
+  let source: FilmSource;
+  let values: FreeVideoValues | undefined;
+  if (formData.has("imdbId")) {
+    source = String(formData.get("imdbId"));
+    if (!/^tt\d{7,}$/.test(source)) return invalidRequest;
+  } else {
+    // Vidéo libre, hors IMDb.
+    source = values = readFreeVideoValues(formData);
+    const fieldErrors = validateFreeVideo(values);
+    if (hasFieldErrors(fieldErrors)) return { status: "error", fieldErrors, values };
+  }
 
-  const result = await addMyVideo(token, imdbId);
+  const result = await addMyVideo(token, source);
+  if (!result.ok && values) {
+    return { status: "error", message: result.error, fieldErrors: {}, values };
+  }
   return settle(
     result,
     [routes.heroVideos, routes.heroDashboard, routes.admin, routes.adminVideos],

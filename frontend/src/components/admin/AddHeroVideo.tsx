@@ -1,5 +1,6 @@
 import { addHeroVideoAction } from "@/app/actions/admin";
 import { AddVideoForm } from "@/components/hero/AddVideoForm";
+import { FreeVideoForm } from "@/components/hero/FreeVideoForm";
 import { buttonClasses } from "@/components/ui/ButtonLink";
 import { cn } from "@/components/ui/cn";
 import { getHeroesForVideos, getHeroVideos, searchImdbTitles } from "@/lib/api";
@@ -23,7 +24,8 @@ const fieldClasses =
   "min-h-11 w-full min-w-0 rounded-full border border-border bg-background px-4 placeholder:text-muted";
 
 /**
- * Ajout direct d'un film IMDb à la vidéothèque d'un super-héros, publié sans modération.
+ * Ajout direct d'un film IMDb, ou d'une vidéo libre, à la vidéothèque d'un super-héros, publié
+ * sans modération.
  * Formulaire GET : fonctionne sans JavaScript et l'URL reste partageable. Lit la session et
  * l'URL : à rendre sous <Suspense>.
  */
@@ -152,6 +154,17 @@ export async function AddHeroVideo({ searchParams }: { searchParams: AddHeroVide
             </>
           )}
         </div>
+      )}
+
+      {hero && (
+        <details className="mt-6 border-t border-border pt-4">
+          <summary className="cursor-pointer font-display font-semibold">
+            Ajouter une vidéo hors IMDb à {hero.alias}
+          </summary>
+          <div className="mt-4">
+            <FreeVideoForm key={hero.id} heroId={hero.id} action={addHeroVideoAction} />
+          </div>
+        </details>
       )}
     </details>
   );

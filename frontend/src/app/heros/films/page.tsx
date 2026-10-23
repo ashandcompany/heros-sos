@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminListSkeleton } from "@/components/admin/ModerationFilter";
+import { FreeVideoForm } from "@/components/hero/FreeVideoForm";
 import { ImdbSearch, MyVideos } from "@/components/hero/HeroVideosSections";
 
 export const metadata: Metadata = { title: "Ma vidéothèque" };
@@ -11,7 +12,7 @@ export default function HeroVideosPage({ searchParams }: PageProps<"/heros/films
     <>
       <AdminPageHeader
         title="Ma vidéothèque"
-        description="Les films qui vous sont consacrés, issus du catalogue IMDb. Chaque ajout est vérifié par la modération avant d'être visible des citoyens."
+        description="Les films et vidéos qui vous sont consacrés, du catalogue IMDb ou d'ailleurs. Chaque ajout est vérifié par la modération avant d'être visible des citoyens."
       />
 
       <div className="grid gap-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:items-start">
@@ -34,6 +35,16 @@ export default function HeroVideosPage({ searchParams }: PageProps<"/heros/films
           <Suspense fallback={<div aria-hidden="true" className="h-11" />}>
             <ImdbSearch searchParams={searchParams} />
           </Suspense>
+          <details className="mt-6 border-t border-border pt-4">
+            <summary className="cursor-pointer font-display font-semibold">
+              Ajouter une vidéo hors IMDb
+            </summary>
+            <p className="mt-2 mb-4 text-sm text-muted">
+              Reportage, interview, extrait : toute vidéo en ligne, vérifiée elle aussi par la
+              modération.
+            </p>
+            <FreeVideoForm />
+          </details>
         </section>
       </div>
     </>

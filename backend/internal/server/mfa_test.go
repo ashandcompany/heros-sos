@@ -150,14 +150,69 @@ func TestModeratorMustActivateTwoFactorBeforeAnythingElse(t *testing.T) {
 		t.Errorf("écriture avec une session limitée : %d %s", got.status, got.body)
 	}
 
-	// Réservé aux modérateurs.
-	for name, actor := range map[string]*actor{"citoyen": citizen} {
-		if got := actor.post("/auth/mfa/setup", nil); got.status != http.StatusForbidden || got.code() != "forbidden" {
-			t.Errorf("%s : setup %d %s", name, got.status, got.body)
-		}
-	}
 	if got := e.newActor().post("/auth/mfa/setup", nil); got.status != http.StatusUnauthorized {
 		t.Errorf("setup sans session : %d", got.status)
+	}
+}
+
+// La 2FA est obligatoire pour les modérateurs mais ouverte à tous : un citoyen et un super-héros peuvent l'activer, et
+// leur connexion demande ensuite un code.
+func TestCitizensAndHeroesCanActivateTwoFactor(t *testing.T) {
+	e := newE2E(t, mfaEnv)
+	moderator, _, _ := e.enrolledModerator("fury@shield.example")
+	citizen := e.signUpAndLogin("steve@avengers.example")
+	hero := e.approvedHero(moderator, "tony@avengers.example", "Iron Test")
+
+	for name, account := range map[string]struct {
+		actor *actor
+		email string
+	}{
+		"citoyen":     {citizen, "steve@avengers.example"},
+		"super-héros": {hero, "tony@avengers.example"},
+	} {
+		// Facultative : la session reste complète tant que la 2FA n'est pas activée.
+		if status := account.actor.mfaStatus(t); status.Status != "not_enrolled" {
+			t.Fatalf("%s avant activation : %+v", name, status)
+		}
+
+		secret := account.actor.setupMFA(t).Secret
+		enabled := account.actor.enableMFA(t, secret)
+		if len(enabled.RecoveryCodes) == 0 || !recoveryCodeFormat.MatchString(enabled.RecoveryCodes[0]) {
+			t.Errorf("%s : codes de secours = %v", name, enabled.RecoveryCodes)
+		}
+		if status := account.actor.mfaStatus(t); status.Status != "verified" || status.RecoveryCodesRemaining != len(enabled.RecoveryCodes) {
+			t.Errorf("%s après activation : %+v", name, status)
+		}
+		e.clock.Advance(totp.Period * time.Second) // le code d'activation a servi
+
+		// Une 2FA déjà activée ne se remplace pas par l'API, pas même par son propriétaire.
+		if got := account.actor.post("/auth/mfa/setup", nil); got.status != http.StatusConflict || got.code() != "mfa_already_enabled" {
+			t.Errorf("%s : second setup %d %s", name, got.status, got.body)
+		}
+
+		// Les codes de secours se renouvellent contre le code courant.
+		got := account.actor.post("/auth/mfa/recovery-codes", map[string]string{"code": e.totpCode(secret)})
+		if got.status != http.StatusOK {
+			t.Errorf("%s : codes de secours %d %s", name, got.status, got.body)
+		}
+		e.clock.Advance(totp.Period * time.Second)
+
+		// La connexion suivante est limitée jusqu'à la saisie du code.
+		browser := e.newActor()
+		status, _ := browser.loginStatus(t, account.email, goodPassword)
+		if status != "verification_required" {
+			t.Errorf("%s : connexion = %q, attendu verification_required", name, status)
+		}
+		if got := browser.get("/me"); got.status != http.StatusForbidden || got.code() != "mfa_required" {
+			t.Errorf("%s : session limitée sur /me : %d %s", name, got.status, got.body)
+		}
+		if got := browser.post("/auth/mfa/verify", map[string]string{"code": e.totpCode(secret)}); got.status != http.StatusOK {
+			t.Errorf("%s : validation du code %d %s", name, got.status, got.body)
+		}
+		if got := browser.get("/auth/me"); got.status != http.StatusOK {
+			t.Errorf("%s : /auth/me après validation : %d %s", name, got.status, got.body)
+		}
+		e.clock.Advance(totp.Period * time.Second)
 	}
 }
 
@@ -449,9 +504,10 @@ func TestRegeneratingRecoveryCodesNeedsACompleteSessionAndTheCurrentCode(t *test
 	if got := pending.post("/auth/mfa/recovery-codes", map[string]string{"code": e.totpCode(secret)}); got.status != http.StatusForbidden || got.code() != "mfa_required" {
 		t.Errorf("session limitée : %d %s", got.status, got.body)
 	}
+	// Un compte qui n'a pas activé la 2FA n'a pas de codes de secours à renouveler.
 	citizen := e.signUpAndLogin("steve@avengers.example")
-	if got := citizen.post("/auth/mfa/recovery-codes", map[string]string{"code": "123456"}); got.status != http.StatusForbidden || got.code() != "forbidden" {
-		t.Errorf("citoyen : %d %s", got.status, got.body)
+	if got := citizen.post("/auth/mfa/recovery-codes", map[string]string{"code": "123456"}); got.status != http.StatusConflict || got.code() != "mfa_not_set_up" {
+		t.Errorf("citoyen sans 2FA : %d %s", got.status, got.body)
 	}
 }
 

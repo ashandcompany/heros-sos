@@ -37,8 +37,8 @@ func (c *components) protected(h http.HandlerFunc, roles ...user.Role) http.Hand
 
 // protectedPendingMFA est protected pour les routes qu'une session limitée (code 2FA à saisir, ou activation
 // obligatoire pas encore faite) doit pouvoir appeler : la 2FA elle-même, l'état de la session, la déconnexion.
-func (c *components) protectedPendingMFA(h http.HandlerFunc, roles ...user.Role) http.Handler {
-	return c.authMiddleware.ProtectedPendingMFA(roles...)(h)
+func (c *components) protectedPendingMFA(h http.HandlerFunc) http.Handler {
+	return c.authMiddleware.ProtectedPendingMFA()(h)
 }
 
 const livePath = "/health"
@@ -68,13 +68,14 @@ func registerAuthRoutes(router *Router, c *components) {
 	router.Handle(http.MethodPost, "/auth/logout-all", c.protectedPendingMFA(h.LogoutAll))
 	router.Handle(http.MethodGet, "/auth/me", c.protectedPendingMFA(h.Me))
 
-	// Double authentification des modérateurs. L'activation et la validation se font avec une session
-	// limitée ; les nouveaux codes de secours exigent une session complète.
+	// Double authentification : obligatoire pour les modérateurs, facultative pour les autres comptes, qui peuvent
+	// l'activer comme eux. L'activation et la validation se font avec une session limitée ; les nouveaux codes de
+	// secours exigent une session complète.
 	router.Handle(http.MethodGet, "/auth/mfa", c.protectedPendingMFA(h.MFAStatus))
-	router.Handle(http.MethodPost, "/auth/mfa/setup", c.protectedPendingMFA(h.MFASetup, user.RoleModerator))
-	router.Handle(http.MethodPost, "/auth/mfa/enable", c.protectedPendingMFA(h.MFAEnable, user.RoleModerator))
+	router.Handle(http.MethodPost, "/auth/mfa/setup", c.protectedPendingMFA(h.MFASetup))
+	router.Handle(http.MethodPost, "/auth/mfa/enable", c.protectedPendingMFA(h.MFAEnable))
 	router.Handle(http.MethodPost, "/auth/mfa/verify", c.protectedPendingMFA(h.MFAVerify))
-	router.Handle(http.MethodPost, "/auth/mfa/recovery-codes", c.protected(h.MFARecoveryCodes, user.RoleModerator))
+	router.Handle(http.MethodPost, "/auth/mfa/recovery-codes", c.protected(h.MFARecoveryCodes))
 }
 
 func registerHeroRoutes(router *Router, c *components) {

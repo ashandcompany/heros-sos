@@ -205,3 +205,103 @@ describe("mutations des incidents (API)", () => {
     });
   });
 });
+
+describe("getHeroIncidents (API)", () => {
+  const session = () => jsonResponse({ user: { id: "hero-1" }, csrfToken: "csrf-1" });
+  const listUrls = (fetchMock: ReturnType<typeof mockFetch>) =>
+    fetchMock.mock.calls.map(([url]) => String(url)).filter((url) => url.includes("/incidents?"));
+
+  it("demande les incidents résolus quand le filtre les inclut", async () => {
+    const fetchMock = mockFetch((path) => (path === "/auth/me" ? session() : page([])));
+    const { getHeroIncidents } = await withApi(() => import("./incidents"));
+
+    await getHeroIncidents("token", ["resolu"]);
+
+    const [url] = listUrls(fetchMock);
+    expect(url).toContain("&status=succeeded");
+    expect(url).not.toContain("status=reported");
+  });
+
+  it("garde les incidents en échec avec les signalements", async () => {
+    const fetchMock = mockFetch((path) => (path === "/auth/me" ? session() : page([])));
+    const { getHeroIncidents } = await withApi(() => import("./incidents"));
+
+    await getHeroIncidents("token", ["signale"]);
+
+    expect(listUrls(fetchMock)[0]).toContain("&status=reported&status=failed");
+  });
+
+  it("lit tous les statuts sans filtre", async () => {
+    const fetchMock = mockFetch((path) => (path === "/auth/me" ? session() : page([])));
+    const { getHeroIncidents } = await withApi(() => import("./incidents"));
+
+    await getHeroIncidents("token");
+
+    expect(listUrls(fetchMock)[0]).not.toContain("status=");
+  });
+});
+
+describe("getHeroIncident (API)", () => {
+  const intervention = (
+    id: string,
+    status: ApiSchema<"Intervention">["status"],
+  ): ApiSchema<"Intervention"> => ({
+    id,
+    incidentId: "incident-1",
+    version: 1,
+    status,
+    startedAt: "2026-10-21T09:00:00Z",
+    endedAt: status === "in_progress" ? undefined : "2026-10-21T10:00:00Z",
+    participants: [
+      {
+        heroId: "hero-2",
+        alias: "Tornade",
+        role: "lead",
+        participation: "confirmed",
+        outcomeValidation: "pending",
+        isActive: status === "in_progress",
+      },
+    ],
+  });
+
+  it("joint les interventions terminées, sans celle en cours", async () => {
+    mockFetch((path) => {
+      if (path === "/auth/me") return jsonResponse({ user: { id: "hero-1" } });
+      if (path === "/incidents/incident-1") return jsonResponse({ ...incident, status: "failed" });
+      if (path === "/incidents/incident-1/interventions") {
+        return jsonResponse({ items: [intervention("i-2", "failed")] });
+      }
+      return errorResponse(404, "not_found");
+    });
+    const { getHeroIncident } = await withApi(() => import("./incidents"));
+
+    expect((await getHeroIncident("token", "incident-1"))?.interventions).toEqual([
+      {
+        id: "i-2",
+        incidentId: "incident-1",
+        hero: { id: "hero-2", alias: "Tornade" },
+        startedAt: "2026-10-21T09:00:00Z",
+        endedAt: "2026-10-21T10:00:00Z",
+        outcome: "echoue",
+      },
+    ]);
+  });
+
+  it("n'affiche pas l'intervention en cours dans l'historique", async () => {
+    mockFetch((path) => {
+      if (path === "/auth/me") return jsonResponse({ user: { id: "hero-1" } });
+      if (path === "/incidents/incident-1")
+        return jsonResponse({ ...incident, interventionId: "i-3" });
+      if (path === "/interventions/i-3") return jsonResponse(intervention("i-3", "in_progress"));
+      if (path === "/incidents/incident-1/interventions") {
+        return jsonResponse({ items: [intervention("i-3", "in_progress")] });
+      }
+      return errorResponse(404, "not_found");
+    });
+    const { getHeroIncident } = await withApi(() => import("./incidents"));
+
+    const found = await getHeroIncident("token", "incident-1");
+    expect(found?.interventions).toEqual([]);
+    expect(found?.team?.id).toBe("i-3");
+  });
+});

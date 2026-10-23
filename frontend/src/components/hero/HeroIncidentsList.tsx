@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { EmptyState } from "@/components/admin/ModerationFilter";
 import { cn } from "@/components/ui/cn";
-import { getHeroIncidents, incidentFeatures } from "@/lib/api";
+import { getHeroIncidents } from "@/lib/api";
 import { routes } from "@/lib/routes";
 import { requireHeroSession } from "@/lib/server-session";
 import type { IncidentStatus } from "@/types";
@@ -20,10 +20,7 @@ type Filter = keyof typeof filters;
 
 const isFilter = (value: string | undefined): value is Filter => !!value && value in filters;
 
-// Avec l'API, `GET /incidents` ne renvoie pas les incidents résolus : le filtre serait toujours vide.
-const visibleFilters = (Object.keys(filters) as Filter[]).filter(
-  (filter) => filter !== "resolu" || incidentFeatures.resolvedInLists,
-);
+const filterKeys = Object.keys(filters) as Filter[];
 
 export type HeroIncidentsSearchParams = Promise<{ statut?: string | string[] }>;
 
@@ -43,7 +40,7 @@ export async function HeroIncidentsList({
     <>
       <nav aria-label="Filtrer par statut" className="mb-6">
         <ul className="flex flex-wrap gap-2">
-          {visibleFilters.map((filter) => (
+          {filterKeys.map((filter) => (
             <li key={filter}>
               <Link
                 href={

@@ -1535,7 +1535,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Interventions d'un incident
+         * @description Toutes les interventions de l'incident, en cours et terminées, de la plus récente à la plus ancienne.
+         *     Réservé aux héros et aux modérateurs, comme le détail d'une intervention.
+         */
+        get: operations["listIncidentInterventions"];
         put?: never;
         /**
          * Démarrer une intervention
@@ -6314,6 +6319,35 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listIncidentInterventions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                incidentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Interventions de l'incident (liste vide s'il n'y en a aucune). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Intervention"][];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
     };

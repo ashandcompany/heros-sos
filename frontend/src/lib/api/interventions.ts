@@ -1,4 +1,5 @@
 import type {
+  HeroIntervention,
   InterventionOutcome,
   InterventionRef,
   InterventionTeam,
@@ -95,6 +96,32 @@ export async function getInterventionTeam(
     if (error instanceof ApiError && error.status === 404) return null;
     throw error;
   }
+}
+
+/**
+ * Interventions terminées d'un incident, des plus récentes aux plus anciennes ; le héros affiché
+ * est le lead. API : `GET /incidents/{incidentId}/interventions` (héros et modérateurs).
+ */
+export async function getPastInterventions(
+  token: string,
+  incidentId: string,
+): Promise<HeroIntervention[]> {
+  const response = await apiFetch(`/incidents/${encodeURIComponent(incidentId)}/interventions`, {
+    sessionToken: token,
+  });
+  const { items } = (await response.json()) as { items: ApiSchema<"Intervention">[] };
+  return items.flatMap((intervention) => {
+    if (intervention.status === "in_progress") return [];
+    const lead = intervention.participants.find(({ role }) => role === "lead");
+    return {
+      id: intervention.id,
+      incidentId: intervention.incidentId,
+      hero: { id: lead?.heroId ?? "", alias: lead?.alias || "Super-héros" },
+      startedAt: intervention.startedAt,
+      endedAt: intervention.endedAt ?? null,
+      outcome: fromApiOutcome(intervention.status),
+    };
+  });
 }
 
 /** Messages des refus métier de `/interventions/*` (codes `intervention.Code…` du backend). */

@@ -66,7 +66,6 @@ export {
   getIncidentsByVillain,
   getOngoingIncidents,
   getResolvedIncidentsByHero,
-  incidentFeatures,
   moderateIncident,
   setIncidentPriority,
   takeChargeOfIncident,

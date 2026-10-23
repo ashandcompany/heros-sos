@@ -14,11 +14,11 @@ Les périmètres sont ceux de [`.github/CODEOWNERS`](.github/CODEOWNERS).
 | **Dev B** | `@Jersey276` | Incidents, interventions, vilains, avis, films, blog, proximité des héros, socle Docker et CI |
 | **Emma** | `@ashandcompany` | Frontend Next.js et son branchement sur l'API |
 
-Pull requests ouvertes sur le dépôt : 56 (Emma 20, Maxime 19, Dev B 17) ; 53 fusionnées, 3 fermées sans fusion.
+Pull requests ouvertes sur le dépôt : 58 (Emma 22, Maxime 19, Dev B 17) ; 55 fusionnées, 3 fermées sans fusion.
 
 ## 2. Chronologie
 
-Cinq jours de travail, du lundi 19 au vendredi 23 octobre 2026. 293 commits (hors fusions) sur `develop`. Les numéros renvoient aux pull requests.
+Cinq jours de travail, du lundi 19 au vendredi 23 octobre 2026. 304 commits (hors fusions) sur `develop` au 23/10/2026 à 14 h. Les numéros renvoient aux pull requests.
 
 | Jour | Jalon | Livré | Commits (Maxime / Emma / Dev B) |
 |---|---|---|---|
@@ -26,7 +26,7 @@ Cinq jours de travail, du lundi 19 au vendredi 23 octobre 2026. 293 commits (hor
 | **Mar 20/10** | Environnements et contrat | Environnements Docker de développement et de production, PostgreSQL 18, Swagger UI (#12, #13), Compose unifié (#14, #15), API adaptée aux besoins du front (#16), fiches des personnages (#11), pages légales (#17, #18) | 4 / 21 / 6 |
 | **Mer 21/10** | Compte et branchement | Profil, contact, newsletter et site de documentation (#25), 2FA des modérateurs, confirmation d'email, désinscription (#32), blog (#26), avis et vidéothèque (#20, #30), fiches des héros (#23), incidents publics (#29), CODEOWNERS, CI de la documentation, déploiement de la documentation sans Pages (#33). Première livraison `develop → main` (#19). Branchement du front sur l'API, domaine par domaine (branche `feat/api-tooling`, #22, #24, #27, #31) | 49 / 25 / 10 |
 | **Jeu 22/10** | Défi technique | Modération des incidents (#39), statistiques d'administration (#38), tableau de bord des héros (#40), **performance à 5 M d'incidents, synchronisation hors ligne, journal d'événements et ELK (#41)**, proximité des héros (#43), correction ELK (#45, #46), mesures à 5 M (#48), préchauffage du cache (#49), `golangci-lint` en CI (#36) | 32 / 22 / 9 |
-| **Ven 23/10** | Fiabilité et livraison | File RabbitMQ et `mail-worker` (#54), `./make` pour les machines sans make (#51), 2FA pour tous les comptes (#56), messages de newsletter (#50), réécriture du README | 27 / 7 / 2 |
+| **Ven 23/10** | Fiabilité et livraison | File RabbitMQ et `mail-worker` (#54), `./make` pour les machines sans make (#51), 2FA pour tous les comptes (#56), messages de newsletter (#50), réécriture du README. Libre-service du compte : changement de mot de passe, pseudo et description du héros, retrait de la photo, export et effacement des données (RGPD) (#57) ; affiches de films (#58) | 28 / 17 / 2 |
 
 ## 3. Écarts et imprévus
 
@@ -95,12 +95,12 @@ Les « Source » indiquent où le point est établi. Les propriétaires sont pro
 
 | # | Point | État | Propriétaire proposé | Source |
 |---|---|---|---|---|
-| 11 | Droit à l'effacement et export des données (RGPD) : aucune route ni commande | ⬜ | Maxime | CONTRAT-MAXIME.md §3.2 point 1 |
-| 12 | Changer son mot de passe quand on est connecté | ⬜ | Maxime et Emma | CONTRAT-MAXIME.md §3.2 point 2 |
-| 13 | Modifier son pseudo et sa description de héros | ⬜ à confirmer avec le cahier | Maxime | CONTRAT-MAXIME.md §3.2 point 3 |
-| 14 | Exiger une 2FA récente pour les actions sensibles ; route de lecture du journal d'audit ; suppression de la photo de profil | ⬜ | Maxime | CONTRAT-MAXIME.md §3.2 points 4 à 6 |
+| 11 | Droit à l'effacement et export des données (RGPD) : `DELETE /me` (anonymisation), `GET /me/export`, `POST /admin/users/{id}/anonymize` | ✅ livré le 23/10/2026 (Emma, #57) | Emma | CONTRAT-MAXIME.md §3.2 point 1 (ligne encore ⬜ dans ce document) |
+| 12 | Changer son mot de passe quand on est connecté : `POST /me/password` | ✅ livré le 23/10/2026 (Emma, #57) | Emma | CONTRAT-MAXIME.md §3.2 point 2 |
+| 13 | Modifier son pseudo et sa description de héros : `alias` et `bio` dans `PATCH /me` | ✅ livré le 23/10/2026 (Emma, #57) | Emma | CONTRAT-MAXIME.md §3.2 point 3 |
+| 14 | Exiger une 2FA récente pour les actions sensibles ; route de lecture du journal d'audit. La suppression de la photo de profil (`DELETE /me/avatar`) est livrée (#57) | ⬜ | Maxime | CONTRAT-MAXIME.md §3.2 points 4 à 6 |
 | 15 | Limiteur de débit partagé avant de lancer plusieurs instances de l'API | 🟡 | Maxime | CONTRAT-MAXIME.md §3.2 point 7 |
-| 16 | Écran des numéros de la newsletter (le contrat existe) | ⬜ | Emma | [backend-contract.md](frontend/docs/backend-contract.md) |
+| 16 | Écran des numéros de la newsletter | ✅ pages `/admin/newsletter` et client `newsletter-issues.ts` en place | Emma | [backend-contract.md](frontend/docs/backend-contract.md) |
 | 17 | Encyclopédie Marvel : trouver une source de données | ⬜ | Équipe | [points-ouverts.md](backend/tables/points-ouverts.md) |
 
 ### 5.4 Qualité et documentation
@@ -109,5 +109,5 @@ Les « Source » indiquent où le point est établi. Les propriétaires sont pro
 |---|---|---|---|---|
 | 18 | Dette `golangci-lint` du code de Dev B et fichiers mal formatés (à recompter : la liste date du 21/10) | 🟡 | Dev B | CONTRAT-MAXIME.md §3.4 |
 | 19 | `internal/herolocation/handler.go` commence par un BOM UTF-8 : `go test -cover` échoue sur le module entier (« invalid BOM in the middle of the file ») | ⬜ | Dev B | constaté le 23/10/2026 |
-| 20 | Rafraîchir les documents périmés : `CONTRAT-MAXIME.md` (état du 21/10, 91 opérations au lieu de 110), `MVP.md` (section « À vérifier avec Emma »), `STACK.md` (« Prochaines étapes »), compte des tests, section « Ce qui n'a pas été vérifié » de la page performance (ELK tourne désormais en continu) | ⬜ | Maxime | relecture du 23/10/2026 |
+| 20 | Rafraîchir les documents périmés : `CONTRAT-MAXIME.md` (91 opérations au lieu de 116, ligne RGPD encore ⬜), `frontend/docs/backend-contract.md` (113 opérations au lieu de 116), `STACK.md` (« Prochaines étapes »), `stack/sessions.md` (décrit `GET /auth/sessions` et `DELETE /auth/sessions/{id}`, absentes du contrat OpenAPI), compte des tests, section « Ce qui n'a pas été vérifié » de la page performance (ELK tourne désormais en continu). `MVP.md` est à jour depuis le 23/10/2026 | 🟡 | Maxime | relecture du 23/10/2026 |
 | 21 | Couverture de tests faible sur `film` et `intervention` | 🟡 | Dev B | `go test -cover` du 23/10/2026 |

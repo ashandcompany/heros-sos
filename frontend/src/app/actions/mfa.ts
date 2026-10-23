@@ -4,8 +4,10 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { enableMfa, regenerateMfaRecoveryCodes, startMfaSetup, verifyMfa } from "@/lib/api";
 import { SESSION_COOKIE } from "@/lib/cookies";
+import { appleOtpauthUrl } from "@/lib/otpauth";
 import { accountHomeByRole, routes } from "@/lib/routes";
 import { setSessionCookie } from "@/lib/server-session";
+import { getSiteDomain } from "@/lib/site";
 import { apiFailureMessage, type FormState } from "@/lib/validation/form-state";
 
 /*
@@ -82,13 +84,26 @@ export async function verifyMfaAction(
 
 export type MfaSetupState =
   | { status: "idle" }
-  | { status: "ready"; secret: string; otpauthUrl: string }
+  | {
+      status: "ready";
+      secret: string;
+      otpauthUrl: string;
+      /** Le même lien, pour l'app Mots de passe d'Apple (voir `appleOtpauthUrl`). */
+      appleOtpauthUrl: string;
+    }
   | { status: "error"; message: string };
 
 /** Commence l'activation : un secret à saisir dans l'application d'authentification. */
 export async function startMfaSetupAction(): Promise<MfaSetupState> {
   const result = await startMfaSetup(await sessionToken());
-  if (result.ok) return { status: "ready", secret: result.secret, otpauthUrl: result.otpauthUrl };
+  if (result.ok) {
+    return {
+      status: "ready",
+      secret: result.secret,
+      otpauthUrl: result.otpauthUrl,
+      appleOtpauthUrl: appleOtpauthUrl(result.otpauthUrl, getSiteDomain()),
+    };
+  }
 
   return {
     status: "error",

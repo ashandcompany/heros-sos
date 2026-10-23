@@ -97,8 +97,14 @@ type Server struct {
 	router     *Router
 	handler    http.Handler
 	httpServer *http.Server
-	mailQueue  *mail.Queue // nil quand un Mailer est injecté (tests)
+	mailQueue  mailQueue // nil quand un Mailer est injecté (tests)
 	components *components
+}
+
+// mailQueue est la file d'envoi des mails, en mémoire (mail.Queue) ou dans RabbitMQ (mail.Publisher) : l'arrêt du
+// serveur la vide ou la ferme.
+type mailQueue interface {
+	Close(ctx context.Context) error
 }
 
 type options struct {
@@ -298,21 +304,21 @@ func NewWithDB(cfg config.Config, logger *slog.Logger, db *gorm.DB, opts ...Opti
 	}, nil
 }
 
-// buildMailer choisit l'expéditeur : celui injecté (tests), sinon SMTP ou journal selon la
-// configuration, placé derrière la file d'envoi asynchrone.
-func buildMailer(cfg config.Config, logger *slog.Logger, settings options) (mail.Mailer, *mail.Queue, error) {
+// buildMailer choisit l'expéditeur : celui injecté (tests), sinon une file d'envoi asynchrone selon la
+// configuration. Avec la file en mémoire, l'API envoie elle-même (SMTP ou journal) ; avec RabbitMQ, elle ne
+// fait que déposer les mails, et le worker `mailworker` les envoie.
+func buildMailer(cfg config.Config, logger *slog.Logger, settings options) (mail.Mailer, mailQueue, error) {
 	if settings.mailer != nil {
 		return settings.mailer, nil, nil
 	}
 
-	var transport mail.Mailer
-	switch cfg.Mail.Driver {
-	case config.MailDriverSMTP:
-		transport = mail.NewSMTPMailer(cfg.Mail.SMTP, mail.Sender{Address: cfg.Mail.FromAddress, Name: cfg.Mail.FromName}, clock.System{})
-	case config.MailDriverLog:
-		transport = mail.NewLogMailer(logger)
-	default:
-		return nil, nil, fmt.Errorf("server : driver de mail inconnu %q", cfg.Mail.Driver)
+	if cfg.Mail.Queue == config.MailQueueRabbitMQ {
+		publisher := mail.NewPublisher(cfg.Mail, logger)
+		return publisher, publisher, nil
+	}
+	transport, err := mail.NewTransport(cfg.Mail, logger)
+	if err != nil {
+		return nil, nil, fmt.Errorf("server : %w", err)
 	}
 	queue := mail.NewQueue(transport, cfg.Mail, logger)
 	return queue, queue, nil

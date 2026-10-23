@@ -18,20 +18,26 @@ x-logging: &logging
     max-size: ${LOG_MAX_SIZE:-10m}
     max-file: ${LOG_MAX_FILE:-3}
 
+# Les mails suivent le vrai chemin : l'API les dépose dans RabbitMQ, le worker les relit puis les envoie à Mailpit
+# (rien ne part dehors). L'API et le worker lisent la même configuration de mails.
+x-mail-environment: &mail-environment
+  HEROS_MAIL_DRIVER: smtp
+  HEROS_SMTP_HOST: mailpit
+  HEROS_SMTP_PORT: "1025"
+  HEROS_SMTP_TLS_MODE: none
+  HEROS_MAIL_QUEUE: rabbitmq
+  HEROS_RABBITMQ_URL: amqp://${RABBITMQ_USER:-heros}:${RABBITMQ_PASSWORD:-heros}@rabbitmq:5672/
+
 services:
   api:
     env_file:
       - backend/.env
     environment:
+      <<: *mail-environment
       HEROS_ENV: development
       HEROS_DATABASE_URL: postgres://${POSTGRES_USER:-heros}:${POSTGRES_PASSWORD:-heros}@db:5432/${POSTGRES_DB:-herossos}?sslmode=disable
       # En développement l'API applique elle-même les migrations ; en production, une tâche dédiée.
       HEROS_AUTO_MIGRATE: "true"
-      # Les mails partent vers Mailpit : c'est le vrai chemin SMTP, sans rien envoyer dehors.
-      HEROS_MAIL_DRIVER: smtp
-      HEROS_SMTP_HOST: mailpit
-      HEROS_SMTP_PORT: "1025"
-      HEROS_SMTP_TLS_MODE: none
       # Le navigateur arrive par le proxy ; le front lancé hors Docker (npm run dev) reste accepté.
       HEROS_ALLOWED_ORIGINS: http://localhost:${PROXY_PORT:-8088},http://localhost:3000
       HEROS_PUBLIC_BASE_URL: http://localhost:${PROXY_PORT:-8088}
@@ -40,6 +46,21 @@ services:
     ports:
       # Accès direct à l'API (curl, outils), sans passer par le proxy.
       - "127.0.0.1:${API_PORT:-8081}:8080"
+
+  # En développement il reçoit le même backend/.env que l'API, par commodité (ces valeurs sont publiques) ; en production
+  # il n'a ni la base ni les clés de chiffrement.
+  mail-worker:
+    env_file:
+      - backend/.env
+    environment:
+      <<: *mail-environment
+      HEROS_ENV: development
+      HEROS_LOG_FORMAT: ${HEROS_LOG_FORMAT:-text}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
 
   db:
     environment:
@@ -205,7 +226,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # La file de mails actuelle est interne à l'API ; RabbitMQ est prêt pour le futur worker de mails.
+  # La file des mails : l'API y dépose (mail.send), le service mail-worker les envoie. Interface de gestion : http://localhost:15672.
   rabbitmq:
     image: rabbitmq:4-management-alpine
     restart: unless-stopped

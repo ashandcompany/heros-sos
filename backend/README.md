@@ -276,11 +276,16 @@ la clé est obligatoire en production. **`secrets/crypto_keys` se sauvegarde hor
 - Les variables des conteneurs (`POSTGRES_*`, `RABBITMQ_*`, `LOG_MAX_*`, ports, adresses) sont
   documentées dans `.env.example` et `.env.production.example`.
 
-**RabbitMQ n'est pas encore utilisé par le code.** Le service est démarré (en développement, et en
-production avec `--profile rabbitmq`) pour être prêt, mais aucun paquet Go ne s'y connecte : les
-mails passent aujourd'hui par `mail.Queue`, une file en mémoire dans le processus de l'API (bornée,
-avec reprises, vidée à l'arrêt propre). RabbitMQ n'interviendra qu'avec un worker de mails, derrière
-la même interface `mail.Mailer`.
+**La file des mails** a deux modes, choisis par `HEROS_MAIL_QUEUE` (voir [RabbitMQ](stack/rabbitmq.md)) :
+
+- `memory` (défaut) : `mail.Queue`, une file en mémoire dans le processus de l'API (bornée, avec reprises, vidée à
+  l'arrêt propre). Si l'API est tuée brutalement, les mails en attente sont perdus.
+- `rabbitmq` : l'API dépose chaque mail dans RabbitMQ (`mail.Publisher`, avec confirmation du courtier) et le service
+  `mail-worker` (`cmd/mailworker`, même image) les envoie, avec reprises et file morte. Un mail accepté survit à
+  l'arrêt de l'API comme à celui de RabbitMQ. **C'est le mode de la pile de développement** ; en production il
+  s'active avec le profil Compose `rabbitmq` (voir `.env.production.example`).
+
+Dans les deux cas, les autres paquets ne connaissent que l'interface `mail.Mailer`.
 
 ## Production
 
@@ -290,8 +295,12 @@ la même interface `mail.Mailer`.
 - Derrière un reverse proxy, renseigner `HEROS_TRUSTED_PROXIES` : sinon tous les clients partagent
   l'adresse IP du proxy, et donc les mêmes limites de débit (déjà fait par les fichiers Compose).
 - Le limiteur de débit est en mémoire : exact pour une seule instance de l'API.
-- Les mails en file sont perdus si le processus est tué brutalement (un worker RabbitMQ les rendra
-  durables sans changer le code appelant : seul `mail.Mailer` est connu des autres paquets).
+- Avec la file en mémoire (`HEROS_MAIL_QUEUE=memory`, défaut), les mails en attente sont perdus si le processus est
+  tué brutalement. Avec `HEROS_MAIL_QUEUE=rabbitmq`, ils sont durables ; il faut alors surveiller la file morte
+  `mail.dead` et l'espace disque de l'hôte de RabbitMQ (sous 50 Mo, il suspend les dépôts : voir
+  [RabbitMQ](stack/rabbitmq.md#quand-rabbitmq-est-bloqué-ou-absent)). Production : activer le profil avec
+  `COMPOSE_PROFILES=rabbitmq` **et** `HEROS_MAIL_QUEUE=rabbitmq` dans `.env.production`, sans oublier `make secrets`
+  (il crée `secrets/rabbitmq_url`, que l'API lit désormais).
 - Sauvegarder `HEROS_CRYPTO_KEYS` séparément de la base ; pour une rotation, ajouter une clé puis
   changer `HEROS_CRYPTO_ACTIVE_KEY_ID` (les anciennes valeurs restent lisibles). La clé qui signe les
   liens (confirmation de la newsletter, confirmation d'un changement d'email, désinscription) en est

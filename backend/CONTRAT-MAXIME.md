@@ -104,7 +104,7 @@ Colonne « Front » : l'écran appelle bien la route quand `API_URL` est renseig
 | 5 | **Lire le journal d'audit** | 🟡 Il s'écrit, mais aucune route ne le lit. | Décider : route réservée aux modérateurs, ou requête SQL côté exploitation. |
 | 6 | **Supprimer sa photo de profil** | ⬜ On peut la remplacer, pas la retirer. | Petite route `DELETE /me/avatar`, si l'écran le demande. |
 | 7 | **Limiteur de débit en mémoire** | 🟡 Exact pour **une** instance de l'API. | À revoir (Redis ou table) avant d'en lancer plusieurs. |
-| 8 | **Mails non durables** | 🟡 La file est dans le processus : un arrêt brutal perd les mails en attente. RabbitMQ est démarré mais pas utilisé. | Worker RabbitMQ derrière `mail.Mailer`, sans changer les appelants. |
+| 8 | **Mails non durables** | 🟡 Avec `HEROS_MAIL_QUEUE=rabbitmq` (pile de développement), un mail accepté est durable : confirmation du courtier, worker `mail-worker`, reprises, file morte `mail.dead`. Le défaut reste la file en mémoire, qui perd les mails en attente à un arrêt brutal. | Activer RabbitMQ en production (`COMPOSE_PROFILES=rabbitmq` et `HEROS_MAIL_QUEUE=rabbitmq`), puis surveiller la file morte. |
 | 9 | **Exploitation** | ⬜ Sauvegarde séparée de `HEROS_CRYPTO_KEYS`, du volume `avatars` et de la base ; SMTP réel ; premiers modérateurs et leur 2FA ; supervision. | Checklist « Production » du README du backend, à dérouler. |
 | 10 | **Envoi de la newsletter** | ✅ `/admin/newsletters` : brouillons, envoi à tous les abonnés confirmés ou à un seul, numéros envoyés en lecture seule. Les mails partent en arrière-plan par la file d'envoi (point 8), sans suivi par destinataire. | Suivi de remise et reprise après arrêt avec le worker RabbitMQ. |
 

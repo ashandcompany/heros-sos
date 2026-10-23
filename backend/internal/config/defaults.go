@@ -69,6 +69,11 @@ const (
 	defaultOMDbBaseURL     = "https://www.omdbapi.com/"
 	defaultOMDbTimeout     = 5 * time.Second
 
+	// Un courtier qui ne confirme pas en 5 s est bloqué (alarme disque ou mémoire) : mieux vaut refuser le mail
+	// que de faire attendre la requête, l'appelant réessaiera.
+	defaultRabbitMQConfirmTimeout = 5 * time.Second
+	defaultRabbitMQReconnectDelay = 2 * time.Second
+
 	// Le « Bureau » : destinataire des messages du formulaire de contact.
 	defaultContactRecipient = "contact@heros-sos.local"
 

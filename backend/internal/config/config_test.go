@@ -599,3 +599,108 @@ func TestEventSettingsHaveDefaultsAndMustBePositive(t *testing.T) {
 		}
 	}
 }
+
+// ---- File de mails RabbitMQ ---------------------------------------------------------------------
+
+func TestMailQueueIsInMemoryByDefault(t *testing.T) {
+	cfg, err := Load(fakeEnv(validEnv()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Mail.Queue != MailQueueMemory {
+		t.Errorf("file de mails = %q, attendu %q : RabbitMQ s'active explicitement", cfg.Mail.Queue, MailQueueMemory)
+	}
+	if cfg.Mail.RabbitMQ.ConfirmTimeout != defaultRabbitMQConfirmTimeout || cfg.Mail.RabbitMQ.ReconnectDelay != defaultRabbitMQReconnectDelay {
+		t.Errorf("délais RabbitMQ par défaut = %+v", cfg.Mail.RabbitMQ)
+	}
+}
+
+func TestRabbitMQMailQueueNeedsAValidBrokerURL(t *testing.T) {
+	env := validEnv()
+	env[envMailQueue] = "rabbitmq"
+	if _, err := Load(fakeEnv(env)); err == nil || !strings.Contains(err.Error(), envRabbitMQURL) {
+		t.Errorf("sans URL, erreur = %v, attendu un message sur %s", err, envRabbitMQURL)
+	}
+
+	env[envRabbitMQURL] = "amqp://heros:heros@rabbitmq:5672/"
+	cfg, err := Load(fakeEnv(env))
+	if err != nil || cfg.Mail.Queue != MailQueueRabbitMQ || cfg.Mail.RabbitMQ.URL != env[envRabbitMQURL] {
+		t.Fatalf("configuration RabbitMQ valide refusée : %v (%+v)", err, cfg.Mail)
+	}
+	env[envRabbitMQURL] = "amqps://heros:heros@rabbitmq.example:5671/"
+	if _, err := Load(fakeEnv(env)); err != nil {
+		t.Errorf("amqps:// doit être accepté : %v", err)
+	}
+
+	for name, bad := range map[string]string{
+		"mauvais schéma": "http://rabbitmq:5672/", "sans hôte": "amqp:///", "illisible": "amqp://%zz",
+	} {
+		env[envRabbitMQURL] = bad
+		_, err := Load(fakeEnv(env))
+		if err == nil || !strings.Contains(err.Error(), envRabbitMQURL) {
+			t.Errorf("%s : erreur = %v, attendu un message sur %s", name, err, envRabbitMQURL)
+		}
+	}
+}
+
+func TestMailQueueRejectsUnknownValuesAndNeverEchoesTheBrokerPassword(t *testing.T) {
+	env := validEnv()
+	env[envMailQueue] = "kafka"
+	if _, err := Load(fakeEnv(env)); err == nil || !strings.Contains(err.Error(), envMailQueue) {
+		t.Errorf("erreur = %v, attendu un message sur %s", err, envMailQueue)
+	}
+
+	env[envMailQueue] = "rabbitmq"
+	env[envRabbitMQURL] = "http://heros:mot-de-passe-secret@rabbitmq:5672/"
+	_, err := Load(fakeEnv(env))
+	if err == nil || strings.Contains(err.Error(), "mot-de-passe-secret") {
+		t.Errorf("l'erreur doit exister sans citer le mot de passe de l'URL : %v", err)
+	}
+}
+
+func TestRabbitMQURLCanComeFromASecretFile(t *testing.T) {
+	env := validEnv()
+	env[envMailQueue] = "rabbitmq"
+	env[envRabbitMQURL+fileSuffix] = writeSecret(t, "amqp://heros:secret@rabbitmq:5672/\n")
+	cfg, err := Load(fakeEnv(env))
+	if err != nil || cfg.Mail.RabbitMQ.URL != "amqp://heros:secret@rabbitmq:5672/" {
+		t.Fatalf("URL lue dans le fichier = %q, %v", cfg.Mail.RabbitMQ.URL, err)
+	}
+}
+
+func TestMailWorkerNeedsNeitherTheDatabaseNorTheEncryptionKeys(t *testing.T) {
+	env := map[string]string{
+		envMailQueue:   "rabbitmq",
+		envRabbitMQURL: "amqp://heros:heros@rabbitmq:5672/",
+		envSMTPHost:    "mailpit",
+		envSMTPPort:    "1025",
+		envMailDriver:  "smtp",
+	}
+	worker, err := LoadMailWorker(fakeEnv(env))
+	if err != nil {
+		t.Fatalf("le worker ne doit exiger ni %s ni %s : %v", envDatabaseURL, envCryptoKeys, err)
+	}
+	if worker.Mail.Queue != MailQueueRabbitMQ || worker.Mail.SMTP.Host != "mailpit" || worker.Mail.Driver != MailDriverSMTP {
+		t.Errorf("configuration du worker = %+v", worker.Mail)
+	}
+}
+
+func TestMailWorkerRefusesTheInMemoryQueueAndInheritsProductionRules(t *testing.T) {
+	env := map[string]string{envRabbitMQURL: "amqp://heros:heros@rabbitmq:5672/"}
+	if _, err := LoadMailWorker(fakeEnv(env)); err == nil || !strings.Contains(err.Error(), envMailQueue) {
+		t.Errorf("file en mémoire : erreur = %v, attendu un message sur %s", err, envMailQueue)
+	}
+
+	production := map[string]string{
+		envEnvironment: string(EnvironmentProduction), envMailQueue: "rabbitmq",
+		envRabbitMQURL: "amqp://heros:heros@rabbitmq:5672/", envSMTPHost: "smtp.example",
+	}
+	worker, err := LoadMailWorker(fakeEnv(production))
+	if err != nil || worker.LogFormat != LogFormatJSON || worker.Mail.SMTP.TLSMode != TLSModeStartTLS {
+		t.Fatalf("production : %v (%+v)", err, worker)
+	}
+	production[envMailDriver] = "log"
+	if _, err := LoadMailWorker(fakeEnv(production)); err == nil || !strings.Contains(err.Error(), envMailDriver) {
+		t.Errorf("le driver log doit rester interdit en production, y compris pour le worker : %v", err)
+	}
+}

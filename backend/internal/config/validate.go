@@ -140,4 +140,20 @@ func (c Config) validateMail(fail func(string, ...any), production bool) {
 	if production && c.Mail.SMTP.TLSMode == TLSModeNone {
 		fail("%s ne peut pas valoir none en production", envSMTPTLSMode)
 	}
+	if c.Mail.Queue == MailQueueRabbitMQ {
+		c.validateRabbitMQ(fail)
+	}
+}
+
+// validateRabbitMQ vérifie l'adresse du courtier. Les messages d'erreur ne citent jamais la valeur : l'URL
+// contient un mot de passe.
+func (c Config) validateRabbitMQ(fail func(string, ...any)) {
+	if c.Mail.RabbitMQ.URL == "" {
+		fail("%s est obligatoire avec %s=%s", envRabbitMQURL, envMailQueue, MailQueueRabbitMQ)
+		return
+	}
+	target, err := url.Parse(c.Mail.RabbitMQ.URL)
+	if err != nil || (target.Scheme != "amqp" && target.Scheme != "amqps") || target.Hostname() == "" {
+		fail("%s : URL amqp:// ou amqps:// attendue", envRabbitMQURL)
+	}
 }

@@ -266,7 +266,9 @@ secrets: ## Génère secrets/ pour la production (ne remplace JAMAIS un secret e
 	create csrf_secret "$$(openssl rand -base64 32 | tr -d '\n')"; \
 	create smtp_password ""; \
 	create omdb_api_key ""; \
-	create rabbitmq_password "$$(openssl rand -hex 24)"; \
+	[ -e secrets/rabbitmq_password ] || printf '%s' "$$(openssl rand -hex 24)" > secrets/rabbitmq_password; \
+	create rabbitmq_password "$$(cat secrets/rabbitmq_password)"; \
+	create rabbitmq_url "amqp://$${RABBITMQ_USER:-heros}:$$(cat secrets/rabbitmq_password)@rabbitmq:5672/"; \
 	echo; echo "Sauvegardez secrets/crypto_keys HORS du serveur : sans elle, les données chiffrées sont perdues."; \
 	echo "Renseignez secrets/smtp_password si votre serveur SMTP demande un mot de passe."; \
 	echo "Renseignez secrets/omdb_api_key avec votre clé OMDb avant de lancer l'API."
@@ -299,7 +301,7 @@ compose-check: ## Valide la syntaxe des fichiers Compose (développement et prod
 	@set -e; created=""; \
 	[ -f .env ] || { cp .env.example .env; created="$$created .env"; }; \
 	[ -f .env.production ] || { cp .env.production.example .env.production; created="$$created .env.production"; }; \
-	[ -d secrets ] || { mkdir secrets; for f in database_url postgres_password crypto_keys csrf_secret smtp_password omdb_api_key rabbitmq_password; do : > secrets/$$f; done; created="$$created secrets"; }; \
+	[ -d secrets ] || { mkdir secrets; for f in database_url postgres_password crypto_keys csrf_secret smtp_password omdb_api_key rabbitmq_password rabbitmq_url; do : > secrets/$$f; done; created="$$created secrets"; }; \
 	trap 'rm -rf $$created' EXIT; \
 	$(COMPOSE_DEV) config -q && echo "développement : valide"; \
 	$(COMPOSE_PROD) config -q && echo "production : valide"

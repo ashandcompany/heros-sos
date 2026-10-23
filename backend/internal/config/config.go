@@ -41,6 +41,18 @@ const (
 	MailDriverSMTP MailDriver = "smtp" // envoie via un serveur SMTP
 )
 
+// MailQueue choisit où attendent les mails avant leur envoi.
+type MailQueue string
+
+// Files d'attente des mails.
+const (
+	// MailQueueMemory est une file bornée dans le processus de l'API : simple, mais les mails en attente
+	// sont perdus si l'API s'arrête brutalement.
+	MailQueueMemory MailQueue = "memory"
+	// MailQueueRabbitMQ dépose chaque mail dans une file durable de RabbitMQ ; le worker `mailworker` les envoie.
+	MailQueueRabbitMQ MailQueue = "rabbitmq"
+)
+
 // TLSMode décrit le chiffrement de la connexion SMTP.
 type TLSMode string
 
@@ -257,9 +269,24 @@ type SMTP struct {
 	Timeout  time.Duration
 }
 
+// RabbitMQ regroupe les réglages de la connexion au courtier de messages (file de mails).
+type RabbitMQ struct {
+	// URL est l'adresse du courtier (amqp://utilisateur:motdepasse@hôte:5672/). Elle porte un mot de passe :
+	// elle n'est jamais journalisée, et en production elle vient d'un secret (HEROS_RABBITMQ_URL_FILE).
+	URL string
+	// ConfirmTimeout borne l'attente de la confirmation du courtier après le dépôt d'un mail.
+	ConfirmTimeout time.Duration
+	// ReconnectDelay sépare deux tentatives de connexion quand le courtier est injoignable.
+	ReconnectDelay time.Duration
+}
+
 // Mail regroupe les réglages d'envoi des mails et de la file d'envoi asynchrone.
 type Mail struct {
-	Driver      MailDriver
+	Driver MailDriver
+	// Queue dit où les mails attendent : en mémoire (par défaut) ou dans RabbitMQ.
+	Queue MailQueue
+	// RabbitMQ n'est lu que si Queue vaut MailQueueRabbitMQ.
+	RabbitMQ    RabbitMQ
 	FromAddress string
 	FromName    string
 	SMTP        SMTP
@@ -550,6 +577,11 @@ func (l *loader) mail(production bool) Mail {
 		l.fail("%s : valeur inconnue %q (log ou smtp)", envMailDriver, driver)
 		driver = defaultDriver
 	}
+	queue := MailQueue(l.text(envMailQueue, string(MailQueueMemory)))
+	if queue != MailQueueMemory && queue != MailQueueRabbitMQ {
+		l.fail("%s : valeur inconnue %q (memory ou rabbitmq)", envMailQueue, queue)
+		queue = MailQueueMemory
+	}
 	tlsMode := TLSMode(l.text(envSMTPTLSMode, string(defaultTLS)))
 	if tlsMode != TLSModeNone && tlsMode != TLSModeStartTLS && tlsMode != TLSModeImplicit {
 		l.fail("%s : valeur inconnue %q (none, starttls ou tls)", envSMTPTLSMode, tlsMode)
@@ -557,7 +589,13 @@ func (l *loader) mail(production bool) Mail {
 	}
 
 	return Mail{
-		Driver:      driver,
+		Driver: driver,
+		Queue:  queue,
+		RabbitMQ: RabbitMQ{
+			URL:            l.text(envRabbitMQURL, ""),
+			ConfirmTimeout: l.duration(envRabbitMQConfirmTimeout, defaultRabbitMQConfirmTimeout),
+			ReconnectDelay: l.duration(envRabbitMQReconnectDelay, defaultRabbitMQReconnectDelay),
+		},
 		FromAddress: l.text(envMailFromAddress, defaultMailFromAddress),
 		FromName:    l.text(envMailFromName, defaultMailFromName),
 		SMTP: SMTP{

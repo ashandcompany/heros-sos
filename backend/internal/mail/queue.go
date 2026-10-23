@@ -11,7 +11,8 @@ import (
 )
 
 var (
-	// ErrQueueFull indique que la file d'envoi est saturée : le mail n'a pas été accepté.
+	// ErrQueueFull indique que la file d'envoi est saturée ou momentanément indisponible (courtier RabbitMQ
+	// injoignable ou bloqué) : le mail n'a pas été accepté, l'appelant peut réessayer plus tard.
 	ErrQueueFull = errors.New("mail : file d'envoi saturée")
 	// ErrQueueClosed indique que la file ne reçoit plus de mails (arrêt en cours).
 	ErrQueueClosed = errors.New("mail : file d'envoi fermée")
@@ -22,8 +23,9 @@ var (
 // croissant, et se vident proprement à l'arrêt. Queue est un Mailer : Send ne fait que mettre
 // le mail en file.
 //
-// Les mails en file sont perdus si le processus s'arrête brutalement ; RabbitMQ (ou une table
-// d'envoi) les rendrait durables, sans changer les appelants qui ne connaissent que Mailer.
+// Les mails en file sont perdus si le processus s'arrête brutalement. Avec HEROS_MAIL_QUEUE=rabbitmq, ils
+// attendent à la place dans RabbitMQ (Publisher dépose, Worker envoie) : durables, sans changer les appelants
+// qui ne connaissent que Mailer.
 type Queue struct {
 	mailer Mailer
 	cfg    config.Mail
@@ -109,30 +111,36 @@ func (q *Queue) work() {
 	}
 }
 
-// deliver tente l'envoi jusqu'à MaxAttempts fois, avec un délai qui s'allonge à chaque échec.
-// Ni le destinataire ni le contenu ne sont journalisés : ce sont des données personnelles.
 func (q *Queue) deliver(message Message) {
-	for attempt := 1; attempt <= q.cfg.MaxAttempts; attempt++ {
-		ctx, cancel := context.WithTimeout(q.baseCtx, q.cfg.SendTimeout)
-		err := q.mailer.Send(ctx, message)
+	_ = sendWithRetry(q.baseCtx, q.mailer, q.cfg, q.logger, message)
+}
+
+// sendWithRetry confie le mail à mailer jusqu'à cfg.MaxAttempts fois, avec un délai qui s'allonge à chaque
+// échec. Il retourne nil si le mail est parti, sinon la dernière erreur : un message invalide n'est pas
+// retenté, et l'annulation de ctx interrompt l'envoi en cours comme l'attente. Ni le destinataire ni le
+// contenu ne sont journalisés : ce sont des données personnelles.
+func sendWithRetry(ctx context.Context, mailer Mailer, cfg config.Mail, logger *slog.Logger, message Message) error {
+	for attempt := 1; ; attempt++ {
+		sendCtx, cancel := context.WithTimeout(ctx, cfg.SendTimeout)
+		err := mailer.Send(sendCtx, message)
 		cancel()
 		if err == nil {
-			return
+			return nil
 		}
 
-		last := attempt == q.cfg.MaxAttempts || q.baseCtx.Err() != nil || errors.Is(err, ErrInvalidMessage)
+		last := attempt >= cfg.MaxAttempts || ctx.Err() != nil || errors.Is(err, ErrInvalidMessage)
 		if last {
-			q.logger.Error("mail abandonné", "subject", message.Subject, "attempts", attempt, "error", err)
-			return
+			logger.Error("mail abandonné", "subject", message.Subject, "attempts", attempt, "error", err)
+			return err
 		}
-		q.logger.Warn("échec d'envoi de mail, nouvelle tentative", "subject", message.Subject, "attempt", attempt, "error", err)
+		logger.Warn("échec d'envoi de mail, nouvelle tentative", "subject", message.Subject, "attempt", attempt, "error", err)
 
-		timer := time.NewTimer(q.cfg.RetryDelay * time.Duration(attempt))
+		timer := time.NewTimer(cfg.RetryDelay * time.Duration(attempt))
 		select {
 		case <-timer.C:
-		case <-q.baseCtx.Done():
+		case <-ctx.Done():
 			timer.Stop()
-			return
+			return err
 		}
 	}
 }

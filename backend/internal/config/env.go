@@ -91,6 +91,11 @@ const (
 	envMailMaxAttempts = "HEROS_MAIL_MAX_ATTEMPTS"
 	envMailRetryDelay  = "HEROS_MAIL_RETRY_DELAY"
 	envMailSendTimeout = "HEROS_MAIL_SEND_TIMEOUT"
+	envMailQueue       = "HEROS_MAIL_QUEUE"
+
+	envRabbitMQURL            = "HEROS_RABBITMQ_URL"
+	envRabbitMQConfirmTimeout = "HEROS_RABBITMQ_CONFIRM_TIMEOUT"
+	envRabbitMQReconnectDelay = "HEROS_RABBITMQ_RECONNECT_DELAY"
 
 	envOMDbAPIKey  = "HEROS_OMDB_API_KEY"
 	envOMDbBaseURL = "HEROS_OMDB_BASE_URL"
@@ -157,7 +162,8 @@ func EnvVarNames() []string {
 		envCSRFSecret, envCryptoKeys, envCryptoActiveK,
 		envMailDriver, envMailFromAddress, envMailFromName, envSMTPHost, envSMTPPort,
 		envSMTPUsername, envSMTPPassword, envSMTPTLSMode, envSMTPTimeout, envMailWorkers,
-		envMailQueueSize, envMailMaxAttempts, envMailRetryDelay, envMailSendTimeout,
+		envMailQueueSize, envMailMaxAttempts, envMailRetryDelay, envMailSendTimeout, envMailQueue,
+		envRabbitMQURL, envRabbitMQConfirmTimeout, envRabbitMQReconnectDelay,
 		envOMDbAPIKey, envOMDbBaseURL, envOMDbTimeout,
 		envContactRecipient, envAvatarDir, envAvatarMaxBytes, envAvatarMaxDimension,
 		envPublicBaseURL, envActivationPath, envPasswordResetPath, envNewsletterConfirmPath,

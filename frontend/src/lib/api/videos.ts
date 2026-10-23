@@ -488,6 +488,7 @@ function fromApiPublicFilm(film: ApiSchema<"PublicFilm">): PublicFilm {
     videoUrl: film.videoUrl ?? (film.imdbId ? `https://www.imdb.com/title/${film.imdbId}/` : ""),
     imdbId: film.imdbId,
     year: film.releaseYear,
+    posterUrl: film.posterUrl,
     addedAt: film.addedAt,
   };
 }

@@ -31,6 +31,8 @@ export interface PublicFilm {
   videoUrl: string;
   imdbId?: string;
   year?: number;
+  /** Affiche du film (catalogue IMDb), absente pour une vidéo libre. */
+  posterUrl?: string;
   /** Date ISO 8601 du rattachement publié le plus récent. */
   addedAt: string;
 }

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { Suspense } from "react";
 import { EmptyState } from "@/components/admin/ModerationFilter";
@@ -35,6 +36,40 @@ function filteredHref(query: Record<string, string | undefined>): string {
   return search ? `${routes.videos}?${search}` : routes.videos;
 }
 
+/** Colonne de l'affiche : au moins au format 2:3, étirée à la hauteur de la carte. */
+const POSTER_COLUMN = "relative min-h-48 w-32 shrink-0 border-r-2 border-border bg-background";
+
+/**
+ * Affiche du film, décorative (alt vide) : le titre est juste à côté. Une vidéo libre n'en a pas,
+ * un cadre la remplace pour garder les cartes alignées.
+ */
+function FilmPoster({ src }: { src: string | undefined }) {
+  if (!src) {
+    return (
+      <div
+        aria-hidden="true"
+        className={`${POSTER_COLUMN} flex items-center justify-center text-3xl text-muted`}
+      >
+        ▶
+      </div>
+    );
+  }
+  return (
+    <div className={POSTER_COLUMN}>
+      <Image
+        src={src}
+        alt=""
+        fill
+        sizes="8rem"
+        // Affiche hébergée par le catalogue (OMDb / IMDb), déjà redimensionnée : servie telle quelle
+        // plutôt que d'autoriser cet hôte dans l'optimiseur de Next.
+        unoptimized
+        className="object-cover"
+      />
+    </div>
+  );
+}
+
 function FilmCard({ film }: { film: PublicFilm }) {
   const titleId = `film-${film.id}-titre`;
   const shown = film.heroes.slice(0, CARD_HEROES);
@@ -43,42 +78,48 @@ function FilmCard({ film }: { film: PublicFilm }) {
   return (
     <article
       aria-labelledby={titleId}
-      className="flex h-full flex-col border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)] p-5"
+      className="flex h-full overflow-hidden border-2 border-border bg-surface shadow-[3px_3px_0_0_var(--color-shadow)]"
     >
-      <p className="font-mono text-xs tracking-widest text-accent uppercase">
-        {film.imdbId ? "Film" : "Vidéo"} · {shown.map(({ alias }) => alias).join(", ")}
-        {hidden.length > 0 && (
-          <>
-            <span aria-hidden="true" title={hidden.map(({ alias }) => alias).join(", ")}>
-              {" "}
-              +{hidden.length}
-            </span>
-            <span className="sr-only">, {hidden.map(({ alias }) => alias).join(", ")}</span>
-          </>
-        )}
-      </p>
-      <h3 id={titleId} className="mt-2 font-display text-lg font-semibold">
-        {film.title}
-        {film.year && (
-          <span className="font-mono text-sm font-normal text-muted"> ({film.year})</span>
-        )}
-      </h3>
-      <p className="mt-2 line-clamp-4 text-sm text-pretty text-muted">{film.description}</p>
-      <p className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-4 text-sm">
-        <span className="text-muted">
-          Ajouté le <time dateTime={film.addedAt}>{formatDate(film.addedAt)}</time>
-        </span>
-        <a
-          href={film.videoUrl}
-          target="_blank"
-          rel="noopener noreferrer nofollow"
-          className="inline-flex min-h-11 items-center font-semibold text-accent hover:underline"
+      <FilmPoster src={film.posterUrl} />
+      <div className="flex min-w-0 flex-1 flex-col p-4">
+        <p className="font-mono text-xs tracking-widest text-accent uppercase">
+          {film.imdbId ? "Film" : "Vidéo"} · {shown.map(({ alias }) => alias).join(", ")}
+          {hidden.length > 0 && (
+            <>
+              <span aria-hidden="true" title={hidden.map(({ alias }) => alias).join(", ")}>
+                {" "}
+                +{hidden.length}
+              </span>
+              <span className="sr-only">, {hidden.map(({ alias }) => alias).join(", ")}</span>
+            </>
+          )}
+        </p>
+        <h3
+          id={titleId}
+          className="mt-1 font-display text-lg leading-snug font-semibold text-balance"
         >
-          {film.imdbId ? "Voir sur IMDb" : "Regarder"}
-          <span className="sr-only"> « {film.title} » (nouvel onglet)</span>
-          <span aria-hidden="true">&nbsp;↗</span>
-        </a>
-      </p>
+          {film.title}
+          {film.year && (
+            <span className="font-mono text-sm font-normal text-muted"> ({film.year})</span>
+          )}
+        </h3>
+        <p className="mt-2 mb-3 line-clamp-4 text-sm text-pretty text-muted">{film.description}</p>
+        <div className="mt-auto flex flex-wrap items-end justify-between gap-x-3 border-t border-border/60 pt-2 text-sm">
+          <span className="py-3 text-xs text-muted">
+            Ajouté le <time dateTime={film.addedAt}>{formatDate(film.addedAt)}</time>
+          </span>
+          <a
+            href={film.videoUrl}
+            target="_blank"
+            rel="noopener noreferrer nofollow"
+            className="inline-flex min-h-11 items-center font-semibold text-accent hover:underline"
+          >
+            {film.imdbId ? "Voir sur IMDb" : "Regarder"}
+            <span className="sr-only"> « {film.title} » (nouvel onglet)</span>
+            <span aria-hidden="true">&nbsp;↗</span>
+          </a>
+        </div>
+      </div>
     </article>
   );
 }
@@ -210,8 +251,10 @@ function GallerySkeleton() {
       {Array.from({ length: 3 }, (_, index) => (
         <div
           key={index}
-          className="h-56 border-2 border-border bg-surface motion-safe:animate-pulse"
-        />
+          className="flex h-56 border-2 border-border bg-surface motion-safe:animate-pulse"
+        >
+          <div className="w-32 shrink-0 border-r-2 border-border bg-background" />
+        </div>
       ))}
     </div>
   );

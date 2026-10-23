@@ -20,8 +20,8 @@ import {
 import { userFromToken } from "./session-user";
 
 /*
- * Double authentification (TOTP) des modérateurs : activation, validation du code à la connexion, codes
- * de secours. Une session limitée (code à saisir, ou activation obligatoire pas encore faite) peut appeler
+ * Double authentification (TOTP) : obligatoire pour les modérateurs, facultative pour les citoyens et les
+ * super-héros. Activation, validation du code à la connexion, codes de secours. Une session limitée (code à saisir, ou activation obligatoire pas encore faite) peut appeler
  * `setup`, `enable` et `verify` ; les codes de secours exigent une session complète.
  *
  * Sans API, aucune 2FA n'existe : ces fonctions simulent l'activation pour que l'écran reste utilisable.
@@ -92,7 +92,7 @@ function fromApiSession(
 export async function enableMfa(token: string, code: string): Promise<MfaEnableResult> {
   if (!isApiEnabled) {
     if (code === MOCK_INVALID_CODE) return mockResponse({ ok: false, error: "invalid-code" });
-    const user = await userFromToken(token, "admin");
+    const user = await userFromToken(token, ["admin", "citoyen", "super-heros"]);
     return mockResponse({
       ok: true,
       session: { user, token, expiresAt: new Date(Date.now() + 8 * 3_600_000).toISOString() },

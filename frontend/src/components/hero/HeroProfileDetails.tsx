@@ -3,6 +3,7 @@ import {
   updateHeroAvatarAction,
   updateHeroContactAction,
 } from "@/app/actions/hero";
+import { MfaSection } from "@/components/auth/MfaPanel";
 import { Panel, SessionsPanel } from "@/components/citizen/AccountDetails";
 import { AvatarForm, ContactForm, EmailChangeForm } from "@/components/citizen/AccountForms";
 import { Avatar } from "@/components/ui/Avatar";
@@ -83,6 +84,8 @@ export async function HeroProfileDetails() {
           )}
           <EmailChangeForm action={requestHeroEmailChangeAction} />
         </Panel>
+
+        <MfaSection role="super-heros" />
 
         <SessionsPanel />
       </div>

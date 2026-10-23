@@ -1,3 +1,4 @@
+import { MfaSection } from "@/components/auth/MfaPanel";
 import { Avatar } from "@/components/ui/Avatar";
 import { getMyAccount } from "@/lib/api";
 import { formatDate } from "@/lib/format";
@@ -107,6 +108,8 @@ function AccountPanels({ account }: { account: MyAccount }) {
         <Panel id="newsletter-settings-title" title="Newsletter">
           <NewsletterSettingsForm subscribed={account.newsletterSubscribed} />
         </Panel>
+
+        <MfaSection role="citoyen" />
 
         <SessionsPanel />
       </div>

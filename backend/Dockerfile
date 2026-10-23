@@ -35,8 +35,8 @@ FROM scratch
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 # `api` est le serveur ; `createmoderator` crée le premier modérateur ; `resetmfa` réinitialise la 2FA d'un compte
 # qui a perdu son appareil (jamais par l'API) :
-#   docker compose run --rm --entrypoint /createmoderator api -email … -first-name … -last-name … -birth-date …
-#   docker compose run --rm --entrypoint /resetmfa api -email …
+#   docker compose run --rm api /createmoderator -email … -first-name … -last-name … -birth-date …
+#   docker compose run --rm api /resetmfa -email …
 # `seed` remplit une base de démonstration (refusé en production) : make seed
 # `mailworker` envoie les mails que l'API dépose dans RabbitMQ (service `mail-worker`, même image, autre
 # binaire : `entrypoint: ["/mailworker"]`). Voir backend/stack/rabbitmq.md.
@@ -60,5 +60,6 @@ EXPOSE 8080
 # L'image n'a pas de curl : le binaire se sonde lui-même (/api/v1/ready, base de données incluse).
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 CMD ["/api", "-healthcheck"]
 
-# ENTRYPOINT (et non CMD) pour passer des options sans répéter le binaire : `-migrate`.
-ENTRYPOINT ["/api"]
+# Pas d'ENTRYPOINT : CMD seul, remplaçable en entier. Pour une autre commande ou d'autres options,
+# on donne le binaire complet : `command: ["/api", "-migrate"]`.
+CMD ["/api"]

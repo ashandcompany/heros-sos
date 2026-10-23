@@ -50,7 +50,7 @@ services:
   migrate:
     # Même image que l'API (construite une seule fois, par le service `api`).
     <<: *api-config
-    command: ["-migrate"]
+    command: ["/api", "-migrate"]
     restart: "no"
     logging: *logging
     depends_on:

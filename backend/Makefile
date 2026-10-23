@@ -249,7 +249,7 @@ elk-down-dev: ## Arrête le monitoring ELK (V=1 supprime aussi ses données) et 
 
 .PHONY: seed-dev
 seed-dev: ## Remplit la base de la pile de développement (univers Marvel) ; RESET=1 efface d'abord TOUTES les données
-	$(COMPOSE_DEV) run --rm --entrypoint /seed api $(if $(RESET),-reset)
+	$(COMPOSE_DEV) run --rm api /seed $(if $(RESET),-reset)
 
 .PHONY: resetmfa-dev
 resetmfa-dev: ## Réinitialise la 2FA d'un compte (appareil perdu) dans la pile de développement : EMAIL=…
@@ -310,14 +310,14 @@ compose-check: ## Valide la syntaxe des fichiers Compose (développement et prod
 # ses sessions. L'API ne le permet jamais, pour qu'un compte piraté ne puisse pas retirer sa propre protection.
 define reset_mfa
 	@test -n "$(EMAIL)" || { echo "EMAIL est obligatoire"; exit 1; }
-	$(1) run --rm --entrypoint /resetmfa api -email "$(EMAIL)"
+	$(1) run --rm api /resetmfa -email "$(EMAIL)"
 endef
 
 # Lance la commande createmoderator (incluse dans l'image) ; le mot de passe est demandé, jamais passé en argument.
 define create_moderator
 	@test -n "$(EMAIL)" -a -n "$(FIRST)" -a -n "$(LAST)" -a -n "$(BIRTH)" || { echo "EMAIL, FIRST, LAST et BIRTH sont obligatoires"; exit 1; }
 	@read -rsp "Mot de passe : " password; echo; \
-	$(1) run --rm -e HEROS_MODERATOR_PASSWORD="$$password" --entrypoint /createmoderator api \
+	$(1) run --rm -e HEROS_MODERATOR_PASSWORD="$$password" api /createmoderator \
 		-email "$(EMAIL)" -first-name "$(FIRST)" -last-name "$(LAST)" -birth-date "$(BIRTH)"
 endef
 

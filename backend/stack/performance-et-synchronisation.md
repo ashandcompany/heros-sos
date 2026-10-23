@@ -31,7 +31,7 @@ Ces mesures à 5 millions datent d'avant la modération des incidents : celles d
 
 Le « 12 s » du sujet n'est pas reproduit à l'identique : la base de mesure est locale, sur un disque rapide et avec un cache chaud. Les ordres de grandeur sont les mêmes (jusqu'à 9 s au p95), et c'est le rapport avant/après qui compte. Un clone neuf avec `make up` donnera des temps plus élevés des deux côtés (PostgreSQL non réglé, disque de la machine virtuelle de Docker).
 
-Ce que `pg_stat_statements` a désigné avant correction, une requête à froid :
+Ce que `pg_stat_statements` a désigné avant correction, une requête à froid (cette extension de PostgreSQL classe les requêtes par temps total, nombre d'appels, durée moyenne et maximale ; la pile de développement la charge depuis le 23/10/2026, voir `make slow-queries` dans [P0](#p0--données-et-mesures)) :
 
 | Requête | Durée |
 |---|---|
@@ -139,6 +139,7 @@ Depuis la fusion de la PR #37, `GET /incidents` renvoie **tous les statuts** sau
   - Il termine par `VACUUM ANALYZE` : statistiques à jour et carte de visibilité renseignée, comme une base installée depuis longtemps.
 - **Place disque : 8,2 Go pour 5 M d'incidents** (tables et index : `incidents` 4,7 Go, `intervention_heroes` 1,9 Go, `interventions` 0,9 Go, `incident_villains` 0,7 Go ; les index partiels et les colonnes dénormalisées ajoutés avec la modération ont fait grossir `incidents`), et le chargement dure environ 7 minutes. Avec le journal de transactions, compter **11 Go libres** : un portable à 8 Go libres ne suffit pas. Garder `PERF_MAX_SIZE_GB` renseigné, **à 10** (à 8, le chargement s'arrêterait à quelques Mo de la fin).
 - **`cmd/loadtest`** (`make perf`) : se connecte avec un cookie de session (le mot de passe est lu dans `LOADTEST_PASSWORD`, jamais dans un argument), joue neuf scénarios en parallèle, affiche p50, p95, p99, les erreurs, et sort en erreur si le p95 dépasse `-p95 350ms`. Le scénario « mes incidents » utilise un client **connecté** et tous les autres un client **anonyme** : l'API ne montre à un citoyen connecté que ses propres incidents, même sur la liste publique.
+- **`make slow-queries`** (`DB_NAME=herossos_perf` pour la base des mesures) : les 15 requêtes les plus coûteuses de la base de développement (temps total, appels, durée moyenne et maximale), lues dans `pg_stat_statements`. C'est l'outil du diagnostic : on lance la charge, puis on regarde ce qui a coûté le plus. `docker-compose.dev.yml` charge l'extension au démarrage de PostgreSQL (`shared_preload_libraries=pg_stat_statements`), la cible la crée dans la base (`CREATE EXTENSION IF NOT EXISTS`, idempotent) : il faut donc la relancer après `make reset`, qui efface la base. Limites : développement seulement (rien n'est activé en production : l'extension garde le texte des requêtes et ajoute une légère surcharge, à décider), et seulement avec la base du Compose, pas celle de `make db-start`, qui ne charge pas la bibliothèque. Les compteurs sont cumulatifs : pour repartir de zéro avant une mesure, `SELECT pg_stat_statements_reset();`.
 - Limite connue : `loadtest` envoie les requêtes avec un nombre fixe de clients. Sous forte surcharge, il sous-estime un peu les pires latences ; c'est suffisant pour comparer un avant et un après. La mesure côté serveur (P6) complète.
 
 ### P1 : performance
@@ -227,6 +228,7 @@ LOADTEST_PASSWORD='Avengers2026!' make perf   # p95 ≤ 350 ms, scénario « mes
 make perf-indexes-off          # retire les index de lecture : la lenteur d'origine revient
 make perf                      # …et la mesure le montre
 make perf-indexes-on
+make slow-queries DB_NAME=herossos_perf   # les requêtes les plus coûteuses (pg_stat_statements), base de la pile Docker
 # Tableau de bord des héros : il demande un compte héros (le scénario « mine » utilise PERF_USER, un citoyen)
 cd backend && LOADTEST_PASSWORD='Avengers2026!' go run ./cmd/loadtest -base-url http://127.0.0.1:8090/api/v1 \
     -identifier tony.stark@heros-sos.local -dashboard -scenarios dashboard

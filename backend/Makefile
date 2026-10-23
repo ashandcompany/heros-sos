@@ -251,6 +251,13 @@ elk-down-dev: ## Arrête le monitoring ELK (V=1 supprime aussi ses données) et 
 seed-dev: ## Remplit la base de la pile de développement (univers Marvel) ; RESET=1 efface d'abord TOUTES les données
 	$(COMPOSE_DEV) run --rm api /seed $(if $(RESET),-reset)
 
+# pg_stat_statements est chargé par docker-compose.dev.yml ; CREATE EXTENSION le rend interrogeable (idempotent, et
+# à refaire après `make reset`, qui efface la base). DB_NAME : la base à examiner (PERF_DB_NAME pour celle des mesures).
+.PHONY: slow-queries-dev
+slow-queries-dev: ## Classe les requêtes de la base de développement par temps total (DB_NAME=herossos_perf pour les mesures)
+	@$(COMPOSE_DEV) exec -T db psql -U $(DB_USER) -d $(DB_NAME) -q -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements" \
+		-c "SELECT round(total_exec_time::numeric / 1000, 2) AS total_s, calls, round(mean_exec_time::numeric, 2) AS mean_ms, round(max_exec_time::numeric, 2) AS max_ms, left(regexp_replace(query, '\s+', ' ', 'g'), 90) AS query FROM pg_stat_statements WHERE dbid = (SELECT oid FROM pg_database WHERE datname = current_database()) AND query NOT ILIKE '%pg_stat_statements%' ORDER BY total_exec_time DESC LIMIT 15"
+
 .PHONY: resetmfa-dev
 resetmfa-dev: ## Réinitialise la 2FA d'un compte (appareil perdu) dans la pile de développement : EMAIL=…
 	$(call reset_mfa,$(COMPOSE_DEV))

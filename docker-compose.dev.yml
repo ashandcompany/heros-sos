@@ -63,6 +63,9 @@ services:
         condition: service_healthy
 
   db:
+    # pg_stat_statements classe les requêtes par temps total (`make slow-queries`) : c'est lui qui désigne les requêtes
+    # à optimiser. Il se charge au démarrage de PostgreSQL ; développement seulement.
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "pg_stat_statements.track=all"]
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-heros}
     ports:

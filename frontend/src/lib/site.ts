@@ -9,3 +9,15 @@
 export function getSiteUrl(): string {
   return (process.env.SITE_URL?.trim() || "http://localhost:3000").replace(/\/+$/, "");
 }
+
+/**
+ * Nom de domaine du site, sans port (ex : `heros-sos.fr`) : celui sous lequel un gestionnaire de mots de passe
+ * enregistre la connexion. `undefined` si `SITE_URL` n'est pas une URL : un réglage faux ne doit pas casser l'appelant.
+ */
+export function getSiteDomain(): string | undefined {
+  try {
+    return new URL(getSiteUrl()).hostname;
+  } catch {
+    return undefined;
+  }
+}

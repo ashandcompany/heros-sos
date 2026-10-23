@@ -305,6 +305,65 @@ func TestHeroReporterCanRateOtherParticipantsButNotThemself(t *testing.T) {
 	}
 }
 
+func TestModeratorReporterCanCommentOwnIntervention(t *testing.T) {
+	e := newE2E(t, nil)
+	reporter := e.newModerator("reporter-mod@shield.example")
+	otherModerator := e.newModerator("other-mod@shield.example")
+	hero := e.approvedHero(otherModerator, "hero@example.org", "Vigie")
+	ownIncident := e.declareIncident(reporter, otherModerator, "moderator_reporter_review")
+	foreignIncident := e.declareIncident(e.signUpAndLogin("citizen@example.org"), otherModerator, "citizen_reporter_review")
+
+	// Héros seul : sa proposition de résultat clôture l'intervention.
+	closeIntervention := func(incidentID string) string {
+		started := e.startIntervention(hero, incidentID)
+		e.mustPost(hero, "/interventions/"+started.ID+"/outcome", map[string]string{"status": "succeeded"}, http.StatusNoContent)
+		return started.ID
+	}
+	ownIntervention := closeIntervention(ownIncident)
+	foreignIntervention := closeIntervention(foreignIncident)
+
+	var page struct {
+		Items []struct {
+			InterventionID string `json:"interventionId"`
+		} `json:"items"`
+		Total int `json:"total"`
+	}
+	if got := reporter.get("/me/interventions"); got.status != http.StatusOK {
+		t.Fatalf("liste du modérateur déclarant : %d %s", got.status, got.body)
+	} else {
+		got.decode(t, &page)
+		if page.Total != 1 || len(page.Items) != 1 || page.Items[0].InterventionID != ownIntervention {
+			t.Fatalf("le modérateur ne doit voir que les interventions de ses incidents : %+v", page)
+		}
+	}
+
+	review := map[string]any{"heroId": hero.userID(), "rating": 5, "comment": "Intervention exemplaire."}
+	if got := reporter.post("/interventions/"+foreignIntervention+"/reviews", review); got.status != http.StatusForbidden {
+		t.Errorf("le modérateur commente une intervention dont il n'est pas l'auteur : %d %s", got.status, got.body)
+	}
+	if got := reporter.post("/interventions/"+ownIntervention+"/reviews", review); got.status != http.StatusNoContent {
+		t.Fatalf("commentaire du modérateur déclarant : %d %s", got.status, got.body)
+	}
+
+	var pending []struct {
+		ID     string `json:"id"`
+		Status string `json:"status"`
+	}
+	listed := otherModerator.get("/admin/hero-reviews?status=pending")
+	raw, _ := json.Marshal(decodeItems(t, listed.body))
+	if err := json.Unmarshal(raw, &pending); err != nil || len(pending) != 1 {
+		t.Fatalf("le commentaire du modérateur doit attendre la modération : %v %s", err, listed.body)
+	}
+	reviewPath := "/admin/hero-reviews/" + pending[0].ID
+	publish := map[string]string{"status": reputation.ReviewPublished}
+	if got := reporter.request(http.MethodPatch, reviewPath, publish); got.status != http.StatusForbidden {
+		t.Errorf("le modérateur publie son propre avis : %d %s", got.status, got.body)
+	}
+	if got := otherModerator.request(http.MethodPatch, reviewPath, publish); got.status != http.StatusNoContent {
+		t.Fatalf("publication par un autre modérateur : %d %s", got.status, got.body)
+	}
+}
+
 func decodeItems(t *testing.T, body []byte) []any {
 	t.Helper()
 	var page struct {

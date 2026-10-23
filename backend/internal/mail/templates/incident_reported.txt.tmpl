@@ -1,6 +1,9 @@
 Bonjour,
 
 Un nouvel incident vient d'être déclaré sur {{.AppName}}.
+{{- if .NearbyRadiusKm}}
+Il a été signalé à moins de {{.NearbyRadiusKm}} km de votre dernière position partagée.
+{{- end}}
 
 Type d'intervention : {{.IncidentType}}
 Titre : {{.IncidentTitle}}

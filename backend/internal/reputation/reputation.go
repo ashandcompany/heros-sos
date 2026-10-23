@@ -28,6 +28,7 @@ var (
 	ErrReplyUnavailable = errors.New("reputation : commentaire indisponible pour une réponse")
 	ErrInvalidRating    = errors.New("reputation : note invalide")
 	ErrInvalidStatus    = errors.New("reputation : statut invalide")
+	ErrOwnReview        = errors.New("reputation : modération de son propre avis")
 )
 
 type Review struct {

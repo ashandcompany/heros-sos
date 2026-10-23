@@ -8,6 +8,7 @@ import (
 	"github.com/ashandcompany/heros-sos/backend/internal/auth"
 	"github.com/ashandcompany/heros-sos/backend/internal/config"
 	"github.com/ashandcompany/heros-sos/backend/internal/httpx"
+	"github.com/ashandcompany/heros-sos/backend/internal/ratelimit"
 	"github.com/ashandcompany/heros-sos/backend/internal/validation"
 )
 
@@ -16,11 +17,18 @@ type Handler struct {
 	service *Service
 	logger  *slog.Logger
 	http    config.HTTP
+	// perUser limite les envois de position d'un même héros.
+	perUser *ratelimit.Limiter
 }
 
 // NewHandler crée le handler.
-func NewHandler(service *Service, logger *slog.Logger, httpConfig config.HTTP) *Handler {
-	return &Handler{service: service, logger: logger, http: httpConfig}
+func NewHandler(service *Service, logger *slog.Logger, httpConfig config.HTTP, perUser *ratelimit.Limiter) *Handler {
+	return &Handler{service: service, logger: logger, http: httpConfig, perUser: perUser}
+}
+
+// SweepLimiters libère la mémoire des fenêtres de limitation expirées.
+func (h *Handler) SweepLimiters() {
+	h.perUser.Sweep()
 }
 
 type payload struct {
@@ -65,6 +73,10 @@ func (h *Handler) DeleteConsent(w http.ResponseWriter, r *http.Request) {
 // Put traite PUT /hero/location : remplace la position du héros connecté.
 func (h *Handler) Put(w http.ResponseWriter, r *http.Request) {
 	principal, _ := auth.PrincipalFrom(r.Context())
+	if allowed, retryAfter := h.perUser.Allow(principal.UserID.String()); !allowed {
+		h.fail(w, r, httpx.RateLimited(retryAfter))
+		return
+	}
 	var body payload
 	if err := httpx.DecodeJSON(w, r, h.http.MaxBodyBytes, &body); err != nil {
 		h.fail(w, r, err)

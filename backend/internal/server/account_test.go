@@ -28,7 +28,7 @@ type accountView struct {
 	PendingEmailConfirmed                                                                           bool
 	Address                                                                                         struct{ Street, Complement, PostalCode, City, Country string }
 	NewsletterSubscribed                                                                            bool
-	Hero                                                                                            *struct{ Alias, Bio string }
+	Hero                                                                                            *struct{ Alias, Bio, LocationConsentAt string }
 }
 
 func (a *actor) account(t *testing.T) accountView {

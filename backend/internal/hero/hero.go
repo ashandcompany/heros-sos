@@ -72,7 +72,9 @@ type Profile struct {
 	ReviewedBy      *uuid.UUID
 	ReviewedAt      *time.Time
 	RejectionReason string
-	CreatedAt       time.Time
+	// LocationConsentAt est la date du consentement au partage de position (nil sans consentement).
+	LocationConsentAt *time.Time
+	CreatedAt         time.Time
 }
 
 // PublicProfile contient les données publiques d'un super-héros approuvé.

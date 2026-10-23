@@ -74,6 +74,8 @@ type templateData struct {
 	NewEmail string
 	// UnsubscribeLink est le lien de désinscription que porte chaque newsletter.
 	UnsubscribeLink string
+	// NearbyRadiusKm est le rayon d'alerte d'un héros prévenu pour sa proximité (0 sinon).
+	NearbyRadiusKm int
 }
 
 // Service compose les mails de l'application à partir des modèles et les confie à un Mailer.
@@ -114,10 +116,11 @@ func (s *Service) SendPasswordReset(ctx context.Context, to, firstName, link str
 }
 
 // SendIncidentReported prévient un destinataire d'un nouvel incident. Le sujet est fixe : le
-// titre, saisi par un utilisateur, ne figure que dans le corps.
-func (s *Service) SendIncidentReported(ctx context.Context, to, title, interventionType string) error {
+// titre, saisi par un utilisateur, ne figure que dans le corps. nearbyRadiusKm, pour un héros prévenu
+// parce qu'il est proche, est le rayon d'alerte cité dans le mail (0 sinon : rien n'est dit).
+func (s *Service) SendIncidentReported(ctx context.Context, to, title, interventionType string, nearbyRadiusKm int) error {
 	return s.send(ctx, to, fmt.Sprintf(subjectIncident, s.appName), templateIncident, templateData{
-		IncidentTitle: title, IncidentType: interventionType,
+		IncidentTitle: title, IncidentType: interventionType, NearbyRadiusKm: nearbyRadiusKm,
 	})
 }
 

@@ -138,7 +138,7 @@ paths:
     get:
       tags: [Réputation]
       summary: Interventions terminées à noter
-      description: Liste les héros confirmés des interventions clôturées sur les incidents déclarés par l'utilisateur connecté (citoyen ou héros), avec ses avis déjà déposés. Un héros déclarant ne peut pas se noter lui-même.
+      description: Liste les héros confirmés des interventions clôturées sur les incidents déclarés par l'utilisateur connecté (citoyen, héros ou modérateur), avec ses avis déjà déposés. Un héros déclarant ne peut pas se noter lui-même.
       operationId: listMyRateableInterventions
       security: [{ sessionCookie: [] }]
       parameters:
@@ -159,7 +159,7 @@ paths:
     post:
       tags: [Réputation]
       summary: Noter un héros de l'intervention
-      description: Seul le déclarant connecté (citoyen ou héros) peut noter chaque participant confirmé d'une intervention clôturée, une fois par héros; un héros déclarant ne peut pas se noter lui-même. Une note seule est publiée immédiatement; un avis avec commentaire attend la modération.
+      description: Seul le déclarant connecté (citoyen, héros ou modérateur) peut noter chaque participant confirmé d'une intervention clôturée, une fois par héros; un héros déclarant ne peut pas se noter lui-même. Une note seule est publiée immédiatement; un avis avec commentaire attend la modération.
       operationId: createHeroReview
       security: [{ sessionCookie: [], csrfToken: [] }]
       parameters:
@@ -247,7 +247,7 @@ paths:
         110 m, conservée en clair 30 minutes au plus (`HEROS_LOCATION_TTL`) puis supprimée, et n'est relue par aucune
         route : le serveur s'en sert seulement pour prévenir les héros à proximité (`HEROS_ALERT_RADIUS_KM`, 10 km par
         défaut) d'un nouvel incident avec coordonnées. Sans héros proche, ou sans coordonnées, tous les héros actifs
-        sont prévenus.
+        sont prévenus. Limité à 60 envois par heure et par héros (`HEROS_RATE_HERO_LOCATION_PER_USER`).
       operationId: saveHeroLocation
       security: [{ sessionCookie: [], csrfToken: [] }]
       requestBody:
@@ -270,6 +270,7 @@ paths:
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "500": { $ref: "#/components/responses/InternalError" }
     delete:
       tags: [Super-héros]
@@ -415,6 +416,7 @@ paths:
     patch:
       tags: [Réputation]
       summary: Publier ou masquer un avis
+      description: Un modérateur ne peut pas modérer un avis qu'il a lui-même déposé (403 hero_review_own_review).
       operationId: moderateHeroReview
       security: [{ sessionCookie: [], csrfToken: [] }]
       parameters:
@@ -5319,6 +5321,12 @@ components:
       properties:
         alias: { type: string, description: Pseudo public. }
         bio: { type: string, description: Description publique. }
+        locationConsentAt:
+          {
+            type: string,
+            format: date-time,
+            description: "Date du consentement au partage de position (`PUT /hero/location/consent`), absente sans consentement.",
+          }
 
     ContactUpdateRequest:
       type: object

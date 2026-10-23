@@ -13,7 +13,7 @@ export interface paths {
         };
         /**
          * Interventions terminées à noter
-         * @description Liste les héros confirmés des interventions clôturées sur les incidents déclarés par l'utilisateur connecté (citoyen ou héros), avec ses avis déjà déposés. Un héros déclarant ne peut pas se noter lui-même.
+         * @description Liste les héros confirmés des interventions clôturées sur les incidents déclarés par l'utilisateur connecté (citoyen, héros ou modérateur), avec ses avis déjà déposés. Un héros déclarant ne peut pas se noter lui-même.
          */
         get: operations["listMyRateableInterventions"];
         put?: never;
@@ -35,7 +35,7 @@ export interface paths {
         put?: never;
         /**
          * Noter un héros de l'intervention
-         * @description Seul le déclarant connecté (citoyen ou héros) peut noter chaque participant confirmé d'une intervention clôturée, une fois par héros; un héros déclarant ne peut pas se noter lui-même. Une note seule est publiée immédiatement; un avis avec commentaire attend la modération.
+         * @description Seul le déclarant connecté (citoyen, héros ou modérateur) peut noter chaque participant confirmé d'une intervention clôturée, une fois par héros; un héros déclarant ne peut pas se noter lui-même. Une note seule est publiée immédiatement; un avis avec commentaire attend la modération.
          */
         post: operations["createHeroReview"];
         delete?: never;
@@ -94,7 +94,7 @@ export interface paths {
         get?: never;
         /**
          * Partager sa position actuelle
-         * @description Réservé aux super-héros. Remplace la position actuelle du héros (aucun historique). Elle est arrondie à environ 110 m, conservée en clair 30 minutes au plus (`HEROS_LOCATION_TTL`) puis supprimée, et n'est relue par aucune route : le serveur s'en sert seulement pour prévenir les héros à proximité (`HEROS_ALERT_RADIUS_KM`, 10 km par défaut) d'un nouvel incident avec coordonnées. Sans héros proche, ou sans coordonnées, tous les héros actifs sont prévenus.
+         * @description Réservé aux super-héros. Remplace la position actuelle du héros (aucun historique). Elle est arrondie à environ 110 m, conservée en clair 30 minutes au plus (`HEROS_LOCATION_TTL`) puis supprimée, et n'est relue par aucune route : le serveur s'en sert seulement pour prévenir les héros à proximité (`HEROS_ALERT_RADIUS_KM`, 10 km par défaut) d'un nouvel incident avec coordonnées. Sans héros proche, ou sans coordonnées, tous les héros actifs sont prévenus. Limité à 60 envois par heure et par héros (`HEROS_RATE_HERO_LOCATION_PER_USER`).
          */
         put: operations["saveHeroLocation"];
         post?: never;
@@ -222,7 +222,10 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Publier ou masquer un avis */
+        /**
+         * Publier ou masquer un avis
+         * @description Un modérateur ne peut pas modérer un avis qu'il a lui-même déposé (403 hero_review_own_review).
+         */
         patch: operations["moderateHeroReview"];
         trace?: never;
     };
@@ -3111,6 +3114,11 @@ export interface components {
             alias: string;
             /** @description Description publique. */
             bio: string;
+            /**
+             * Format: date-time
+             * @description Date du consentement au partage de position (`PUT /hero/location/consent`), absente sans consentement.
+             */
+            locationConsentAt?: string;
         };
         ContactUpdateRequest: {
             /** @description Portable français (06 ou 07) ou international (+33…) ; espaces, points et tirets sont ignorés. */
@@ -3561,6 +3569,7 @@ export interface operations {
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
         };
     };

@@ -200,6 +200,7 @@ type RateLimits struct {
 	EmailChangePerUser    RateRule
 	AvatarPerUser         RateRule
 	MFAVerifyPerUser      RateRule
+	HeroLocationPerUser   RateRule
 	MaxTrackedKeys        int
 }
 
@@ -465,6 +466,7 @@ func Load(getenv func(string) string) (Config, error) {
 				EmailChangePerUser:    l.rateRule(envRateEmailChangePerUser, defaultRateEmailChangePerUser),
 				AvatarPerUser:         l.rateRule(envRateAvatarPerUser, defaultRateAvatarPerUser),
 				MFAVerifyPerUser:      l.rateRule(envRateMFAVerifyPerUser, defaultRateMFAVerifyPerUser),
+				HeroLocationPerUser:   l.rateRule(envRateHeroLocationPerUser, defaultRateHeroLocationPerUser),
 				MaxTrackedKeys:        l.positiveInt(envMaxTrackedRateKeys, defaultMaxTrackedRateKeys),
 			},
 			Tokens: Tokens{

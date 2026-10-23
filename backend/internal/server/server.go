@@ -36,6 +36,7 @@ import (
 	"github.com/ashandcompany/heros-sos/backend/internal/mail"
 	"github.com/ashandcompany/heros-sos/backend/internal/moderation"
 	"github.com/ashandcompany/heros-sos/backend/internal/newsletter"
+	"github.com/ashandcompany/heros-sos/backend/internal/ratelimit"
 	"github.com/ashandcompany/heros-sos/backend/internal/realtime"
 	"github.com/ashandcompany/heros-sos/backend/internal/reputation"
 	"github.com/ashandcompany/heros-sos/backend/internal/signedlink"
@@ -216,7 +217,9 @@ func NewWithDB(cfg config.Config, logger *slog.Logger, db *gorm.DB, opts ...Opti
 	c.villainHandler = villain.NewHandler(
 		villain.NewService(villains, c.audit, c.tx, c.clock, types), logger, cfg.HTTP)
 	c.locationService = herolocation.NewService(db, c.clock, cfg.Proximity.LocationTTL, cfg.Proximity.AlertRadiusKm)
-	c.locationHandler = herolocation.NewHandler(c.locationService, logger, cfg.HTTP)
+	limits := cfg.Security.RateLimits
+	c.locationHandler = herolocation.NewHandler(c.locationService, logger, cfg.HTTP,
+		ratelimit.New(limits.HeroLocationPerUser, limits.MaxTrackedKeys, c.clock))
 	incidentService := incident.NewService(incident.ServiceDeps{
 		Repo: incident.NewRepository(db), Types: types, Villains: villains, Users: c.users, Heroes: c.locationService,
 		Notifier: mailService, Audit: c.audit, Events: c.events, Tx: c.tx, Clock: c.clock, Logger: logger,
@@ -433,6 +436,7 @@ func (s *Server) cleanup(ctx context.Context) {
 	c.accountHandler.SweepLimiters()
 	c.newsletterHandler.SweepLimiters()
 	c.contactHandler.SweepLimiters()
+	c.locationHandler.SweepLimiters()
 
 	tokenRetention := s.cfg.Jobs.TokenRetention
 	for _, task := range []purgeTask{

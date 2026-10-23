@@ -266,6 +266,7 @@ Le site `docs-site/` (Docusaurus) rassemble la documentation technique : l'archi
 | Docker, le déploiement en production | [backend/stack/docker.md](backend/stack/docker.md), [backend/README.md](backend/README.md#environnements-docker) |
 | Le frontend : architecture, conventions, interface, contrat avec le backend | [frontend/docs/](frontend/docs/) : [architecture](frontend/docs/architecture.md), [conventions](frontend/docs/conventions.md), [interface](frontend/docs/ui.md), [contrat](frontend/docs/backend-contract.md) |
 | Le site de documentation (ajouter une page) | [docs-site/README.md](docs-site/README.md) |
+| Le planning, les écarts et le reste à faire | [PLANNING.md](PLANNING.md) |
 
 **Maquettes Figma** : à compléter · **Environnement de recette** : à compléter
 

@@ -485,11 +485,11 @@ export interface paths {
         put?: never;
         /**
          * Commencer l'activation de la double authentification
-         * @description Réservé aux modérateurs. Tire un secret TOTP et le rend, pour le configurer dans une application
-         *     d'authentification (Google Authenticator, Aegis, 1Password…) : `otpauthUrl` s'ouvre dans l'application
-         *     (lien ou QR code), `secret` se saisit à la main. La double authentification n'est active qu'une fois
-         *     confirmée par un premier code (`POST /auth/mfa/enable`) ; recommencer remplace le secret d'une
-         *     activation non confirmée. Une double authentification **déjà activée** ne se réinitialise pas par
+         * @description Ouvert à tous les comptes : obligatoire pour un modérateur, facultative pour les autres. Tire un secret
+         *     TOTP et le rend, pour le configurer dans une application d'authentification (Google Authenticator, Aegis,
+         *     1Password…) : `otpauthUrl` s'ouvre dans l'application (lien ou QR code), `secret` se saisit à la main.
+         *     La double authentification n'est active qu'une fois confirmée par un premier code
+         *     (`POST /auth/mfa/enable`) ; recommencer remplace le secret d'une activation non confirmée. Une double authentification **déjà activée** ne se réinitialise pas par
          *     l'API (`mfa_already_enabled`) : un compte piraté ne doit pas pouvoir remplacer sa propre protection ;
          *     l'exploitation la réinitialise (`make resetmfa-dev`).
          *
@@ -513,7 +513,7 @@ export interface paths {
         put?: never;
         /**
          * Activer la double authentification
-         * @description Réservé aux modérateurs. Le premier code de l'application confirme l'activation. La réponse donne
+         * @description Ouvert à tous les comptes (voir `POST /auth/mfa/setup`). Le premier code de l'application confirme l'activation. La réponse donne
          *     **les codes de secours, montrés cette seule fois** (à garder hors ligne : chacun remplace un code TOTP
          *     une fois), et ouvre une **session complète avec un nouveau cookie et un nouveau jeton CSRF** : les
          *     autres sessions du compte sont fermées, celles ouvertes avant n'ayant jamais passé le second facteur.
@@ -569,7 +569,7 @@ export interface paths {
         put?: never;
         /**
          * Régénérer les codes de secours
-         * @description Réservé aux modérateurs, avec une **session complète**. Remplace tous les codes de secours (utilisés
+         * @description Ouvert à tous les comptes qui ont activé la double authentification, avec une **session complète**. Remplace tous les codes de secours (utilisés
          *     ou non) par de nouveaux, montrés cette seule fois. Demande le code TOTP courant : une session volée ne
          *     suffit pas à s'en procurer.
          */

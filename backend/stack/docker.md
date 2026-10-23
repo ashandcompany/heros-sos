@@ -2,7 +2,7 @@
 
 Un `docker-compose.yml` avec ces services :
 
-- `api` : image Go en multi-stage, avec une image finale minimale.
+- `api` : image Go en multi-stage, avec une image finale minimale (`FROM scratch`, utilisateur non privilégié). Elle n'a **pas d'`ENTRYPOINT`** : seul `CMD ["/api"]` la démarre. Une autre commande ou d'autres options se donnent avec le binaire en entier : `command: ["/api", "-migrate"]` (tâche `migrate` de la production), `docker compose run --rm api /seed`, `/resetmfa`, `/createmoderator` (les cibles `make seed-dev`, `resetmfa-dev` et `moderator-dev`). Le `mail-worker` fixe lui-même `entrypoint: ["/mailworker"]`.
 - `mail-worker` : même image que `api`, binaire `mailworker` (`cmd/mailworker`). Il lit la file `mail.send` et envoie les mails. Il n'a ni la base ni les clés de chiffrement. Voir [RabbitMQ](rabbitmq.md).
 - `proxy` : Caddy ou Traefik. Il termine le TLS et route `/api/*` vers `api` et le reste vers Next.js, pour que le navigateur ne parle qu'à une seule origine (voir [Sessions](sessions.md)).
 - `web` : Next.js, si le frontend est aussi conteneurisé (à confirmer avec Emma).

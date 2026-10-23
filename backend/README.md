@@ -6,7 +6,7 @@ personnelles, mails.
 
 ## Démarrage rapide
 
-Prérequis : Go (voir `go.mod`), Docker, `openssl`.
+Prérequis : Go (voir `go.mod`), Docker, `openssl`. Sans `make` sur la machine, `./make` à la racine du dépôt lance les mêmes cibles dans un conteneur (voir le [README racine](../README.md#sans-make-installé)).
 
 **Toute l'application dans Docker** (proxy, front, API, PostgreSQL 18, Mailpit, RabbitMQ, documentation) :
 

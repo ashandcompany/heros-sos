@@ -4,6 +4,7 @@ SHELL := /bin/bash
 # Point d'entrée à la racine : les fichiers Compose (docker-compose*.yml) sont ici, et chaque cible
 # délègue à backend/Makefile (qui porte la logique : ports, secrets, modérateur…).
 # Les variables passées en ligne de commande (EMAIL=…, V=1…) sont transmises telles quelles.
+# Sans make sur la machine : `./make up` lance la même cible dans un conteneur (script ./make, image docker/make/).
 BACKEND := $(MAKE) --no-print-directory -C backend
 
 # Même projet Compose que backend/Makefile (COMPOSE_DEV), pour les cibles qui n'y ont pas d'équivalent.

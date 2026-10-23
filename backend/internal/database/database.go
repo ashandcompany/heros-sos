@@ -20,6 +20,17 @@ import (
 // Codes d'erreur SQLSTATE traités par l'application.
 const uniqueViolationCode = "23505"
 
+const foreignKeyViolationCode = "23503"
+
+// IsForeignKeyViolation indique si err est une violation de la clé étrangère nommée.
+func IsForeignKeyViolation(err error, constraint string) bool {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != foreignKeyViolationCode {
+		return false
+	}
+	return constraint == "" || pgErr.ConstraintName == constraint
+}
+
 // Open ouvre le pool de connexions et vérifie que la base répond. L'URL de connexion n'est
 // jamais incluse dans les erreurs ni dans les logs : elle contient le mot de passe.
 func Open(ctx context.Context, cfg config.Database, logger *slog.Logger) (*gorm.DB, error) {

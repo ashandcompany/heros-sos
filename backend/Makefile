@@ -106,7 +106,7 @@ perf-prepare: ## Migre la base de mesures et y charge les données Marvel (héro
 	@$(WITH_ENV) export HEROS_DATABASE_URL='$(PERF_DATABASE_URL)'; go run ./cmd/api -migrate && go run ./cmd/seed
 
 .PHONY: seed-perf
-seed-perf: ## Ajoute PERF_INCIDENTS (5 000 000) incidents à la base de mesures ; PERF_MAX_SIZE_GB=8 borne sa taille
+seed-perf: ## Ajoute PERF_INCIDENTS (5 000 000) incidents à la base de mesures ; PERF_MAX_SIZE_GB=10 borne sa taille (8,2 Go mesurés)
 	@$(WITH_ENV) export HEROS_DATABASE_URL='$(PERF_DATABASE_URL)'; go run ./cmd/seedperf -incidents $(PERF_INCIDENTS) -max-size-gb $(PERF_MAX_SIZE_GB)
 
 .PHONY: perf-run
@@ -218,17 +218,27 @@ moderator-dev: ## Crée un modérateur dans la pile de développement : EMAIL=�
 	$(call create_moderator,$(COMPOSE_DEV))
 
 # Monitoring ELK (profil Compose `elk`) : Elasticsearch, Logstash, Kibana et Filebeat, qui lit les journaux JSON de l'API.
-# Compter 3 à 4 Go de mémoire en plus : donner 6 à 8 Go à Docker Desktop. Les images pèsent environ 2 Go.
-ELK_DISK_MIN_MB ?= 4096
+# Mesuré sur Docker Desktop (macOS) : l'ELK prend environ 3,3 Go de mémoire (Elasticsearch 1,5 ; Kibana 0,9 ; Logstash 0,8 ;
+# Filebeat 0,1), soit environ 5,7 Go avec toute la pile : donner 8 Go à Docker Desktop. Les images pèsent environ 6 Go sur le
+# disque de Docker (Kibana 2,3 ; Elasticsearch 1,6 ; Logstash 1,4 ; Filebeat 0,6) : au premier démarrage il faut la place de les
+# télécharger, ensuite une marge ordinaire suffit.
+ELK_DISK_MIN_MB       ?= 8192
+ELK_DISK_MIN_MB_READY ?= 2048
 ELK_SERVICES    = elasticsearch logstash kibana filebeat elk-setup
 
 .PHONY: elk-dev
 elk-dev: ## Démarre le monitoring ELK (journaux de l'API en JSON, Kibana sur http://localhost:5601)
-	@$(MAKE) --no-print-directory disk-check DISK_MIN_MB=$(ELK_DISK_MIN_MB)
 	@test -f .env || { echo "Créez .env d'abord : make env"; exit 1; }
+	@# Place exigée : celle de télécharger les images si l'une manque, une marge ordinaire sinon.
+	@set -a; . ./.env; set +a; version=$${ELASTIC_VERSION:-9.3.1}; missing=; \
+	for image in elasticsearch/elasticsearch kibana/kibana logstash/logstash beats/filebeat; do \
+		docker image inspect docker.elastic.co/$$image:$$version >/dev/null 2>&1 || missing=1; \
+	done; \
+	min=$(ELK_DISK_MIN_MB_READY); [ -z "$$missing" ] || min=$(ELK_DISK_MIN_MB); \
+	$(MAKE) --no-print-directory disk-check DISK_MIN_MB=$$min
 	@# L'API est recréée avec des journaux JSON ; elle reprend le texte lisible au prochain `make up`.
 	HEROS_LOG_FORMAT=json $(COMPOSE_DEV) --profile elk up -d api $(ELK_SERVICES)
-	@echo "Kibana : http://localhost:$${KIBANA_PORT:-5601} (le dashboard apparaît une fois elk-setup terminé : make logs-dev)"
+	@echo "Kibana : http://localhost:$${KIBANA_PORT:-5601} (le dashboard apparaît une fois elk-setup terminé : docker logs heros-sos-dev-elk-setup-1)"
 
 .PHONY: elk-down-dev
 elk-down-dev: ## Arrête le monitoring ELK (V=1 supprime aussi ses données) et remet les journaux de l'API en texte

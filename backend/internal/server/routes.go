@@ -41,9 +41,17 @@ func (c *components) protectedPendingMFA(h http.HandlerFunc, roles ...user.Role)
 	return c.authMiddleware.ProtectedPendingMFA(roles...)(h)
 }
 
+const livePath = "/health"
+
+// probeRoutes sont les motifs des sondes de santé, tels que le routeur les note pour AccessLog.
+var probeRoutes = []string{
+	http.MethodGet + " " + APIPrefix + livePath,
+	http.MethodGet + " " + APIPrefix + readyPath,
+}
+
 func registerHealthRoutes(router *Router, c *components) {
-	router.HandleFunc(http.MethodGet, "/health", c.health.live)
-	router.HandleFunc(http.MethodGet, "/ready", c.health.ready)
+	router.HandleFunc(http.MethodGet, livePath, c.health.live)
+	router.HandleFunc(http.MethodGet, readyPath, c.health.ready)
 }
 
 func registerAuthRoutes(router *Router, c *components) {

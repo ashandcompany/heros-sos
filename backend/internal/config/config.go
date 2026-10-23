@@ -287,6 +287,16 @@ type App struct {
 	EmailChangeConfirmPath string
 }
 
+// MailLogoPath est l'emplacement, dans le frontend, du logo affiché en tête des mails.
+const MailLogoPath = "/mail/logo.png"
+
+// MailLogoURL construit l'adresse absolue du logo des mails.
+func (a App) MailLogoURL() string {
+	target := *a.PublicBaseURL
+	target.Path = MailLogoPath
+	return target.String()
+}
+
 // ActivationLink construit le lien d'activation de compte envoyé par mail.
 func (a App) ActivationLink(token string) string {
 	return a.link(a.ActivationPath, token)
@@ -362,6 +372,9 @@ type Dashboard struct {
 	// est encore servie sur-le-champ pendant qu'une nouvelle est calculée en arrière-plan, car ces agrégats parcourent
 	// de très grosses tables. Zéro désactive ce cache : chaque appel recalcule.
 	StatsTTL time.Duration
+	// Warmup calcule d'avance, au démarrage, les statistiques de chaque héros : sans cela, le premier affichage de
+	// chacun calcule en direct (environ 11 s à 5 millions d'incidents). Sans effet quand le cache est désactivé.
+	Warmup bool
 }
 
 // Proximity regroupe les réglages de la localisation des héros.
@@ -512,7 +525,10 @@ func Load(getenv func(string) string) (Config, error) {
 			StreamMaxAge:      l.duration(envEventsStreamMaxAge, defaultEventsStreamMaxAge),
 			StreamBuffer:      l.positiveInt(envEventsStreamBuffer, defaultEventsStreamBuffer),
 		},
-		Dashboard: Dashboard{StatsTTL: l.durationOrZero(envDashboardStatsTTL, defaultDashboardStatsTTL)},
+		Dashboard: Dashboard{
+			StatsTTL: l.durationOrZero(envDashboardStatsTTL, defaultDashboardStatsTTL),
+			Warmup:   l.boolean(envDashboardWarmup, true),
+		},
 		Proximity: Proximity{
 			LocationTTL:   l.duration(envLocationTTL, defaultLocationTTL),
 			AlertRadiusKm: l.positiveInt(envAlertRadiusKm, defaultAlertRadiusKm),

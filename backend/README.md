@@ -236,6 +236,8 @@ seule, toutes les capacités Linux retirées, `no-new-privileges`, journaux tour
 **healthcheck** : `/api -healthcheck` interroge `/api/v1/ready` (base comprise) depuis l'intérieur du
 conteneur. Une image `FROM scratch` n'a ni shell ni `curl` : la sonde est donc dans le binaire du
 serveur (`cmd/api`, `internal/server/probe.go`), délai réglable par `HEROS_HEALTHCHECK_TIMEOUT`.
+Les sondes `/health` et `/ready` réussies ne sont journalisées qu'au niveau `debug` (`HEROS_LOG_LEVEL=debug` pour les
+voir) ; une sonde en échec reste en `warn` ou `error`.
 
 **Premier déploiement en production**
 
@@ -300,9 +302,14 @@ la même interface `mail.Mailer`.
   fichier orphelin, sans effet visible.
 - **Formulaire de contact** : le mail est la seule trace du message, et la file d'envoi est interne
   au processus (voir plus haut). Régler `HEROS_CONTACT_RECIPIENT` sur la boîte de l'équipe.
-- **Newsletter** : l'abonnement (double opt-in) et la désinscription existent, pas encore l'envoi des
-  numéros. `mail.SendNewsletter` est la seule façon d'en envoyer un et refuse un message sans lien de
-  désinscription. Le consentement est daté dans `newsletter_subscriptions.confirmed_at`.
+- **Newsletter** : l'abonnement (double opt-in), la désinscription et l'envoi des numéros existent. Les
+  modérateurs rédigent des brouillons sous `/admin/newsletters` (HTML assaini) et les envoient à tous les
+  abonnés confirmés ou à un seul ; un numéro envoyé est en lecture seule. Les mails partent en
+  arrière-plan par la file d'envoi (perdus si le processus s'arrête brutalement, sans suivi par
+  destinataire). `mail.SendNewsletter` est la seule façon d'en envoyer un et refuse un message sans lien de
+  désinscription. Tous les mails HTML partagent la mise en page `internal/mail/templates/layout.html.tmpl`
+  (logo `frontend/public/mail/logo.png` servi depuis l'adresse publique du frontend, thèmes clair et sombre).
+  Le consentement est daté dans `newsletter_subscriptions.confirmed_at`.
 - **Double authentification des modérateurs** : `HEROS_MFA_MODERATOR_REQUIRED=true` est imposé (le serveur
   refuse de démarrer avec `false`).
   - *Activation, pour chaque modérateur* : l'exploitation crée le compte (`make moderator-prod`, depuis

@@ -6,7 +6,7 @@
 #                                             http://localhost:3001/heros-sos/  (la documentation)
 #
 # Outils facultatifs : `make adminer` ajoute Adminer (http://localhost:8082).
-# `make elk` ajoute le monitoring ELK (Kibana : http://localhost:5601), qui pèse 3 à 4 Go de mémoire.
+# `make elk` ajoute le monitoring ELK (Kibana : http://localhost:5601) : 3,3 Go de mémoire et environ 6 Go d'images.
 #
 # Lancé depuis la racine du dépôt : les chemins sont relatifs à la racine, et l'environnement de l'API
 # est lu dans backend/.env (le Makefile le passe aussi à Compose pour les ${…} de ce fichier).
@@ -81,7 +81,7 @@ services:
     restart: unless-stopped
     logging: *logging
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/health"]
       interval: 10s
       timeout: 5s
       retries: 30

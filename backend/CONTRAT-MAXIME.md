@@ -106,7 +106,7 @@ Colonne « Front » : l'écran appelle bien la route quand `API_URL` est renseig
 | 7 | **Limiteur de débit en mémoire** | 🟡 Exact pour **une** instance de l'API. | À revoir (Redis ou table) avant d'en lancer plusieurs. |
 | 8 | **Mails non durables** | 🟡 La file est dans le processus : un arrêt brutal perd les mails en attente. RabbitMQ est démarré mais pas utilisé. | Worker RabbitMQ derrière `mail.Mailer`, sans changer les appelants. |
 | 9 | **Exploitation** | ⬜ Sauvegarde séparée de `HEROS_CRYPTO_KEYS`, du volume `avatars` et de la base ; SMTP réel ; premiers modérateurs et leur 2FA ; supervision. | Checklist « Production » du README du backend, à dérouler. |
-| 10 | **Envoi de la newsletter** | ⬜ L'abonnement et la désinscription existent ; aucun numéro ne part. | Version 2 : tâche d'envoi, avec `mail.SendNewsletter` (refuse un message sans lien de désinscription). |
+| 10 | **Envoi de la newsletter** | ✅ `/admin/newsletters` : brouillons, envoi à tous les abonnés confirmés ou à un seul, numéros envoyés en lecture seule. Les mails partent en arrière-plan par la file d'envoi (point 8), sans suivi par destinataire. | Suivi de remise et reprise après arrêt avec le worker RabbitMQ. |
 
 ### 3.3 Avec Emma (phase 3)
 

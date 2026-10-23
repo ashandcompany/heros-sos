@@ -48,6 +48,9 @@ func newSnapshotCache[V any](ttl time.Duration, clk clock.Clock, logger *slog.Lo
 	return &snapshotCache[V]{ttl: ttl, clock: clk, logger: logger, entries: map[string]*snapshot[V]{}}
 }
 
+// enabled dit si le cache garde des valeurs (un ttl nul le désactive).
+func (c *snapshotCache[V]) enabled() bool { return c.ttl > 0 }
+
 // get retourne la valeur de la clé, calculée par load au besoin.
 func (c *snapshotCache[V]) get(ctx context.Context, key string, load func(context.Context) (V, error)) (V, error) {
 	if c.ttl <= 0 {
@@ -66,9 +69,25 @@ func (c *snapshotCache[V]) get(ctx context.Context, key string, load func(contex
 	}
 	c.mu.Unlock()
 
+	// Un contexte déjà annulé ne démarre pas de calcul : il serait détaché de la requête et se poursuivrait pour
+	// personne (c'est ce qui arrivait au préchauffage quand le serveur s'arrête).
+	if err := ctx.Err(); err != nil {
+		var zero V
+		return zero, err
+	}
+
 	// Premier appel de cette clé : calcul en direct, partagé entre les appels simultanés. Il est détaché de la requête
 	// (qui peut être abandonnée) mais l'appelant, lui, n'attend pas plus longtemps que sa requête.
 	result := c.group.DoChan(key, func() (any, error) {
+		// Un calcul partagé qui vient de se terminer a pu ranger sa valeur entre le moment où cet appel a constaté
+		// l'absence de valeur et celui où il est devenu le calcul de la clé : la revérifier évite de calculer deux fois.
+		c.mu.Lock()
+		if entry, ok := c.entries[key]; ok {
+			value := entry.value
+			c.mu.Unlock()
+			return value, nil
+		}
+		c.mu.Unlock()
 		loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshTimeout)
 		defer cancel()
 		value, err := load(loadCtx)

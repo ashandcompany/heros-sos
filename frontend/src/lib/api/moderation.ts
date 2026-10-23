@@ -28,6 +28,7 @@ export async function getModerationSummary(token: string): Promise<ModerationSum
   return mockResponse({
     incidents: pending(incidentsMock),
     draftArticles: articlesMock.filter(({ status }) => status === "brouillon").length,
+    draftNewsletters: 0,
     videos: pending(videosMock),
     // Les avis sont publiés dès leur envoi : seules les réponses modifiées attendent un modérateur.
     comments: reviewsMock.filter(({ reply }) => reply?.status === "en-attente").length,

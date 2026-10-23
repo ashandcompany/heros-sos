@@ -24,6 +24,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/ashandcompany/heros-sos/backend/internal/clock"
 	"github.com/ashandcompany/heros-sos/backend/internal/config"
 )
@@ -699,6 +701,49 @@ func TestServicePropagatesMailerFailure(t *testing.T) {
 	}
 }
 
+func TestEveryHTMLMailIsWrappedByTheCommonLayout(t *testing.T) {
+	recorder := NewRecorder()
+	const logo = "https://heros-sos.example/mail/logo.png"
+	service, err := NewService(recorder, "Heros-SOS", config.Tokens{ActivationTTL: time.Hour}, WithLogoURL(logo))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	_ = service.SendActivation(ctx, "a@b.co", "Steve", "https://x.example/a")
+	_ = service.SendReviewRequest(ctx, "a@b.co", "https://x.example/r")
+	_ = service.SendInterventionInvitation(ctx, "a@b.co", uuid.New())
+	_ = service.SendNewsletter(ctx, "a@b.co", "Octobre", "<p>Salut</p>", "https://x.example/u")
+
+	messages := recorder.Messages()
+	if len(messages) != 4 {
+		t.Fatalf("mails = %d", len(messages))
+	}
+	for _, message := range messages {
+		if strings.Count(message.HTML, "<html") != 1 || strings.Count(message.HTML, "<body") != 1 {
+			t.Errorf("%q : un seul document HTML attendu :\n%s", message.Subject, message.HTML)
+		}
+		for _, want := range []string{`src="` + logo + `"`, `class="card"`, "prefers-color-scheme: light", "Service d'intervention"} {
+			if !strings.Contains(message.HTML, want) {
+				t.Errorf("%q : %q absent du gabarit", message.Subject, want)
+			}
+		}
+	}
+	if strings.Contains(messages[0].HTML, "Se désabonner") {
+		t.Error("seule la newsletter porte le lien de désinscription")
+	}
+	if !strings.Contains(messages[3].HTML, "Se désabonner") {
+		t.Error("le pied de la newsletter doit porter le lien de désinscription")
+	}
+}
+
+func TestPlainTextFromNewsletterHTML(t *testing.T) {
+	got := plainText(`<h2>Titre</h2><p>Un <b>texte</b> avec <a href="https://x.example/a">un lien</a>.</p><ul><li>un</li><li>deux</li></ul><script>x()</script>`)
+	want := "Titre\n\nUn texte avec un lien (https://x.example/a).\n\n- un\n- deux"
+	if got != want {
+		t.Errorf("plainText = %q, attendu %q", got, want)
+	}
+}
+
 func TestFormatDuration(t *testing.T) {
 	tests := map[time.Duration]string{
 		time.Hour:        "1 heure",
@@ -812,8 +857,11 @@ func TestSendNewsletterAlwaysCarriesTheUnsubscribeLink(t *testing.T) {
 			t.Errorf("%s : le lien de désinscription manque :\n%s", name, content)
 		}
 	}
-	if strings.Contains(message.HTML, "<b>tout") || !strings.Contains(message.HTML, "&lt;b&gt;tout le monde&lt;/b&gt;") {
-		t.Errorf("le corps doit être échappé dans le HTML :\n%s", message.HTML)
+	if strings.Contains(message.HTML, "&lt;b&gt;") {
+		t.Errorf("le corps HTML nettoyé doit être inséré tel quel :\n%s", message.HTML)
+	}
+	if !strings.Contains(message.HTML, "Bonjour <b>tout le monde</b>") || !strings.Contains(message.Text, "Bonjour tout le monde") {
+		t.Errorf("corps HTML ou texte dérivé manquant :\n%s\n%s", message.HTML, message.Text)
 	}
 
 	// L'en-tête List-Unsubscribe part dans le message MIME, et rien d'autre ne peut s'y glisser.

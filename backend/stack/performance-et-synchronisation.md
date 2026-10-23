@@ -1,6 +1,6 @@
 # Performance, synchronisation hors ligne et journalisation
 
-**Statut : implémenté et mesuré, sauf ce qui est listé dans [Ce qui n'a pas été vérifié](#4-ce-qui-na-pas-été-vérifié).** Établi le 22/10/2026 sur `develop` (commit `e9292b4`), avec une base PostgreSQL 18 de 5 millions d'incidents. Remis à niveau le même jour sur `develop` après la modération des incidents et le tableau de bord des héros (commit `0dbabc0`), puis après le tri par date de résolution de la page d'accueil et le passage des tests du frontend à Vitest (commit `034afef`) : voir [Mise à jour après la modération des incidents](#mise-à-jour-après-la-modération-des-incidents).
+**Statut : implémenté et mesuré, sauf ce qui est listé dans [Ce qui n'a pas été vérifié](#4-ce-qui-na-pas-été-vérifié).** Établi le 22/10/2026 sur `develop` (commit `e9292b4`), avec une base PostgreSQL 18 de 5 millions d'incidents. Remis à niveau le même jour sur `develop` après la modération des incidents et le tableau de bord des héros (commit `0dbabc0`), puis après le tri par date de résolution de la page d'accueil et le passage des tests du frontend à Vitest (commit `034afef`) : voir [Mise à jour après la modération des incidents](#mise-à-jour-après-la-modération-des-incidents). **Remesuré à 5 millions d'incidents sur ce code (commit `f5a69b2`)** : tout est sous 30 ms au p95. Le premier appel du tableau de bord d'un héros, qui calculait en direct (environ 11 s), est préchauffé au démarrage (voir plus bas).
 
 ## Le défi
 
@@ -27,7 +27,7 @@ Mesurés avec `make perf` (commande `cmd/loadtest`) sur la même base de 5 milli
 | Liste des héros | 6,12 s | 3,3 ms |
 | Liste des vilains | 710,7 ms | 2,9 ms |
 
-Ces mesures à 5 millions datent d'avant la modération des incidents : celles faites ensuite sur le code actuel (1 million d'incidents, faute de place sur le disque) sont dans la section suivante.
+Ces mesures à 5 millions datent d'avant la modération des incidents : celles du code actuel, à 1 puis à 5 millions d'incidents, sont dans la section suivante.
 
 Le « 12 s » du sujet n'est pas reproduit à l'identique : la base de mesure est locale, sur un disque rapide et avec un cache chaud. Les ordres de grandeur sont les mêmes (jusqu'à 9 s au p95), et c'est le rapport avant/après qui compte. Un clone neuf avec `make up` donnera des temps plus élevés des deux côtés (PostgreSQL non réglé, disque de la machine virtuelle de Docker).
 
@@ -60,27 +60,31 @@ Ce que `pg_stat_statements` a désigné avant correction, une requête à froid 
 | Tests du frontend | `develop` a adopté Vitest (et Playwright pour les parcours) : les tests de la file hors ligne sont convertis, 22 avant et 22 après (un changement volontaire du relais est toujours détecté), et il n'y a plus qu'un lanceur de tests (`npm test`) |
 | Jeux de données | `cmd/seed` écrit `moderation = 'approved'` (sans cela, après le seed, aucun incident n'était visible des héros). `cmd/seedperf` aussi, avec un peu d'incidents « signalés » en attente ou rejetés pour exercer les filtres |
 
-**Cache des statistiques du tableau de bord** (`herodashboard/cache.go`, `HEROS_DASHBOARD_STATS_TTL`, 30 s par défaut, 0 désactive). Une valeur plus jeune que le délai est servie telle quelle ; une valeur plus vieille est **servie quand même, tout de suite**, pendant qu'une nouvelle se calcule en arrière-plan (un calcul à la fois par clé) ; seul le premier appel d'une clé calcule en direct, et les appels simultanés partagent ce calcul. Les deux listes (incident en cours du héros, derniers incidents non résolus) ne sont **pas** mises en cache : elles se lisent dans des index et restent à jour. Conséquence assumée : les statistiques peuvent retarder de 30 s sur un héros qui vient de clore une intervention. Un compteur exact par trigger aurait demandé, pour les « principaux ennemis » (comptage distinct par héros et par vilain, qui dépend de la modération et des vilains liés), une mécanique disproportionnée pour une page de statistiques.
+**Cache des statistiques du tableau de bord** (`herodashboard/cache.go`, `HEROS_DASHBOARD_STATS_TTL`, 30 s par défaut, 0 désactive). Une valeur plus jeune que le délai est servie telle quelle ; une valeur plus vieille est **servie quand même, tout de suite**, pendant qu'une nouvelle se calcule en arrière-plan (un calcul à la fois par clé) ; seul le premier appel d'une clé calcule en direct, et les appels simultanés partagent ce calcul. Les deux listes (incident en cours du héros, derniers incidents non résolus) ne sont **pas** mises en cache : elles se lisent dans des index et restent à jour. Au démarrage, `Service.Warm` calcule d'avance les statistiques globales puis celles de chaque héros approuvé et actif, en arrière-plan (deux héros à la fois, `HEROS_DASHBOARD_WARMUP=false` pour le désactiver) : le serveur répond pendant ce temps, et une requête qui arrive partage le calcul en cours. Conséquence assumée : une statistique peut retarder de plus que le délai, puisqu'une valeur périmée est servie d'abord : de 30 s pour un héros qui consulte régulièrement, davantage au premier affichage après une longue absence (la valeur date alors de sa dernière consultation, et se rafraîchit aussitôt). Un compteur exact par trigger aurait demandé, pour les « principaux ennemis » (comptage distinct par héros et par vilain, qui dépend de la modération et des vilains liés), une mécanique disproportionnée pour une page de statistiques.
 
-Mesures sur le code actuel, `make seed-perf` avec 1 000 038 incidents (999 640 approuvés, 182 en attente, 216 rejetés), base de 1,7 Go, PostgreSQL 18 local, 16 clients en parallèle pendant 10 s par scénario, aucune erreur :
+Mesures sur le code actuel, p95 en ms (16 clients en parallèle pendant 10 s par scénario, aucune erreur, PostgreSQL 18 local, `shared_buffers` à 512 Mo, `fsync` désactivé, machine de 16 Go) :
 
-| Scénario | p50 | p95 |
-|---|---|---|
-| Liste des incidents (public, approuvés) | 2,9 ms | 5,8 ms |
-| Liste des incidents ouverts | 2,9 ms | 5,7 ms |
-| **Derniers incidents résolus (page d'accueil)** | 2,0 ms | 4,6 ms |
-| Mes incidents (compte héros) | 0,9 ms | 2,6 ms |
-| **Tableau de bord d'un héros** | 3,1 ms | 7,3 ms |
-| Historique d'un héros | 2,3 ms | 7,6 ms |
-| Fiche d'un héros | 0,5 ms | 1,1 ms |
-| Historique d'un vilain | 2,1 ms | 5,2 ms |
-| Fiche d'un vilain | 0,6 ms | 1,3 ms |
-| Liste des héros | 0,8 ms | 2,6 ms |
-| Liste des vilains | 1,6 ms | 3,3 ms |
+| Scénario | 1 M, p95 | 5 M, p50 | 5 M, p95 |
+|---|---|---|---|
+| Liste des incidents (public, approuvés) | 5,8 | 3,1 | 7,2 |
+| Liste des incidents ouverts | 5,7 | 3,3 | 8,1 |
+| **Derniers incidents résolus (page d'accueil)** | 4,6 | 2,1 | 5,5 |
+| Mes incidents (compte héros) | 2,6 | 0,8 | 3,2 |
+| **Tableau de bord d'un héros (valeur en cache)** | 7,3 | 4,0 | 16,1 |
+| Historique d'un héros | 7,6 | 2,5 | 8,9 |
+| Fiche d'un héros | 1,1 | 0,5 | 1,1 |
+| Historique d'un vilain | 5,2 | 2,3 | 6,9 |
+| Fiche d'un vilain | 1,3 | 0,6 | 1,5 |
+| Liste des héros | 2,6 | 0,9 | 3,5 |
+| Liste des vilains | 3,3 | 1,7 | 3,6 |
 
-Les deux lignes en gras sont celles que `develop` a ajoutées sans que le volume ait été pris en compte. Avant correction, sur le même jeu : le tableau de bord (8 clients, il a fallu attendre 16 réponses) à **3,96 s** de p50 et **7,44 s** de p95 ; la requête de la page d'accueil, chronométrée seule, à **0,9 à 1,4 s**. Les compteurs et les colonnes dénormalisées (dont `incidents.resolved_at`), recomptés ensuite sur ces 1 million de lignes, égalent un comptage complet des tables (0 écart).
+Jeux de données : 1 000 038 incidents (1,7 Go) et 5 000 038 incidents (4 998 014 approuvés, 982 en attente, 1 042 rejetés ; **8,2 Go** : `incidents` 4,7 Go, `intervention_heroes` 1,9 Go, `interventions` 0,9 Go, `incident_villains` 0,7 Go ; 22 héros). Les deux lignes en gras sont celles que `develop` a ajoutées sans que le volume ait été pris en compte. Avant correction : la requête de la page d'accueil, chronométrée seule, prenait **0,9 à 1,4 s à 1 million et 6,5 s à 5 millions** (14 ms après, sans charge) ; le tableau de bord (8 clients, 16 réponses) était à **3,96 s** de p50 et **7,44 s** de p95 à 1 million. Les compteurs et les colonnes dénormalisées (dont `incidents.resolved_at`, cohérent sur 4 589 865 incidents réussis), recomptés sur 1 puis 5 millions de lignes, égalent un comptage complet des tables (0 écart).
 
-**Limites de ces mesures** : 1 million d'incidents et non 5 (le disque de la machine ne laissait pas la place d'en charger davantage) ; le premier appel d'un héros après le démarrage calcule en direct (de l'ordre de la seconde à ce volume, davantage à 5 millions : `COUNT` des interventions terminées et jointures de ses interventions) ; le nombre d'interventions terminées n'a pas de compteur.
+**Limite constatée à 5 millions, corrigée par le préchauffage : le premier appel du tableau de bord d'un héros calculait en direct, environ 11 s.** Mesuré avant correction : 11,4 s pour le premier appel après un démarrage, 10,8 s pour le premier appel d'un second héros (les statistiques globales étaient déjà en cache), puis 25 ms et 1,6 ms. La cause est le volume de chaque héros : 22 héros pour 5 millions d'incidents, soit environ 295 000 participations chacun (un jeu de données très concentré). Requêtes chronométrées seules, cache chaud : statistiques personnelles d'un héros 9,3 s, principaux ennemis 7,3 s (en parallèle), nombre d'interventions terminées 2,0 s ; tout le reste est sous 25 ms.
+
+Avec `Service.Warm` (mesuré à 5 millions, 22 héros) : le préchauffage prend **133 s** en arrière-plan (`failed=0`), et le premier appel de trois héros ensuite est de **49, 13 et 13 ms**. Le préchauffage ne dégrade pas les autres routes : pendant qu'il tourne, `list` est à 7,6 ms de p95, `latest-resolved` à 5,3 ms, `mine` à 2,2 ms et `hero-incidents` à 5,5 ms. Limites restantes : un héros qui arrive **pendant** le préchauffage, avant que son tour soit venu, calcule en direct (15,0 s mesurés, car il concurrence le préchauffage) ; un héros approuvé après le démarrage, ou tous si le préchauffage est désactivé, calculent à leur première requête ; et chaque rafraîchissement en arrière-plan d'un héros qui consulte son tableau de bord coûte toujours environ 10 s de calcul toutes les 30 s. Si beaucoup de héros consultent en même temps, il reste à allonger `HEROS_DASHBOARD_STATS_TTL` ou à passer aux compteurs pour les statistiques personnelles (`hero_stats` donne déjà les interventions et les résolutions d'un héros ; il manque les échecs et les principaux ennemis).
+
+**Variance des mesures.** Le tableau ci-dessus vient d'un passage sur une machine tranquille. Trois autres passages, sur une machine chargée (charge moyenne de 14 à 21 : navigateur et autres applications ouverts), donnent des p95 plus hauts et plus dispersés (liste de 7 à 18 ms, tableau de bord de 10 à 22 ms, historique d'un héros de 19 à 27 ms, un pic isolé à 316 ms) : toujours très en dessous de 350 ms.
 
 ## Décisions retenues
 
@@ -133,7 +137,7 @@ Depuis la fusion de la PR #37, `GET /incidents` renvoie **tous les statuts** sau
   - Il ajoute les incidents par `INSERT … SELECT generate_series`, lot par lot, avec leurs interventions, leurs héros et leurs vilains dans des proportions réalistes : 92 % des incidents clos réussissent, les plus récents seulement sont ouverts, et les interventions en cours se répartissent sur les héros qui n'en ont aucune. Les lignes sont reproductibles : aucun tirage aléatoire.
   - Il refuse la production, comme `cmd/seed`, refuse une base qui contient déjà beaucoup d'incidents (`-append` pour passer outre), et s'arrête entre deux lots quand la base dépasse `PERF_MAX_SIZE_GB`.
   - Il termine par `VACUUM ANALYZE` : statistiques à jour et carte de visibilité renseignée, comme une base installée depuis longtemps.
-- **Place disque : environ 7 Go pour 5 M d'incidents** (tables et index : `incidents` 3,4 Go, `intervention_heroes` 1,8 Go, `interventions` 0,9 Go, `incident_villains` 0,6 Go), et le chargement dure environ 5 minutes. Les 8 Go libres d'un portable ne suffisent pas toujours : garder `PERF_MAX_SIZE_GB` renseigné.
+- **Place disque : 8,2 Go pour 5 M d'incidents** (tables et index : `incidents` 4,7 Go, `intervention_heroes` 1,9 Go, `interventions` 0,9 Go, `incident_villains` 0,7 Go ; les index partiels et les colonnes dénormalisées ajoutés avec la modération ont fait grossir `incidents`), et le chargement dure environ 7 minutes. Avec le journal de transactions, compter **11 Go libres** : un portable à 8 Go libres ne suffit pas. Garder `PERF_MAX_SIZE_GB` renseigné, **à 10** (à 8, le chargement s'arrêterait à quelques Mo de la fin).
 - **`cmd/loadtest`** (`make perf`) : se connecte avec un cookie de session (le mot de passe est lu dans `LOADTEST_PASSWORD`, jamais dans un argument), joue neuf scénarios en parallèle, affiche p50, p95, p99, les erreurs, et sort en erreur si le p95 dépasse `-p95 350ms`. Le scénario « mes incidents » utilise un client **connecté** et tous les autres un client **anonyme** : l'API ne montre à un citoyen connecté que ses propres incidents, même sur la liste publique.
 - Limite connue : `loadtest` envoie les requêtes avec un nombre fixe de clients. Sous forte surcharge, il sous-estime un peu les pires latences ; c'est suffisant pour comparer un avant et un après. La mesure côté serveur (P6) complète.
 
@@ -208,7 +212,7 @@ Côté code :
   4. délai de synchronisation des actions faites hors ligne ;
   5. chronologie des événements (recherche enregistrée).
   Le flux temps réel dure jusqu'à 10 minutes : il est écarté des durées.
-- **Poids** : compter 3 à 4 Go de RAM en plus (ordre de grandeur, pas une mesure), donc 6 à 8 Go alloués à Docker Desktop, et 4 Go de disque libre pour les images. Sur Linux, Elasticsearch exige `vm.max_map_count=262144`. Pas d'ELK dans la CI.
+- **Poids** (mesuré sur Docker Desktop, macOS) : l'ELK prend 3,3 Go de mémoire (5,7 Go avec toute la pile), donc 8 Go alloués à Docker Desktop ; les images pèsent environ 6 Go sur le disque de Docker. Sur Linux, Elasticsearch exige `vm.max_map_count=262144`. Pas d'ELK dans la CI.
 
 ## 3. Utiliser et démontrer
 
@@ -217,7 +221,7 @@ Côté code :
 make db-start                  # ou la pile Docker : make perf-db crée alors herossos_perf dedans
 make env
 make perf-prepare              # migre herossos_perf et y charge les données Marvel
-make seed-perf PERF_MAX_SIZE_GB=8
+make seed-perf PERF_MAX_SIZE_GB=10
 make perf-run                  # API sur :8090, à laisser tourner
 LOADTEST_PASSWORD='Avengers2026!' make perf   # p95 ≤ 350 ms, scénario « mes incidents » compris
 make perf-indexes-off          # retire les index de lecture : la lenteur d'origine revient
@@ -250,11 +254,10 @@ Prévoir une vidéo de secours, et démarrer la pile ELK avant d'entrer en salle
 
 Ce document décrit ce qui a été **exécuté**. Le reste est écrit mais n'a pas tourné :
 
-- **La pile ELK n'a pas démarré** : Docker n'était pas lancé sur la machine qui a produit ce travail. Les fichiers (`docker-compose.dev.yml` avec le profil `elk`, Filebeat, Logstash, modèles d'index, `setup.sh`) sont valides au sens de leur syntaxe (Compose, YAML, JSON, bash), et le **format des lignes de journal** que Logstash attend est celui que l'API produit, vérifié. Mais la version d'image par défaut, les healthchecks, la lecture des fichiers de journaux sur Docker Desktop (macOS) et l'import du dashboard sont à constater au premier `make elk`. Le dashboard est écrit à la main : si son import échoue (non bloquant), les vues de données restent utilisables dans Discover et les graphiques se recréent dans Lens.
+- **La pile ELK a été démarrée une fois** (22/10/2026, Docker Desktop sur macOS, 7,5 Go, Elastic 9.3.1) : les cinq services démarrent, `elk-setup` importe le dashboard, les journaux et les événements arrivent dans Elasticsearch, le p95 par route se calcule et les sept graphiques du dashboard s'affichent avec des données (déclaration d'un incident avec `X-Client-Created-At` deux minutes dans le passé : `sync_delay_ms` = 120 496 ms). Ce démarrage a révélé un défaut, corrigé : l'adresse IP restait dans `event.original`. **Non vérifié** : Linux (`vm.max_map_count`), Windows, une autre version d'Elastic, et le monitoring sous plusieurs instances de l'API (Filebeat lit tous les conteneurs `api`, mais un seul a été lancé).
 - **Le parcours dans un vrai navigateur** : service worker, IndexedDB et `EventSource` n'ont pas été exercés dans un navigateur. Ce qui l'a été : la logique de la file (22 tests, avec le vrai chiffrement), la route `/api/sync` contre la vraie API (envoi, rejeu, refus, chemin interdit, session absente, mauvaise origine), et le flux SSE contre la vraie API avec trois comptes. Les formulaires compilent, passent ESLint et le build.
 - **Le comportement d'un navigateur coupé du réseau** : une Server Action qui échoue hors ligne lève une `TypeError` (comportement de `fetch`), c'est ce que le code intercepte. À confirmer dans chaque navigateur visé.
 - **Plusieurs instances de l'API** : les verrous consultatifs (écriture des événements, journalisation) sont prévus pour, mais seul un serveur a été lancé.
-- **5 millions d'incidents après la modération** : la mesure sur le code actuel a été faite avec 1 million (voir la mise à jour plus haut). Les plans d'exécution (`TestReadQueriesUseTheirIndexes`) et les compteurs sont vérifiés, mais le chiffre à 5 millions des listes publiques (index partiels) et du tableau de bord reste à constater.
 - **`make seed-perf` dans la base de la pile Docker** : exécuté avec une base PostgreSQL 18 locale (même version majeure que `postgres:18-alpine`), pas dans le conteneur.
 
 ## 5. Risques et points d'attention
@@ -263,7 +266,7 @@ Ce document décrit ce qui a été **exécuté**. Le reste est écrit mais n'a p
 - **Données personnelles.** Les adresses et descriptions d'incidents n'entrent jamais dans le journal d'événements ni dans ELK ; l'adresse IP est retirée par Logstash. Un journal immuable pose la question de l'effacement RGPD ; piste : chiffrer les champs sensibles du contenu avec `crypto/sealer` et détruire la clé.
 - **Compteurs.** Ils sont écrits par des triggers sur des lignes partagées : deux transactions qui touchent le même héros, vilain, déclarant ou statut se suivent. Sans objet à ce rythme d'écriture ; à mesurer si les écritures montent. `rebuild_read_counters()` les recalcule en cas de dérive, et `AssertReadCounters` les contrôle dans les tests. La suppression d'un incident (non implémentée aujourd'hui) est déjà couverte par les triggers.
 - **Commandes en transaction.** Une route idempotente exécute son handler dans la transaction de la clé : les mails qu'un handler met en file partent donc avant la validation finale. Une panne entre les deux est rare ; un rejeu ne renvoie aucun mail.
-- **Tableau de bord.** Ses statistiques peuvent retarder d'au plus `HEROS_DASHBOARD_STATS_TTL` (30 s). Le cache est propre à chaque instance de l'API (pas de partage entre instances) et en mémoire : un redémarrage le vide, et le premier appel de chaque héros calcule en direct. `0` le désactive.
+- **Tableau de bord.** Ses statistiques retardent d'environ `HEROS_DASHBOARD_STATS_TTL` (30 s) pour un héros qui consulte régulièrement, et davantage au premier affichage après une longue absence (voir le cache plus haut). Le cache est propre à chaque instance de l'API (pas de partage entre instances) et en mémoire : un redémarrage le vide, puis `Service.Warm` le remplit en arrière-plan (133 s à 5 millions d'incidents pour 22 héros ; un héros qui arrive avant son tour calcule en direct, environ 15 s). `HEROS_DASHBOARD_WARMUP=false` désactive le préchauffage, `HEROS_DASHBOARD_STATS_TTL=0` le cache.
 - **Compatibilité d'API.** Le curseur s'ajoute à `offset`, et tous les champs ajoutés sont facultatifs : le front actuel et `api:types:check` ne cassent pas.
 - **Répartition du travail.** Les incidents, interventions et l'infrastructure (P1, P2, P5, P6) relèvent de Dev B ; les sessions, le CSRF et le chiffrement de la file hors ligne (P3, P4) touchent à Dev A (voir `CONTRAT-MAXIME.md`). Les migrations et les tests de cette branche modifient des fichiers des deux côtés : une relecture croisée est nécessaire.
 - **Documents mis à jour avec ce travail** : [tables/incidents.md](../tables/incidents.md), [tables/technique.md](../tables/technique.md), [tables/statistiques.md](../tables/statistiques.md), [Docker](./docker.md).
